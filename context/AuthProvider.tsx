@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
-import type { Session, AuthError } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { AuthenticatedUser, TeacherUser, StudentUser } from '../types';
 import { supabase } from '../lib/supabase';
 import * as dataService from '../services/dataService';
@@ -16,72 +16,69 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Build a TeacherUser synchronously from a Supabase session.
+// Reads name from session metadata (set at sign-up / by Google OAuth) so
+// no extra network call is needed during the auth flow.
+const buildTeacherUser = (session: Session): TeacherUser => {
+  const meta = session.user.user_metadata ?? {};
+  const name =
+    meta.name ||
+    meta.full_name ||
+    session.user.email?.split('@')[0] ||
+    'Teacher';
+  return {
+    id:       session.user.id,
+    email:    session.user.email ?? '',
+    name,
+    provider: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
+    role:     'teacher',
+  };
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
   const [loading, setLoading]         = useState(true);
 
-  // Build a TeacherUser from a Supabase session
-  const buildTeacherUser = useCallback(async (session: Session): Promise<TeacherUser> => {
-    const profile = await dataService.getTeacherProfile(session.user.id);
-    const name = profile?.name
-      ?? session.user.user_metadata?.name
-      ?? session.user.email?.split('@')[0]
-      ?? 'Teacher';
-    return {
-      id:       session.user.id,
-      email:    session.user.email ?? '',
-      name,
-      provider: (session.user.app_metadata?.provider === 'google' ? 'google' : 'email'),
-      role:     'teacher',
-    };
-  }, []);
-
-  // On mount: restore session from Supabase (handles page refresh)
+  // Subscribe to Supabase auth events.
+  // INITIAL_SESSION fires immediately on mount from localStorage — no network
+  // call, no internal lock — so subsequent auth calls are never blocked.
   useEffect(() => {
-    const restore = async () => {
-      try {
-        // Safety timeout — if Supabase hangs (e.g. stale token, network issue),
-        // we fall through to the login page instead of staying on a blank screen.
-        const sessionResult = await Promise.race([
-          supabase.auth.getSession(),
-          new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
-        ]);
-        if (sessionResult && (sessionResult as any).data?.session) {
-          const session = (sessionResult as any).data.session;
-          const teacher = await buildTeacherUser(session);
-          setCurrentUser(teacher);
-        }
-      } catch (err) {
-        console.warn('Session restore failed:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    restore();
+    let initialized = false;
 
-    // Listen for auth state changes (sign-in, sign-out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        const teacher = await buildTeacherUser(session);
-        setCurrentUser(teacher);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        // Always fires first, even if session is null (logged-out state)
+        if (session) setCurrentUser(buildTeacherUser(session));
+        initialized = true;
+        setLoading(false);
+      } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        setCurrentUser(buildTeacherUser(session));
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [buildTeacherUser]);
+    // Safety fallback: if INITIAL_SESSION never fires within 4 seconds,
+    // stop the loading spinner so the user isn't stuck on a blank screen.
+    const timer = setTimeout(() => {
+      if (!initialized) {
+        initialized = true;
+        setLoading(false);
+      }
+    }, 4000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
+  }, []); // no deps — buildTeacherUser is a module-level function, not a closure
 
   // ── Teacher email+password login ─────────────────────────────
   const login = useCallback(async (email: string, password: string): Promise<{ error: string | null }> => {
-    // Clear any stale local session before signing in.
-    // This prevents the Supabase client from hanging on a background token
-    // refresh from a previous session, which causes signInWithPassword to never resolve.
-    await supabase.auth.signOut({ scope: 'local' });
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
     return { error: null };
-    // currentUser is set via onAuthStateChange above
+    // currentUser is set via onAuthStateChange SIGNED_IN above
   }, []);
 
   // ── Teacher sign-up (creates auth user + profile row) ────────
@@ -91,7 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },  // stored in raw_user_meta_data → trigger picks it up
+      options: { data: { name } }, // stored in raw_user_meta_data → trigger picks it up
     });
     if (error) return { error: error.message };
     // Profile row is created by the database trigger handle_new_user().
@@ -121,9 +118,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signInWithGoogle = useCallback(async (): Promise<void> => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     // Supabase redirects the browser; currentUser is set via onAuthStateChange after redirect.
   }, []);
