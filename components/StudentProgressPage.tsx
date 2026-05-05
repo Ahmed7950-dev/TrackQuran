@@ -729,6 +729,18 @@ const shouldHighlightQalqalah = (letter: string, letterIndex: number, word: stri
     return false;
 };
 
+// Normalise Arabic text for speech-recognition matching:
+// strips all diacritics and standardises common letter variations so that
+// ASR output (plain Arabic) can be compared against Uthmani-script Quran words.
+const normalizeArabic = (text: string): string =>
+  text
+    .replace(/[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, '') // diacritics
+    .replace(/[أإآٱ]/g, 'ا')   // alef variants → plain alef
+    .replace(/ى/g, 'ي')        // alef maqsura → ya
+    .replace(/ة/g, 'ه')        // ta marbuta → ha
+    .replace(/\s+/g, ' ')
+    .trim();
+
 // Silent letters are marked in the Madinah Mushaf with U+06DF (Small High Rounded Zero).
 // These letters are written but not pronounced (e.g. the alif in "أَنَا", the wāw in
 // "أُولَٰئِكَ", the lām in الشَّمْس when reading wasl). Returns true if this letter is silent.
@@ -1296,7 +1308,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [dragStartWord, setDragStartWord] = useState<string | null>(null);
     const [dragEndWord, setDragEndWord] = useState<string | null>(null);
 
+    const [isListening, setIsListening] = useState(false);
+    const [highlightedWordKey, setHighlightedWordKey] = useState<string | null>(null);
+
     const hoveredVerse = useRef<{ surah: number; ayah: number } | null>(null);
+    const recognitionRef = useRef<any>(null);
+    const isListeningRef = useRef(false);
+    const wordCursorRef = useRef(0);
+    const flatWordListRef = useRef<Array<{ key: string; word: string }>>([]);
+    const lastMatchedIndexRef = useRef(-1);
     const longPressTimer = useRef<number | null>(null);
     const longPressFired = useRef(false);
     const prevSurahStatusesRef = useRef<SurahStatus[]>();
@@ -1359,6 +1379,106 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // Store the function in a ref so we can call it
         mistakeSoundRef.current = createMistakeSound;
     }, []);
+
+    // ── Speech recognition: build flat word list whenever verses change ─────────
+    useEffect(() => {
+        const list: Array<{ key: string; word: string }> = [];
+        verses.forEach(verse => {
+            const [s, a] = verse.verse_key.split(':').map(Number);
+            verse.text_uthmani.split(' ').forEach((word, wi) => {
+                list.push({ key: `${s}:${a}:${wi}`, word });
+            });
+        });
+        flatWordListRef.current = list;
+        wordCursorRef.current = 0;
+        lastMatchedIndexRef.current = -1;
+    }, [verses]);
+
+    // ── Speech recognition: auto-scroll highlighted word to centre ───────────
+    useEffect(() => {
+        if (!highlightedWordKey) return;
+        const el = document.querySelector(`[data-word-key="${highlightedWordKey}"]`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }, [highlightedWordKey]);
+
+    // ── startListening / stopListening ───────────────────────────────────────
+    const stopListening = useCallback(() => {
+        isListeningRef.current = false;
+        setIsListening(false);
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch (_) {}
+            recognitionRef.current = null;
+        }
+    }, []);
+
+    const startListening = useCallback(() => {
+        const SpeechRecognition =
+            (window as any).SpeechRecognition ||
+            (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ar-SA';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognitionRef.current = recognition;
+        isListeningRef.current = true;
+        setIsListening(true);
+
+        recognition.onresult = (event: any) => {
+            if (!isListeningRef.current) return;
+
+            // Collect all result transcript text (final + interim)
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+
+            const spokenWords = transcript.trim().split(/\s+/).filter(Boolean);
+            const flatList = flatWordListRef.current;
+            if (!flatList.length || !spokenWords.length) return;
+
+            // Sliding-window forward search: look ahead up to 20 words from cursor
+            const LOOK_AHEAD = 20;
+            const cursor = wordCursorRef.current;
+            const searchEnd = Math.min(cursor + LOOK_AHEAD, flatList.length);
+
+            // Try to match the last spoken word (or a few of them) against the flat list
+            const lastSpoken = normalizeArabic(spokenWords[spokenWords.length - 1]);
+
+            for (let i = cursor; i < searchEnd; i++) {
+                const candidate = normalizeArabic(flatList[i].word);
+                if (candidate === lastSpoken && i > lastMatchedIndexRef.current) {
+                    lastMatchedIndexRef.current = i;
+                    wordCursorRef.current = i + 1;
+                    setHighlightedWordKey(flatList[i].key);
+                    break;
+                }
+            }
+        };
+
+        recognition.onerror = (event: any) => {
+            if (event.error === 'no-speech') return; // ignore no-speech, keep going
+            console.warn('Speech recognition error:', event.error);
+            if (event.error === 'not-allowed') {
+                stopListening();
+            }
+        };
+
+        recognition.onend = () => {
+            // Auto-restart while still in listening mode
+            if (isListeningRef.current) {
+                try { recognition.start(); } catch (_) {}
+            }
+        };
+
+        recognition.start();
+    }, [stopListening]);
 
     // Helper function to get all word keys between two word keys
     const getWordsBetween = useCallback((startKey: string, endKey: string): string[] => {
@@ -2378,8 +2498,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         );
                     }
                     const isLastWordInVerse = wordIndex === wordsArray.length - 1;
+                    const readingWordKey = `${surahNum}:${ayahNum}:${wordIndex}`;
+                    const isHighlightedWord = highlightedWordKey === readingWordKey;
                     return (
-                        <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
+                        <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} data-word-key={readingWordKey} className={`relative inline rounded-sm transition-colors duration-150 ${isHighlightedWord ? 'bg-amber-300/70 dark:bg-amber-500/50' : ''}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
                             {letters.map(({ letter, index: letterIndex }) => {
                                 const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
                                 const mistake = studentMistakes[letterKey];
@@ -2482,13 +2604,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     
                     // Determine if word should be highlighted (selected or in drag range)
                     const shouldHighlight = isSelected || isInDragRange;
-                    
+                    const isHighlightedWord = highlightedWordKey === key;
+
                     return (
                         <React.Fragment key={key}>
-                            <span 
+                            <span
                                 data-word-key={key}
                                 data-word-index={wordIndex}
                                 className={`px-1 rounded-md transition-colors ${
+                                    isHighlightedWord ? 'bg-amber-300/70 dark:bg-amber-500/50' :
                                     shouldHighlight ? 'bg-yellow-200 dark:bg-yellow-800/60' : ''
                                 } ${getMistakeColor(mistakeLevel)}`}
                                 onMouseDown={handleMouseDown}
@@ -2772,6 +2896,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <button onClick={() => setShowQalqalah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showQalqalah ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-sky-100'}`} aria-pressed={showQalqalah} title={t('liveSession.toggleQalqalah')}>Q</button>
                                     <button onClick={() => setShowGhunnah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showGhunnah ? 'bg-green-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-green-100'}`} aria-pressed={showGhunnah} title={t('liveSession.toggleGhunnah')}>G</button>
                                     <button onClick={() => setShowMadd(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showMadd ? 'bg-pink-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-pink-100'}`} aria-pressed={showMadd} title={t('liveSession.toggleMadd')}>M</button>
+                                    <button
+                                        onClick={() => isListening ? stopListening() : startListening()}
+                                        title={isListening ? 'Stop word tracking' : 'Start word-by-word tracking'}
+                                        className={`w-8 h-7 flex items-center justify-center rounded-md transition-colors duration-200 ${isListening ? 'bg-red-500 text-white shadow-md animate-pulse' : 'bg-slate-200 text-slate-700 hover:bg-red-100'}`}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                            <path d="M8.25 4.5a3.75 3.75 0 1 1 7.5 0v8.25a3.75 3.75 0 1 1-7.5 0V4.5Z" />
+                                            <path d="M6 10.5a.75.75 0 0 1 .75.75v1.5a5.25 5.25 0 1 0 10.5 0v-1.5a.75.75 0 0 1 1.5 0v1.5a6.751 6.751 0 0 1-6 6.709v2.291h3a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5h3v-2.291a6.751 6.751 0 0 1-6-6.709v-1.5A.75.75 0 0 1 6 10.5Z" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
                             <form onSubmit={handleSearch} className="flex gap-2 items-center">
