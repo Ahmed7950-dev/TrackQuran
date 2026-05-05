@@ -39,12 +39,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // On mount: restore session from Supabase (handles page refresh)
   useEffect(() => {
     const restore = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const teacher = await buildTeacherUser(session);
-        setCurrentUser(teacher);
+      try {
+        // Safety timeout — if Supabase hangs (e.g. stale token, network issue),
+        // we fall through to the login page instead of staying on a blank screen.
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
+        ]);
+        if (sessionResult && (sessionResult as any).data?.session) {
+          const session = (sessionResult as any).data.session;
+          const teacher = await buildTeacherUser(session);
+          setCurrentUser(teacher);
+        }
+      } catch (err) {
+        console.warn('Session restore failed:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     restore();
 
