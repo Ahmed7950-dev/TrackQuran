@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(npx tsc *)",
+      "Bash(chmod +x \"/Users/ahmed/Desktop/Quran-Apps/Quran-ful/quran-ful-v3 31 Dec/Run-TRACKQURAN.command\")",
+      "Bash(npm install *)"
+    ]
+  }
+}

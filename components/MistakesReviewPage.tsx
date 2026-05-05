@@ -1,0 +1,883 @@
+import React, { useState, useEffect } from 'react';
+import { Student, QuranVerse, Mistake } from '../types';
+import { QURAN_METADATA } from '../constants';
+import { useI18n } from '../context/I18nProvider';
+
+
+// Helper function to check if a character is an Arabic letter
+const isArabicLetter = (char: string | undefined): boolean => {
+    if (!char) return false;
+    const code = char.charCodeAt(0);
+    // Basic Arabic letters (U+0621–U+064A)
+    if (code >= 0x0621 && code <= 0x064A) return true;
+    // Extended Arabic letters used in Quranic orthography
+    // (e.g. ٱ Alef Wasla U+0671). Excludes U+0670 which is a combining mark.
+    if (code >= 0x0671 && code <= 0x06D3) return true;
+    if (code === 0x06D5) return true;
+    if (code >= 0x06EE && code <= 0x06EF) return true;
+    if (code >= 0x06FA && code <= 0x06FC) return true;
+    return false;
+};
+
+// Parse word into individual letters with their indices
+const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
+    const letters: Array<{ letter: string; index: number }> = [];
+    if (!word || typeof word !== 'string') return letters;
+    let letterIndex = 0;
+    for (let i = 0; i < word.length; i++) {
+        const char = word[i];
+        if (isArabicLetter(char)) {
+            letters.push({ letter: char, index: letterIndex });
+            letterIndex++;
+        } else {
+            // Attach diacritics to the previous letter, or create a standalone unit
+            if (letters.length > 0) {
+                letters[letters.length - 1].letter += char;
+            } else {
+                letters.push({ letter: char, index: letterIndex });
+            }
+        }
+    }
+    return letters;
+};
+
+const getMistakeColor = (level: number): string => {
+    switch (level) {
+        case 1: return 'bg-yellow-200/70 dark:bg-yellow-500/30';
+        case 2: return 'bg-orange-300/70 dark:bg-orange-500/30';
+        case 3: return 'bg-red-400/70 dark:bg-red-500/30';
+        case 4: return 'bg-orange-300/70 dark:bg-orange-500/30'; // correction
+        case 5: return 'bg-yellow-200/70 dark:bg-yellow-500/30'; // correction
+        default: return 'transparent';
+    }
+};
+
+const toEasternArabicNumerals = (num: number): string => {
+    const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return String(num).split('').map(digit => arabicNumerals[parseInt(digit, 10)]).join('');
+};
+
+interface MistakesReviewPageProps {
+  student: Student;
+  showTitle?: boolean;
+  onBack?: () => void;
+}
+
+type VersesWithMistakes = {
+    [surahNum: number]: QuranVerse[];
+};
+
+const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTitle = true, onBack }) => {
+    const { t } = useI18n();
+    const [versesWithMistakes, setVersesWithMistakes] = useState<VersesWithMistakes>({});
+    const [loading, setLoading] = useState(true);
+    const [isExportingImage, setIsExportingImage] = useState(false);
+    const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'specific'>('all');
+    const [specificDate, setSpecificDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+    useEffect(() => {
+        const processMistakes = async () => {
+            setLoading(true);
+            const mistakes = student.mistakes || {};
+            let mistakeKeys = Object.keys(mistakes);
+
+            // Filter mistakes by date
+            if (dateFilter !== 'all') {
+                let targetDate: string;
+                if (dateFilter === 'today') {
+                    targetDate = new Date().toISOString().split('T')[0];
+                } else {
+                    targetDate = specificDate;
+                }
+
+                mistakeKeys = mistakeKeys.filter(key => {
+                    const mistake = mistakes[key];
+                    if (!mistake || !mistake.date) return false;
+                    const mistakeDate = new Date(mistake.date).toISOString().split('T')[0];
+                    return mistakeDate === targetDate;
+                });
+            }
+
+            if (mistakeKeys.length === 0) {
+                setVersesWithMistakes({});
+                setLoading(false);
+                return;
+            }
+
+            const surahsToFetch = new Set<number>();
+            const mistakesByVerse: { [verseKey: string]: boolean } = {};
+            mistakeKeys.forEach(key => {
+                const [surah] = key.split(':').map(Number);
+                const verseKey = key.split(':').slice(0, 2).join(':');
+                surahsToFetch.add(surah);
+                mistakesByVerse[verseKey] = true;
+            });
+
+            try {
+                const surahPromises = Array.from(surahsToFetch).map(async surahId => {
+                    const response = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surahId}`);
+                    if (!response.ok) throw new Error(`Failed to fetch Surah ${surahId}`);
+                    const data = await response.json();
+                    return { surahId, verses: data.verses as QuranVerse[] };
+                });
+
+                const fetchedSurahs = await Promise.all(surahPromises);
+                const allVersesMap: { [surahId: number]: QuranVerse[] } = {};
+                fetchedSurahs.forEach(s => {
+                    allVersesMap[s.surahId] = s.verses;
+                });
+                
+                const result: VersesWithMistakes = {};
+                for (const surahId of Array.from(surahsToFetch).sort((a,b) => a-b)) {
+                    const versesInSurah = allVersesMap[surahId];
+                    if (versesInSurah) {
+                        const versesContainingMistakes = versesInSurah.filter(v => mistakesByVerse[v.verse_key]);
+                        if(versesContainingMistakes.length > 0) {
+                            result[surahId] = versesContainingMistakes;
+                        }
+                    }
+                }
+                setVersesWithMistakes(result);
+            } catch (error) {
+                console.error("Failed to load verses for mistakes review:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        processMistakes();
+    }, [student.mistakes, dateFilter, specificDate]);
+
+    const [isImageExportMode, setIsImageExportMode] = useState(false);
+
+    // Helper function to get image export library
+    const getImageExportLibrary = () => {
+        const win = window as any;
+        // rasterizeHTML.js is the primary library
+        const rasterizeHTML = win.rasterizeHTML;
+        
+        // Fallback to html2canvas if rasterizeHTML is not available
+        const html2canvasLib = win.html2canvas;
+        
+        return { rasterizeHTML, html2canvasLib };
+    };
+
+    const handleExportAsImage = async () => {
+        // Wait a bit for libraries to load if they're still loading
+        let attempts = 0;
+        let { rasterizeHTML, html2canvasLib } = getImageExportLibrary();
+        
+        while (!rasterizeHTML && !html2canvasLib && attempts < 10) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            ({ rasterizeHTML, html2canvasLib } = getImageExportLibrary());
+            attempts++;
+        }
+        
+        if (!rasterizeHTML && !html2canvasLib) {
+            alert('Image export library is not loaded. Please refresh the page and try again.');
+            return;
+        }
+
+        setIsExportingImage(true);
+        setIsImageExportMode(true); // Enable image-optimized rendering
+        
+        const element = document.getElementById('mistakes-review-content');
+        if (!element) {
+            console.error('Export failed: Could not find element #mistakes-review-content');
+            setIsExportingImage(false);
+            setIsImageExportMode(false);
+            return;
+        }
+
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        const isReadingMode = document.documentElement.getAttribute('data-theme') === 'reading';
+        
+        // Prepare DOM for capture
+        if (isDarkMode) document.documentElement.classList.remove('dark');
+        if (isReadingMode) document.documentElement.removeAttribute('data-theme');
+
+        try {
+            // Force re-render with image export mode
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // Wait for fonts to load
+            if (document.fonts && document.fonts.ready) {
+                await document.fonts.ready;
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            let imageDataUrl: string;
+            
+            // Prefer rasterizeHTML if available, fallback to html2canvas
+            if (rasterizeHTML) {
+                // Use rasterizeHTML which handles text rendering better
+                // It preserves fonts and text formatting more accurately by using SVG foreignObject
+                // Create a canvas element for rendering
+                const canvas = document.createElement('canvas');
+                canvas.width = element.scrollWidth * 2; // Higher resolution
+                canvas.height = element.scrollHeight * 2;
+                
+                // Create a temporary document with the element content
+                // This ensures all styles are properly applied
+                const tempDoc = document.implementation.createHTMLDocument('temp');
+                const tempBody = tempDoc.body;
+                
+                // Copy all styles from the current document
+                Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]')).forEach(style => {
+                    tempDoc.head.appendChild(style.cloneNode(true));
+                });
+                
+                // Clone the element and remove no-print elements
+                const clonedElement = element.cloneNode(true) as HTMLElement;
+                const noPrintElements = clonedElement.querySelectorAll('.no-print');
+                noPrintElements.forEach(el => el.remove());
+                
+                // Append to temp document
+                tempBody.appendChild(clonedElement);
+                tempBody.style.margin = '0';
+                tempBody.style.padding = '0';
+                tempBody.style.backgroundColor = '#ffffff';
+                
+                // Render document to canvas using rasterizeHTML
+                await rasterizeHTML.drawDocument(tempDoc, canvas);
+                
+                imageDataUrl = canvas.toDataURL('image/png', 1.0);
+            } else if (html2canvasLib) {
+                // Fallback to html2canvas with better settings for Arabic text
+                const canvas = await html2canvasLib(element, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    allowTaint: false,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc: Document) => {
+                        // Ensure fonts are properly loaded in clone
+                        const clonedElement = clonedDoc.getElementById('mistakes-review-content');
+                        if (clonedElement) {
+                            // Force font rendering
+                            const style = clonedDoc.createElement('style');
+                            style.textContent = `
+                                * {
+                                    -webkit-font-smoothing: antialiased;
+                                    -moz-osx-font-smoothing: grayscale;
+                                }
+                            `;
+                            clonedDoc.head.appendChild(style);
+                        }
+                    }
+                });
+                imageDataUrl = canvas.toDataURL('image/png', 1.0);
+            } else {
+                throw new Error('No image export library available');
+            }
+
+            // Create a temporary link to download
+            const link = document.createElement('a');
+            link.download = `${student.name.replace(/ /g, '_')}_mistakes_report.png`;
+            link.href = imageDataUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Return the image data URL
+            return imageDataUrl;
+        } catch (error) {
+            console.error("Error generating image:", error);
+            alert(`An error occurred while generating the image: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+            return null;
+        } finally {
+            // Cleanup DOM after capture
+            if (isDarkMode) document.documentElement.classList.add('dark');
+            if (isReadingMode) document.documentElement.setAttribute('data-theme', 'reading');
+            setIsExportingImage(false);
+            setIsImageExportMode(false);
+        }
+    };
+
+    const handleExportToPdf = async () => {
+        setIsExportingImage(true);
+        setIsImageExportMode(true); // Enable image-optimized rendering
+        
+        const element = document.getElementById('mistakes-review-content');
+        if (!element) {
+            console.error('Export failed: Could not find element #mistakes-review-content');
+            setIsExportingImage(false);
+            setIsImageExportMode(false);
+            return;
+        }
+
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        const isReadingMode = document.documentElement.getAttribute('data-theme') === 'reading';
+        
+        // Prepare DOM for capture
+        if (isDarkMode) document.documentElement.classList.remove('dark');
+        if (isReadingMode) document.documentElement.removeAttribute('data-theme');
+
+        try {
+            // Wait a bit for libraries to load if they're still loading
+            let attempts = 0;
+            let { rasterizeHTML, html2canvasLib } = getImageExportLibrary();
+            
+            while (!rasterizeHTML && !html2canvasLib && attempts < 10) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                ({ rasterizeHTML, html2canvasLib } = getImageExportLibrary());
+                attempts++;
+            }
+            
+            if (!rasterizeHTML && !html2canvasLib) {
+                alert('Image export library is not loaded. Please refresh the page and try again.');
+                setIsImageExportMode(false);
+                return;
+            }
+
+            // Check for jsPDF
+            const jsPDF = (window as any).jspdf?.jsPDF;
+            if (!jsPDF) {
+                alert('PDF export library is not loaded. Please refresh the page and try again.');
+                setIsImageExportMode(false);
+                return;
+            }
+
+            // Force re-render with image export mode
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // Wait for fonts to load
+            if (document.fonts && document.fonts.ready) {
+                await document.fonts.ready;
+            }
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            let imageDataUrl: string;
+            let imageWidth: number;
+            let imageHeight: number;
+            
+            // Prefer rasterizeHTML if available, fallback to html2canvas
+            if (rasterizeHTML) {
+                // Use rasterizeHTML which handles text rendering better
+                // It preserves fonts and text formatting more accurately by using SVG foreignObject
+                // Create a canvas element for rendering
+                const canvas = document.createElement('canvas');
+                canvas.width = element.scrollWidth * 2; // Higher resolution
+                canvas.height = element.scrollHeight * 2;
+                imageWidth = canvas.width;
+                imageHeight = canvas.height;
+                
+                // Create a temporary document with the element content
+                // This ensures all styles are properly applied
+                const tempDoc = document.implementation.createHTMLDocument('temp');
+                const tempBody = tempDoc.body;
+                
+                // Copy all styles from the current document
+                Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]')).forEach(style => {
+                    tempDoc.head.appendChild(style.cloneNode(true));
+                });
+                
+                // Clone the element and remove no-print elements
+                const clonedElement = element.cloneNode(true) as HTMLElement;
+                const noPrintElements = clonedElement.querySelectorAll('.no-print');
+                noPrintElements.forEach(el => el.remove());
+                
+                // Append to temp document
+                tempBody.appendChild(clonedElement);
+                tempBody.style.margin = '0';
+                tempBody.style.padding = '0';
+                tempBody.style.backgroundColor = '#ffffff';
+                
+                // Render document to canvas using rasterizeHTML
+                await rasterizeHTML.drawDocument(tempDoc, canvas);
+                
+                imageDataUrl = canvas.toDataURL('image/png', 1.0);
+            } else if (html2canvasLib) {
+                // Fallback to html2canvas with better settings for Arabic text
+                const canvas = await html2canvasLib(element, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    allowTaint: false,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc: Document) => {
+                        // Ensure fonts are properly loaded in clone
+                        const clonedElement = clonedDoc.getElementById('mistakes-review-content');
+                        if (clonedElement) {
+                            // Force font rendering
+                            const style = clonedDoc.createElement('style');
+                            style.textContent = `
+                                * {
+                                    -webkit-font-smoothing: antialiased;
+                                    -moz-osx-font-smoothing: grayscale;
+                                }
+                            `;
+                            clonedDoc.head.appendChild(style);
+                        }
+                    }
+                });
+                imageDataUrl = canvas.toDataURL('image/png', 1.0);
+                imageWidth = canvas.width;
+                imageHeight = canvas.height;
+            } else {
+                throw new Error('No image export library available');
+            }
+
+            // Create PDF using jsPDF
+            // Calculate PDF dimensions (A4 size in mm)
+            const pdfWidth = 210; // A4 width in mm
+            const pdfHeight = 297; // A4 height in mm
+            const imgAspectRatio = imageWidth / imageHeight;
+            
+            // Calculate dimensions to fit the image in A4
+            let finalWidth = pdfWidth;
+            let finalHeight = pdfWidth / imgAspectRatio;
+            
+            // If image is taller than A4, scale to fit height
+            if (finalHeight > pdfHeight) {
+                finalHeight = pdfHeight;
+                finalWidth = pdfHeight * imgAspectRatio;
+            }
+            
+            const pdf = new jsPDF({
+                orientation: finalHeight > finalWidth ? 'portrait' : 'landscape',
+                unit: 'mm',
+                format: [finalWidth, finalHeight]
+            });
+            
+            // Add image to PDF
+            pdf.addImage(imageDataUrl, 'PNG', 0, 0, finalWidth, finalHeight);
+            
+            // Generate filename with student name and current date
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+            const studentName = student.name.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+            const fileName = `${studentName}_${dateStr}.pdf`;
+            
+            // Save PDF
+            pdf.save(fileName);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            alert(`An error occurred while generating the PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+        } finally {
+            // Cleanup DOM after capture
+            if (isDarkMode) document.documentElement.classList.add('dark');
+            if (isReadingMode) document.documentElement.setAttribute('data-theme', 'reading');
+            setIsExportingImage(false);
+            setIsImageExportMode(false);
+        }
+    };
+
+    // Helper function to process text and wrap U+06DF characters in Amiri font
+    const processTextWithU06DF = (text: string): React.ReactNode => {
+        if (!text.includes('\u06DF')) {
+            return text;
+        }
+        const parts: React.ReactNode[] = [];
+        let currentPart = '';
+        let charIndex = 0;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (char === '\u06DF') {
+                if (currentPart) {
+                    parts.push(<span key={`part-${charIndex++}`}>{currentPart}</span>);
+                    currentPart = '';
+                }
+                parts.push(
+                    <span key={`u06df-${charIndex++}`} style={{ fontFamily: 'Amiri Regular' }}>
+                        {'\u06DF'}
+                    </span>
+                );
+            } else {
+                currentPart += char;
+            }
+        }
+        if (currentPart) {
+            parts.push(<span key={`part-${charIndex++}`}>{currentPart}</span>);
+        }
+        return <>{parts}</>;
+    };
+
+    // Letter component - matches StudentProgressPage exactly for accurate highlighting
+    const LetterForPDF: React.FC<{
+        letter: string;
+        letterKey: string;
+        mistake: Mistake | undefined;
+    }> = ({ letter, letterKey, mistake }) => {
+        const getLetterColor = () => {
+            if (mistake && mistake.errorText) {
+                if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
+                if (mistake.errorType === 'reading') return 'bg-red-100 dark:bg-red-900/40';
+            }
+            return '';
+        };
+
+        return (
+            <span 
+                className="relative inline align-top" 
+                style={{ 
+                    display: 'inline', 
+                    fontFamily: 'inherit',
+                    letterSpacing: '0',
+                    // Ensure no gaps between letters for proper Arabic rendering
+                    margin: '0',
+                    padding: '0'
+                }}
+            >
+                {/* Annotation box for letters with mistakes */}
+                {mistake && mistake.errorText && (
+                    <div 
+                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-40 pointer-events-none"
+                        style={{ 
+                            zIndex: 40, 
+                            whiteSpace: 'nowrap',
+                            transform: 'translateX(-50%)'
+                        }}
+                    >
+                                    <div className={`px-2 py-1 text-xs rounded shadow whitespace-nowrap max-w-[250px] font-medium ${
+                            mistake.errorType === 'tajweed' 
+                                ? 'bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-200 border border-green-300 dark:border-green-700'
+                                : 'bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-700'
+                        }`}>
+                            {mistake.errorText}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Letter with background highlight - exactly like StudentProgressPage */}
+                <span
+                    className={`inline rounded transition-colors relative z-10 ${getLetterColor()}`}
+                    style={{ 
+                        display: 'inline', 
+                        fontFamily: 'inherit', 
+                        letterSpacing: '0', 
+                        position: 'relative', 
+                        zIndex: 10,
+                        // Ensure no gaps
+                        margin: '0',
+                        padding: '0'
+                    }}
+                >
+                    {letter.includes('\u06DF') ? (
+                        letter.split('').map((char, idx) => 
+                            char === '\u06DF' ? (
+                                <span key={idx} style={{ fontFamily: 'Amiri Regular' }}>{char}</span>
+                            ) : (
+                                <span key={idx}>{char}</span>
+                            )
+                        )
+                    ) : (
+                        letter
+                    )}
+                </span>
+            </span>
+        );
+    };
+
+    const renderVerseContent = (verse: QuranVerse, forImageExport: boolean = false) => {
+        const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+        const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+
+        return words.map((word, wordIndex) => {
+            const wordKey = `${surahNum}:${ayahNum}:${wordIndex}`;
+            const wordMistake = student.mistakes[wordKey];
+            const wordMistakeLevel = wordMistake?.level;
+            
+            // Parse word into letters for letter-level mistakes
+            const letters = parseWordIntoLetters(word);
+            
+            // Check if this word has any letter-level mistakes with errorText
+            const hasLetterMistakes = letters.some(({ index: letterIndex }) => {
+                const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                const letterMistake = student.mistakes[letterKey];
+                return letterMistake && letterMistake.errorText;
+            });
+            
+            if (letters.length === 0 || !hasLetterMistakes) {
+                // Fallback to word-level rendering if no letters found or no letter-level mistakes
+                return (
+                    <React.Fragment key={wordKey}>
+                        <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`}>
+                            {processTextWithU06DF(word)}
+                        </span>
+                        {' '}
+                    </React.Fragment>
+                );
+            }
+            
+            // Render each letter individually - same for both normal display and image export
+            // This ensures accurate highlighting that matches StudentProgressPage exactly
+            return (
+                <span 
+                    key={wordKey} 
+                    className="relative inline" 
+                    style={{ 
+                        display: 'inline', 
+                        fontFamily: 'inherit',
+                        // Ensure letters stay together for proper Arabic ligatures
+                        whiteSpace: 'nowrap',
+                        letterSpacing: '0'
+                    }}
+                >
+                    {letters.map(({ letter, index: letterIndex }) => {
+                        const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                        const mistake = student.mistakes[letterKey];
+                        
+                        return (
+                            <LetterForPDF
+                                key={letterKey}
+                                letter={letter}
+                                letterKey={letterKey}
+                                mistake={mistake}
+                            />
+                        );
+                    })}
+                    {' '}
+                </span>
+            );
+        });
+    };
+
+    if (loading) {
+        return <div className="text-center p-8">{t('liveSession.loadingSurah')}</div>;
+    }
+
+    if (Object.keys(versesWithMistakes).length === 0) {
+        const filterMessage = dateFilter === 'today' 
+            ? 'No mistakes marked today.'
+            : dateFilter === 'specific'
+            ? `No mistakes marked on ${new Date(specificDate).toLocaleDateString()}.`
+            : 'No mistakes found.';
+        
+        return (
+            <div className="space-y-6">
+                {/* Date Filter */}
+                <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-3 mb-4">
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            Filter by Date:
+                        </label>
+                        <select
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'specific')}
+                            className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="all">All Mistakes</option>
+                            <option value="today">Today</option>
+                            <option value="specific">Specific Date</option>
+                        </select>
+                    </div>
+                    {dateFilter === 'specific' && (
+                        <input
+                            type="date"
+                            value={specificDate}
+                            onChange={(e) => setSpecificDate(e.target.value)}
+                            className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    )}
+                </div>
+                
+                <div className="text-center p-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                    <p className="font-semibold text-lg text-slate-700 dark:text-slate-200">{t('studentView.noMistakesMashaAllah')}</p>
+                    <p className="text-slate-500 dark:text-slate-400">{filterMessage}</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div id="mistakes-review-content" className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="p-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-200 rounded-full hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors"
+                            aria-label="Back"
+                            title="Back"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 rtl:rotate-180">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                            </svg>
+                        </button>
+                    )}
+                    {showTitle && (
+                        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">
+                            {t('studentView.mistakesReviewTab')}
+                        </h2>
+                    )}
+                </div>
+                
+                {/* Date Filter */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            Filter by Date:
+                        </label>
+                        <select
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'specific')}
+                            className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="all">All Mistakes</option>
+                            <option value="today">Today</option>
+                            <option value="specific">Specific Date</option>
+                        </select>
+                    </div>
+                    {dateFilter === 'specific' && (
+                        <input
+                            type="date"
+                            value={specificDate}
+                            onChange={(e) => setSpecificDate(e.target.value)}
+                            className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-slate-700 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    )}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExportAsImage}
+                        disabled={isExportingImage}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        title="Download as Image"
+                    >
+                        {isExportingImage ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="hidden sm:inline">Generating...</span>
+                            </>
+                        ) : (
+                            <>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                                </svg>
+                                <span className="hidden sm:inline">Download Image</span>
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={handleExportToPdf}
+                        disabled={isExportingImage}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-500 dark:bg-red-600 text-white rounded-lg hover:bg-red-600 dark:hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        title="Export to PDF"
+                    >
+                        {isExportingImage ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="hidden sm:inline">Generating PDF...</span>
+                            </>
+                        ) : (
+                            <>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                                <span className="hidden sm:inline">Export PDF</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {Object.entries(versesWithMistakes).map(([surahNum, verses]: [string, QuranVerse[]]) => {
+                const surahInfo = QURAN_METADATA.find(s => s.number === Number(surahNum));
+                
+                // Get the date of mistakes in this surah (use the first mistake's date as reference)
+                const getSurahMistakeDate = () => {
+                    const mistakes = student.mistakes || {};
+                    for (const verse of verses) {
+                        const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+                        const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+                        
+                        // Check letter-level mistakes first
+                        for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
+                            const letters = parseWordIntoLetters(words[wordIndex]);
+                            for (let letterIndex = 0; letterIndex < letters.length; letterIndex++) {
+                                const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                                const mistake = mistakes[letterKey];
+                                if (mistake && mistake.date) {
+                                    return new Date(mistake.date).toLocaleDateString();
+                                }
+                            }
+                        }
+                        
+                        // Check word-level mistakes
+                        for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
+                            const wordKey = `${surahNum}:${ayahNum}:${wordIndex}`;
+                            const mistake = mistakes[wordKey];
+                            if (mistake && mistake.date) {
+                                return new Date(mistake.date).toLocaleDateString();
+                            }
+                        }
+                    }
+                    return null;
+                };
+                
+                const mistakeDate = getSurahMistakeDate();
+                
+                return (
+                    <div key={surahNum} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm break-inside-avoid">
+                        <div className="flex justify-between items-center mb-4 pb-2 border-b dark:border-gray-700">
+                            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                                {surahInfo?.number}. {surahInfo?.name} ({surahInfo?.transliteratedName})
+                            </h3>
+                            {mistakeDate && (
+                                <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                                    {mistakeDate}
+                                </span>
+                            )}
+                        </div>
+                        <div dir="rtl" className="font-quranic text-slate-800 dark:text-slate-100 text-center" style={{ fontSize: '5rem', lineHeight: '4rem' }}>
+                            {verses.map(verse => {
+                                const ayahNum = Number(verse.verse_key.split(':')[1]);
+                                // Check if this verse has any letter-level mistakes with annotation boxes
+                                const [surahNum, ayahNumCheck] = verse.verse_key.split(':').map(Number);
+                                const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+                                const hasLetterMistakes = words.some((word, wordIndex) => {
+                                    const letters = parseWordIntoLetters(word);
+                                    return letters.some(({ index: letterIndex }) => {
+                                        const letterKey = `${surahNum}:${ayahNumCheck}:${wordIndex}:${letterIndex}`;
+                                        const letterMistake = student.mistakes[letterKey];
+                                        return letterMistake && letterMistake.errorText;
+                                    });
+                                });
+                                
+                                return (
+                                     <div 
+                                        key={verse.verse_key} 
+                                        className="flex flex-row-reverse items-start gap-x-2 border-b border-gray-100 dark:border-gray-700"
+                                        style={{ 
+                                            minHeight: hasLetterMistakes ? 'auto' : 'auto',
+                                            paddingTop: hasLetterMistakes ? '3.5rem' : '0.5rem',
+                                            paddingBottom: hasLetterMistakes ? '0.5rem' : '0.5rem',
+                                            marginBottom: '0.75rem'
+                                        }}
+                                    >
+                                        <span className="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 mx-1 font-mono text-sm font-bold text-slate-700 dark:text-slate-200 border-2 rounded-full font-sans" style={{ verticalAlign: 'middle' }}>
+                                            {toEasternArabicNumerals(ayahNum)}
+                                        </span>
+                                        <span 
+                                            className="flex-grow text-center"
+                                            style={{ 
+                                                fontSize: '7rem',
+                                                lineHeight: '10rem',
+                                                fontFamily: 'inherit',
+                                                display: 'block',
+                                                wordWrap: 'break-word',
+                                                overflowWrap: 'break-word'
+                                            }}
+                                        >
+                                            {renderVerseContent(verse, isImageExportMode)}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+export default MistakesReviewPage;

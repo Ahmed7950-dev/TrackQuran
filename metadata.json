@@ -1,0 +1,5 @@
+{
+  "name": "Quran-ful V2",
+  "description": "An application for Quran teachers to track the progress of their students, including recitation, tajweed, tafsir, and attendance. It features detailed student profiles, progress visualizations, and an AI-powered comment generator for reports.",
+  "requestFramePermissions": []
+}
