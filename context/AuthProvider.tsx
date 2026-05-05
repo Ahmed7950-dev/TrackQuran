@@ -74,6 +74,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // ── Teacher email+password login ─────────────────────────────
   const login = useCallback(async (email: string, password: string): Promise<{ error: string | null }> => {
+    // Clear any stale local session before signing in.
+    // This prevents the Supabase client from hanging on a background token
+    // refresh from a previous session, which causes signInWithPassword to never resolve.
+    await supabase.auth.signOut({ scope: 'local' });
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
     return { error: null };
