@@ -44,9 +44,25 @@ const getMistakeBg = (level: number) => {
   }
 };
 
-// Minshawi individual-ayah audio URL from everyayah.com
+// Global ayah number required by cdn.islamic.network
+const SURAH_VERSE_COUNTS = [
+  7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,
+  112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,
+  59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,
+  52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,
+  21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6,
+];
+
+const toGlobalAyah = (surah: number, ayah: number): number => {
+  let n = 0;
+  for (let i = 0; i < surah - 1; i++) n += SURAH_VERSE_COUNTS[i];
+  return n + ayah;
+};
+
+// Islamic Network CDN — has CORS headers, reliable, free
+// ar.minshawi = Mohamed Siddiq Al-Minshawi (Murattal)
 const audioUrl = (surah: number, ayah: number) =>
-  `https://everyayah.com/data/Minshawi_Murattal_64kbps/${String(surah).padStart(3, '0')}${String(ayah).padStart(3, '0')}.mp3`;
+  `https://cdn.islamic.network/quran/audio/128/ar.minshawi/${toGlobalAyah(surah, ayah)}.mp3`;
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
@@ -268,37 +284,61 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         );
       }
 
+      // Collect annotations to render below the verse (avoids inline-block which breaks ligatures)
+      const annotations: Array<{ label: string; type: string }> = [];
+      letters.forEach(({ index: li }) => {
+        const lm = mistakes[`${surahNum}:${ayahNum}:${wi}:${li}`];
+        if (lm?.errorText) annotations.push({ label: lm.errorText, type: lm.errorType ?? 'tajweed' });
+      });
+
       return (
-        <span key={wordKey} className="relative inline whitespace-nowrap" style={{ fontFamily: 'inherit' }}>
-          {letters.map(({ letter, index: li }) => {
-            const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
-            const lm = mistakes[lk];
-            const letterBg = lm?.errorText
-              ? lm.errorType === 'tajweed'
-                ? 'bg-green-100'
-                : 'bg-red-100'
-              : '';
-            return (
-              <span key={lk} className="relative inline-block align-top" style={{ fontFamily: 'inherit' }}>
-                {lm?.errorText && (
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-10 pointer-events-none">
-                    <span className={`block px-2 py-0.5 text-xs rounded shadow whitespace-nowrap font-medium ${
-                      lm.errorType === 'tajweed'
-                        ? 'bg-green-100 text-green-800 border border-green-300'
-                        : 'bg-red-100 text-red-800 border border-red-300'
-                    }`}>
-                      {lm.errorText}
-                    </span>
-                  </span>
-                )}
-                <span className={`inline rounded ${letterBg}`} style={{ fontFamily: 'inherit' }}>
+        <React.Fragment key={wordKey}>
+          <span
+            style={{
+              display: 'inline',
+              fontFamily: 'inherit',
+              position: 'relative',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {letters.map(({ letter, index: li }) => {
+              const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
+              const lm = mistakes[lk];
+              const letterBg = lm?.errorText
+                ? lm.errorType === 'tajweed' ? 'bg-green-200' : 'bg-red-200'
+                : lm ? getMistakeBg(lm.level) : '';
+              return (
+                <span
+                  key={lk}
+                  className={`rounded ${letterBg}`}
+                  style={{ display: 'inline', fontFamily: 'inherit' }}
+                >
                   {letter}
                 </span>
-              </span>
-            );
-          })}
+              );
+            })}
+          </span>
+          {annotations.length > 0 && (
+            <span
+              style={{ display: 'inline-flex', gap: '4px', verticalAlign: 'super', fontSize: '0.6em', marginRight: '2px' }}
+            >
+              {annotations.map((a, i) => (
+                <span
+                  key={i}
+                  className={`px-1 py-0.5 rounded font-sans font-medium whitespace-nowrap ${
+                    a.type === 'tajweed'
+                      ? 'bg-green-100 text-green-800 border border-green-300'
+                      : 'bg-red-100 text-red-800 border border-red-300'
+                  }`}
+                  style={{ fontFamily: 'sans-serif', lineHeight: 1.3 }}
+                >
+                  {a.label}
+                </span>
+              ))}
+            </span>
+          )}
           {' '}
-        </span>
+        </React.Fragment>
       );
     });
   };
