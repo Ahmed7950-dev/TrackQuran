@@ -251,6 +251,41 @@ const getDefaultTajweedRules = (): string[] => [
 // ============================================================
 // Quran API (unchanged)
 // ============================================================
+// Shared Reports (public student mistake review links)
+// ============================================================
+
+export interface SharedReportData {
+  studentName: string;
+  generatedAt: string;
+  mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
+  verses: Array<{ verse_key: string; text_uthmani: string }>;
+}
+
+export const createSharedReport = async (
+  teacherId: string,
+  studentName: string,
+  reportData: SharedReportData,
+): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('shared_reports')
+    .insert({ teacher_id: teacherId, student_name: studentName, report_data: reportData })
+    .select('id')
+    .single();
+  if (error) { console.error('createSharedReport:', error.message); return null; }
+  return data.id as string;
+};
+
+export const getSharedReport = async (id: string): Promise<{ student_name: string; report_data: SharedReportData } | null> => {
+  const { data, error } = await supabase
+    .from('shared_reports')
+    .select('student_name, report_data')
+    .eq('id', id)
+    .single();
+  if (error) { console.error('getSharedReport:', error.message); return null; }
+  return data;
+};
+
+// ============================================================
 const surahCache = new Map<number, QuranVerse[]>();
 
 export const getVersesForSurah = async (surahId: number): Promise<QuranVerse[]> => {

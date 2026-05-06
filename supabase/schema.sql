@@ -113,3 +113,29 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ── Shared student mistake reports ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS shared_reports (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id  UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  student_name TEXT NOT NULL,
+  report_data JSONB NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE shared_reports ENABLE ROW LEVEL SECURITY;
+
+-- Anyone (including unauthenticated visitors) can read a report by its ID
+CREATE POLICY "Public read shared reports"
+  ON shared_reports FOR SELECT
+  USING (true);
+
+-- Only the owning teacher can insert
+CREATE POLICY "Teachers insert own reports"
+  ON shared_reports FOR INSERT
+  WITH CHECK (auth.uid() = teacher_id);
+
+-- Only the owning teacher can delete
+CREATE POLICY "Teachers delete own reports"
+  ON shared_reports FOR DELETE
+  USING (auth.uid() = teacher_id);

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
+import { createSharedReport } from '../services/dataService';
+import { useAuth } from '../context/AuthProvider';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -61,19 +63,24 @@ interface MistakesReviewPageProps {
   student: Student;
   showTitle?: boolean;
   onBack?: () => void;
+  teacherId?: string;
 }
 
 type VersesWithMistakes = {
     [surahNum: number]: QuranVerse[];
 };
 
-const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTitle = true, onBack }) => {
+const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTitle = true, onBack, teacherId }) => {
     const { t } = useI18n();
+    const { currentUser } = useAuth();
     const [versesWithMistakes, setVersesWithMistakes] = useState<VersesWithMistakes>({});
     const [loading, setLoading] = useState(true);
     const [isExportingImage, setIsExportingImage] = useState(false);
     const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'specific'>('all');
     const [specificDate, setSpecificDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [isSharing, setIsSharing] = useState(false);
+    const [shareLink, setShareLink] = useState<string | null>(null);
+    const [shareCopied, setShareCopied] = useState(false);
 
     useEffect(() => {
         const processMistakes = async () => {
@@ -463,6 +470,61 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         }
     };
 
+    // ── Share handler ────────────────────────────────────────────
+    const handleShare = async () => {
+        const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
+        if (!tid) return;
+
+        setIsSharing(true);
+        try {
+            // Collect only verses that have mistakes
+            const mistakeVerseKeys = new Set<string>();
+            Object.keys(student.mistakes || {}).forEach(k => {
+                mistakeVerseKeys.add(k.split(':').slice(0, 2).join(':'));
+            });
+
+            // Collect the currently displayed verses
+            const verseList: Array<{ verse_key: string; text_uthmani: string }> = [];
+            (Object.values(versesWithMistakes).flat() as QuranVerse[]).forEach(v => {
+                if (mistakeVerseKeys.has(v.verse_key)) {
+                    verseList.push({ verse_key: v.verse_key, text_uthmani: v.text_uthmani });
+                }
+            });
+
+            // Apply same date filter as currently shown
+            const filteredMistakes: { [key: string]: Mistake } = {};
+            Object.entries(student.mistakes || {}).forEach(([key, m]: [string, Mistake]) => {
+                if (dateFilter === 'all') {
+                    filteredMistakes[key] = m;
+                } else {
+                    const targetDate = dateFilter === 'today'
+                        ? new Date().toISOString().split('T')[0]
+                        : specificDate;
+                    if (m.date && new Date(m.date).toISOString().split('T')[0] === targetDate) {
+                        filteredMistakes[key] = m;
+                    }
+                }
+            });
+
+            const reportId = await createSharedReport(tid, student.name, {
+                studentName: student.name,
+                generatedAt: new Date().toISOString(),
+                mistakes: filteredMistakes,
+                verses: verseList,
+            });
+
+            if (reportId) {
+                const link = `${window.location.origin}/report/${reportId}`;
+                setShareLink(link);
+                await navigator.clipboard.writeText(link).catch(() => {});
+                setShareCopied(true);
+                setTimeout(() => setShareCopied(false), 3000);
+            }
+        } finally {
+            setIsSharing(false);
+        }
+    };
+
     // Helper function to process text and wrap U+06DF characters in Amiri font
     const processTextWithU06DF = (text: string): React.ReactNode => {
         if (!text.includes('\u06DF')) {
@@ -776,8 +838,60 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                             </>
                         )}
                     </button>
+
+                    {/* Share button */}
+                    <button
+                        onClick={handleShare}
+                        disabled={isSharing}
+                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        title="Generate shareable link for student"
+                    >
+                        {isSharing ? (
+                            <>
+                                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="hidden sm:inline">Generating…</span>
+                            </>
+                        ) : shareCopied ? (
+                            <>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                    <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+                                </svg>
+                                <span className="hidden sm:inline">Link Copied!</span>
+                            </>
+                        ) : (
+                            <>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
+                                </svg>
+                                <span className="hidden sm:inline">Share</span>
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
+
+            {/* Share link display */}
+            {shareLink && (
+                <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-teal-600 flex-shrink-0">
+                        <path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-.354-5.304.75.75 0 0 1-.353-1Z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-teal-700 font-medium truncate flex-1">{shareLink}</span>
+                    <button
+                        onClick={async () => {
+                            await navigator.clipboard.writeText(shareLink).catch(() => {});
+                            setShareCopied(true);
+                            setTimeout(() => setShareCopied(false), 3000);
+                        }}
+                        className="flex-shrink-0 px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700 transition"
+                    >
+                        {shareCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                </div>
+            )}
 
             {Object.entries(versesWithMistakes).map(([surahNum, verses]: [string, QuranVerse[]]) => {
                 const surahInfo = QURAN_METADATA.find(s => s.number === Number(surahNum));

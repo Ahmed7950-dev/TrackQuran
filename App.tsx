@@ -16,6 +16,7 @@ import StudentViewOnlyPage from './components/StudentViewOnlyPage';
 import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
+import SharedReportPage from './components/SharedReportPage';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -88,6 +89,13 @@ const useQuranicFont = () => {
 };
 
 const App: React.FC = () => {
+  // ── Shared report route — no auth required ──────────────────────────────────
+  const sharedReportId = (() => {
+    const m = window.location.pathname.match(/^\/report\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (sharedReportId) return <SharedReportPage reportId={sharedReportId} />;
+
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -677,7 +685,7 @@ const App: React.FC = () => {
           />
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (
-            <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} />
+            <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined} />
           ) : (
             <StudentDetailPage 
               student={selectedStudent} 
