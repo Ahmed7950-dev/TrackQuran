@@ -277,18 +277,34 @@ export const getReportPlays = async (reportId: string): Promise<{ [verseKey: str
   return counts;
 };
 
-export const createSharedReport = async (
+/** Upsert the shared report for a student — always returns the same UUID. */
+export const createOrUpdateSharedReport = async (
   teacherId: string,
+  studentId: string,
   studentName: string,
   reportData: SharedReportData,
 ): Promise<string | null> => {
   const { data, error } = await supabase
     .from('shared_reports')
-    .insert({ teacher_id: teacherId, student_name: studentName, report_data: reportData })
+    .upsert(
+      { teacher_id: teacherId, student_id: studentId, student_name: studentName, report_data: reportData },
+      { onConflict: 'teacher_id,student_id' },
+    )
     .select('id')
     .single();
-  if (error) { console.error('createSharedReport:', error.message); return null; }
+  if (error) { console.error('createOrUpdateSharedReport:', error.message); return null; }
   return data.id as string;
+};
+
+/** Returns the existing report UUID for this student, or null if none exists yet. */
+export const getStudentReportId = async (teacherId: string, studentId: string): Promise<string | null> => {
+  const { data } = await supabase
+    .from('shared_reports')
+    .select('id')
+    .eq('teacher_id', teacherId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+  return data?.id ?? null;
 };
 
 export const getSharedReport = async (id: string): Promise<{ student_name: string; report_data: SharedReportData } | null> => {

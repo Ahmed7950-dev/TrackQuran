@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
-import { createSharedReport, getReportPlays } from '../services/dataService';
+import { createOrUpdateSharedReport, getStudentReportId, getReportPlays } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 
@@ -80,28 +80,59 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'specific'>('all');
     const [specificDate, setSpecificDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [isSharing, setIsSharing] = useState(false);
-    const [shareLink, setShareLink] = useState<string | null>(null);
     const [shareCopied, setShareCopied] = useState(false);
     const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
     const playChannelRef = useRef<any>(null);
 
-    // Derive the active reportId from the share link
-    const activeReportId = useMemo(() => {
-        if (!shareLink) return null;
-        const m = shareLink.match(/\/report\/([a-f0-9-]{36})$/i);
-        return m ? m[1] : null;
-    }, [shareLink]);
+    // Single source of truth: the UUID of this student's persistent report (null = not created yet)
+    const [activeReportId, setActiveReportId] = useState<string | null>(null);
 
-    // Subscribe to play events whenever a report link is active
+    // Derived — no state needed; URL is always the same UUID
+    const shareLink = activeReportId ? `${window.location.origin}/report/${activeReportId}` : null;
+
+    // Serialised mistakes — used to detect real content changes without object-reference churn
+    const mistakesKey = useMemo(() => JSON.stringify(student.mistakes), [student.mistakes]);
+    // Tracks the last mistakes snapshot we pushed to the DB so we don't over-call
+    const lastSyncedMistakesRef = useRef<string>('');
+
+    // On mount: look up the existing report for this student so circles persist across refreshes
+    useEffect(() => {
+        if (!teacherId || !student.id) return;
+        getStudentReportId(teacherId, student.id).then(id => {
+            if (id) setActiveReportId(id);
+        });
+    }, [teacherId, student.id]);
+
+    // Auto-update the shared report whenever mistakes change (only when a report already exists
+    // and we're showing all mistakes so the verse list is complete)
+    useEffect(() => {
+        if (!activeReportId || loading || dateFilter !== 'all') return;
+        if (Object.keys(versesWithMistakes).length === 0) return;
+        if (mistakesKey === lastSyncedMistakesRef.current) return; // nothing changed
+        lastSyncedMistakesRef.current = mistakesKey;
+
+        const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
+        if (!tid) return;
+
+        const verseList = (Object.values(versesWithMistakes).flat() as QuranVerse[])
+            .map(v => ({ verse_key: v.verse_key, text_uthmani: v.text_uthmani }));
+
+        // Fire-and-forget — silent background sync, no loading indicators
+        createOrUpdateSharedReport(tid, student.id, student.name, {
+            studentName: student.name,
+            generatedAt: new Date().toISOString(),
+            mistakes: student.mistakes || {},
+            verses: verseList,
+        }).catch(e => console.error('Auto-update shared report:', e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeReportId, loading, versesWithMistakes, mistakesKey, dateFilter]);
+
+    // Subscribe to play events + load historical plays whenever a report exists
     useEffect(() => {
         if (!activeReportId) return;
 
-        // Load any existing plays (student may have already listened)
-        getReportPlays(activeReportId).then(plays => {
-            setVersePlays(plays);
-        });
+        getReportPlays(activeReportId).then(plays => setVersePlays(plays));
 
-        // Subscribe to live broadcast from the student's page
         const ch = supabase.channel(`report-plays-${activeReportId}`);
         ch.on('broadcast', { event: 'play' }, ({ payload }) => {
             const vk = payload?.verse_key as string | undefined;
@@ -500,52 +531,28 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         }
     };
 
-    // ── Share handler ────────────────────────────────────────────
+    // ── Share handler — always upserts so the link never changes ────
     const handleShare = async () => {
         const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
         if (!tid) return;
 
         setIsSharing(true);
         try {
-            // Collect only verses that have mistakes
-            const mistakeVerseKeys = new Set<string>();
-            Object.keys(student.mistakes || {}).forEach(k => {
-                mistakeVerseKeys.add(k.split(':').slice(0, 2).join(':'));
-            });
+            // Always save ALL mistakes (not filtered) so the student sees everything
+            const verseList: Array<{ verse_key: string; text_uthmani: string }> =
+                (Object.values(versesWithMistakes).flat() as QuranVerse[])
+                    .map(v => ({ verse_key: v.verse_key, text_uthmani: v.text_uthmani }));
 
-            // Collect the currently displayed verses
-            const verseList: Array<{ verse_key: string; text_uthmani: string }> = [];
-            (Object.values(versesWithMistakes).flat() as QuranVerse[]).forEach(v => {
-                if (mistakeVerseKeys.has(v.verse_key)) {
-                    verseList.push({ verse_key: v.verse_key, text_uthmani: v.text_uthmani });
-                }
-            });
-
-            // Apply same date filter as currently shown
-            const filteredMistakes: { [key: string]: Mistake } = {};
-            Object.entries(student.mistakes || {}).forEach(([key, m]: [string, Mistake]) => {
-                if (dateFilter === 'all') {
-                    filteredMistakes[key] = m;
-                } else {
-                    const targetDate = dateFilter === 'today'
-                        ? new Date().toISOString().split('T')[0]
-                        : specificDate;
-                    if (m.date && new Date(m.date).toISOString().split('T')[0] === targetDate) {
-                        filteredMistakes[key] = m;
-                    }
-                }
-            });
-
-            const reportId = await createSharedReport(tid, student.name, {
+            const reportId = await createOrUpdateSharedReport(tid, student.id, student.name, {
                 studentName: student.name,
                 generatedAt: new Date().toISOString(),
-                mistakes: filteredMistakes,
+                mistakes: student.mistakes || {},
                 verses: verseList,
             });
 
             if (reportId) {
+                setActiveReportId(reportId); // activates subscription if not already running
                 const link = `${window.location.origin}/report/${reportId}`;
-                setShareLink(link);
                 await navigator.clipboard.writeText(link).catch(() => {});
                 setShareCopied(true);
                 setTimeout(() => setShareCopied(false), 3000);
