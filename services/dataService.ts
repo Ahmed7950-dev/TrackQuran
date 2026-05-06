@@ -261,6 +261,22 @@ export interface SharedReportData {
   verses: Array<{ verse_key: string; text_uthmani: string }>;
 }
 
+// ── Verse play tracking ──────────────────────────────────────────────────────
+
+export const recordVersePlay = async (reportId: string, verseKey: string): Promise<void> => {
+  await supabase.from('report_plays').insert({ report_id: reportId, verse_key: verseKey });
+};
+
+export const getReportPlays = async (reportId: string): Promise<{ [verseKey: string]: number }> => {
+  const { data } = await supabase
+    .from('report_plays')
+    .select('verse_key')
+    .eq('report_id', reportId);
+  const counts: { [k: string]: number } = {};
+  data?.forEach(r => { counts[r.verse_key] = (counts[r.verse_key] ?? 0) + 1; });
+  return counts;
+};
+
 export const createSharedReport = async (
   teacherId: string,
   studentName: string,

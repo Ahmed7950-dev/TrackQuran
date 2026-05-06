@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getSharedReport, SharedReportData } from '../services/dataService';
+import { getSharedReport, SharedReportData, recordVersePlay } from '../services/dataService';
+import { supabase } from '../lib/supabase';
 import { QURAN_METADATA } from '../constants';
 import Logo from './Logo';
 
@@ -66,7 +67,7 @@ const audioUrl = (surah: number, ayah: number) =>
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
-const VerseAudioPlayer: React.FC<{ surah: number; ayah: number }> = ({ surah, ayah }) => {
+const VerseAudioPlayer: React.FC<{ surah: number; ayah: number; onPlay?: () => void }> = ({ surah, ayah, onPlay }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -94,7 +95,7 @@ const VerseAudioPlayer: React.FC<{ surah: number; ayah: number }> = ({ surah, ay
       audio.pause();
       setPlaying(false);
     } else {
-      audio.play().then(() => setPlaying(true)).catch(() => setError(true));
+      audio.play().then(() => { setPlaying(true); onPlay?.(); }).catch(() => setError(true));
     }
   };
 
@@ -217,12 +218,31 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [report, setReport] = useState<{ student_name: string; report_data: SharedReportData } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     getSharedReport(reportId).then(r => {
       if (!r) setNotFound(true);
       else setReport(r);
       setLoading(false);
+    });
+
+    // Set up broadcast channel so the teacher's page can receive play events
+    const ch = supabase.channel(`report-plays-${reportId}`);
+    ch.subscribe();
+    channelRef.current = ch;
+    return () => { ch.unsubscribe(); };
+  }, [reportId]);
+
+  // Called each time the student presses play on a verse
+  const handleVersePlay = useCallback(async (verseKey: string) => {
+    // Persist to DB (teacher can see even if they refresh)
+    await recordVersePlay(reportId, verseKey);
+    // Broadcast real-time to teacher's open tab
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'play',
+      payload: { verse_key: verseKey },
     });
   }, [reportId]);
 
@@ -402,7 +422,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
 
                       {/* Audio player */}
                       <div dir="ltr">
-                        <VerseAudioPlayer surah={s} ayah={a} />
+                        <VerseAudioPlayer surah={s} ayah={a} onPlay={() => handleVersePlay(`${s}:${a}`)} />
                       </div>
                     </div>
                   );

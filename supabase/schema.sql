@@ -139,3 +139,15 @@ CREATE POLICY "Teachers insert own reports"
 CREATE POLICY "Teachers delete own reports"
   ON shared_reports FOR DELETE
   USING (auth.uid() = teacher_id);
+
+-- ── Verse play tracking ───────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS report_plays (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id  UUID NOT NULL REFERENCES shared_reports(id) ON DELETE CASCADE,
+  verse_key  TEXT NOT NULL,
+  played_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE report_plays ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone reads plays"   ON report_plays FOR SELECT USING (true);
+CREATE POLICY "Anyone inserts plays" ON report_plays FOR INSERT WITH CHECK (true);

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
-import { createSharedReport } from '../services/dataService';
+import { createSharedReport, getReportPlays } from '../services/dataService';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 
 
@@ -81,6 +82,35 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const [isSharing, setIsSharing] = useState(false);
     const [shareLink, setShareLink] = useState<string | null>(null);
     const [shareCopied, setShareCopied] = useState(false);
+    const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
+    const playChannelRef = useRef<any>(null);
+
+    // Derive the active reportId from the share link
+    const activeReportId = useMemo(() => {
+        if (!shareLink) return null;
+        const m = shareLink.match(/\/report\/([a-f0-9-]{36})$/i);
+        return m ? m[1] : null;
+    }, [shareLink]);
+
+    // Subscribe to play events whenever a report link is active
+    useEffect(() => {
+        if (!activeReportId) return;
+
+        // Load any existing plays (student may have already listened)
+        getReportPlays(activeReportId).then(plays => {
+            setVersePlays(plays);
+        });
+
+        // Subscribe to live broadcast from the student's page
+        const ch = supabase.channel(`report-plays-${activeReportId}`);
+        ch.on('broadcast', { event: 'play' }, ({ payload }) => {
+            const vk = payload?.verse_key as string | undefined;
+            if (vk) setVersePlays(prev => ({ ...prev, [vk]: (prev[vk] ?? 0) + 1 }));
+        }).subscribe();
+
+        playChannelRef.current = ch;
+        return () => { ch.unsubscribe(); playChannelRef.current = null; };
+    }, [activeReportId]);
 
     useEffect(() => {
         const processMistakes = async () => {
@@ -956,23 +986,43 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                     });
                                 });
                                 
+                                const playCount = versePlays[verse.verse_key] ?? 0;
+
                                 return (
-                                     <div 
-                                        key={verse.verse_key} 
-                                        className="flex flex-row-reverse items-start gap-x-2 border-b border-gray-100 dark:border-gray-700"
-                                        style={{ 
+                                     <div
+                                        key={verse.verse_key}
+                                        className="relative flex flex-row-reverse items-start gap-x-2 border-b border-gray-100 dark:border-gray-700"
+                                        style={{
                                             minHeight: hasLetterMistakes ? 'auto' : 'auto',
                                             paddingTop: hasLetterMistakes ? '3.5rem' : '0.5rem',
                                             paddingBottom: hasLetterMistakes ? '0.5rem' : '0.5rem',
                                             marginBottom: '0.75rem'
                                         }}
                                     >
+                                        {/* Play circles — shown when student has listened */}
+                                        {playCount > 0 && (
+                                            <div className="no-print absolute top-2 left-2 flex items-center gap-1 z-10" title={`Listened ${playCount} time${playCount !== 1 ? 's' : ''}`}>
+                                                {Array.from({ length: Math.min(playCount, 5) }).map((_, i) => (
+                                                    <span
+                                                        key={i}
+                                                        className="block w-2.5 h-2.5 rounded-full bg-teal-500 shadow-sm"
+                                                        style={{ opacity: 0.6 + i * 0.08 }}
+                                                    />
+                                                ))}
+                                                {playCount > 5 && (
+                                                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 leading-none">
+                                                        +{playCount - 5}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <span className="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 mx-1 font-mono text-sm font-bold text-slate-700 dark:text-slate-200 border-2 rounded-full font-sans" style={{ verticalAlign: 'middle' }}>
                                             {toEasternArabicNumerals(ayahNum)}
                                         </span>
-                                        <span 
+                                        <span
                                             className="flex-grow text-center"
-                                            style={{ 
+                                            style={{
                                                 fontSize: '7rem',
                                                 lineHeight: '10rem',
                                                 fontFamily: 'inherit',
