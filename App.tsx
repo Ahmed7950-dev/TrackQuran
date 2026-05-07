@@ -19,6 +19,7 @@ import AlphabetTrainerPage from './components/AlphabetTrainerPage';
 import SharedReportPage from './components/SharedReportPage';
 import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
+import AboutUsPage from './components/AboutUsPage';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -112,7 +113,7 @@ const App: React.FC = () => {
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportBackup = () => {
@@ -455,9 +456,12 @@ const App: React.FC = () => {
                     <Logo />
                 </button>
                 <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
-                    <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.aboutUs')}</a>
+                    <button
+                        onClick={() => setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs')}
+                        className={`text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                    >{t('header.aboutUs')}</button>
                     <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
-                    <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.supportUs')}</a>
+                    <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
                     <button
                         onClick={() => setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer')}
                         className={`text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -524,6 +528,8 @@ const App: React.FC = () => {
                 <LettersTrainerPage />
               ) : activeTab === 'alphabetTrainer' ? (
                 <AlphabetTrainerPage />
+              ) : activeTab === 'aboutUs' ? (
+                <AboutUsPage />
               ) : (
                 <StudentViewOnlyPage
                   student={currentUser.student}
@@ -567,9 +573,12 @@ const App: React.FC = () => {
                 <Logo />
             </button>
             <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
-                <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.aboutUs')}</a>
+                <button
+                    onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs'); }}
+                    className={`text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                >{t('header.aboutUs')}</button>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
-                <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.supportUs')}</a>
+                <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
                 <button
                     onClick={() => setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer')}
                     className={`text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -679,6 +688,8 @@ const App: React.FC = () => {
           <LettersTrainerPage />
         ) : activeTab === 'alphabetTrainer' ? (
           <AlphabetTrainerPage />
+        ) : activeTab === 'aboutUs' ? (
+          <AboutUsPage />
         ) : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}

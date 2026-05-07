@@ -8,15 +8,7 @@
 import type { TrainerState } from './lettersTrainerService';
 
 export const LETTERS_TRAINER_INITIAL_DATA: TrainerState = {
-  students: [
-    { id: 'id_q4kmrn85', name: 'Demo Student' },
-    { id: 'id_lxzfsr8q', name: 'Idrees' },
-    { id: 'id_fw6n8vhj', name: 'Morad' },
-    { id: 'id_azmzhw8b', name: 'Mustafa' },
-    { id: 'id_578xiq0c', name: 'Uthman' },
-    { id: 'id_dlxn4p5z', name: 'Zakaria' },
-    { id: 'id_bup0ole4', name: 'Liyana' },
-  ],
+  students: [],
   challenges: [
     {
       id: 'id_1cscxzmn',

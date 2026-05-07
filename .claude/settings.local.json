@@ -6,7 +6,9 @@
       "Bash(npx tsc *)",
       "Bash(chmod +x \"/Users/ahmed/Desktop/Quran-Apps/Quran-ful/quran-ful-v3 31 Dec/Run-TRACKQURAN.command\")",
       "Bash(npm install *)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
