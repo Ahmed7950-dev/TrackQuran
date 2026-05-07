@@ -276,6 +276,9 @@ export interface SharedReportData {
     }>;
     attendance: Array<{ date: string; status: string }>;
     masteredTajweedRules: string[];
+    dob?: string;
+    tafsirReviews: Array<{ id: string; date: string; surah: number; reviewQuality: number }>;
+    tafsirMemorizationReviews: Array<{ id: string; date: string; surah: number; reviewQuality: number }>;
   };
 }
 

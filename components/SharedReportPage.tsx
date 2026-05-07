@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getSharedReport, SharedReportData, recordVersePlay } from '../services/dataService';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah } from '../services/dataService';
 import { supabase } from '../lib/supabase';
-import { QURAN_METADATA } from '../constants';
+import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
 import Logo from './Logo';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -359,191 +359,576 @@ const ProgressTab: React.FC<{
   studentName: string;
   progress: NonNullable<SharedReportData['studentProgress']>;
 }> = ({ studentName, progress }) => {
-  const { recitationAchievements, memorizationAchievements, attendance, masteredTajweedRules } = progress;
+  const {
+    recitationAchievements,
+    memorizationAchievements,
+    attendance,
+    masteredTajweedRules,
+    tafsirReviews = [],
+    tafsirMemorizationReviews = [],
+  } = progress;
 
-  // Compute stats
-  const totalRecitationPages = recitationAchievements.reduce((s, a) => s + (a.pagesCompleted || 0), 0);
-  const totalMemorizationPages = memorizationAchievements.reduce((s, a) => s + (a.pagesCompleted || 0), 0);
-  const totalPoints = recitationAchievements.reduce((s, a) => s + (a.pointsEarned || 0), 0);
-  const presentCount = attendance.filter(a => a.status === 'present').length;
-  const attendanceRate = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : null;
+  const [quranBarView, setQuranBarView] = useState<'reading' | 'memorization'>('reading');
+  const [milestoneView, setMilestoneView] = useState<'reading' | 'memorization'>('reading');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [showAllRecitation, setShowAllRecitation] = useState(false);
+  const [showAllMemorization, setShowAllMemorization] = useState(false);
 
-  const avgReadingQuality = recitationAchievements.length > 0
-    ? (recitationAchievements.reduce((s, a) => s + (a.readingQuality || 0), 0) / recitationAchievements.length).toFixed(1)
-    : null;
+  // ── Compute page sets ────────────────────────────────────────────────────────
+  const recitedPages = useMemo(() => {
+    const s = new Set<number>();
+    recitationAchievements.forEach(ach => {
+      const sp = getPageOfAyah(ach.startSurah, ach.startAyah);
+      const ep = getPageOfAyah(ach.endSurah, ach.endAyah);
+      if (sp > 0 && ep > 0) for (let i = sp; i <= ep; i++) s.add(i);
+    });
+    return s;
+  }, [recitationAchievements]);
 
-  const avgMemQuality = memorizationAchievements.length > 0
-    ? (memorizationAchievements.reduce((s, a) => s + (a.memorizationQuality || 0), 0) / memorizationAchievements.length).toFixed(1)
-    : null;
+  const memorizedPages = useMemo(() => {
+    const s = new Set<number>();
+    memorizationAchievements.forEach(ach => {
+      const sp = getPageOfAyah(ach.startSurah, ach.startAyah);
+      const ep = getPageOfAyah(ach.endSurah, ach.endAyah);
+      if (sp > 0 && ep > 0) for (let i = sp; i <= ep; i++) s.add(i);
+    });
+    return s;
+  }, [memorizationAchievements]);
 
-  // Recent sessions (last 5)
-  const recentRecitation = [...recitationAchievements]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
-  const recentMemorization = [...memorizationAchievements]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
+  // ── Surah quality maps for progress bar ─────────────────────────────────────
+  const getSurahQualityMap = (achievements: Array<any>, qualityKey: string): Record<number, number> => {
+    const map: Record<number, { total: number; count: number }> = {};
+    achievements.forEach(ach => {
+      for (let i = ach.startSurah; i <= ach.endSurah; i++) {
+        if (!map[i]) map[i] = { total: 0, count: 0 };
+        map[i].total += ach[qualityKey] || 0;
+        map[i].count += 1;
+      }
+    });
+    const avg: Record<number, number> = {};
+    for (const k in map) avg[k] = map[k].total / map[k].count;
+    return avg;
+  };
 
-  const surahName = (num: number) => QURAN_METADATA.find(s => s.number === num)?.transliteratedName ?? `Surah ${num}`;
+  const recitedSurahsQuality = useMemo(() => getSurahQualityMap(recitationAchievements, 'readingQuality'), [recitationAchievements]);
+  const memorizedSurahsQuality = useMemo(() => getSurahQualityMap(memorizationAchievements, 'memorizationQuality'), [memorizationAchievements]);
 
+  // ── Attendance ───────────────────────────────────────────────────────────────
+  const attendanceData = useMemo(() => ({
+    present: attendance.filter(a => a.status === 'present').length,
+    absent: attendance.filter(a => a.status === 'absent').length,
+    rescheduled: attendance.filter(a => a.status === 'rescheduled').length,
+  }), [attendance]);
+
+  // ── Reading data ─────────────────────────────────────────────────────────────
+  const readingData = useMemo(() => {
+    const totalPages = recitedPages.size;
+    const pagesRemaining = TOTAL_QURAN_PAGES - totalPages;
+    const avgQuality = recitationAchievements.length > 0
+      ? recitationAchievements.reduce((s, a) => s + (a.readingQuality || 0), 0) / recitationAchievements.length
+      : 0;
+    const sorted = [...recitationAchievements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const last = sorted[0];
+    const lastAchievementText = last
+      ? `${QURAN_METADATA.find(s => s.number === last.endSurah)?.name || ''} ${last.endAyah}`
+      : '—';
+    const tafsirBySurah = tafsirReviews.reduce((acc, r) => {
+      if (!acc[r.surah]) acc[r.surah] = [];
+      acc[r.surah].push(r.reviewQuality);
+      return acc;
+    }, {} as Record<number, number[]>);
+    return { totalPages, pagesRemaining, avgQuality, lastAchievementText, tafsirBySurah, sorted };
+  }, [recitedPages, recitationAchievements, tafsirReviews]);
+
+  // ── Memorization data ────────────────────────────────────────────────────────
+  const memorizationData = useMemo(() => {
+    const totalPages = memorizedPages.size;
+    const pagesRemaining = TOTAL_QURAN_PAGES - totalPages;
+    const avgQuality = memorizationAchievements.length > 0
+      ? memorizationAchievements.reduce((s, a) => s + (a.memorizationQuality || 0), 0) / memorizationAchievements.length
+      : 0;
+    const sorted = [...memorizationAchievements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const last = sorted[0];
+    const lastAchievementText = last
+      ? `${QURAN_METADATA.find(s => s.number === last.endSurah)?.name || ''} ${last.endAyah}`
+      : '—';
+    // Combine initial memorization + explicit recall reviews
+    const allReviews: { surah: number; quality: number }[] = [];
+    memorizationAchievements.forEach(ach => {
+      for (let i = ach.startSurah; i <= ach.endSurah; i++) {
+        allReviews.push({ surah: i, quality: ach.memorizationQuality });
+      }
+    });
+    tafsirMemorizationReviews.forEach(r => {
+      allReviews.push({ surah: r.surah, quality: r.reviewQuality });
+    });
+    const tafsirBySurah = allReviews.reduce((acc, r) => {
+      if (!acc[r.surah]) acc[r.surah] = [];
+      acc[r.surah].push(r.quality);
+      return acc;
+    }, {} as Record<number, number[]>);
+    return { totalPages, pagesRemaining, avgQuality, lastAchievementText, tafsirBySurah, sorted };
+  }, [memorizedPages, memorizationAchievements, tafsirMemorizationReviews]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   const qualityColor = (q: number) => {
     if (q >= 9) return 'text-green-600';
     if (q >= 7) return 'text-teal-600';
     if (q >= 5) return 'text-yellow-600';
     return 'text-red-500';
   };
+  const qualityBg = (q: number) => {
+    if (q >= 8) return 'bg-green-500';
+    if (q >= 5) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  // ── Inner sub-components ─────────────────────────────────────────────────────
+
+  // Simple Reading / Hifdh toggle
+  const Toggle = ({ value, onChange }: {
+    value: 'reading' | 'memorization';
+    onChange: (v: 'reading' | 'memorization') => void;
+  }) => (
+    <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+      {(['reading', 'memorization'] as const).map(v => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+            value === v ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {v === 'reading' ? 'Reading' : 'Hifdh'}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Stat card
+  const StatCard = ({ title, value, subtext, colorClass = 'text-slate-800' }: {
+    title: string; value: string | number; subtext?: string; colorClass?: string;
+  }) => (
+    <div className="bg-white rounded-xl p-4 shadow-sm">
+      <p className="text-xs text-slate-500 mb-1 font-medium">{title}</p>
+      <p className={`text-xl font-bold ${colorClass} truncate`}>{value}</p>
+      {subtext && <p className="text-xs text-slate-400 mt-0.5">{subtext}</p>}
+    </div>
+  );
+
+  // 114-surah Quran progress bar
+  const ProgressSection = ({ qualityMap, pagesCompleted }: {
+    qualityMap: Record<number, number>; pagesCompleted: number;
+  }) => {
+    const getQColor = (q: number) => {
+      if (q > 9) return 'bg-orange-600'; if (q > 7) return 'bg-orange-500';
+      if (q > 5) return 'bg-orange-400'; if (q > 3) return 'bg-orange-300';
+      return 'bg-orange-200';
+    };
+    return (
+      <>
+        <div className="flex justify-end mb-2">
+          <span className="text-sm font-bold text-teal-600">
+            {((pagesCompleted / TOTAL_QURAN_PAGES) * 100).toFixed(1)}% Complete
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(114, minmax(0, 1fr))', minWidth: '600px' }}>
+            {QURAN_METADATA.map(surah => {
+              const quality = qualityMap[surah.number];
+              const color = quality ? getQColor(quality) : 'bg-slate-200';
+              return (
+                <div key={surah.number} className="relative group first:rounded-s-sm last:rounded-e-sm">
+                  <div className={`h-6 w-full ${color} transition-colors`} />
+                  <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 left-1/2 -translate-x-1/2">
+                    {surah.transliteratedName}
+                    <svg className="absolute text-gray-800 h-2 w-full left-0 top-full" viewBox="0 0 255 255">
+                      <polygon className="fill-current" points="0,0 127.5,127.5 255,0" />
+                    </svg>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* Legend */}
+        <div className="flex items-center gap-3 mt-3 flex-wrap text-xs text-slate-500">
+          <span className="font-medium">Quality:</span>
+          {[
+            { label: 'Excellent (9-10)', cls: 'bg-orange-600' },
+            { label: 'Good (7-9)', cls: 'bg-orange-500' },
+            { label: 'Average (5-7)', cls: 'bg-orange-400' },
+            { label: 'Below avg (3-5)', cls: 'bg-orange-300' },
+            { label: 'Needs work', cls: 'bg-orange-200' },
+            { label: 'Not yet started', cls: 'bg-slate-200' },
+          ].map(l => (
+            <span key={l.label} className="flex items-center gap-1">
+              <span className={`w-3 h-3 rounded-sm inline-block ${l.cls}`} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  // Milestone journey
+  const MilestoneSection = ({ completedPages }: { completedPages: Set<number> }) => (
+    <div className="flex items-center overflow-x-auto py-2">
+      {MILESTONES.map((milestone, index) => {
+        const achieved = milestone.isAchieved(completedPages);
+        const IconComponent = milestone.badgeIcon;
+        return (
+          <Fragment key={milestone.id}>
+            <div className="relative flex flex-col items-center group w-20 flex-shrink-0">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all duration-300 ${
+                achieved
+                  ? 'bg-teal-500 border-teal-200 text-white'
+                  : 'bg-slate-200 border-slate-300 text-slate-500'
+              }`}>
+                {achieved && typeof milestone.badgeIcon !== 'string' && milestone.id !== 'ya-seen' && milestone.id !== 'khatm'
+                  ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )
+                  : typeof IconComponent === 'string'
+                    ? <span className="font-bold text-lg">{IconComponent}</span>
+                    : IconComponent
+                }
+              </div>
+              <p className={`text-center text-xs mt-2 font-semibold transition-colors ${achieved ? 'text-teal-600' : 'text-slate-400'}`}>
+                {milestone.title}
+              </p>
+              <div className="absolute bottom-full mb-3 w-48 bg-slate-800 text-white text-xs rounded py-1.5 px-3 text-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                {milestone.description}
+                <svg className="absolute text-slate-800 h-2 w-full left-0 top-full" viewBox="0 0 255 255">
+                  <polygon className="fill-current" points="0,0 127.5,127.5 255,0" />
+                </svg>
+              </div>
+            </div>
+            {index < MILESTONES.length - 1 && (
+              <div className={`flex-grow h-1 rounded ${achieved ? 'bg-teal-500' : 'bg-slate-300'}`} />
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+
+  // Tafsir / recall reviews by surah
+  const TafsirSection = ({ tafsirBySurah }: { tafsirBySurah: Record<number, number[]> }) => (
+    Object.keys(tafsirBySurah).length > 0 ? (
+      <div className="space-y-4 max-h-64 overflow-y-auto pr-1">
+        {Object.entries(tafsirBySurah).map(([surahNum, qualities]) => {
+          const surah = QURAN_METADATA.find(s => s.number === +surahNum);
+          if (!surah) return null;
+          const avg = qualities.reduce((a, b) => a + b, 0) / qualities.length;
+          return (
+            <div key={surahNum}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-bold text-slate-800 text-sm">{surah.transliteratedName}</span>
+                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {qualities.length} review{qualities.length !== 1 ? 's' : ''}
+                </span>
+                <span className="text-xs text-indigo-600 font-bold">Avg: {avg.toFixed(1)}</span>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {qualities.map((q, i) => (
+                  <div
+                    key={i}
+                    title={`Review ${i + 1}: ${q}/10`}
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm ${qualityBg(q)}`}
+                  >
+                    {q}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ) : <p className="text-slate-400 italic text-sm">No reviews yet.</p>
+  );
+
+  // Attendance calendar
+  const attendanceMap = new Map(attendance.map(a => [new Date(a.date).toDateString(), a.status]));
+  const calMonth = calendarDate.getMonth();
+  const calYear = calendarDate.getFullYear();
+  const calFirstDay = new Date(calYear, calMonth, 1).getDay();
+  const calDaysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const calDays: React.ReactNode[] = Array.from({ length: calFirstDay }, (_, i) => (
+    <div key={`e-${i}`} className="h-8 w-8" />
+  ));
+  for (let d = 1; d <= calDaysInMonth; d++) {
+    const dateStr = new Date(calYear, calMonth, d).toDateString();
+    const status = attendanceMap.get(dateStr);
+    const isToday = dateStr === new Date().toDateString();
+    const bg = status === 'present'
+      ? 'bg-green-400 text-white'
+      : status === 'absent'
+        ? 'bg-red-400 text-white'
+        : status === 'rescheduled'
+          ? 'bg-orange-400 text-white'
+          : 'bg-slate-100 text-slate-600';
+    calDays.push(
+      <div
+        key={d}
+        className={`h-8 w-8 flex items-center justify-center text-xs rounded-full ${bg} ${isToday ? 'ring-2 ring-teal-500' : ''}`}
+      >
+        {d}
+      </div>
+    );
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-teal-600">{totalRecitationPages}</p>
-          <p className="text-xs text-slate-500 mt-1">Pages Recited</p>
+
+      {/* ── Attendance ─────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+            <span>📅</span> Attendance
+            <span className="text-xs text-slate-400 font-normal ml-1">
+              ({attendanceData.present} present / {attendance.length} sessions)
+            </span>
+          </h3>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-purple-600">{totalMemorizationPages}</p>
-          <p className="text-xs text-slate-500 mt-1">Pages Memorized</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-orange-500">{attendanceRate !== null ? `${attendanceRate}%` : '—'}</p>
-          <p className="text-xs text-slate-500 mt-1">Attendance</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-yellow-500">{totalPoints.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">Points Earned</p>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard title="Present" value={attendanceData.present} subtext="days attended" colorClass="text-green-600" />
+            <StatCard title="Absent" value={attendanceData.absent} subtext="days missed" colorClass="text-red-500" />
+            <StatCard title="Rescheduled" value={attendanceData.rescheduled} colorClass="text-orange-500" />
+          </div>
+          {/* Calendar */}
+          <div className="bg-slate-50 rounded-xl p-4">
+            <div className="flex justify-between items-center mb-3">
+              <button
+                onClick={() => setCalendarDate(new Date(calYear, calMonth - 1))}
+                className="p-1 rounded-full hover:bg-slate-200 text-slate-600 transition"
+              >&lt;</button>
+              <h4 className="font-semibold text-slate-700 text-sm">
+                {calendarDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}
+              </h4>
+              <button
+                onClick={() => setCalendarDate(new Date(calYear, calMonth + 1))}
+                className="p-1 rounded-full hover:bg-slate-200 text-slate-600 transition"
+              >&gt;</button>
+            </div>
+            <div className="mx-auto w-max">
+              <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-400 mb-1">
+                {['S','M','T','W','T','F','S'].map((d, i) => (
+                  <div key={i} className="h-8 w-8 flex items-center justify-center font-bold">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center">{calDays}</div>
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 flex-wrap">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-400 inline-block" /> Present</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" /> Rescheduled</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-400 inline-block" /> Absent</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Quality averages */}
-      {(avgReadingQuality || avgMemQuality) && (
-        <div className="grid grid-cols-2 gap-3">
-          {avgReadingQuality && (
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500 mb-1">Avg. Reading Quality</p>
-              <p className={`text-xl font-bold ${qualityColor(Number(avgReadingQuality))}`}>{avgReadingQuality} / 10</p>
-            </div>
-          )}
-          {avgMemQuality && (
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-slate-500 mb-1">Avg. Memorization Quality</p>
-              <p className={`text-xl font-bold ${qualityColor(Number(avgMemQuality))}`}>{avgMemQuality} / 10</p>
-            </div>
-          )}
+      {/* ── Reading Progress ────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-800 flex items-center gap-2"><span>📖</span> Reading Progress</h3>
         </div>
-      )}
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <StatCard
+              title="Last Recitation"
+              value={readingData.lastAchievementText}
+            />
+            <StatCard
+              title="Pages Read"
+              value={readingData.totalPages}
+              subtext={`${readingData.pagesRemaining} pages to Khatm`}
+              colorClass="text-teal-600"
+            />
+            <StatCard
+              title="Avg. Reading Quality"
+              value={readingData.avgQuality > 0 ? `${readingData.avgQuality.toFixed(1)} / 10` : '—'}
+              colorClass={qualityColor(readingData.avgQuality)}
+            />
+          </div>
+        </div>
+      </div>
 
-      {/* Recent Recitation Sessions */}
-      {recentRecitation.length > 0 && (
+      {/* ── Memorization Progress ───────────────────────────────── */}
+      {memorizationAchievements.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-            <span className="text-teal-600">📖</span>
-            <h3 className="font-semibold text-slate-800 text-sm">Recent Recitation Sessions</h3>
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2"><span>🧠</span> Memorization (Hifdh) Progress</h3>
           </div>
-          <div className="divide-y divide-slate-50">
-            {recentRecitation.map(ach => (
-              <div key={ach.id} className="px-4 py-3 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-700 truncate">
-                    {surahName(ach.startSurah)} {ach.startSurah !== ach.endSurah ? `→ ${surahName(ach.endSurah)}` : ''}
-                  </p>
-                  <p className="text-xs text-slate-400">{new Date(ach.date).toLocaleDateString()}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0 text-right">
-                  <div>
-                    <p className="text-xs text-slate-400">Pages</p>
-                    <p className="text-sm font-semibold text-slate-700">{ach.pagesCompleted}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Quality</p>
-                    <p className={`text-sm font-semibold ${qualityColor(ach.readingQuality)}`}>{ach.readingQuality}/10</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <StatCard
+                title="Pages Memorized"
+                value={memorizationData.totalPages}
+                subtext={`${memorizationData.pagesRemaining} pages to Khatm`}
+                colorClass="text-purple-600"
+              />
+              <StatCard
+                title="Avg. Memorization Quality"
+                value={memorizationData.avgQuality > 0 ? `${memorizationData.avgQuality.toFixed(1)} / 10` : '—'}
+                colorClass={qualityColor(memorizationData.avgQuality)}
+              />
+            </div>
           </div>
         </div>
       )}
 
-      {/* Recent Memorization Sessions */}
-      {recentMemorization.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-            <span className="text-purple-600">🧠</span>
-            <h3 className="font-semibold text-slate-800 text-sm">Recent Memorization Sessions</h3>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {recentMemorization.map(ach => (
-              <div key={ach.id} className="px-4 py-3 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-700 truncate">
-                    {surahName(ach.startSurah)} {ach.startSurah !== ach.endSurah ? `→ ${surahName(ach.endSurah)}` : ''}
-                  </p>
-                  <p className="text-xs text-slate-400">{new Date(ach.date).toLocaleDateString()}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0 text-right">
-                  <div>
-                    <p className="text-xs text-slate-400">Pages</p>
-                    <p className="text-sm font-semibold text-slate-700">{ach.pagesCompleted}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Quality</p>
-                    <p className={`text-sm font-semibold ${qualityColor(ach.memorizationQuality)}`}>{ach.memorizationQuality}/10</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* ── Quran Progress Bar ──────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-slate-800">Quran Progress</h3>
+          <Toggle value={quranBarView} onChange={setQuranBarView} />
         </div>
-      )}
+        <ProgressSection
+          qualityMap={quranBarView === 'reading' ? recitedSurahsQuality : memorizedSurahsQuality}
+          pagesCompleted={quranBarView === 'reading' ? recitedPages.size : memorizedPages.size}
+        />
+      </div>
 
-      {/* Mastered Tajweed Rules */}
-      {masteredTajweedRules.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <h3 className="font-semibold text-slate-800 text-sm mb-3 flex items-center gap-2">
-            <span className="text-green-600">✅</span> Mastered Tajweed Rules
-          </h3>
-          <div className="flex flex-wrap gap-2">
+      {/* ── Milestone Journey ───────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-slate-800">Milestone Journey</h3>
+          <Toggle value={milestoneView} onChange={setMilestoneView} />
+        </div>
+        <MilestoneSection completedPages={milestoneView === 'reading' ? recitedPages : memorizedPages} />
+      </div>
+
+      {/* ── Mastered Tajweed Rules ──────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <span>✅</span> Mastered Tajweed Rules
+        </h3>
+        {masteredTajweedRules.length > 0 ? (
+          <ul className="space-y-2">
             {masteredTajweedRules.map((rule, i) => (
-              <span
-                key={i}
-                className="px-3 py-1 bg-green-50 text-green-800 border border-green-200 rounded-full text-xs font-medium"
+              <li key={i} className="flex items-center gap-2">
+                <div className="bg-green-100 rounded-full p-1 flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600">
+                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-slate-700 text-sm">{rule}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-slate-400 italic text-sm">No tajweed rules mastered yet.</p>
+        )}
+      </div>
+
+      {/* ── Tafsir Reviews & Memorization Recall ───────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <h3 className="font-semibold text-slate-800 mb-3 text-sm">Tafsir Reviews</h3>
+          <TafsirSection tafsirBySurah={readingData.tafsirBySurah} />
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <h3 className="font-semibold text-slate-800 mb-3 text-sm">Memorization Recall</h3>
+          <TafsirSection tafsirBySurah={memorizationData.tafsirBySurah} />
+        </div>
+      </div>
+
+      {/* ── All Recitation Sessions ─────────────────────────────── */}
+      {recitationAchievements.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+              <span className="text-teal-600">📖</span>
+              Recitation Sessions
+              <span className="text-xs text-slate-400 font-normal">({recitationAchievements.length} total)</span>
+            </h3>
+            {recitationAchievements.length > 5 && (
+              <button
+                onClick={() => setShowAllRecitation(s => !s)}
+                className="text-xs text-teal-600 hover:underline flex-shrink-0"
               >
-                {rule}
-              </span>
+                {showAllRecitation ? 'Show less' : `Show all ${recitationAchievements.length}`}
+              </button>
+            )}
+          </div>
+          <div className="divide-y divide-slate-50">
+            {readingData.sorted.slice(0, showAllRecitation ? undefined : 5).map(ach => (
+              <div key={ach.id} className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-700" dir="rtl">
+                    {QURAN_METADATA.find(s => s.number === ach.startSurah)?.name}
+                    {ach.startAyah && ` (${ach.startAyah})`}
+                    {ach.startSurah !== ach.endSurah && ` — ${QURAN_METADATA.find(s => s.number === ach.endSurah)?.name} (${ach.endAyah})`}
+                  </p>
+                  <p className="text-xs text-slate-400">{formatDate(ach.date)}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Pages</p>
+                    <p className="text-sm font-semibold text-slate-700">{ach.pagesCompleted}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Quality</p>
+                    <p className={`text-sm font-bold ${qualityColor(ach.readingQuality)}`}>{ach.readingQuality}/10</p>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Attendance history (recent 20) */}
-      {attendance.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <h3 className="font-semibold text-slate-800 text-sm mb-3 flex items-center gap-2">
-            <span>📅</span> Attendance
-            <span className="text-xs text-slate-400 font-normal">({presentCount} present / {attendance.length} sessions)</span>
-          </h3>
-          <div className="flex flex-wrap gap-1.5">
-            {[...attendance]
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .slice(0, 30)
-              .map((rec, i) => (
-                <div
-                  key={i}
-                  title={`${new Date(rec.date).toLocaleDateString()} — ${rec.status}`}
-                  className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold ${
-                    rec.status === 'present'
-                      ? 'bg-teal-100 text-teal-700'
-                      : rec.status === 'excused'
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-red-100 text-red-600'
-                  }`}
-                >
-                  {rec.status === 'present' ? '✓' : rec.status === 'excused' ? '~' : '✗'}
-                </div>
-              ))}
+      {/* ── All Memorization Sessions ───────────────────────────── */}
+      {memorizationAchievements.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+              <span className="text-purple-600">🧠</span>
+              Memorization Sessions
+              <span className="text-xs text-slate-400 font-normal">({memorizationAchievements.length} total)</span>
+            </h3>
+            {memorizationAchievements.length > 5 && (
+              <button
+                onClick={() => setShowAllMemorization(s => !s)}
+                className="text-xs text-purple-600 hover:underline flex-shrink-0"
+              >
+                {showAllMemorization ? 'Show less' : `Show all ${memorizationAchievements.length}`}
+              </button>
+            )}
           </div>
-          <p className="text-xs text-slate-400 mt-2">Showing last 30 sessions. Green = present, yellow = excused, red = absent.</p>
+          <div className="divide-y divide-slate-50">
+            {memorizationData.sorted.slice(0, showAllMemorization ? undefined : 5).map(ach => (
+              <div key={ach.id} className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-700" dir="rtl">
+                    {QURAN_METADATA.find(s => s.number === ach.startSurah)?.name}
+                    {ach.startAyah && ` (${ach.startAyah})`}
+                    {ach.startSurah !== ach.endSurah && ` — ${QURAN_METADATA.find(s => s.number === ach.endSurah)?.name} (${ach.endAyah})`}
+                  </p>
+                  <p className="text-xs text-slate-400">{formatDate(ach.date)}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Pages</p>
+                    <p className="text-sm font-semibold text-slate-700">{ach.pagesCompleted}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Quality</p>
+                    <p className={`text-sm font-bold ${qualityColor(ach.memorizationQuality)}`}>{ach.memorizationQuality}/10</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -128,6 +128,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 memorizationAchievements: student.memorizationAchievements || [],
                 attendance: student.attendance || [],
                 masteredTajweedRules: student.masteredTajweedRules || [],
+                dob: student.dob,
+                tafsirReviews: student.tafsirReviews || [],
+                tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
             },
         }).catch(e => console.error('Auto-update shared report:', e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -559,6 +562,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     memorizationAchievements: student.memorizationAchievements || [],
                     attendance: student.attendance || [],
                     masteredTajweedRules: student.masteredTajweedRules || [],
+                    dob: student.dob,
+                    tafsirReviews: student.tafsirReviews || [],
+                    tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
                 },
             });
 
