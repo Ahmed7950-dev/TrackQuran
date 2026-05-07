@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
-import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah } from '../services/dataService';
+import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah, getReportPlays } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
 import Logo from './Logo';
@@ -213,7 +213,8 @@ const MistakesTab: React.FC<{
   reportId: string;
   quranicFont: string;
   handleVersePlay: (verseKey: string) => void;
-}> = ({ report, reportId, quranicFont, handleVersePlay }) => {
+  versePlays: { [verseKey: string]: number };
+}> = ({ report, reportId, quranicFont, handleVersePlay, versePlays }) => {
   const { student_name, report_data } = report;
   const { mistakes, verses, generatedAt, homeworkVerses = [] } = report_data;
 
@@ -302,61 +303,35 @@ const MistakesTab: React.FC<{
     );
   }
 
-  // Resolve homework verses to their full data from the verses array
-  const homeworkVerseData = homeworkVerses
-    .map(vk => verses.find(v => v.verse_key === vk))
-    .filter((v): v is { verse_key: string; text_uthmani: string } => !!v);
+  // Set of homework verse keys for O(1) lookup
+  const homeworkSet = new Set(homeworkVerses);
+  const homeworkCount = homeworkVerses.length;
+  const homeworkDoneCount = homeworkVerses.filter(vk => (versePlays[vk] ?? 0) >= 3).length;
 
   return (
     <div className="space-y-6">
 
-      {/* ── Homework section ───────────────────────────────────── */}
-      {homeworkVerseData.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden shadow-sm" dir="ltr">
-          <div className="px-4 py-3 bg-amber-100 border-b border-amber-200 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-amber-600 flex-shrink-0">
-              <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
-            </svg>
-            <div>
-              <h2 className="font-bold text-amber-800 text-sm">Homework — Practice These Verses</h2>
-              <p className="text-xs text-amber-700 mt-0.5">Your teacher has assigned {homeworkVerseData.length} verse{homeworkVerseData.length !== 1 ? 's' : ''} for extra practice</p>
-            </div>
-          </div>
-          <div className="divide-y divide-amber-100">
-            {homeworkVerseData.map(verse => {
-              const [s, a] = verse.verse_key.split(':').map(Number);
-              const surahInfo = QURAN_METADATA.find(q => q.number === s);
-              return (
-                <div key={verse.verse_key} className="p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-3" dir="ltr">
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-full">
-                      {surahInfo?.transliteratedName} — Verse {a}
-                    </span>
-                    <span className="text-xs text-amber-600">{surahInfo?.name}</span>
-                  </div>
-                  <div
-                    className="text-slate-900 text-2xl sm:text-3xl leading-[3] sm:leading-[3.2] text-center select-none mb-3"
-                    style={{ fontFamily: quranicFont }}
-                    dir="rtl"
-                  >
-                    {verse.text_uthmani}
-                    <span className="inline-flex items-center justify-center w-9 h-9 mx-1 font-mono text-sm font-bold text-amber-700 relative" style={{ verticalAlign: 'middle' }}>
-                      <svg className="absolute inset-0 w-full h-full text-amber-200" viewBox="0 0 100 100" fill="currentColor">
-                        <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
-                        <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
-                      </svg>
-                      <span className="relative z-10">{toEasternArabicNumerals(a)}</span>
-                    </span>
-                  </div>
-                  <div dir="ltr">
-                    <VerseAudioPlayer surah={s} ayah={a} onEnded={() => handleVersePlay(`${s}:${a}`)} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-xs text-amber-700" dir="ltr">
-            💡 Listen to each verse carefully, then practice reciting it on your own.
+      {/* Homework summary banner — only when homework is assigned */}
+      {homeworkCount > 0 && (
+        <div className={`rounded-xl p-4 flex items-start gap-3 border ${
+          homeworkDoneCount === homeworkCount
+            ? 'bg-green-50 border-green-200'
+            : 'bg-amber-50 border-amber-200'
+        }`} dir="ltr">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 mt-0.5 flex-shrink-0 ${homeworkDoneCount === homeworkCount ? 'text-green-600' : 'text-amber-600'}`}>
+            <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className={`font-semibold text-sm ${homeworkDoneCount === homeworkCount ? 'text-green-800' : 'text-amber-800'}`}>
+              {homeworkDoneCount === homeworkCount
+                ? '✓ All homework complete — great work!'
+                : `📌 Homework — ${homeworkCount} verse${homeworkCount !== 1 ? 's' : ''} assigned`}
+            </p>
+            <p className={`text-xs mt-0.5 ${homeworkDoneCount === homeworkCount ? 'text-green-700' : 'text-amber-700'}`}>
+              {homeworkDoneCount === homeworkCount
+                ? `You listened to all ${homeworkCount} verses 3 times each.`
+                : `Listen to each marked verse 3 times to complete your homework. (${homeworkDoneCount}/${homeworkCount} done)`}
+            </p>
           </div>
         </div>
       )}
@@ -380,8 +355,54 @@ const MistakesTab: React.FC<{
             <div className="divide-y divide-slate-100">
               {surahVerses.map(verse => {
                 const [s, a] = verse.verse_key.split(':').map(Number);
+                const isHomework = homeworkSet.has(verse.verse_key);
+                const playCount = versePlays[verse.verse_key] ?? 0;
+                const homeworkDone = isHomework && playCount >= 3;
                 return (
-                  <div key={verse.verse_key} className="p-4 sm:p-6">
+                  <div
+                    key={verse.verse_key}
+                    className={`p-4 sm:p-6 transition-colors ${
+                      isHomework
+                        ? homeworkDone
+                          ? 'border-l-4 border-green-400 bg-green-50/30'
+                          : 'border-l-4 border-amber-400 bg-amber-50/40'
+                        : ''
+                    }`}
+                  >
+                    {/* Homework badge + progress dots */}
+                    {isHomework && (
+                      <div className="flex items-center gap-3 mb-3" dir="ltr">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
+                          homeworkDone
+                            ? 'bg-green-100 text-green-700 border-green-300'
+                            : 'bg-amber-100 text-amber-700 border-amber-300'
+                        }`}>
+                          {homeworkDone
+                            ? (<>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
+                                Homework Complete
+                              </>)
+                            : '📌 Homework'
+                          }
+                        </span>
+                        {!homeworkDone && (
+                          <div className="flex items-center gap-1.5">
+                            {[0, 1, 2].map(i => (
+                              <span
+                                key={i}
+                                className={`w-2.5 h-2.5 rounded-full border-2 transition-colors ${
+                                  i < playCount
+                                    ? 'bg-amber-500 border-amber-500'
+                                    : 'border-slate-300 bg-white'
+                                }`}
+                              />
+                            ))}
+                            <span className="text-xs text-slate-500 font-medium">{Math.min(playCount, 3)}/3</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div
                       className="text-slate-900 text-2xl sm:text-3xl leading-[3] sm:leading-[3.2] text-center select-none"
                       style={{ fontFamily: quranicFont }}
@@ -1011,6 +1032,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [quranicFont, setQuranicFont] = useState<string>(() =>
     localStorage.getItem('quranicFont') || 'Hafs'
   );
+  const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
   const channelRef = useRef<any>(null);
 
   // Persist font choice
@@ -1033,12 +1055,23 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   useEffect(() => {
     getSharedReport(reportId).then(r => {
       if (!r) setNotFound(true);
-      else setReport(r);
+      else {
+        setReport(r);
+        // Initialise font from teacher's saved preference stored in the report
+        if (r.report_data.quranicFont) setQuranicFont(r.report_data.quranicFont);
+      }
       setLoading(false);
     });
 
+    // Load existing play counts from DB
+    getReportPlays(reportId).then(plays => setVersePlays(plays));
+
+    // Subscribe to real-time play broadcasts so the student's own counter updates live
     const ch = supabase.channel(`report-plays-${reportId}`);
-    ch.subscribe();
+    ch.on('broadcast', { event: 'play' }, ({ payload }: { payload: Record<string, unknown> }) => {
+      const vk = payload?.verse_key as string | undefined;
+      if (vk) setVersePlays(prev => ({ ...prev, [vk]: (prev[vk] ?? 0) + 1 }));
+    }).subscribe();
     channelRef.current = ch;
     return () => { ch.unsubscribe(); };
   }, [reportId]);
@@ -1046,6 +1079,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const handleVersePlay = useCallback(async (verseKey: string) => {
     await recordVersePlay(reportId, verseKey);
     channelRef.current?.send({ type: 'broadcast', event: 'play', payload: { verse_key: verseKey } });
+    // Also update local state immediately so progress dots animate right away
+    setVersePlays(prev => ({ ...prev, [verseKey]: (prev[verseKey] ?? 0) + 1 }));
   }, [reportId]);
 
   if (loading) {
@@ -1172,6 +1207,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             reportId={reportId}
             quranicFont={quranicFont}
             handleVersePlay={handleVersePlay}
+            versePlays={versePlays}
           />
         )}
         {activeTab === 'progress' && hasProgress && (

@@ -260,6 +260,7 @@ export interface SharedReportData {
   mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
   verses: Array<{ verse_key: string; text_uthmani: string }>;
   homeworkVerses?: string[];
+  quranicFont?: string;
   studentProgress?: {
     recitationAchievements: Array<{
       id: string; date: string;

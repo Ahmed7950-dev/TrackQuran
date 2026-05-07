@@ -96,17 +96,20 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     // Tracks the last mistakes snapshot we pushed to the DB so we don't over-call
     const lastSyncedMistakesRef = useRef<string>('');
 
-    // On mount: look up the existing report for this student so circles and homework persist
+    // On mount: look up the existing report for this student so circles and homework persist.
+    // IMPORTANT: set homeworkVerses BEFORE activeReportId so React 18 batches both into one
+    // render — this prevents the auto-update effect from firing with empty homeworkVerses and
+    // wiping previously saved homework from the DB.
     useEffect(() => {
         if (!teacherId || !student.id) return;
         getStudentReportId(teacherId, student.id).then(async id => {
             if (id) {
-                setActiveReportId(id);
-                // Also load any previously assigned homework
                 const existing = await getSharedReport(id);
                 if (existing?.report_data?.homeworkVerses?.length) {
                     setHomeworkVerses(new Set(existing.report_data.homeworkVerses));
                 }
+                // Set activeReportId LAST so the auto-update effect sees the correct homework
+                setActiveReportId(id);
             }
         });
     }, [teacherId, student.id]);
@@ -132,6 +135,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             mistakes: student.mistakes || {},
             verses: verseList,
             homeworkVerses: [...homeworkVerses],
+            quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
             studentProgress: {
                 recitationAchievements: student.recitationAchievements || [],
                 memorizationAchievements: student.memorizationAchievements || [],
@@ -567,6 +571,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 mistakes: student.mistakes || {},
                 verses: verseList,
                 homeworkVerses: [...homeworkVerses],
+                quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],
                     memorizationAchievements: student.memorizationAchievements || [],
@@ -1038,6 +1043,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 
                                 const playCount = versePlays[verse.verse_key] ?? 0;
                                 const isHomework = homeworkVerses.has(verse.verse_key);
+                                const homeworkDone = isHomework && playCount >= 3;
 
                                 return (
                                      <div
@@ -1074,15 +1080,28 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                                 onClick={() => handleToggleHomework(verse.verse_key)}
                                                 title={isHomework ? 'Remove from homework' : 'Assign as homework'}
                                                 className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-all ${
-                                                    isHomework
-                                                        ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600'
-                                                        : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-gray-600 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'
+                                                    homeworkDone
+                                                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-300 dark:border-green-600'
+                                                        : isHomework
+                                                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600'
+                                                            : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-gray-600 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'
                                                 }`}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                                                    <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
-                                                </svg>
-                                                {isHomework ? 'Homework' : 'Assign'}
+                                                {homeworkDone ? (
+                                                    <>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                                                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Done
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                                                            <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
+                                                        </svg>
+                                                        {isHomework ? `Homework ${Math.min(playCount, 3)}/3` : 'Assign'}
+                                                    </>
+                                                )}
                                             </button>
                                         </div>
 
