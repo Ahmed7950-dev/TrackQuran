@@ -413,24 +413,59 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 onReviewMistakes={onReviewMistakes}
             />
 
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                 <div className="border-t dark:border-gray-700 pt-5">
-                    <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{t('studentDetail.addNewAchievement')}</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                        <button onClick={() => setActiveModal('recitation')} className="group relative w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl border-2 border-transparent hover:border-teal-500 dark:hover:border-orange-500 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-lg"><div className="mb-3"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-teal-600 dark:text-orange-400 transition-transform group-hover:scale-110"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg></div><h4 className="font-bold text-lg text-slate-700 dark:text-slate-200">{t('studentDetail.readingHifdh')}</h4><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('studentDetail.readingHifdhDesc')}</p></button>
-                         <button onClick={() => setActiveModal('tajweed')} className="group relative w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl border-2 border-transparent hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-lg"><div className="mb-3"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-blue-600 dark:text-blue-400 transition-transform group-hover:scale-110"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg></div><h4 className="font-bold text-lg text-slate-700 dark:text-slate-200">{t('studentDetail.tajweed')}</h4><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('studentDetail.tajweedDesc')}</p></button>
-                         <button onClick={() => setActiveModal('tafsir')} className="group relative w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl border-2 border-transparent hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-lg">
-                            <div className="mb-3">
-                                <span className="material-symbols-outlined text-5xl text-indigo-600 dark:text-indigo-400 transition-transform group-hover:scale-110" style={{ fontVariationSettings: "'FILL' 1" }}>
-                                    cognition
-                                </span>
-                            </div>
-                            <h4 className="font-bold text-lg text-slate-700 dark:text-slate-200">{t('studentDetail.tafsir')}</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('studentDetail.tafsirDesc')}</p>
-                        </button>
-                         <button onClick={() => setActiveModal('attendance')} className="group relative w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl border-2 border-transparent hover:border-yellow-500 dark:hover:border-yellow-500 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-lg"><div className="mb-3"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-yellow-600 dark:text-yellow-400 transition-transform group-hover:scale-110"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18M-4.5 12.75h22.5" /></svg></div><h4 className="font-bold text-lg text-slate-700 dark:text-slate-200">{t('studentDetail.attendance')}</h4><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('studentDetail.attendanceDesc')}</p></button>
-                    </div>
-                 </div>
+            {/* ── Add New Achievement — compact tab strip ── */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-4 pt-4 pb-1 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t('studentDetail.addNewAchievement')}</span>
+                </div>
+                <div className="flex overflow-x-auto px-3 pb-3 gap-2 pt-2">
+                    {/* Reading / Hifdh */}
+                    <button
+                        onClick={() => setActiveModal('recitation')}
+                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-50 dark:bg-teal-900/25 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/50 hover:border-teal-400 dark:hover:border-teal-500 transition-all font-medium text-sm group"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                        </svg>
+                        {t('studentDetail.readingHifdh')}
+                    </button>
+
+                    {/* Tajweed */}
+                    <button
+                        onClick={() => setActiveModal('tajweed')}
+                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/25 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all font-medium text-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+                        </svg>
+                        {t('studentDetail.tajweed')}
+                    </button>
+
+                    {/* Tafsir */}
+                    <button
+                        onClick={() => setActiveModal('tafsir')}
+                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/25 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all font-medium text-sm"
+                    >
+                        <span className="material-symbols-outlined text-base leading-none flex-shrink-0" style={{ fontVariationSettings: "'FILL' 1", fontSize: '16px' }}>
+                            cognition
+                        </span>
+                        {t('studentDetail.tafsir')}
+                    </button>
+
+                    {/* Attendance */}
+                    <button
+                        onClick={() => setActiveModal('attendance')}
+                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 dark:hover:border-amber-500 transition-all font-medium text-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" />
+                        </svg>
+                        {t('studentDetail.attendance')}
+                    </button>
+                </div>
             </div>
 
             <div className="flex justify-end"><select value={timePeriod} onChange={e => setTimePeriod(e.target.value as TimePeriod)} className="bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2">
