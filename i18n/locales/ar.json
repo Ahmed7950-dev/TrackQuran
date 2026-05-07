@@ -1,6 +1,6 @@
 {
     "header": {
-        "title": "TRACKQURAN",
+        "title": "LISAN & QURAN",
         "tagline": "لمعلمي القرآن",
         "backToDashboard": "العودة للوحة التحكم",
         "searchPlaceholder": "ابحث عن طالب...",
@@ -94,7 +94,7 @@
         "notEnoughData": "لا توجد بيانات كافية لعرض مخطط التقدم. يلزم وجود إنجازين على الأقل."
     },
     "login": {
-        "title": "أهلاً بك في TRACKQURAN",
+        "title": "أهلاً بك في LISAN & QURAN",
         "subtitle": "سجل الدخول لتتبع التقدم.",
         "teacherLogin": "أنا معلم",
         "studentLogin": "أنا طالب / ولي أمر",
@@ -137,7 +137,7 @@
         "exportFailed": "فشل تصدير النسخة الاحتياطية.",
         "importConfirm": "سيؤدي استيراد النسخة الاحتياطية إلى استبدال جميع البيانات الحالية على هذا الجهاز. هل تريد المتابعة؟",
         "importSuccess": "تمت استعادة النسخة الاحتياطية بنجاح ({count} عنصرًا). سيتم إعادة تحميل التطبيق.",
-        "importFailed": "فشل استيراد النسخة الاحتياطية. تأكد من أن الملف نسخة احتياطية صالحة لـ TRACKQURAN."
+        "importFailed": "فشل استيراد النسخة الاحتياطية. تأكد من أن الملف نسخة احتياطية صالحة لـ LISAN & QURAN."
     },
     "modals": {
         "addStudent": {
@@ -268,7 +268,7 @@
             "buttonEnhanceAI": "تحسين بالذكاء الاصطناعي",
             "buttonGenerateAI": "إنشاء بالذكاء الاصطناعي",
             "buttonWorking": "جاري العمل...",
-            "footer": "تم إنشاؤه بواسطة TRACKQURAN في {{date}}"
+            "footer": "تم إنشاؤه بواسطة LISAN & QURAN في {{date}}"
         },
         "honorBoard": {
             "title": "لوحة الشرف",
