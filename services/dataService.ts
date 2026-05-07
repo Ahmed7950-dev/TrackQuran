@@ -259,6 +259,7 @@ export interface SharedReportData {
   generatedAt: string;
   mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
   verses: Array<{ verse_key: string; text_uthmani: string }>;
+  homeworkVerses?: string[];
   studentProgress?: {
     recitationAchievements: Array<{
       id: string; date: string;
@@ -336,6 +337,22 @@ export const getSharedReport = async (id: string): Promise<{ student_name: strin
     .single();
   if (error) { console.error('getSharedReport:', error.message); return null; }
   return data;
+};
+
+/** Patch only the homeworkVerses field of an existing shared report. */
+export const updateHomeworkVerses = async (reportId: string, homeworkVerses: string[]): Promise<void> => {
+  const { data } = await supabase
+    .from('shared_reports')
+    .select('report_data')
+    .eq('id', reportId)
+    .single();
+  if (!data) return;
+  const updated: SharedReportData = { ...(data.report_data as SharedReportData), homeworkVerses };
+  const { error } = await supabase
+    .from('shared_reports')
+    .update({ report_data: updated })
+    .eq('id', reportId);
+  if (error) console.error('updateHomeworkVerses:', error.message);
 };
 
 // ============================================================

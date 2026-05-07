@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
-import { createOrUpdateSharedReport, getStudentReportId, getReportPlays } from '../services/dataService';
+import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getSharedReport, updateHomeworkVerses } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 
@@ -82,6 +82,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const [isSharing, setIsSharing] = useState(false);
     const [shareCopied, setShareCopied] = useState(false);
     const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
+    const [homeworkVerses, setHomeworkVerses] = useState<Set<string>>(new Set());
     const playChannelRef = useRef<any>(null);
 
     // Single source of truth: the UUID of this student's persistent report (null = not created yet)
@@ -95,11 +96,18 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     // Tracks the last mistakes snapshot we pushed to the DB so we don't over-call
     const lastSyncedMistakesRef = useRef<string>('');
 
-    // On mount: look up the existing report for this student so circles persist across refreshes
+    // On mount: look up the existing report for this student so circles and homework persist
     useEffect(() => {
         if (!teacherId || !student.id) return;
-        getStudentReportId(teacherId, student.id).then(id => {
-            if (id) setActiveReportId(id);
+        getStudentReportId(teacherId, student.id).then(async id => {
+            if (id) {
+                setActiveReportId(id);
+                // Also load any previously assigned homework
+                const existing = await getSharedReport(id);
+                if (existing?.report_data?.homeworkVerses?.length) {
+                    setHomeworkVerses(new Set(existing.report_data.homeworkVerses));
+                }
+            }
         });
     }, [teacherId, student.id]);
 
@@ -123,6 +131,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             generatedAt: new Date().toISOString(),
             mistakes: student.mistakes || {},
             verses: verseList,
+            homeworkVerses: [...homeworkVerses],
             studentProgress: {
                 recitationAchievements: student.recitationAchievements || [],
                 memorizationAchievements: student.memorizationAchievements || [],
@@ -557,6 +566,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 generatedAt: new Date().toISOString(),
                 mistakes: student.mistakes || {},
                 verses: verseList,
+                homeworkVerses: [...homeworkVerses],
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],
                     memorizationAchievements: student.memorizationAchievements || [],
@@ -577,6 +587,21 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             }
         } finally {
             setIsSharing(false);
+        }
+    };
+
+    // ── Homework toggle ─────────────────────────────────────────────────────────
+    const handleToggleHomework = async (verseKey: string) => {
+        const next = new Set(homeworkVerses);
+        if (next.has(verseKey)) {
+            next.delete(verseKey);
+        } else {
+            next.add(verseKey);
+        }
+        setHomeworkVerses(next);
+        // Persist immediately if a report already exists; otherwise it's saved on next share
+        if (activeReportId) {
+            await updateHomeworkVerses(activeReportId, Array.from(next) as string[]);
         }
     };
 
@@ -1012,35 +1037,54 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 });
                                 
                                 const playCount = versePlays[verse.verse_key] ?? 0;
+                                const isHomework = homeworkVerses.has(verse.verse_key);
 
                                 return (
                                      <div
                                         key={verse.verse_key}
-                                        className="relative flex flex-row-reverse items-start gap-x-2 border-b border-gray-100 dark:border-gray-700"
+                                        className={`relative flex flex-row-reverse items-start gap-x-2 border-b border-gray-100 dark:border-gray-700 ${isHomework ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''}`}
                                         style={{
                                             minHeight: hasLetterMistakes ? 'auto' : 'auto',
-                                            paddingTop: hasLetterMistakes ? '3.5rem' : '0.5rem',
+                                            paddingTop: hasLetterMistakes ? '3.5rem' : '2.5rem',
                                             paddingBottom: hasLetterMistakes ? '0.5rem' : '0.5rem',
                                             marginBottom: '0.75rem'
                                         }}
                                     >
-                                        {/* Play circles — shown when student has listened */}
-                                        {playCount > 0 && (
-                                            <div className="no-print absolute top-2 left-2 flex items-center gap-1 z-10" title={`Listened ${playCount} time${playCount !== 1 ? 's' : ''}`}>
-                                                {Array.from({ length: Math.min(playCount, 5) }).map((_, i) => (
-                                                    <span
-                                                        key={i}
-                                                        className="block w-2.5 h-2.5 rounded-full bg-teal-500 shadow-sm"
-                                                        style={{ opacity: 0.6 + i * 0.08 }}
-                                                    />
-                                                ))}
-                                                {playCount > 5 && (
-                                                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 leading-none">
-                                                        +{playCount - 5}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
+                                        {/* Play circles + homework button — top-left overlay */}
+                                        <div className="no-print absolute top-1.5 left-2 flex items-center gap-2 z-10">
+                                            {/* Listen circles */}
+                                            {playCount > 0 && (
+                                                <div className="flex items-center gap-1" title={`Listened ${playCount} time${playCount !== 1 ? 's' : ''}`}>
+                                                    {Array.from({ length: Math.min(playCount, 5) }).map((_, i) => (
+                                                        <span
+                                                            key={i}
+                                                            className="block w-2.5 h-2.5 rounded-full bg-teal-500 shadow-sm"
+                                                            style={{ opacity: 0.6 + i * 0.08 }}
+                                                        />
+                                                    ))}
+                                                    {playCount > 5 && (
+                                                        <span className="text-xs font-bold text-teal-600 dark:text-teal-400 leading-none">
+                                                            +{playCount - 5}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Homework toggle button */}
+                                            <button
+                                                onClick={() => handleToggleHomework(verse.verse_key)}
+                                                title={isHomework ? 'Remove from homework' : 'Assign as homework'}
+                                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-all ${
+                                                    isHomework
+                                                        ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600'
+                                                        : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-gray-600 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'
+                                                }`}
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                                                    <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
+                                                </svg>
+                                                {isHomework ? 'Homework' : 'Assign'}
+                                            </button>
+                                        </div>
 
                                         <span className="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 mx-1 font-mono text-sm font-bold text-slate-700 dark:text-slate-200 border-2 rounded-full font-sans" style={{ verticalAlign: 'middle' }}>
                                             {toEasternArabicNumerals(ayahNum)}

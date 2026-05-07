@@ -75,7 +75,7 @@ const QURANIC_FONTS = [
 
 // ── VerseAudioPlayer ──────────────────────────────────────────────────────────
 
-const VerseAudioPlayer: React.FC<{ surah: number; ayah: number; onPlay?: () => void }> = ({ surah, ayah, onPlay }) => {
+const VerseAudioPlayer: React.FC<{ surah: number; ayah: number; onEnded?: () => void }> = ({ surah, ayah, onEnded }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -100,7 +100,7 @@ const VerseAudioPlayer: React.FC<{ surah: number; ayah: number; onPlay?: () => v
       audio.pause();
       setPlaying(false);
     } else {
-      audio.play().then(() => { setPlaying(true); onPlay?.(); }).catch(() => setError(true));
+      audio.play().then(() => { setPlaying(true); }).catch(() => setError(true));
     }
   };
 
@@ -115,7 +115,7 @@ const VerseAudioPlayer: React.FC<{ surah: number; ayah: number; onPlay?: () => v
     setDuration(audioRef.current?.duration ?? 0);
   };
 
-  const handleEnded = () => { setPlaying(false); setProgress(0); };
+  const handleEnded = () => { setPlaying(false); setProgress(0); onEnded?.(); };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
@@ -215,7 +215,7 @@ const MistakesTab: React.FC<{
   handleVersePlay: (verseKey: string) => void;
 }> = ({ report, reportId, quranicFont, handleVersePlay }) => {
   const { student_name, report_data } = report;
-  const { mistakes, verses, generatedAt } = report_data;
+  const { mistakes, verses, generatedAt, homeworkVerses = [] } = report_data;
 
   const versesBySurah: Record<number, Array<{ verse_key: string; text_uthmani: string }>> = {};
   verses.forEach(v => {
@@ -302,8 +302,65 @@ const MistakesTab: React.FC<{
     );
   }
 
+  // Resolve homework verses to their full data from the verses array
+  const homeworkVerseData = homeworkVerses
+    .map(vk => verses.find(v => v.verse_key === vk))
+    .filter((v): v is { verse_key: string; text_uthmani: string } => !!v);
+
   return (
     <div className="space-y-6">
+
+      {/* ── Homework section ───────────────────────────────────── */}
+      {homeworkVerseData.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden shadow-sm" dir="ltr">
+          <div className="px-4 py-3 bg-amber-100 border-b border-amber-200 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-amber-600 flex-shrink-0">
+              <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <h2 className="font-bold text-amber-800 text-sm">Homework — Practice These Verses</h2>
+              <p className="text-xs text-amber-700 mt-0.5">Your teacher has assigned {homeworkVerseData.length} verse{homeworkVerseData.length !== 1 ? 's' : ''} for extra practice</p>
+            </div>
+          </div>
+          <div className="divide-y divide-amber-100">
+            {homeworkVerseData.map(verse => {
+              const [s, a] = verse.verse_key.split(':').map(Number);
+              const surahInfo = QURAN_METADATA.find(q => q.number === s);
+              return (
+                <div key={verse.verse_key} className="p-4 sm:p-5">
+                  <div className="flex items-center gap-2 mb-3" dir="ltr">
+                    <span className="text-xs font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-full">
+                      {surahInfo?.transliteratedName} — Verse {a}
+                    </span>
+                    <span className="text-xs text-amber-600">{surahInfo?.name}</span>
+                  </div>
+                  <div
+                    className="text-slate-900 text-2xl sm:text-3xl leading-[3] sm:leading-[3.2] text-center select-none mb-3"
+                    style={{ fontFamily: quranicFont }}
+                    dir="rtl"
+                  >
+                    {verse.text_uthmani}
+                    <span className="inline-flex items-center justify-center w-9 h-9 mx-1 font-mono text-sm font-bold text-amber-700 relative" style={{ verticalAlign: 'middle' }}>
+                      <svg className="absolute inset-0 w-full h-full text-amber-200" viewBox="0 0 100 100" fill="currentColor">
+                        <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
+                        <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
+                      </svg>
+                      <span className="relative z-10">{toEasternArabicNumerals(a)}</span>
+                    </span>
+                  </div>
+                  <div dir="ltr">
+                    <VerseAudioPlayer surah={s} ayah={a} onEnded={() => handleVersePlay(`${s}:${a}`)} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-xs text-amber-700" dir="ltr">
+            💡 Listen to each verse carefully, then practice reciting it on your own.
+          </div>
+        </div>
+      )}
+
       {/* Info banner */}
       <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-sm text-teal-800" dir="ltr">
         <p className="font-semibold mb-1">📖 How to use this review</p>
@@ -340,7 +397,7 @@ const MistakesTab: React.FC<{
                       </span>
                     </div>
                     <div dir="ltr">
-                      <VerseAudioPlayer surah={s} ayah={a} onPlay={() => handleVersePlay(`${s}:${a}`)} />
+                      <VerseAudioPlayer surah={s} ayah={a} onEnded={() => handleVersePlay(`${s}:${a}`)} />
                     </div>
                   </div>
                 );
