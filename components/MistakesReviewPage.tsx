@@ -44,6 +44,20 @@ const parseWordIntoLetters = (word: string): Array<{ letter: string; index: numb
     return letters;
 };
 
+/** Returns the timestamp of the most recent mistake logged for a given verse. */
+const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): number => {
+    const [s, a] = verseKey.split(':');
+    const prefix = `${s}:${a}:`;
+    let max = 0;
+    for (const [key, m] of Object.entries(mistakes)) {
+        if (key.startsWith(prefix) && m?.date) {
+            const t = new Date(m.date).getTime();
+            if (!isNaN(t) && t > max) max = t;
+        }
+    }
+    return max;
+};
+
 const getMistakeColor = (level: number): string => {
     switch (level) {
         case 1: return 'bg-yellow-200/70 dark:bg-yellow-500/30';
@@ -88,6 +102,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
 
     // Single source of truth: the UUID of this student's persistent report (null = not created yet)
     const [activeReportId, setActiveReportId] = useState<string | null>(null);
+    // Verse keys that were manually removed this session — prevents processMistakes
+    // from re-adding them when the student prop updates after onStudentUpdate.
+    const [removedVerseKeys, setRemovedVerseKeys] = useState<Set<string>>(new Set());
 
     // Derived — no state needed; URL is always the same UUID
     const shareLink = activeReportId ? `${window.location.origin}/report/${activeReportId}` : null;
@@ -222,7 +239,11 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 for (const surahId of Array.from(surahsToFetch).sort((a,b) => a-b)) {
                     const versesInSurah = allVersesMap[surahId];
                     if (versesInSurah) {
-                        const versesContainingMistakes = versesInSurah.filter(v => mistakesByVerse[v.verse_key]);
+                        const versesContainingMistakes = versesInSurah.filter(v =>
+                            mistakesByVerse[v.verse_key] &&
+                            // Exclude verses the teacher explicitly removed this session
+                            !removedVerseKeys.has(v.verse_key)
+                        );
                         if(versesContainingMistakes.length > 0) {
                             result[surahId] = versesContainingMistakes;
                         }
@@ -622,6 +643,12 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     delete updated[verseKey];
                     return updated;
                 });
+                // Notify the student's sharable link so its in-memory count clears too
+                playChannelRef.current?.send({
+                    type: 'broadcast',
+                    event: 'play_reset',
+                    payload: { verse_key: verseKey },
+                });
             }
         }
     };
@@ -630,13 +657,15 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const handleRemoveVerse = async (verseKey: string) => {
         const [surahNum, ayahNum] = verseKey.split(':').map(Number);
 
-        // 1. Remove from local versesWithMistakes
+        // 1. Remove from local versesWithMistakes and guard against re-adds
         const newVWM = { ...versesWithMistakes };
         if (newVWM[surahNum]) {
             newVWM[surahNum] = newVWM[surahNum].filter(v => v.verse_key !== verseKey);
             if (newVWM[surahNum].length === 0) delete newVWM[surahNum];
         }
         setVersesWithMistakes(newVWM);
+        // Mark as removed so processMistakes won't re-add it when the student prop changes
+        setRemovedVerseKeys(prev => new Set([...prev, verseKey]));
 
         // 2. Turn all mistakes for this verse to level 1 (yellow) in the student record
         const updatedMistakes = { ...student.mistakes };
@@ -1058,7 +1087,17 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 </div>
             )}
 
-            {Object.entries(versesWithMistakes).map(([surahNum, verses]: [string, QuranVerse[]]) => {
+            {(Object.entries(versesWithMistakes) as [string, QuranVerse[]][])
+                // Sort surah groups: newest mistake date first
+                .sort(([, vA], [, vB]) => {
+                    const newest = (vv: QuranVerse[]) => Math.max(0, ...vv.map(v => getVerseNewestTime(v.verse_key, student.mistakes || {})));
+                    return newest(vB) - newest(vA);
+                })
+                .map(([surahNum, verses]: [string, QuranVerse[]]) => {
+                // Sort verses within the surah: newest first
+                const sortedVerses = [...verses].sort(
+                    (a, b) => getVerseNewestTime(b.verse_key, student.mistakes || {}) - getVerseNewestTime(a.verse_key, student.mistakes || {})
+                );
                 const surahInfo = QURAN_METADATA.find(s => s.number === Number(surahNum));
                 
                 // Get the date of mistakes in this surah (use the first mistake's date as reference)
@@ -1107,7 +1146,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                             )}
                         </div>
                         <div dir="rtl" className="font-quranic text-slate-800 dark:text-slate-100 text-center" style={{ fontSize: '5rem', lineHeight: '4rem' }}>
-                            {verses.map(verse => {
+                            {sortedVerses.map(verse => {
                                 const ayahNum = Number(verse.verse_key.split(':')[1]);
                                 // Check if this verse has any letter-level mistakes with annotation boxes
                                 const [surahNum, ayahNumCheck] = verse.verse_key.split(':').map(Number);

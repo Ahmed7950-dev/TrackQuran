@@ -45,6 +45,20 @@ const getMistakeBg = (level: number) => {
   }
 };
 
+/** Returns the timestamp of the most recent mistake logged for a given verse key. */
+const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): number => {
+  const [s, a] = verseKey.split(':');
+  const prefix = `${s}:${a}:`;
+  let max = 0;
+  for (const [key, m] of Object.entries(mistakes)) {
+    if (key.startsWith(prefix) && m?.date) {
+      const t = new Date(m.date).getTime();
+      if (!isNaN(t) && t > max) max = t;
+    }
+  }
+  return max;
+};
+
 /**
  * Wraps U+06DF (ARABIC SMALL HIGH ROUNDED ZERO — the silent-letter marker used
  * in the Madinah Mushaf) in a span with 'Amiri Regular' so it renders as a
@@ -241,8 +255,13 @@ const MistakesTab: React.FC<{
   const { student_name, report_data } = report;
   const { mistakes, verses, generatedAt, homeworkVerses = [] } = report_data;
 
+  // Sort all verses newest-first before grouping
+  const sortedVerses = [...verses].sort(
+    (a, b) => getVerseNewestTime(b.verse_key, mistakes) - getVerseNewestTime(a.verse_key, mistakes)
+  );
+
   const versesBySurah: Record<number, Array<{ verse_key: string; text_uthmani: string }>> = {};
-  verses.forEach(v => {
+  sortedVerses.forEach(v => {
     const surahNum = Number(v.verse_key.split(':')[0]);
     if (!versesBySurah[surahNum]) versesBySurah[surahNum] = [];
     versesBySurah[surahNum].push(v);
@@ -369,7 +388,14 @@ const MistakesTab: React.FC<{
         <p>Highlighted words and letters are the mistakes from your lesson. Click <strong>▶ Play</strong> on any verse to hear the correct recitation by Sheikh Al-Minshawi.</p>
       </div>
 
-      {Object.entries(versesBySurah).map(([surahNum, surahVerses]) => {
+      {Object.entries(versesBySurah)
+        // Sort surah groups so the one with the most recent mistake appears first
+        .sort(([, vA], [, vB]) => {
+          const newest = (vv: Array<{ verse_key: string }>) =>
+            Math.max(0, ...vv.map(v => getVerseNewestTime(v.verse_key, mistakes)));
+          return newest(vB) - newest(vA);
+        })
+        .map(([surahNum, surahVerses]) => {
         const surahInfo = QURAN_METADATA.find(s => s.number === Number(surahNum));
         return (
           <div key={surahNum} className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -1095,10 +1121,21 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
 
     // Subscribe to real-time play broadcasts so the student's own counter updates live
     const ch = supabase.channel(`report-plays-${reportId}`);
-    ch.on('broadcast', { event: 'play' }, ({ payload }: { payload: Record<string, unknown> }) => {
-      const vk = payload?.verse_key as string | undefined;
-      if (vk) setVersePlays(prev => ({ ...prev, [vk]: (prev[vk] ?? 0) + 1 }));
-    }).subscribe();
+    ch
+      .on('broadcast', { event: 'play' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const vk = payload?.verse_key as string | undefined;
+        if (vk) setVersePlays(prev => ({ ...prev, [vk]: (prev[vk] ?? 0) + 1 }));
+      })
+      // Teacher reset homework → clear play count so student sees 0/3 again
+      .on('broadcast', { event: 'play_reset' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const vk = payload?.verse_key as string | undefined;
+        if (vk) setVersePlays(prev => {
+          const next = { ...prev };
+          delete next[vk];
+          return next;
+        });
+      })
+      .subscribe();
     channelRef.current = ch;
     return () => { ch.unsubscribe(); };
   }, [reportId]);
