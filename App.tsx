@@ -454,7 +454,7 @@ const App: React.FC = () => {
                 <button onClick={() => setActiveTab('main')} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to main">
                     <Logo />
                 </button>
-                <nav className="flex-1 flex justify-center items-center gap-6">
+                <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
                     <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.aboutUs')}</a>
                     <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                     <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.supportUs')}</a>
@@ -566,7 +566,7 @@ const App: React.FC = () => {
             >
                 <Logo />
             </button>
-            <nav className="flex-1 flex justify-center items-center gap-6">
+            <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.aboutUs')}</a>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.supportUs')}</a>

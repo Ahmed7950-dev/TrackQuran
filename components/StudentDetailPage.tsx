@@ -326,7 +326,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             <div className="flex justify-end items-center mb-3">
                 <span className="font-bold text-teal-600 dark:text-orange-400 text-sm">{t('studentDetail.completePercent', { percent: ((pagesCompleted / TOTAL_QURAN_PAGES) * 100).toFixed(1) })}</span>
             </div>
-            <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(114, minmax(0, 1fr))' }}>
+            <div className="overflow-x-auto -mx-1">
+            <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(114, minmax(0, 1fr))', minWidth: '600px' }}>
                 {quranMetadata.map(surah => {
                     const quality = qualityMap[surah.number];
                     const getQualityColor = (q: number) => {
@@ -348,9 +349,10 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     );
                 })}
             </div>
+            </div>
         </>
     );
-    
+
     const MilestoneSection = ({ completedPages }: { completedPages: Set<number> }) => (
         <div className="flex items-center">
             {MILESTONES.map((milestone, index) => {

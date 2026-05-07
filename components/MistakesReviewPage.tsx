@@ -123,6 +123,12 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             generatedAt: new Date().toISOString(),
             mistakes: student.mistakes || {},
             verses: verseList,
+            studentProgress: {
+                recitationAchievements: student.recitationAchievements || [],
+                memorizationAchievements: student.memorizationAchievements || [],
+                attendance: student.attendance || [],
+                masteredTajweedRules: student.masteredTajweedRules || [],
+            },
         }).catch(e => console.error('Auto-update shared report:', e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeReportId, loading, versesWithMistakes, mistakesKey, dateFilter]);
@@ -548,6 +554,12 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 generatedAt: new Date().toISOString(),
                 mistakes: student.mistakes || {},
                 verses: verseList,
+                studentProgress: {
+                    recitationAchievements: student.recitationAchievements || [],
+                    memorizationAchievements: student.memorizationAchievements || [],
+                    attendance: student.attendance || [],
+                    masteredTajweedRules: student.masteredTajweedRules || [],
+                },
             });
 
             if (reportId) {

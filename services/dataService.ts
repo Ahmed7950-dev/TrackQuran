@@ -259,6 +259,24 @@ export interface SharedReportData {
   generatedAt: string;
   mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
   verses: Array<{ verse_key: string; text_uthmani: string }>;
+  studentProgress?: {
+    recitationAchievements: Array<{
+      id: string; date: string;
+      startSurah: number; startAyah: number;
+      endSurah: number; endAyah: number;
+      readingQuality: number; tajweedQuality: number;
+      pagesCompleted: number; versesCompleted: number; pointsEarned: number;
+    }>;
+    memorizationAchievements: Array<{
+      id: string; date: string;
+      startSurah: number; startAyah: number;
+      endSurah: number; endAyah: number;
+      memorizationQuality: number;
+      pagesCompleted: number; versesCompleted: number;
+    }>;
+    attendance: Array<{ date: string; status: string }>;
+    masteredTajweedRules: string[];
+  };
 }
 
 // ── Verse play tracking ──────────────────────────────────────────────────────
