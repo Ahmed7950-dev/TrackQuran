@@ -17,6 +17,8 @@ import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
 import SharedReportPage from './components/SharedReportPage';
+import AdminPanel from './components/AdminPanel';
+import ContactSupportModal from './components/ContactSupportModal';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -105,9 +107,10 @@ const App: React.FC = () => {
   const { currentFont, setFont, fonts } = useQuranicFont();
   const { t, language } = useI18n();
   
-  const [isAddStudentModalOpen, setIsAddStudentModalOpen] = useState(false);
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
+  const [isAddStudentModalOpen,    setIsAddStudentModalOpen]    = useState(false);
+  const [isUserMenuOpen,           setIsUserMenuOpen]           = useState(false);
+  const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
+  const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
   const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -537,6 +540,11 @@ const App: React.FC = () => {
     );
   }
 
+  // Admin View — isolated panel, no student management
+  if (currentUser.role === 'admin') {
+    return <AdminPanel currentUser={currentUser} onLogout={logout} />;
+  }
+
   // Teacher View
   const selectedStudent = students.find((s) => s.id === selectedStudentId) || null;
   const sessionStudent = students.find((s) => s.id === sessionStudentId) || null;
@@ -643,6 +651,11 @@ const App: React.FC = () => {
                                     {t('userMenu.importBackup')}
                                 </button>
                                 <div className="border-t border-slate-200 dark:border-gray-700 my-1" />
+                                <button onClick={() => { setIsUserMenuOpen(false); setIsContactSupportOpen(true); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>
+                                    Contact Support
+                                </button>
+                                <div className="border-t border-slate-200 dark:border-gray-700 my-1" />
                                 <button onClick={logout} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
                                     {t('userMenu.logout')}
@@ -708,12 +721,18 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <AddStudentModal 
-        isOpen={isAddStudentModalOpen} 
+      <AddStudentModal
+        isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
         onAddStudent={(name, dob) => handleAddStudent({ name, dob, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
       />
-      
+
+      <ContactSupportModal
+        currentUser={currentUser}
+        isOpen={isContactSupportOpen}
+        onClose={() => setIsContactSupportOpen(false)}
+      />
+
       <div className="no-print">
         <Footer />
       </div>

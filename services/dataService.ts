@@ -1,4 +1,4 @@
-import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User } from '../types';
+import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage } from '../types';
 import { QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import { pageVerseList } from './quranPageData';
 import { supabase } from '../lib/supabase';
@@ -346,4 +346,136 @@ export const getVersesInRange = async (start: Progress, end: Progress): Promise<
   const endVerses = await getVersesForSurah(end.surah);
   verses.push(...endVerses.slice(0, end.ayah));
   return verses;
+};
+
+// ============================================================
+// Admin — teacher management
+// ============================================================
+
+export interface TeacherProfile {
+  id: string;
+  name: string;
+  role: string;
+  created_at: string;
+}
+
+export const getAllTeachers = async (): Promise<TeacherProfile[]> => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, role, created_at')
+    .order('created_at', { ascending: true });
+  if (error) { console.error('getAllTeachers:', error.message); return []; }
+  return data ?? [];
+};
+
+export const deleteTeacherAccount = async (teacherId: string): Promise<void> => {
+  // Cascade-delete everything owned by this teacher
+  await supabase.from('students').delete().eq('teacher_id', teacherId);
+  await supabase.from('shared_reports').delete().eq('teacher_id', teacherId);
+  await supabase.from('support_tickets').delete().eq('teacher_id', teacherId);
+  await supabase.from('profiles').delete().eq('id', teacherId);
+};
+
+// ============================================================
+// Support tickets & messages
+// ============================================================
+
+const rowToTicket = (row: any): SupportTicket => ({
+  id:          row.id,
+  teacherId:   row.teacher_id,
+  teacherName: row.teacher_name,
+  subject:     row.subject,
+  status:      row.status,
+  createdAt:   row.created_at,
+  updatedAt:   row.updated_at,
+});
+
+const rowToMessage = (row: any): SupportMessage => ({
+  id:         row.id,
+  ticketId:   row.ticket_id,
+  senderId:   row.sender_id,
+  senderName: row.sender_name,
+  senderRole: row.sender_role,
+  body:       row.body,
+  createdAt:  row.created_at,
+});
+
+export const createSupportTicket = async (
+  teacherId: string,
+  teacherName: string,
+  subject: string,
+  firstMessage: string,
+): Promise<SupportTicket | null> => {
+  const { data: ticket, error } = await supabase
+    .from('support_tickets')
+    .insert({ teacher_id: teacherId, teacher_name: teacherName, subject })
+    .select()
+    .single();
+  if (error || !ticket) { console.error('createSupportTicket:', error?.message); return null; }
+  await supabase.from('support_messages').insert({
+    ticket_id:   ticket.id,
+    sender_id:   teacherId,
+    sender_name: teacherName,
+    sender_role: 'teacher',
+    body:        firstMessage,
+  });
+  return rowToTicket(ticket);
+};
+
+export const getMyTickets = async (teacherId: string): Promise<SupportTicket[]> => {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .order('updated_at', { ascending: false });
+  if (error) { console.error('getMyTickets:', error.message); return []; }
+  return (data ?? []).map(rowToTicket);
+};
+
+export const getAllTickets = async (): Promise<SupportTicket[]> => {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .select('*')
+    .order('updated_at', { ascending: false });
+  if (error) { console.error('getAllTickets:', error.message); return []; }
+  return (data ?? []).map(rowToTicket);
+};
+
+export const getTicketMessages = async (ticketId: string): Promise<SupportMessage[]> => {
+  const { data, error } = await supabase
+    .from('support_messages')
+    .select('*')
+    .eq('ticket_id', ticketId)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('getTicketMessages:', error.message); return []; }
+  return (data ?? []).map(rowToMessage);
+};
+
+export const sendSupportMessage = async (
+  ticketId: string,
+  senderId: string,
+  senderName: string,
+  senderRole: 'teacher' | 'admin',
+  body: string,
+): Promise<void> => {
+  await supabase.from('support_messages').insert({
+    ticket_id:   ticketId,
+    sender_id:   senderId,
+    sender_name: senderName,
+    sender_role: senderRole,
+    body,
+  });
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (senderRole === 'admin') updates.status = 'in_progress';
+  await supabase.from('support_tickets').update(updates).eq('id', ticketId);
+};
+
+export const updateTicketStatus = async (
+  ticketId: string,
+  status: 'open' | 'in_progress' | 'resolved',
+): Promise<void> => {
+  await supabase
+    .from('support_tickets')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', ticketId);
 };

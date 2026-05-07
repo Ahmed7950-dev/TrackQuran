@@ -16,10 +16,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Build a TeacherUser synchronously from a Supabase session.
-// Reads name from session metadata (set at sign-up / by Google OAuth) so
-// no extra network call is needed during the auth flow.
-const buildTeacherUser = (session: Session): TeacherUser => {
+// Fetch the role column from the profiles table.
+// Kept separate so the role is always read from the DB (not stale metadata).
+const fetchRole = async (userId: string): Promise<'teacher' | 'admin'> => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+  return data?.role === 'admin' ? 'admin' : 'teacher';
+};
+
+// Build a TeacherUser from a Supabase session + a resolved role.
+const buildTeacherUser = (session: Session, role: 'teacher' | 'admin'): TeacherUser => {
   const meta = session.user.user_metadata ?? {};
   const name =
     meta.name ||
@@ -31,7 +40,7 @@ const buildTeacherUser = (session: Session): TeacherUser => {
     email:    session.user.email ?? '',
     name,
     provider: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
-    role:     'teacher',
+    role,
   };
 };
 
@@ -41,37 +50,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Subscribe to Supabase auth events.
   // INITIAL_SESSION fires immediately on mount from localStorage — no network
-  // call, no internal lock — so subsequent auth calls are never blocked.
+  // lock — so subsequent auth calls (login) are never blocked.
+  // Role is fetched from the DB once per session event; the 4-second safety
+  // timeout ensures we never spin forever if the DB is unreachable.
   useEffect(() => {
     let initialized = false;
+    let cancelled   = false;
+
+    const resolveUser = async (session: Session) => {
+      const role = await fetchRole(session.user.id);
+      if (!cancelled) setCurrentUser(buildTeacherUser(session, role));
+    };
+
+    const markDone = () => {
+      if (!initialized) { initialized = true; if (!cancelled) setLoading(false); }
+    };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
-        // Always fires first, even if session is null (logged-out state)
-        if (session) setCurrentUser(buildTeacherUser(session));
-        initialized = true;
-        setLoading(false);
+        if (session) {
+          resolveUser(session).then(markDone).catch(markDone);
+        } else {
+          markDone();
+        }
       } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        setCurrentUser(buildTeacherUser(session));
+        resolveUser(session).catch(console.error);
       } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
+        if (!cancelled) setCurrentUser(null);
       }
     });
 
-    // Safety fallback: if INITIAL_SESSION never fires within 4 seconds,
-    // stop the loading spinner so the user isn't stuck on a blank screen.
-    const timer = setTimeout(() => {
-      if (!initialized) {
-        initialized = true;
-        setLoading(false);
-      }
-    }, 4000);
+    // Safety fallback: stop the spinner after 4 s if INITIAL_SESSION never fires.
+    const timer = setTimeout(markDone, 4000);
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
       clearTimeout(timer);
     };
-  }, []); // no deps — buildTeacherUser is a module-level function, not a closure
+  }, []);
 
   // ── Teacher email+password login ─────────────────────────────
   const login = useCallback(async (email: string, password: string): Promise<{ error: string | null }> => {

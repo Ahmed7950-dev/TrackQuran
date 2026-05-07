@@ -84,7 +84,7 @@ export interface User {
 
 // New types for role-based authentication
 export interface TeacherUser extends User {
-  role: 'teacher';
+  role: 'teacher' | 'admin';
 }
 
 export interface StudentUser {
@@ -94,6 +94,27 @@ export interface StudentUser {
 }
 
 export type AuthenticatedUser = TeacherUser | StudentUser;
+
+// ── Support tickets ────────────────────────────────────────────────────────────
+export interface SupportTicket {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  subject: string;
+  status: 'open' | 'in_progress' | 'resolved';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticketId: string;
+  senderId: string | null;
+  senderName: string;
+  senderRole: 'teacher' | 'admin';
+  body: string;
+  createdAt: string;
+}
 
 
 export enum SortCriteria {
