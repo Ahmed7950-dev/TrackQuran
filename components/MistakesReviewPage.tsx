@@ -104,7 +104,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const [activeReportId, setActiveReportId] = useState<string | null>(null);
     // Verse keys that were manually removed this session — prevents processMistakes
     // from re-adding them when the student prop updates after onStudentUpdate.
-    const [removedVerseKeys, setRemovedVerseKeys] = useState<Set<string>>(new Set());
+    // useRef (not useState) so the value is always current inside the effect closure.
+    const removedVerseKeysRef = useRef<Set<string>>(new Set());
 
     // Derived — no state needed; URL is always the same UUID
     const shareLink = activeReportId ? `${window.location.origin}/report/${activeReportId}` : null;
@@ -242,7 +243,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         const versesContainingMistakes = versesInSurah.filter(v =>
                             mistakesByVerse[v.verse_key] &&
                             // Exclude verses the teacher explicitly removed this session
-                            !removedVerseKeys.has(v.verse_key)
+                            !removedVerseKeysRef.current.has(v.verse_key)
                         );
                         if(versesContainingMistakes.length > 0) {
                             result[surahId] = versesContainingMistakes;
@@ -634,6 +635,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         if (activeReportId) {
             await updateHomeworkVerses(activeReportId, Array.from(next) as string[]);
 
+            // Broadcast updated homework list so the student's page updates in real time (Bug 3 fix)
+            playChannelRef.current?.send({
+                type: 'broadcast',
+                event: 'homework_update',
+                payload: { homeworkVerses: Array.from(next) },
+            });
+
             // When removing a completed homework verse, reset the play count so that
             // re-assigning it later starts the student fresh at 0/3.
             if (wasDone && wasAssigned) {
@@ -664,8 +672,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             if (newVWM[surahNum].length === 0) delete newVWM[surahNum];
         }
         setVersesWithMistakes(newVWM);
-        // Mark as removed so processMistakes won't re-add it when the student prop changes
-        setRemovedVerseKeys(prev => new Set([...prev, verseKey]));
+        // Mark as removed so processMistakes won't re-add it when the student prop changes.
+        // Using ref (not state) ensures the closure inside the effect always sees the latest set.
+        removedVerseKeysRef.current.add(verseKey);
 
         // 2. Turn all mistakes for this verse to level 1 (yellow) in the student record
         const updatedMistakes = { ...student.mistakes };
@@ -716,6 +725,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
                 },
             }).catch(e => console.error('handleRemoveVerse shared report:', e));
+
+            // Broadcast so the student's open page removes the verse immediately (Bug 2 fix)
+            playChannelRef.current?.send({
+                type: 'broadcast',
+                event: 'verse_removed',
+                payload: { verse_key: verseKey },
+            });
         }
     };
 

@@ -1135,6 +1135,34 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           return next;
         });
       })
+      // Teacher updated homework assignment → update student's homeworkVerses in real time (Bug 3 fix)
+      .on('broadcast', { event: 'homework_update' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const hw = payload?.homeworkVerses as string[] | undefined;
+        if (hw !== undefined) {
+          setReport(prev =>
+            prev
+              ? { ...prev, report_data: { ...prev.report_data, homeworkVerses: hw } }
+              : null
+          );
+        }
+      })
+      // Teacher removed a verse → hide it from student's page immediately (Bug 2 fix)
+      .on('broadcast', { event: 'verse_removed' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const vk = payload?.verse_key as string | undefined;
+        if (vk) {
+          setReport(prev =>
+            prev
+              ? {
+                  ...prev,
+                  report_data: {
+                    ...prev.report_data,
+                    verses: prev.report_data.verses.filter(v => v.verse_key !== vk),
+                  },
+                }
+              : null
+          );
+        }
+      })
       .subscribe();
     channelRef.current = ch;
     return () => { ch.unsubscribe(); };
