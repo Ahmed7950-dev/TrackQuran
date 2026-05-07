@@ -709,7 +709,7 @@ const App: React.FC = () => {
           />
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (
-            <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined} />
+            <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined} onStudentUpdate={handleUpdateStudent} />
           ) : (
             <StudentDetailPage 
               student={selectedStudent} 

@@ -45,6 +45,29 @@ const getMistakeBg = (level: number) => {
   }
 };
 
+/**
+ * Wraps U+06DF (ARABIC SMALL HIGH ROUNDED ZERO — the silent-letter marker used
+ * in the Madinah Mushaf) in a span with 'Amiri Regular' so it renders as a
+ * proper small circle instead of a generic glyph in Quranic fonts.
+ */
+const U06DF = '۟';
+const processTextWithU06DF = (text: string): React.ReactNode => {
+  if (!text.includes(U06DF)) return text;
+  const parts: React.ReactNode[] = [];
+  let current = '';
+  let idx = 0;
+  for (const ch of text) {
+    if (ch === U06DF) {
+      if (current) { parts.push(<span key={`t${idx++}`}>{current}</span>); current = ''; }
+      parts.push(<span key={`d${idx++}`} style={{ fontFamily: 'Amiri Regular' }}>{ch}</span>);
+    } else {
+      current += ch;
+    }
+  }
+  if (current) parts.push(<span key={`t${idx}`}>{current}</span>);
+  return <>{parts}</>;
+};
+
 // Global ayah number required by cdn.islamic.network
 const SURAH_VERSE_COUNTS = [
   7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,
@@ -227,6 +250,8 @@ const MistakesTab: React.FC<{
 
   const renderVerse = (verse: { verse_key: string; text_uthmani: string }) => {
     const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+    // Replace standard sukun (U+0652) with Quranic small rounded zero (U+06E1)
+    // so it renders correctly in all Quranic fonts (same fix as MistakesReviewPage).
     const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ');
 
     return words.map((word, wi) => {
@@ -243,7 +268,8 @@ const MistakesTab: React.FC<{
         return (
           <React.Fragment key={wordKey}>
             <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`}>
-              {word}
+              {/* processTextWithU06DF ensures the silent-letter marker renders as a proper circle */}
+              {processTextWithU06DF(word)}
             </span>{' '}
           </React.Fragment>
         );
@@ -266,7 +292,8 @@ const MistakesTab: React.FC<{
                 : lm ? getMistakeBg(lm.level) : '';
               return (
                 <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
-                  {letter}
+                  {/* Apply per-character U+06DF font switch inside letter spans too */}
+                  {processTextWithU06DF(letter)}
                 </span>
               );
             })}

@@ -300,6 +300,16 @@ export const getReportPlays = async (reportId: string): Promise<{ [verseKey: str
   return counts;
 };
 
+/** Delete all play-tracking rows for one verse so the homework counter resets to 0. */
+export const resetVersePlayCount = async (reportId: string, verseKey: string): Promise<void> => {
+  const { error } = await supabase
+    .from('report_plays')
+    .delete()
+    .eq('report_id', reportId)
+    .eq('verse_key', verseKey);
+  if (error) console.error('resetVersePlayCount:', error.message);
+};
+
 /** Upsert the shared report for a student — always returns the same UUID. */
 export const createOrUpdateSharedReport = async (
   teacherId: string,
