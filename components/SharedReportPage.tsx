@@ -1292,7 +1292,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         </div>
       </header>
 
-      <main className="container mx-auto px-3 sm:px-4 py-6 max-w-3xl" dir="ltr">
+      <main className="w-full px-3 sm:px-6 py-6" dir="ltr">
         {activeTab === 'mistakes' && (
           <MistakesTab
             report={report}
