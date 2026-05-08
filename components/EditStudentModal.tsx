@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Student, SurahMetadata, MemorizationAchievement, TafsirMemorizationReview, AttendanceRecord, AttendanceStatus, RecitationAchievement, TafsirReview } from '../types';
+import { Student, SurahMetadata, MemorizationAchievement, TafsirMemorizationReview, AttendanceRecord, AttendanceStatus, RecitationAchievement, TafsirReview, AgeCategory } from '../types';
 import QualityScoreInput from './QualityScoreInput';
 import { calculateVersesAndPages } from '../services/dataService';
 import { useI18n } from '../context/I18nProvider';
@@ -17,7 +17,8 @@ interface EditStudentDataModalProps {
 const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onClose, onUpdateStudent, onDeleteStudent, student, quranMetadata }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'logbook'>('info');
   const [name, setName] = useState(student.name);
-  const [dob, setDob] = useState(student.dob);
+  const [dob, setDob] = useState(student.dob ?? '');
+  const [ageCategory, setAgeCategory] = useState<AgeCategory>(student.ageCategory ?? 'young_gems');
   
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editingLogData, setEditingLogData] = useState<any | null>(null);
@@ -33,7 +34,8 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   useEffect(() => {
     if (isOpen) {
         setName(student.name);
-        setDob(student.dob);
+        setDob(student.dob ?? '');
+        setAgeCategory(student.ageCategory ?? 'young_gems');
         setActiveTab('info');
         setEditingLogId(null);
         setEditingLogData(null);
@@ -42,7 +44,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
 
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateStudent({ ...student, name, dob });
+    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory });
     onClose();
   };
   
@@ -323,7 +325,10 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                                     <input type="text" id="student-name-edit" value={name} onChange={(e) => setName(e.target.value)} className="block w-full px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-md shadow-sm" />
                                 </div>
                                 <div>
-                                    <label htmlFor="student-dob-edit" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('modals.editStudent.dobLabel')}</label>
+                                    <label htmlFor="student-dob-edit" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                      {t('modals.editStudent.dobLabel')}
+                                      <span className="ml-1 text-xs font-normal text-slate-400">(optional)</span>
+                                    </label>
                                     <div className="relative mt-1">
                                         <input type="date" id="student-dob-edit" value={dob} onChange={(e) => setDob(e.target.value)} className="block w-full px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-md shadow-sm pe-10" />
                                         <div className="absolute inset-y-0 right-0 flex items-center pe-3 pointer-events-none">
@@ -331,6 +336,40 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18M-4.5 12.75h22.5" />
                                             </svg>
                                         </div>
+                                    </div>
+                                </div>
+                                {/* Age Category */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Age Category
+                                        {dob ? <span className="ml-1 text-xs font-normal text-slate-400">(auto-set from date of birth)</span>
+                                              : <span className="ml-1 text-xs font-normal text-slate-400">(select manually)</span>}
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {([
+                                          { value: 'young_gems' as AgeCategory,        label: 'Young Gems',        range: 'Ages 4–15',  emoji: '⭐' },
+                                          { value: 'aspiring_scholars' as AgeCategory, label: 'Aspiring Scholars', range: 'Ages 16–35', emoji: '📚' },
+                                          { value: 'devoted_learners' as AgeCategory,  label: 'Devoted Learners',  range: 'Ages 36+',   emoji: '🌿' },
+                                        ]).map(cat => {
+                                          const isSelected = ageCategory === cat.value;
+                                          const isLocked = !!dob;
+                                          return (
+                                            <button
+                                              key={cat.value}
+                                              type="button"
+                                              disabled={isLocked}
+                                              onClick={() => !isLocked && setAgeCategory(cat.value)}
+                                              className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl border-2 text-center transition-all
+                                                ${isSelected ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30 dark:border-teal-400'
+                                                             : 'border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-300'}
+                                                ${isLocked ? 'opacity-70 cursor-default' : 'cursor-pointer'}`}
+                                            >
+                                              <span className="text-xl">{cat.emoji}</span>
+                                              <span className={`text-xs font-semibold leading-tight ${isSelected ? 'text-teal-700 dark:text-teal-300' : 'text-slate-700 dark:text-slate-300'}`}>{cat.label}</span>
+                                              <span className="text-[10px] text-slate-400">{cat.range}</span>
+                                            </button>
+                                          );
+                                        })}
                                     </div>
                                 </div>
                             </div>

@@ -209,7 +209,8 @@ const App: React.FC = () => {
     const newStudent: Student = {
       id: `student-${Date.now()}`,
       name: student.name,
-      dob: student.dob,
+      dob: student.dob || undefined,
+      ageCategory: student.ageCategory,
       recitationAchievements: student.recitationAchievements || [],
       memorizationAchievements: [],
       attendance: student.attendance || [],
@@ -735,7 +736,7 @@ const App: React.FC = () => {
       <AddStudentModal
         isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
-        onAddStudent={(name, dob) => handleAddStudent({ name, dob, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
+        onAddStudent={(name, dob, ageCategory) => handleAddStudent({ name, dob, ageCategory, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
       />
 
       <ContactSupportModal

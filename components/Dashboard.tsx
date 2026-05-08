@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Student, SortCriteria, SurahMetadata, AttendanceStatus } from '../types';
+import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
 import { getBirthdayStatus } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
@@ -7,7 +7,9 @@ import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
 import HonorBoardModal from './HonorBoardModal';
 
-const getAge = (dob: string) => {
+/** Returns age in years, or null if no dob is available. */
+const getAge = (dob?: string): number | null => {
+  if (!dob) return null;
   const birthDate = new Date(dob);
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -148,7 +150,14 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetad
                             <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
                             <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">{t('studentCard.yearsOld', { age: getAge(student.dob) })}</p>
+                        {getAge(student.dob) !== null
+                          ? <p className="text-sm text-slate-600 dark:text-slate-400">{t('studentCard.yearsOld', { age: getAge(student.dob) })}</p>
+                          : student.ageCategory && (
+                              <p className="text-sm text-slate-500 dark:text-slate-400">
+                                {student.ageCategory === 'young_gems' ? '⭐ Young Gems' : student.ageCategory === 'aspiring_scholars' ? '📚 Aspiring Scholars' : '🌿 Devoted Learners'}
+                              </p>
+                            )
+                        }
                     </div>
                      <div className="flex items-center flex-shrink-0 gap-1.5 ml-2">
                         {achievedReadingMilestones.slice(0, 2).map(m => <MilestoneBadge key={`read-${m.id}`} milestone={m} type="reading" />)}
@@ -157,7 +166,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetad
                  </div>
             </div>
             
-            <BirthdayBanner dob={student.dob} name={student.name} />
+            {student.dob && <BirthdayBanner dob={student.dob} name={student.name} />}
             
             {/* Content Section */}
             <div className="px-4 py-2">
@@ -219,18 +228,29 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         case SortCriteria.Name:
           return a.name.localeCompare(b.name);
         case SortCriteria.Age:
-          return getAge(a.dob) - getAge(b.dob);
+          return (getAge(a.dob) ?? 0) - (getAge(b.dob) ?? 0);
         default:
           return 0;
       }
     });
   }, [students, sortCriteria, searchQuery]);
 
+  /** Resolve the effective age category for a student. */
+  const getEffectiveCategory = (s: Student): AgeCategory => {
+    if (s.ageCategory) return s.ageCategory; // manual override always wins
+    const age = getAge(s.dob);
+    if (age === null) return 'young_gems'; // fallback
+    if (age <= 15) return 'young_gems';
+    if (age <= 35) return 'aspiring_scholars';
+    return 'devoted_learners';
+  };
+
   const studentGroups = useMemo(() => {
-    const youngGems = sortedStudents.filter(s => { const age = getAge(s.dob); return age >= 4 && age <= 15; });
-    const aspiringScholars = sortedStudents.filter(s => { const age = getAge(s.dob); return age >= 16 && age <= 35; });
-    const devotedLearners = sortedStudents.filter(s => { const age = getAge(s.dob); return age >= 36; });
+    const youngGems        = sortedStudents.filter(s => getEffectiveCategory(s) === 'young_gems');
+    const aspiringScholars = sortedStudents.filter(s => getEffectiveCategory(s) === 'aspiring_scholars');
+    const devotedLearners  = sortedStudents.filter(s => getEffectiveCategory(s) === 'devoted_learners');
     return { youngGems, aspiringScholars, devotedLearners };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedStudents]);
 
   return (

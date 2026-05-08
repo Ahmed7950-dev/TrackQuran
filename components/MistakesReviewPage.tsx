@@ -676,11 +676,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         // Using ref (not state) ensures the closure inside the effect always sees the latest set.
         removedVerseKeysRef.current.add(verseKey);
 
-        // 2. Turn all mistakes for this verse to level 1 (yellow) in the student record
+        // 2. Turn all mistakes for this verse to level 1 (yellow) in the student record.
+        //    Deliberately omit errorType and errorText so that in the live logging page
+        //    letter-level mistakes render yellow (fallback) instead of red/green.
         const updatedMistakes = { ...student.mistakes };
         Object.keys(updatedMistakes).forEach(key => {
             if (key.startsWith(`${surahNum}:${ayahNum}:`)) {
-                updatedMistakes[key] = { ...updatedMistakes[key], level: 1 };
+                updatedMistakes[key] = { level: 1, date: updatedMistakes[key]?.date || new Date().toISOString() };
             }
         });
         const updatedStudent: Student = { ...student, mistakes: updatedMistakes };

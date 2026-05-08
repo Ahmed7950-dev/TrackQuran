@@ -62,10 +62,13 @@ export interface Mistake {
   errorText?: string; // Text description of the error
 }
 
+export type AgeCategory = 'young_gems' | 'aspiring_scholars' | 'devoted_learners';
+
 export interface Student {
   id: string;
   name: string;
-  dob: string; // ISO string for date
+  dob?: string; // ISO date — optional; use ageCategory when absent
+  ageCategory?: AgeCategory; // Manual override; auto-derived from dob when dob is present
   recitationAchievements: RecitationAchievement[];
   memorizationAchievements: MemorizationAchievement[];
   attendance: AttendanceRecord[];

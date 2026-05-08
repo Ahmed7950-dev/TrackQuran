@@ -791,6 +791,8 @@ const LetterWithError: React.FC<{
         if (mistake) {
             if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
             if (mistake.errorType === 'reading') return 'bg-red-100 dark:bg-red-900/40';
+            // Mistake exists but errorType was cleared (verse removed from review) → yellow
+            return 'bg-yellow-100 dark:bg-yellow-900/40';
         }
         return '';
     };
@@ -2671,9 +2673,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
             <div className="space-y-6">
                 <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky top-[100px] z-30">
-                    <div className="flex flex-col gap-2">
-                    {/* ── Row 1: mode toggle + surah nav ── */}
-                    <div className="flex items-center gap-2">
+                    {/* Single horizontally-scrollable toolbar row */}
+                    <div className="flex items-center gap-2 overflow-x-auto horizontal-scrollbar pb-0.5">
+                        {/* ── Mode toggle ── */}
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <div className="relative flex items-center rounded-full bg-slate-200 dark:bg-gray-700 p-1 w-28 h-10">
                                 {/* The moving part */}
@@ -2752,43 +2754,49 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 )}
                             </div>
                         </div>
-                        {/* Surah nav pills — scrollable, fills remaining space in row 1 */}
-                        <div className="flex-grow horizontal-scrollbar overflow-x-auto overflow-y-hidden min-w-0">
-                            <div className="flex items-center gap-2">
-                                {surahStatuses.map(({ id, transliteratedName, status }) => (<button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)} className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status)}`}><span className="font-mono text-xs">{id}</span><div className={`w-px h-4 ${getDividerClass(id, status)}`}></div><span className="tracking-wide">{transliteratedName}</span></button>))}
-                            </div>
-                        </div>
-                    </div>
-                    {/* ── Row 2: controls toolbar (scrolls horizontally on mobile) ── */}
-                    <div className="flex items-center gap-2 overflow-x-auto horizontal-scrollbar pb-0.5">
-                        {/* Font size */}
+                        {/* ── Surah nav pills ── */}
+                        {surahStatuses.map(({ id, transliteratedName, status }) => (
+                            <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
+                                className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status)}`}>
+                                <span className="font-mono text-xs">{id}</span>
+                                <div className={`w-px h-4 ${getDividerClass(id, status)}`} />
+                                <span className="tracking-wide">{transliteratedName}</span>
+                            </button>
+                        ))}
+
+                        {/* ── Divider ── */}
+                        <div className="w-px h-6 bg-slate-300 dark:bg-gray-600 flex-shrink-0 mx-1" />
+
+                        {/* ── Font size ── */}
                         <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-lg p-1 flex-shrink-0">
                             <button onClick={handleDecreaseFontSize} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
                             <span className="text-slate-600 dark:text-slate-300 font-semibold w-7 text-center text-sm">A</span>
                             <button onClick={handleIncreaseFontSize} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
                         </div>
-                        {/* Auto-scroll */}
-                        <div className={`flex items-center gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-1 transition-all duration-300 ease-in-out flex-shrink-0 ${isAutoScrolling ? 'w-32 sm:w-40' : 'w-auto'}`}>
+
+                        {/* ── Auto-scroll ── */}
+                        <div className={`flex items-center gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-1 transition-all duration-300 ease-in-out flex-shrink-0 ${isAutoScrolling ? 'w-32' : 'w-auto'}`}>
                             <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                 {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                             </button>
                             {isAutoScrolling && (<div className="flex items-center justify-center gap-1 flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
                         </div>
-                        {/* Tajweed colour toggles */}
+
+                        {/* ── Tajweed colour toggles ── */}
                         <div className="flex items-center gap-1 flex-shrink-0">
                             <button onClick={() => setShowTranslation(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showTranslation ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-teal-100'}`} aria-pressed={showTranslation} title={t('liveSession.toggleTranslation')}>T</button>
                             <button onClick={() => setShowQalqalah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showQalqalah ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-sky-100'}`} aria-pressed={showQalqalah} title={t('liveSession.toggleQalqalah')}>Q</button>
                             <button onClick={() => setShowGhunnah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showGhunnah ? 'bg-green-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-green-100'}`} aria-pressed={showGhunnah} title={t('liveSession.toggleGhunnah')}>G</button>
                             <button onClick={() => setShowMadd(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showMadd ? 'bg-pink-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-pink-100'}`} aria-pressed={showMadd} title={t('liveSession.toggleMadd')}>M</button>
                         </div>
-                        {/* Search */}
-                        <form onSubmit={handleSearch} className="flex gap-2 items-center flex-shrink-0 ms-auto">
-                            <input type="text" value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder={t('liveSession.searchPlaceholder')} className="w-28 sm:w-32 px-2 py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
+
+                        {/* ── Search ── */}
+                        <form onSubmit={handleSearch} className="flex gap-2 items-center flex-shrink-0">
+                            <input type="text" value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder={t('liveSession.searchPlaceholder')} className="w-28 px-2 py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
                             <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600" aria-label={t('liveSession.search')}>
                                 {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
                             </button>
                         </form>
-                    </div>
                     </div>
                 </div>
                 <div dir="rtl" className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
