@@ -11,7 +11,7 @@ create table if not exists public.tajweed_lessons (
   title        text not null,
   description  text,
   order_index  integer not null default 0,
-  pdf_url      text,                                 -- Supabase Storage public URL of original PDF
+  pdf_url      text,                                 -- legacy; unused, kept nullable
   slides       jsonb not null default '[]'::jsonb,   -- Array<Slide>
   created_by   uuid references auth.users(id),
   created_at   timestamptz not null default now(),
@@ -117,9 +117,9 @@ create trigger trg_touch_tajweed_lessons before update on public.tajweed_lessons
 for each row execute function public.touch_lesson_updated_at();
 
 -- ============================================================
--- DONE.
--- After running:
+-- DONE. Next:
 --   1. Storage → New bucket: name = 'tajweed-assets', Public = ON
 --   2. Make a user an admin:
 --        update public.profiles set role = 'admin' where id = '<your-user-uuid>';
+--   3. Log out and back in.
 -- ============================================================

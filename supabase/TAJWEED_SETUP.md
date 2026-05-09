@@ -1,46 +1,41 @@
-# Tajweed Lessons — One-Time Setup
+# Tajweed Lessons — Setup (3 steps, ~5 minutes)
 
-Follow these steps in order. Do them once.
+No CLI, no API keys, no terminal commands needed.
 
 ## 1. Run the SQL migration
-1. Open Supabase Dashboard → **SQL Editor**.
-2. Paste the contents of `supabase/tajweed_migration.sql` and click **Run**.
-3. This creates: `tajweed_lessons`, `tajweed_lesson_completions`, RLS policies, an `is_admin()` helper, and an RPC.
+1. Open Supabase Dashboard → **SQL Editor** → **New query**
+2. Paste the contents of `supabase/tajweed_migration.sql`
+3. Click **Run** (✅ Success)
+
+This creates the `tajweed_lessons` and `tajweed_lesson_completions` tables, RLS policies, and helper functions.
 
 ## 2. Create the storage bucket
-1. Supabase Dashboard → **Storage** → **New bucket**.
-2. Name: `tajweed-assets`
-3. **Public**: ON
-4. Create.
+1. Supabase Dashboard → **Storage** → **New bucket**
+2. Name: **`tajweed-assets`** (must match exactly)
+3. Toggle **Public bucket** ON
+4. Click **Create bucket**
 
-## 3. Promote yourself (or another user) to admin
-Find your user UUID in **Authentication → Users**, then run in SQL Editor:
+This is where slide images are uploaded.
+
+## 3. Make yourself an admin
+In **SQL Editor**, run:
 
 ```sql
 update public.profiles set role = 'admin' where id = '<your-user-uuid>';
 ```
 
-Reload the app — the **Tajweed** tab will now show "Create Lesson from PDF" for you.
+> Find your user UUID in **Authentication → Users** (or use the one you already know).
 
-## 4. Deploy the Edge Function (calls Claude)
-You need the [Supabase CLI](https://supabase.com/docs/guides/cli) installed and linked to your project.
+Then **log out and back in** so the app picks up your new role.
 
-```bash
-# Set your Anthropic API key as a secret (only stored on Supabase, never in client)
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+---
 
-# Deploy the function
-supabase functions deploy parse-pdf-to-slides --no-verify-jwt
-```
+## ✅ Done!
 
-> Get an Anthropic API key at https://console.anthropic.com/
+Go to the **Tajweed** tab. As admin you'll see **"Create New Lesson"**.
 
-## Done!
-You can now go to the **Tajweed** tab and:
-- Click **Create Lesson from PDF**
-- Upload a PDF
-- Wait ~30s while Claude reads it and builds slides
-- Edit slides freely (drag, resize, change text/colors/fonts, add images)
+- Click it → enter a title → opens the editor
+- Add text boxes, upload images, change colors, add more slides
 - Save
-
-Tutors will see all lessons. They pick a student from the dropdown and click **Mark Done** to record completion. Completed lessons appear automatically on the student's detail page **and** their shared report link.
+- Tutors can now open the lesson, navigate slide-by-slide, and mark it as done for any of their students
+- Completed lessons appear automatically on each student's detail page and shared report link

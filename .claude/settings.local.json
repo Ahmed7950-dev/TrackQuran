@@ -8,7 +8,10 @@
       "Bash(npm install *)",
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(xcode-select -p)",
+      "Read(//Library/Developer/**)"
     ]
   }
 }

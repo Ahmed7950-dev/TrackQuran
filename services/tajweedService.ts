@@ -4,8 +4,7 @@
 //
 // • Lessons live in `tajweed_lessons` (admins write, all teachers read)
 // • Completions in `tajweed_lesson_completions` (one row per student/lesson)
-// • PDFs and uploaded slide images live in the public `tajweed-assets` bucket
-// • PDF → slides conversion is delegated to the `parse-pdf-to-slides` Edge Fn
+// • Uploaded slide images live in the public `tajweed-assets` bucket
 // -----------------------------------------------------------------------------
 
 import { supabase } from '../lib/supabase';
@@ -28,7 +27,6 @@ export async function listLessons(): Promise<TajweedLesson[]> {
 export async function createLesson(input: {
   title: string;
   description?: string;
-  pdfUrl?: string;
   slides: Slide[];
 }): Promise<TajweedLesson | null> {
   // Place new lessons at the end
@@ -42,7 +40,6 @@ export async function createLesson(input: {
     .insert({
       title: input.title,
       description: input.description ?? null,
-      pdf_url: input.pdfUrl ?? null,
       slides: input.slides,
       order_index: nextOrder,
     })
@@ -73,16 +70,7 @@ export async function deleteLesson(id: string): Promise<boolean> {
   return true;
 }
 
-// ── Storage: PDFs and slide images ──────────────────────────────────────────
-
-export async function uploadPdf(file: File): Promise<string | null> {
-  const path = `pdfs/${Date.now()}-${slug(file.name)}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    cacheControl: '3600', upsert: false, contentType: 'application/pdf',
-  });
-  if (error) { console.error('uploadPdf:', error.message); return null; }
-  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-}
+// ── Storage: slide images ───────────────────────────────────────────────────
 
 export async function uploadSlideImage(file: File): Promise<string | null> {
   const path = `images/${Date.now()}-${slug(file.name)}`;
@@ -91,32 +79,6 @@ export async function uploadSlideImage(file: File): Promise<string | null> {
   });
   if (error) { console.error('uploadSlideImage:', error.message); return null; }
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-}
-
-// ── AI: PDF → slides (calls Supabase Edge Function) ─────────────────────────
-
-export async function generateSlidesFromPdf(
-  pdfUrl: string,
-  lessonTitle?: string,
-): Promise<{ slides: Slide[]; suggestedTitle?: string } | { error: string }> {
-  const { data, error } = await supabase.functions.invoke('parse-pdf-to-slides', {
-    body: { pdfUrl, lessonTitle },
-  });
-  if (error) return { error: error.message };
-  if (!data || !Array.isArray((data as { slides?: unknown }).slides)) {
-    return { error: 'AI returned an unexpected response' };
-  }
-  // Stamp each element with a unique id if Claude omitted it
-  const slides = (data.slides as Slide[]).map((s, i) => ({
-    ...s,
-    id: s.id ?? `slide-${i + 1}`,
-    background: s.background ?? '#ffffff',
-    elements: (s.elements ?? []).map((el, j) => ({
-      ...el,
-      id: el.id ?? `${s.id ?? `slide-${i + 1}`}-el-${j + 1}`,
-    })),
-  }));
-  return { slides, suggestedTitle: (data as { suggestedTitle?: string }).suggestedTitle };
 }
 
 // ── Completions ─────────────────────────────────────────────────────────────

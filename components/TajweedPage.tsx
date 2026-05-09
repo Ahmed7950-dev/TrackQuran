@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Student, TajweedLesson } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import { listLessons, deleteLesson } from '../services/tajweedService';
-import PdfUploadModal from './PdfUploadModal';
+import CreateLessonModal from './CreateLessonModal';
 import TajweedLessonEditor, { SlideContent } from './TajweedLessonEditor';
 import TajweedLessonViewer from './TajweedLessonViewer';
 
@@ -27,7 +27,7 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
 
   const [lessons, setLessons]   = useState<TajweedLesson[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [uploadOpen, setUploadOpen]   = useState(false);
+  const [createOpen, setCreateOpen]   = useState(false);
   const [editing, setEditing]   = useState<TajweedLesson | null>(null);
   const [viewing, setViewing]   = useState<TajweedLesson | null>(null);
 
@@ -68,13 +68,13 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
         </div>
         {isAdmin && (
           <button
-            onClick={() => setUploadOpen(true)}
+            onClick={() => setCreateOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white font-semibold rounded-lg shadow-sm hover:bg-teal-700"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Create Lesson from PDF
+            Create New Lesson
           </button>
         )}
       </div>
@@ -85,7 +85,7 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
           <div className="text-6xl mb-3">📚</div>
           <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-1">No lessons yet</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isAdmin ? 'Click "Create Lesson from PDF" to get started.' : 'Lessons will appear here once an admin creates them.'}
+            {isAdmin ? 'Click "Create New Lesson" to get started.' : 'Lessons will appear here once an admin creates them.'}
           </p>
         </div>
       )}
@@ -105,10 +105,10 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
       </div>
 
       {/* ── Modals & overlays ── */}
-      {isAdmin && uploadOpen && (
-        <PdfUploadModal
-          isOpen={uploadOpen}
-          onClose={() => setUploadOpen(false)}
+      {isAdmin && createOpen && (
+        <CreateLessonModal
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
           onCreated={lesson => { setLessons(prev => [...prev, lesson]); setEditing(lesson); }}
         />
       )}
