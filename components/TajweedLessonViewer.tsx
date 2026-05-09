@@ -7,11 +7,13 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore — Vite ?url import gives the bundled worker path, no CDN needed
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Student, TajweedLesson } from '../types';
 import { markLessonCompleted, unmarkLessonCompleted, getCompletedLessonIds } from '../services/tajweedService';
 
-// Use the bundled worker via CDN to avoid Vite config complexity
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Point PDF.js at the locally-bundled worker (no CDN, always matches the package version)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 interface Props {
   lesson: TajweedLesson;
@@ -44,12 +46,14 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
 
     const load = async () => {
       try {
-        const doc = await pdfjsLib.getDocument({
-          url: lesson.pdfUrl!,
-          // Disable range requests so the whole PDF loads at once (prevents CORS issues)
-          disableRange: true,
-          disableStream: true,
-        }).promise;
+        // Fetch the PDF as binary first — this uses the browser's normal fetch
+        // (which handles CORS correctly for public Supabase storage) and then
+        // passes the raw data to PDF.js so it never makes its own network request.
+        const response = await fetch(lesson.pdfUrl!);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+
+        const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         setPdfDoc(doc);
         setTotalPages(doc.numPages);
         setPageNum(1);
