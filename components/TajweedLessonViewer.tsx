@@ -81,11 +81,16 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
 
     const page = await doc.getPage(num);
 
-    // Scale to fit the container width, max 2x device pixel ratio for sharpness
+    // Scale to fit the container like CSS object-fit:contain —
+    // use whichever axis is the limiting one so the page fills the
+    // screen without scrolling and without cropping.
     const dpr = window.devicePixelRatio || 1;
     const containerW = container.clientWidth;
+    const containerH = container.clientHeight;
     const viewport = page.getViewport({ scale: 1 });
-    const scale = (containerW / viewport.width) * dpr;
+    const scaleW = containerW / viewport.width;
+    const scaleH = containerH / viewport.height;
+    const scale  = Math.min(scaleW, scaleH) * dpr;
     const scaledViewport = page.getViewport({ scale });
 
     canvas.width  = scaledViewport.width;
@@ -225,7 +230,7 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
       {/* ── PDF canvas area ── */}
       <div
         ref={containerRef}
-        className="flex-1 min-h-0 overflow-y-auto flex items-start justify-center bg-gray-700 py-4 px-2"
+        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center bg-gray-700"
       >
         {loadingPdf && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-300">
