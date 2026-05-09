@@ -281,6 +281,7 @@ export interface SharedReportData {
     dob?: string;
     tafsirReviews: Array<{ id: string; date: string; surah: number; reviewQuality: number }>;
     tafsirMemorizationReviews: Array<{ id: string; date: string; surah: number; reviewQuality: number }>;
+    tajweedCompletions?: Array<{ lessonId: string; lessonTitle: string; completedAt: string }>;
   };
 }
 

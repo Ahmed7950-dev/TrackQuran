@@ -78,6 +78,55 @@ export interface Student {
   mistakes: { [key: string]: Mistake };
 }
 
+// ── Tajweed lesson slide system ─────────────────────────────────────────────
+// Slides are rendered on a 1280×720 virtual canvas. All x/y/w/h are in canvas
+// units; the viewer scales them down responsively while preserving aspect.
+
+export interface TextElement {
+  type: 'text';
+  id: string;
+  x: number; y: number; w: number; h: number;
+  text: string;
+  fontSize: number;        // px on the 1280×720 canvas
+  color: string;           // hex
+  bold: boolean;
+  align: 'left' | 'center' | 'right';
+  fontFamily?: string;     // optional override (e.g. 'Hafs' for Arabic)
+}
+
+export interface ImageElement {
+  type: 'image';
+  id: string;
+  x: number; y: number; w: number; h: number;
+  url: string;
+}
+
+export type SlideElement = TextElement | ImageElement;
+
+export interface Slide {
+  id: string;
+  background?: string;     // hex; default '#ffffff'
+  elements: SlideElement[];
+}
+
+export interface TajweedLesson {
+  id: string;
+  title: string;
+  description?: string;
+  orderIndex: number;
+  pdfUrl?: string;
+  slides: Slide[];
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TajweedCompletion {
+  lessonId: string;
+  lessonTitle: string;
+  completedAt: string;
+}
+
 export interface User {
   id: string;
   email: string;

@@ -1,5 +1,6 @@
-import React, { useState, useMemo, Fragment } from 'react';
-import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview } from '../types';
+import React, { useState, useMemo, Fragment, useEffect } from 'react';
+import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion } from '../types';
+import { getStudentCompletions } from '../services/tajweedService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
 import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah } from '../services/dataService';
@@ -63,6 +64,12 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
     // Fix: Replaced 'a.useState' with 'useState'.
     const [chartView, setChartView] = useState<'reading' | 'memorization'>('reading');
+    const [tajweedCompletions, setTajweedCompletions] = useState<TajweedCompletion[]>([]);
+
+    useEffect(() => {
+        if (!student.id) return;
+        getStudentCompletions(student.id).then(setTajweedCompletions);
+    }, [student.id]);
     // Fix: Replaced 'a.useState' with 'useState'.
     const [quranBarView, setQuranBarView] = useState<'reading' | 'memorization'>('reading');
     // Fix: Replaced 'a.useState' with 'useState'.
@@ -553,6 +560,33 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                          {student.masteredTajweedRules.length > 0 ? (
                             <ul className="space-y-3">{student.masteredTajweedRules.map(rule => (<li key={rule} className="flex items-center"><div className="bg-green-100 dark:bg-green-900/50 rounded-full p-1 me-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600 dark:text-green-400"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg></div><span className="text-slate-700 dark:text-slate-300 text-sm">{rule}</span></li>))}</ul>
                          ) : <p className="text-slate-500 dark:text-slate-400 italic text-sm">{t('studentDetail.noRulesMastered')}</p>}
+                    </div>
+
+                    {/* Completed Tajweed Lessons */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                            <span>🎓</span> Completed Tajweed Lessons
+                            <span className="text-xs font-normal text-slate-400 dark:text-slate-500 ml-1">({tajweedCompletions.length})</span>
+                        </h3>
+                        {tajweedCompletions.length > 0 ? (
+                            <ul className="divide-y divide-slate-100 dark:divide-gray-700">
+                                {tajweedCompletions.map(c => (
+                                    <li key={c.lessonId} className="py-2 flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="bg-green-100 dark:bg-green-900/50 rounded-full p-1 flex-shrink-0">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600 dark:text-green-400">
+                                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                            <span className="text-sm text-slate-700 dark:text-slate-300 truncate">{c.lessonTitle}</span>
+                                        </div>
+                                        <span className="text-xs text-slate-400 flex-shrink-0">{new Date(c.completedAt).toLocaleDateString()}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">No tajweed lessons completed yet.</p>
+                        )}
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">

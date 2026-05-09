@@ -20,6 +20,7 @@ import SharedReportPage from './components/SharedReportPage';
 import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
+import TajweedPage from './components/TajweedPage';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -113,7 +114,7 @@ const App: React.FC = () => {
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportBackup = () => {
@@ -588,6 +589,10 @@ const App: React.FC = () => {
                     onClick={() => setActiveTab(t => t === 'alphabetTrainer' ? 'main' : 'alphabetTrainer')}
                     className={`text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
                 >{t('header.alphabetTrainer')}</button>
+                <button
+                    onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); }}
+                    className={`text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                >{t('header.tajweed')}</button>
             </nav>
             <div className="flex items-center gap-2">
                 {!isDetailedView && (
@@ -691,6 +696,8 @@ const App: React.FC = () => {
           <AlphabetTrainerPage />
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
+        ) : activeTab === 'tajweed' ? (
+          <TajweedPage students={students} />
         ) : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}

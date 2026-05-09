@@ -497,6 +497,7 @@ const ProgressTab: React.FC<{
     masteredTajweedRules,
     tafsirReviews = [],
     tafsirMemorizationReviews = [],
+    tajweedCompletions = [],
   } = progress;
 
   const [quranBarView, setQuranBarView] = useState<'reading' | 'memorization'>('reading');
@@ -958,6 +959,33 @@ const ProgressTab: React.FC<{
           </ul>
         ) : (
           <p className="text-slate-400 italic text-sm">No tajweed rules mastered yet.</p>
+        )}
+      </div>
+
+      {/* ── Tajweed Lessons Completed ─────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+          <span>🎓</span> Tajweed Lessons Completed
+          <span className="text-xs font-normal text-slate-400 ml-1">({tajweedCompletions.length})</span>
+        </h3>
+        {tajweedCompletions.length > 0 ? (
+          <ul className="divide-y divide-slate-100">
+            {tajweedCompletions.map(c => (
+              <li key={c.lessonId} className="py-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="bg-green-100 rounded-full p-1 flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600">
+                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-slate-700 truncate">{c.lessonTitle}</span>
+                </div>
+                <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(c.completedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-slate-400 italic text-sm">No tajweed lessons completed yet.</p>
         )}
       </div>
 

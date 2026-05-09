@@ -3,6 +3,7 @@ import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
 import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getSharedReport, updateHomeworkVerses, saveStudent, resetVersePlayCount } from '../services/dataService';
+import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 
@@ -106,6 +107,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     // from re-adding them when the student prop updates after onStudentUpdate.
     // useRef (not useState) so the value is always current inside the effect closure.
     const removedVerseKeysRef = useRef<Set<string>>(new Set());
+    // Tajweed lesson completions for this student — cached and embedded in shared report
+    const tajweedCompletionsRef = useRef<Array<{ lessonId: string; lessonTitle: string; completedAt: string }>>([]);
+
+    useEffect(() => {
+        if (!student.id) return;
+        getStudentCompletions(student.id).then(rows => { tajweedCompletionsRef.current = rows; });
+    }, [student.id]);
 
     // Derived — no state needed; URL is always the same UUID
     const shareLink = activeReportId ? `${window.location.origin}/report/${activeReportId}` : null;
@@ -163,6 +171,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 dob: student.dob,
                 tafsirReviews: student.tafsirReviews || [],
                 tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
+                tajweedCompletions: tajweedCompletionsRef.current,
             },
         }).catch(e => console.error('Auto-update shared report:', e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
