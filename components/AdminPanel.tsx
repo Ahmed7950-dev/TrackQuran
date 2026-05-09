@@ -11,6 +11,7 @@ import {
 } from '../services/dataService';
 import { supabase } from '../lib/supabase';
 import Logo from './Logo';
+import TajweedPage from './TajweedPage';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 interface Props { currentUser: TeacherUser; onLogout: () => void; }
 
 const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'support'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'support' | 'tajweed'>('teachers');
 
   // ── Teachers state ────────────────────────────────────────
   const [teachers,        setTeachers]        = useState<TeacherProfile[]>([]);
@@ -183,7 +184,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
 
         {/* ── Tabs ───────────────────────────────────────────── */}
         <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm w-fit">
-          {(['teachers', 'support'] as const).map(tab => (
+          {(['teachers', 'support', 'tajweed'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -193,7 +194,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'
               }`}
             >
-              {tab === 'teachers' ? 'Teachers' : 'Support Inbox'}
+              {tab === 'teachers' ? 'Teachers' : tab === 'support' ? 'Support Inbox' : 'Tajweed Lessons'}
               {tab === 'support' && openCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">
                   {openCount}
@@ -484,6 +485,13 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
             </div>
           </div>
         )}
+        {/* ── Tajweed Lessons Tab ────────────────────────────── */}
+        {activeTab === 'tajweed' && (
+          <div className="flex-1">
+            <TajweedPage students={[]} />
+          </div>
+        )}
+
       </main>
     </div>
   );
