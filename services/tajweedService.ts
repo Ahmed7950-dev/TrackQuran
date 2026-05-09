@@ -4,11 +4,11 @@
 //
 // • Lessons live in `tajweed_lessons` (admins write, all teachers read)
 // • Completions in `tajweed_lesson_completions` (one row per student/lesson)
-// • Uploaded slide images live in the public `tajweed-assets` bucket
+// • Uploaded PDFs live in the public `tajweed-assets` bucket
 // -----------------------------------------------------------------------------
 
 import { supabase } from '../lib/supabase';
-import { Slide, TajweedLesson, TajweedCompletion } from '../types';
+import { TajweedLesson, TajweedCompletion } from '../types';
 
 const BUCKET = 'tajweed-assets';
 
@@ -27,9 +27,8 @@ export async function listLessons(): Promise<TajweedLesson[]> {
 export async function createLesson(input: {
   title: string;
   description?: string;
-  slides: Slide[];
+  pdfUrl?: string;
 }): Promise<TajweedLesson | null> {
-  // Place new lessons at the end
   const { data: maxRow } = await supabase
     .from('tajweed_lessons').select('order_index')
     .order('order_index', { ascending: false }).limit(1).maybeSingle();
@@ -38,10 +37,11 @@ export async function createLesson(input: {
   const { data, error } = await supabase
     .from('tajweed_lessons')
     .insert({
-      title: input.title,
+      title:       input.title,
       description: input.description ?? null,
-      slides: input.slides,
+      pdf_url:     input.pdfUrl ?? null,
       order_index: nextOrder,
+      slides:      [],
     })
     .select()
     .single();
@@ -51,12 +51,12 @@ export async function createLesson(input: {
 
 export async function updateLesson(
   id: string,
-  patch: Partial<{ title: string; description: string; slides: Slide[]; orderIndex: number }>,
+  patch: Partial<{ title: string; description: string; pdfUrl: string; orderIndex: number }>,
 ): Promise<boolean> {
   const update: Record<string, unknown> = {};
   if (patch.title       !== undefined) update.title       = patch.title;
   if (patch.description !== undefined) update.description = patch.description;
-  if (patch.slides      !== undefined) update.slides      = patch.slides;
+  if (patch.pdfUrl      !== undefined) update.pdf_url     = patch.pdfUrl;
   if (patch.orderIndex  !== undefined) update.order_index = patch.orderIndex;
 
   const { error } = await supabase.from('tajweed_lessons').update(update).eq('id', id);
@@ -70,14 +70,14 @@ export async function deleteLesson(id: string): Promise<boolean> {
   return true;
 }
 
-// ── Storage: slide images ───────────────────────────────────────────────────
+// ── Storage: PDF upload ──────────────────────────────────────────────────────
 
-export async function uploadSlideImage(file: File): Promise<string | null> {
-  const path = `images/${Date.now()}-${slug(file.name)}`;
+export async function uploadLessonPdf(file: File): Promise<string | null> {
+  const path = `pdfs/${Date.now()}-${slug(file.name)}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    cacheControl: '3600', upsert: false, contentType: file.type || 'image/png',
+    cacheControl: '3600', upsert: false, contentType: 'application/pdf',
   });
-  if (error) { console.error('uploadSlideImage:', error.message); return null; }
+  if (error) { console.error('uploadLessonPdf:', error.message); return null; }
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
@@ -117,7 +117,6 @@ export async function getStudentCompletions(studentId: string): Promise<TajweedC
   }));
 }
 
-/** All completed-lesson IDs for a student — used by the lesson list to badge "done". */
 export async function getCompletedLessonIds(studentId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from('tajweed_lesson_completions').select('lesson_id').eq('student_id', studentId);
@@ -129,15 +128,14 @@ export async function getCompletedLessonIds(studentId: string): Promise<Set<stri
 
 function rowToLesson(row: Record<string, unknown>): TajweedLesson {
   return {
-    id:           row.id as string,
-    title:        row.title as string,
+    id:          row.id as string,
+    title:       row.title as string,
     description: (row.description as string | null) ?? undefined,
-    orderIndex:   row.order_index as number,
+    orderIndex:  row.order_index as number,
     pdfUrl:      (row.pdf_url as string | null) ?? undefined,
-    slides:      (row.slides as Slide[]) ?? [],
     createdBy:   (row.created_by as string | null) ?? undefined,
-    createdAt:    row.created_at as string,
-    updatedAt:    row.updated_at as string,
+    createdAt:   row.created_at as string,
+    updatedAt:   row.updated_at as string,
   };
 }
 

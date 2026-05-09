@@ -1,152 +1,150 @@
 // components/TajweedLessonViewer.tsx
 // -----------------------------------------------------------------------------
-// Read-only slide viewer for tutors. Supports prev/next navigation, fullscreen,
-// keyboard arrows, and marking the lesson as done for a chosen student.
+// Full-screen PDF viewer for Tajweed lessons.
+// Tutors can select a student and mark the lesson as done.
 // -----------------------------------------------------------------------------
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Student, TajweedLesson } from '../types';
-import { SlideContent } from './TajweedLessonEditor';
-import { markLessonCompleted, unmarkLessonCompleted } from '../services/tajweedService';
-
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
+import { markLessonCompleted, unmarkLessonCompleted, getCompletedLessonIds } from '../services/tajweedService';
 
 interface Props {
   lesson: TajweedLesson;
   students: Student[];
   tutorId: string;
-  initialCompletedFor?: Set<string>; // student ids that already completed this lesson
   onClose: () => void;
-  onCompletionChanged?: (studentId: string, completed: boolean) => void;
 }
 
-const TajweedLessonViewer: React.FC<Props> = ({
-  lesson, students, tutorId, initialCompletedFor, onClose, onCompletionChanged,
-}) => {
-  const [idx, setIdx] = useState(0);
-  const [completedSet, setCompletedSet] = useState<Set<string>>(initialCompletedFor ?? new Set());
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [marking, setMarking] = useState(false);
+const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClose }) => {
+  const [completedIds, setCompletedIds]           = useState<Set<string>>(new Set());
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [marking, setMarking]                     = useState(false);
 
-  const stageRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
+  // When student changes, fetch their completion status for this lesson
   useEffect(() => {
-    const compute = () => {
-      const el = stageRef.current; if (!el) return;
-      setScale(Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H));
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    if (stageRef.current) ro.observe(stageRef.current);
-    return () => ro.disconnect();
-  }, []);
+    if (!selectedStudentId) return;
+    getCompletedLessonIds(selectedStudentId).then(ids => setCompletedIds(ids));
+  }, [selectedStudentId]);
 
-  // Keyboard navigation
+  // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') setIdx(i => Math.min(lesson.slides.length - 1, i + 1));
-      if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                    setIdx(i => Math.max(0, i - 1));
-      if (e.key === 'Escape') onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lesson.slides.length, onClose]);
+  }, [onClose]);
 
-  const slide = lesson.slides[idx];
-  const isCompletedForSelected = selectedStudentId && completedSet.has(selectedStudentId);
+  const isCompleted = selectedStudentId ? completedIds.has(lesson.id) : false;
 
   const handleMark = async () => {
-    if (!selectedStudentId) return;
+    if (!selectedStudentId || marking) return;
     setMarking(true);
-    const ok = isCompletedForSelected
-      ? await unmarkLessonCompleted(selectedStudentId, lesson.id)
-      : await markLessonCompleted(selectedStudentId, lesson.id, tutorId);
-    setMarking(false);
-    if (ok) {
-      const next = new Set(completedSet);
-      if (isCompletedForSelected) next.delete(selectedStudentId); else next.add(selectedStudentId);
-      setCompletedSet(next);
-      onCompletionChanged?.(selectedStudentId, !isCompletedForSelected);
+    if (isCompleted) {
+      const ok = await unmarkLessonCompleted(selectedStudentId, lesson.id);
+      if (ok) setCompletedIds(prev => { const s = new Set(prev); s.delete(lesson.id); return s; });
+    } else {
+      const ok = await markLessonCompleted(selectedStudentId, lesson.id, tutorId);
+      if (ok) setCompletedIds(prev => new Set([...prev, lesson.id]));
     }
+    setMarking(false);
   };
 
-  if (!slide) return null;
-
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col" dir="ltr">
+    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
       {/* ── Top bar ── */}
-      <div className="bg-slate-800 px-4 py-3 flex items-center gap-3 flex-shrink-0">
-        <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-700 text-white" title="Close (Esc)">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <div className="flex items-center gap-3 px-4 py-3 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex-shrink-0"
+          title="Close (Esc)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
           </svg>
         </button>
-        <h2 className="text-lg font-bold text-white truncate flex-1">{lesson.title}</h2>
 
-        {/* Mark as done — student picker + button */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Title */}
+        <div className="flex-1 min-w-0">
+          <h2 className="font-bold text-white truncate">{lesson.title}</h2>
+          {lesson.description && (
+            <p className="text-xs text-gray-400 truncate">{lesson.description}</p>
+          )}
+        </div>
+
+        {/* Open in new tab */}
+        {lesson.pdfUrl && (
+          <a
+            href={lesson.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
+            title="Open PDF in new tab"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            <span className="hidden sm:inline">Open in tab</span>
+          </a>
+        )}
+
+        {/* Student selector */}
+        {students.length > 0 && (
           <select
             value={selectedStudentId}
             onChange={e => setSelectedStudentId(e.target.value)}
-            className="px-3 py-1.5 text-sm bg-slate-700 text-white border border-slate-600 rounded-md focus:ring-2 focus:ring-teal-500 focus:outline-none"
+            className="px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 max-w-[160px]"
           >
-            <option value="">— Select student —</option>
+            <option value="">Select student…</option>
             {students.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name}{completedSet.has(s.id) ? ' ✓' : ''}
-              </option>
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
+        )}
+
+        {/* Mark done button */}
+        {selectedStudentId && (
           <button
             onClick={handleMark}
-            disabled={!selectedStudentId || marking}
-            className={`px-4 py-1.5 text-sm font-semibold rounded-md disabled:opacity-50 ${
-              isCompletedForSelected
-                ? 'bg-amber-600 text-white hover:bg-amber-700'
-                : 'bg-green-600 text-white hover:bg-green-700'
-            }`}
-          >{marking ? '…' : isCompletedForSelected ? 'Unmark' : '✓ Mark Done'}</button>
-        </div>
+            disabled={marking}
+            className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex-shrink-0 ${
+              isCompleted
+                ? 'bg-green-600 text-white hover:bg-red-600'
+                : 'bg-teal-600 text-white hover:bg-teal-700'
+            } disabled:opacity-50`}
+          >
+            {marking ? (
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/>
+              </svg>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                </svg>
+                <span className="hidden sm:inline">{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* ── Stage ── */}
-      <div ref={stageRef} className="flex-1 flex items-center justify-center p-6 min-h-0">
-        <div className="shadow-2xl" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
-          <div style={{ width: CANVAS_W, height: CANVAS_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-            <SlideContent slide={slide} />
+      {/* ── PDF viewer ── */}
+      <div className="flex-1 min-h-0">
+        {lesson.pdfUrl ? (
+          <iframe
+            src={lesson.pdfUrl}
+            className="w-full h-full border-0"
+            title={lesson.title}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="w-16 h-16 opacity-40">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+            <p className="text-lg font-medium">No PDF attached to this lesson</p>
           </div>
-        </div>
-      </div>
-
-      {/* ── Bottom navigation ── */}
-      <div className="bg-slate-800 px-4 py-3 flex items-center justify-center gap-4 flex-shrink-0">
-        <button
-          onClick={() => setIdx(i => Math.max(0, i - 1))}
-          disabled={idx === 0}
-          className="flex items-center gap-2 px-5 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-          </svg>
-          Previous
-        </button>
-
-        <div className="text-white font-semibold text-lg min-w-[5rem] text-center">
-          {idx + 1} <span className="text-slate-400 text-sm">/ {lesson.slides.length}</span>
-        </div>
-
-        <button
-          onClick={() => setIdx(i => Math.min(lesson.slides.length - 1, i + 1))}
-          disabled={idx === lesson.slides.length - 1}
-          className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          Next
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
+        )}
       </div>
     </div>
   );
