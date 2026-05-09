@@ -12,7 +12,8 @@
       "Bash(git add *)",
       "Bash(xcode-select -p)",
       "Read(//Library/Developer/**)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(node -e \"const p = require\\('./node_modules/pdfjs-dist/package.json'\\); console.log\\(p.version\\)\")"
     ]
   }
 }

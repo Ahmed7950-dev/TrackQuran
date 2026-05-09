@@ -1,12 +1,17 @@
 // components/TajweedLessonViewer.tsx
 // -----------------------------------------------------------------------------
-// Full-screen PDF viewer for Tajweed lessons.
-// Tutors can select a student and mark the lesson as done.
+// Full-screen PDF viewer using PDF.js.
+// Each page is rendered to a <canvas> — no browser toolbar, no download button.
+// Tutors navigate with Prev / Next buttons and can mark lessons done per student.
 // -----------------------------------------------------------------------------
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
 import { Student, TajweedLesson } from '../types';
 import { markLessonCompleted, unmarkLessonCompleted, getCompletedLessonIds } from '../services/tajweedService';
+
+// Use the bundled worker via CDN to avoid Vite config complexity
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface Props {
   lesson: TajweedLesson;
@@ -16,22 +21,120 @@ interface Props {
 }
 
 const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClose }) => {
-  const [completedIds, setCompletedIds]           = useState<Set<string>>(new Set());
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [marking, setMarking]                     = useState(false);
+  // ── PDF state ──────────────────────────────────────────────────────────────
+  const canvasRef                           = useRef<HTMLCanvasElement>(null);
+  const containerRef                        = useRef<HTMLDivElement>(null);
+  const renderTaskRef                       = useRef<pdfjsLib.RenderTask | null>(null);
+  const [pdfDoc,       setPdfDoc]           = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [pageNum,      setPageNum]          = useState(1);
+  const [totalPages,   setTotalPages]       = useState(0);
+  const [loadingPdf,   setLoadingPdf]       = useState(true);
+  const [pdfError,     setPdfError]         = useState('');
 
-  // When student changes, fetch their completion status for this lesson
+  // ── Completion state ───────────────────────────────────────────────────────
+  const [completedIds,       setCompletedIds]       = useState<Set<string>>(new Set());
+  const [selectedStudentId,  setSelectedStudentId]  = useState('');
+  const [marking,            setMarking]            = useState(false);
+
+  // ── Load PDF ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!lesson.pdfUrl) { setPdfError('No PDF attached to this lesson.'); setLoadingPdf(false); return; }
+    setLoadingPdf(true);
+    setPdfError('');
+
+    const load = async () => {
+      try {
+        const doc = await pdfjsLib.getDocument({
+          url: lesson.pdfUrl!,
+          // Disable range requests so the whole PDF loads at once (prevents CORS issues)
+          disableRange: true,
+          disableStream: true,
+        }).promise;
+        setPdfDoc(doc);
+        setTotalPages(doc.numPages);
+        setPageNum(1);
+      } catch (err) {
+        console.error('PDF load error:', err);
+        setPdfError('Failed to load PDF. Please try again.');
+      } finally {
+        setLoadingPdf(false);
+      }
+    };
+    load();
+  }, [lesson.pdfUrl]);
+
+  // ── Render current page ────────────────────────────────────────────────────
+  const renderPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, num: number) => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    // Cancel any in-progress render
+    if (renderTaskRef.current) {
+      try { renderTaskRef.current.cancel(); } catch {}
+      renderTaskRef.current = null;
+    }
+
+    const page = await doc.getPage(num);
+
+    // Scale to fit the container width, max 2x device pixel ratio for sharpness
+    const dpr = window.devicePixelRatio || 1;
+    const containerW = container.clientWidth;
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = (containerW / viewport.width) * dpr;
+    const scaledViewport = page.getViewport({ scale });
+
+    canvas.width  = scaledViewport.width;
+    canvas.height = scaledViewport.height;
+    canvas.style.width  = `${scaledViewport.width  / dpr}px`;
+    canvas.style.height = `${scaledViewport.height / dpr}px`;
+
+    const ctx = canvas.getContext('2d')!;
+    const task = page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport: scaledViewport, canvas });
+    renderTaskRef.current = task;
+    try {
+      await task.promise;
+    } catch (e: unknown) {
+      // RenderingCancelledException is expected when we cancel — ignore it
+      if (e instanceof Error && e.name !== 'RenderingCancelledException') {
+        console.error('Render error:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pdfDoc) renderPage(pdfDoc, pageNum);
+  }, [pdfDoc, pageNum, renderPage]);
+
+  // Re-render on container resize
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pdfDoc) return;
+    const ro = new ResizeObserver(() => renderPage(pdfDoc, pageNum));
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [pdfDoc, pageNum, renderPage]);
+
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        setPageNum(n => Math.min(totalPages, n + 1));
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        setPageNum(n => Math.max(1, n - 1));
+      }
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [totalPages, onClose]);
+
+  // ── Completion ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedStudentId) return;
     getCompletedLessonIds(selectedStudentId).then(ids => setCompletedIds(ids));
   }, [selectedStudentId]);
-
-  // Close on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   const isCompleted = selectedStudentId ? completedIds.has(lesson.id) : false;
 
@@ -48,10 +151,13 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
     setMarking(false);
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col select-none">
+
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+
         {/* Close */}
         <button
           onClick={onClose}
@@ -65,34 +171,18 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
 
         {/* Title */}
         <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-white truncate">{lesson.title}</h2>
-          {lesson.description && (
-            <p className="text-xs text-gray-400 truncate">{lesson.description}</p>
+          <h2 className="font-bold text-white text-sm sm:text-base truncate">{lesson.title}</h2>
+          {totalPages > 0 && (
+            <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>
           )}
         </div>
-
-        {/* Open in new tab */}
-        {lesson.pdfUrl && (
-          <a
-            href={lesson.pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
-            title="Open PDF in new tab"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span className="hidden sm:inline">Open in tab</span>
-          </a>
-        )}
 
         {/* Student selector */}
         {students.length > 0 && (
           <select
             value={selectedStudentId}
             onChange={e => setSelectedStudentId(e.target.value)}
-            className="px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 max-w-[160px]"
+            className="px-2 sm:px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 max-w-[130px] sm:max-w-[180px]"
           >
             <option value="">Select student…</option>
             {students.map(s => (
@@ -106,11 +196,12 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
           <button
             onClick={handleMark}
             disabled={marking}
-            className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors flex-shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors flex-shrink-0 disabled:opacity-50 ${
               isCompleted
                 ? 'bg-green-600 text-white hover:bg-red-600'
                 : 'bg-teal-600 text-white hover:bg-teal-700'
-            } disabled:opacity-50`}
+            }`}
+            title={isCompleted ? 'Click to unmark' : 'Mark as done'}
           >
             {marking ? (
               <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -118,34 +209,83 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/>
               </svg>
             ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-                <span className="hidden sm:inline">{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
-              </>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
             )}
+            <span className="hidden sm:inline">{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
           </button>
         )}
       </div>
 
-      {/* ── PDF viewer ── */}
-      <div className="flex-1 min-h-0">
-        {lesson.pdfUrl ? (
-          <iframe
-            src={lesson.pdfUrl}
-            className="w-full h-full border-0"
-            title={lesson.title}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-4">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="w-16 h-16 opacity-40">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+      {/* ── PDF canvas area ── */}
+      <div
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-y-auto flex items-start justify-center bg-gray-700 py-4 px-2"
+      >
+        {loadingPdf && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-300">
+            <svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/>
             </svg>
-            <p className="text-lg font-medium">No PDF attached to this lesson</p>
+            <span className="text-sm">Loading PDF…</span>
           </div>
         )}
+
+        {pdfError && !loadingPdf && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-red-400">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 opacity-60">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+            <p className="text-sm font-medium">{pdfError}</p>
+          </div>
+        )}
+
+        {!loadingPdf && !pdfError && (
+          <canvas
+            ref={canvasRef}
+            className="shadow-2xl rounded"
+            style={{ display: 'block', maxWidth: '100%' }}
+          />
+        )}
       </div>
+
+      {/* ── Bottom navigation bar ── */}
+      {!loadingPdf && !pdfError && totalPages > 0 && (
+        <div className="flex items-center justify-center gap-4 px-4 py-3 bg-gray-800 border-t border-gray-700 flex-shrink-0">
+
+          {/* Previous */}
+          <button
+            onClick={() => setPageNum(n => Math.max(1, n - 1))}
+            disabled={pageNum <= 1}
+            className="flex items-center gap-2 px-5 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            Previous
+          </button>
+
+          {/* Page counter */}
+          <span className="text-gray-300 text-sm font-medium tabular-nums min-w-[80px] text-center">
+            {pageNum} / {totalPages}
+          </span>
+
+          {/* Next */}
+          <button
+            onClick={() => setPageNum(n => Math.min(totalPages, n + 1))}
+            disabled={pageNum >= totalPages}
+            className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+
+        </div>
+      )}
     </div>
   );
 };
