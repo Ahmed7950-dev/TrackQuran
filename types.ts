@@ -25,6 +25,7 @@ export interface RecitationAchievement {
   pagesCompleted: number;
   versesCompleted: number;
   pointsEarned: number;
+  isRevision?: boolean; // true = Reading Revision log
 }
 
 export interface MemorizationAchievement {
@@ -38,14 +39,19 @@ export interface MemorizationAchievement {
   notes?: string;
   pagesCompleted: number;
   versesCompleted: number;
+  isRevision?: boolean; // true = Hifz Revision log
 }
 
 
 export interface TafsirReview {
   id: string;
   date: string; // ISO string
-  surah: number;
-  reviewQuality: number; // 1-10
+  surah: number;           // kept for backward compat (original single-surah field)
+  startSurah?: number;     // full verse-range fields (new logs)
+  startAyah?: number;
+  endSurah?: number;
+  endAyah?: number;
+  reviewQuality?: number;  // 1-10 (not collected for Tafseer in live logging)
 }
 
 export interface TafsirMemorizationReview {

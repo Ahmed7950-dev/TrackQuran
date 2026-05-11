@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Student, Progress, RecitationAchievement, MemorizationAchievement } from './types';
+import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
@@ -341,41 +341,36 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
-  const handleLogRecitationRange = (studentId: string, range: { start: Progress; end: Progress }) => {
-    // This is a simplified async wrapper because the original function was not async
-    // but the underlying call should ideally be.
-    (async () => {
-        const student = students.find(s => s.id === studentId);
-        if (!student) return;
+  const handleLogRecitationRange = (studentId: string, range: { start: Progress; end: Progress }, quality: number = 8, isRevision: boolean = false) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
 
-        // Note: `getVersesInRange` is async but not awaited here, which could lead to race conditions.
-        // For simplicity of this change, we'll keep the structure but ideally this should be refactored.
-        const { verses, pages } = calculateVersesAndPages(range.start.surah, range.start.ayah, range.end.surah, range.end.ayah);
-        const avgWordsPerVerse = 15;
-        const points = verses * avgWordsPerVerse * POINTS_PER_WORD;
+    const { verses, pages } = calculateVersesAndPages(range.start.surah, range.start.ayah, range.end.surah, range.end.ayah);
+    const avgWordsPerVerse = 15;
+    const points = isRevision ? 0 : verses * avgWordsPerVerse * POINTS_PER_WORD;
 
-        const newAchievement: RecitationAchievement = {
-          id: `rec-live-${Date.now()}`,
-          date: new Date().toISOString(),
-          startSurah: range.start.surah,
-          startAyah: range.start.ayah,
-          endSurah: range.end.surah,
-          endAyah: range.end.ayah,
-          readingQuality: 8,
-          tajweedQuality: 8,
-          pagesCompleted: pages,
-          versesCompleted: verses,
-          pointsEarned: points,
-        };
+    const newAchievement: RecitationAchievement = {
+      id: `rec-live-${Date.now()}`,
+      date: new Date().toISOString(),
+      startSurah: range.start.surah,
+      startAyah: range.start.ayah,
+      endSurah: range.end.surah,
+      endAyah: range.end.ayah,
+      readingQuality: quality,
+      tajweedQuality: quality,
+      pagesCompleted: pages,
+      versesCompleted: verses,
+      pointsEarned: points,
+      isRevision,
+    };
 
-        const updatedStudent = {
-          ...student,
-          recitationAchievements: [...student.recitationAchievements, newAchievement],
-        };
-        handleUpdateStudent(updatedStudent);
-    })();
+    const updatedStudent = {
+      ...student,
+      recitationAchievements: [...student.recitationAchievements, newAchievement],
+    };
+    handleUpdateStudent(updatedStudent);
   };
-  
+
   const handleRemoveRecitationAchievement = (studentId: string, achievementId: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
@@ -386,8 +381,8 @@ const App: React.FC = () => {
     };
     handleUpdateStudent(updatedStudent);
   };
-  
-  const handleLogMemorizationRange = (studentId: string, range: { start: Progress; end: Progress }) => {
+
+  const handleLogMemorizationRange = (studentId: string, range: { start: Progress; end: Progress }, quality: number = 9, isRevision: boolean = false) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
@@ -400,9 +395,10 @@ const App: React.FC = () => {
       startAyah: range.start.ayah,
       endSurah: range.end.surah,
       endAyah: range.end.ayah,
-      memorizationQuality: 9, // Default quality for live tracking
+      memorizationQuality: quality,
       pagesCompleted: pages,
       versesCompleted: verses,
+      isRevision,
     };
 
     const updatedStudent = {
@@ -419,6 +415,27 @@ const App: React.FC = () => {
     const updatedStudent = {
       ...student,
       memorizationAchievements: student.memorizationAchievements.filter(ach => ach.id !== achievementId),
+    };
+    handleUpdateStudent(updatedStudent);
+  };
+
+  const handleLogTafseerRange = (studentId: string, range: { start: Progress; end: Progress }) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const newReview: TafsirReview = {
+      id: `tafseer-live-${Date.now()}`,
+      date: new Date().toISOString(),
+      surah: range.start.surah,
+      startSurah: range.start.surah,
+      startAyah: range.start.ayah,
+      endSurah: range.end.surah,
+      endAyah: range.end.ayah,
+    };
+
+    const updatedStudent = {
+      ...student,
+      tafsirReviews: [...(student.tafsirReviews || []), newReview],
     };
     handleUpdateStudent(updatedStudent);
   };
@@ -713,6 +730,7 @@ const App: React.FC = () => {
             onRemoveRecitationAchievement={handleRemoveRecitationAchievement}
             onLogMemorizationRange={handleLogMemorizationRange}
             onRemoveMemorizationAchievement={handleRemoveMemorizationAchievement}
+            onLogTafseerRange={handleLogTafseerRange}
             onGoBack={() => setSessionStudentId(null)}
           />
         ) : selectedStudent ? (

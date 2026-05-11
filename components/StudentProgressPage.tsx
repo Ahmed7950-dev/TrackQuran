@@ -7,11 +7,9 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import ConfirmationModal from './ConfirmationModal';
-import ModernToggle from './ModernToggle';
-
 declare var confetti: any;
 
-type LoggingMode = 'reading' | 'memorization';
+type LogType = 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafseer';
 
 
 interface StudentProgressPageProps {
@@ -24,10 +22,11 @@ interface StudentProgressPageProps {
   onUpdateProgress: (studentId: string, surah: number, ayah: number) => void;
   onCycleMistakeLevel: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => void;
   onClearMistake: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number) => void;
-  onLogRecitationRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
+  onLogRecitationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
   onRemoveRecitationAchievement: (studentId: string, achievementId: string) => void;
-  onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
+  onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
+  onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onGoBack: () => void;
 }
 
@@ -1152,7 +1151,7 @@ type SurahStatus = {
     status: 'completed' | 'in-progress' | 'not-started';
 };
 
-const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, type: LoggingMode }> = ({ surahStatuses, title, type }) => {
+const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, type: 'reading' | 'memorization' }> = ({ surahStatuses, title, type }) => {
     const colors = {
         reading: {
             completed: 'bg-teal-400',
@@ -1245,8 +1244,12 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onGoBack }) => {
-    const [loggingMode, setLoggingMode] = useState<LoggingMode>('reading');
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onGoBack }) => {
+    // ── Log-type modal state ──────────────────────────────────────────────────
+    const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
+    const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
+    const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
+    const [logQuality, setLogQuality] = useState<number>(8);
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('tajweed');
     const [selectedSurahId, setSelectedSurahId] = useState<number>(studentProgress?.surah || 1);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
@@ -1289,24 +1292,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [editingLetterKey, setEditingLetterKey] = useState<string | null>(null);
     const [errorTextInput, setErrorTextInput] = useState<string>('');
     
-    // New memorization mode state
-    const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set()); // Set of word keys: "surah:ayah:wordIndex"
-    const [hiddenWords, setHiddenWords] = useState<Set<string>>(new Set()); // Set of word keys that are hidden
+    // Memorization practice state (counter for tracking recitation count)
     const [memorizationCounter, setMemorizationCounter] = useState<number>(0);
     const [showCounter, setShowCounter] = useState(false);
     const [showTryAgain, setShowTryAgain] = useState(false);
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStartWord, setDragStartWord] = useState<string | null>(null);
-    const [dragEndWord, setDragEndWord] = useState<string | null>(null);
 
     const hoveredVerse = useRef<{ surah: number; ayah: number } | null>(null);
     const longPressTimer = useRef<number | null>(null);
     const longPressFired = useRef(false);
     const prevSurahStatusesRef = useRef<SurahStatus[]>();
-    const prevLoggingModeRef = useRef<LoggingMode>();
     const scrollIntervalRef = useRef<number | null>(null);
-    const wordPressTimer = useRef<number | null>(null);
-    const wordLongPressFired = useRef(false);
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
     const [clickStateUpdateTrigger, setClickStateUpdateTrigger] = useState(0); // Force re-render when click states change
     const [showMistakeHighlight, setShowMistakeHighlight] = useState(false);
@@ -1363,208 +1358,65 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         mistakeSoundRef.current = createMistakeSound;
     }, []);
 
-    // Helper function to get all word keys between two word keys
-    const getWordsBetween = useCallback((startKey: string, endKey: string): string[] => {
-        const [startSurah, startAyah, startWord] = startKey.split(':').map(Number);
-        const [endSurah, endAyah, endWord] = endKey.split(':').map(Number);
-        
-        const words: string[] = [];
-        
-        // Get all verses between start and end (inclusive)
-        const allVerses = verses.filter(v => {
-            const [s, a] = v.verse_key.split(':').map(Number);
-            const startVerseNum = startSurah * 10000 + startAyah;
-            const endVerseNum = endSurah * 10000 + endAyah;
-            const currentVerseNum = s * 10000 + a;
-            const minNum = Math.min(startVerseNum, endVerseNum);
-            const maxNum = Math.max(startVerseNum, endVerseNum);
-            return currentVerseNum >= minNum && currentVerseNum <= maxNum;
-        });
-        
-        // Sort verses
-        allVerses.sort((a, b) => {
-            const [s1, a1] = a.verse_key.split(':').map(Number);
-            const [s2, a2] = b.verse_key.split(':').map(Number);
-            const num1 = s1 * 10000 + a1;
-            const num2 = s2 * 10000 + a2;
-            return num1 - num2;
-        });
-        
-        let started = false;
-        let ended = false;
-        
-        for (const verse of allVerses) {
-            const [s, a] = verse.verse_key.split(':').map(Number);
-            const verseWords = verse.text_uthmani.split(' ');
-            
-            for (let w = 0; w < verseWords.length; w++) {
-                const wordKey = `${s}:${a}:${w}`;
-                
-                if (wordKey === startKey) started = true;
-                if (wordKey === endKey) {
-                    if (started) words.push(wordKey);
-                    ended = true;
-                    break;
-                }
-                if (started && !ended) words.push(wordKey);
-            }
-            if (ended) break;
-        }
-        
-        // If we didn't find end, include it
-        if (started && !ended) {
-            words.push(endKey);
-        }
-        
-        return words;
-    }, [verses]);
-    
-    // Global mouse up handler for drag end
-    useEffect(() => {
-        const handleGlobalMouseUp = () => {
-            if (isDragging) {
-                setIsDragging(false);
-                if (dragStartWord && dragEndWord) {
-                    const wordsInRange = getWordsBetween(dragStartWord, dragEndWord);
-                    setSelectedWords(new Set(wordsInRange));
-                }
-                setDragStartWord(null);
-                setDragEndWord(null);
-            }
-        };
-        
-        if (isDragging) {
-            window.addEventListener('mouseup', handleGlobalMouseUp);
-            return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-        }
-    }, [isDragging, dragStartWord, dragEndWord, getWordsBetween]);
-
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
             if (event.code === 'Space') {
-                const target = event.target as HTMLElement;
-                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
                 event.preventDefault();
                 setIsAutoScrolling(prev => !prev);
             }
-            
+
             // Ctrl key for mistake indication
             if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
-                const target = event.target as HTMLElement;
-                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
                 event.preventDefault();
-                
-                // Show red highlight
                 setShowMistakeHighlight(true);
-                
-                // Play mistake sound
-                if (mistakeSoundRef.current) {
-                    mistakeSoundRef.current();
-                }
-                
-                // Remove highlight after animation
-                setTimeout(() => {
-                    setShowMistakeHighlight(false);
-                }, 500);
+                if (mistakeSoundRef.current) mistakeSoundRef.current();
+                setTimeout(() => setShowMistakeHighlight(false), 500);
             }
-            
-            // Memorization mode keyboard shortcuts
-            if (loggingMode === 'memorization') {
-                const target = event.target as HTMLElement;
-                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-                
-                if (event.key === '+' || event.key === '=') {
-                    event.preventDefault();
-                    setMemorizationCounter(prev => {
-                        const newCount = prev + 1;
-                        // Show counter with fade effect
-                        setShowCounter(true);
-                        setTimeout(() => setShowCounter(false), 1500);
-                        return newCount;
+
+            // Repetition counter (+ / 0)
+            if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                setMemorizationCounter(prev => { const n = prev + 1; setShowCounter(true); setTimeout(() => setShowCounter(false), 1500); return n; });
+            } else if (event.key === '0') {
+                event.preventDefault();
+                setMemorizationCounter(0);
+                setShowTryAgain(true);
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+                setTimeout(() => setShowTryAgain(false), 1500);
+            }
+
+            // H key — hide/reveal hovered verse
+            if (event.key.toLowerCase() === 'h') {
+                event.preventDefault();
+                const hv = hoveredVerse.current;
+                if (hv) {
+                    const verse = { surah: hv.surah, ayah: hv.ayah };
+                    setHiddenRanges(prev => {
+                        const idx = prev.findIndex(r => isVerseAfterOrEqual(verse, r.start) && isVerseAfterOrEqual(r.end, verse));
+                        return idx > -1 ? prev.filter((_, i) => i !== idx) : [...prev, { start: verse, end: verse }];
                     });
-                } else if (event.key === '0') {
-                    event.preventDefault();
-                    setMemorizationCounter(0);
-                    // Show "try again!" with fade and vibration effect
-                    setShowTryAgain(true);
-                    // Trigger vibration if supported
-                    if (navigator.vibrate) {
-                        navigator.vibrate([100, 50, 100, 50, 100]);
-                    }
-                    setTimeout(() => setShowTryAgain(false), 1500);
-                } else if (event.key.toLowerCase() === 'h') {
-                    event.preventDefault();
-                    const hv = hoveredVerse.current;
-                    if (hv) {
-                        const verse = { surah: hv.surah, ayah: hv.ayah };
-                        setHiddenRanges(prev => {
-                            const idx = prev.findIndex(range =>
-                                isVerseAfterOrEqual(verse, range.start) && isVerseAfterOrEqual(range.end, verse)
-                            );
-                            if (idx > -1) {
-                                // Verse is hidden → reveal it
-                                return prev.filter((_, i) => i !== idx);
-                            } else {
-                                // Verse is visible → hide it
-                                return [...prev, { start: verse, end: verse }];
-                            }
-                        });
-                    }
-                } else if (event.key.toLowerCase() === 's') {
-                    event.preventDefault();
-                    if (selectedWords.size > 0) {
-                        // Save selected words as memorized
-                        // Get the verse range from selected words
-                        const verseKeys = new Set<string>();
-                        selectedWords.forEach(wordKey => {
-                            const [surah, ayah] = wordKey.split(':').slice(0, 2);
-                            verseKeys.add(`${surah}:${ayah}`);
-                        });
-                        
-                        // Convert to verse ranges and save
-                        const verseArray = Array.from(verseKeys).map(key => {
-                            const [surah, ayah] = key.split(':').map(Number);
-                            return { surah, ayah };
-                        }).sort((a, b) => {
-                            const numA = a.surah * 10000 + a.ayah;
-                            const numB = b.surah * 10000 + b.ayah;
-                            return numA - numB;
-                        });
-                        
-                        if (verseArray.length > 0) {
-                            const start = verseArray[0];
-                            const end = verseArray[verseArray.length - 1];
-                            onLogMemorizationRange(student.id, { start, end });
-                            showToast(t('liveSession.memorizationSaved', { ayah: end.ayah }));
-                        }
-                    }
                 }
             }
-            
-            // Error type shortcuts (only in reading mode)
-            if (loggingMode === 'reading') {
-                const target = event.target as HTMLElement;
-                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-                if (event.key.toLowerCase() === 'r') {
-                    event.preventDefault();
-                    setErrorType('reading');
-                } else if (event.key.toLowerCase() === 't') {
-                    event.preventDefault();
-                    setErrorType('tajweed');
-                }
-            }
+
+            // Error type shortcuts
+            if (event.key.toLowerCase() === 'r') { event.preventDefault(); setErrorType('reading'); }
+            else if (event.key.toLowerCase() === 't') { event.preventDefault(); setErrorType('tajweed'); }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [loggingMode]);
+    }, []);
 
+    // surahStatuses based on reading (recitation non-revision) achievements
     const surahStatuses = useMemo<SurahStatus[]>(() => {
-        const achievements = loggingMode === 'reading' ? recitationAchievements : memorizationAchievements;
+        const readingAchs = recitationAchievements.filter(a => !a.isRevision);
         return QURAN_METADATA.map(surah => {
             const surahId = surah.number;
             let status: 'completed' | 'in-progress' | 'not-started' = 'not-started';
 
-            for (const range of achievements) {
+            for (const range of readingAchs) {
                 if (surahId > range.startSurah && surahId < range.endSurah) {
                     status = 'completed'; break;
                 }
@@ -1581,35 +1433,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 englishName: surah.englishName, status
             };
         });
-    }, [recitationAchievements, memorizationAchievements, loggingMode]);
+    }, [recitationAchievements]);
 
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status']) => {
         if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
-        
-        const modeColors = {
-            reading: { completed: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900',
-                       inProgress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900' },
-            memorization: { completed: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900',
-                            inProgress: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900' }
-        };
         const defaultClass = 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
-        
         switch (status) {
-            case 'completed': return modeColors[loggingMode].completed;
-            case 'in-progress': return modeColors[loggingMode].inProgress;
+            case 'completed': return 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900';
+            case 'in-progress': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900';
             default: return defaultClass;
         }
     };
 
     const getDividerClass = (surahId: number, status: SurahStatus['status']) => {
         if (surahId === selectedSurahId) return 'bg-white/40 dark:bg-white/40';
-        const modeColors = {
-            reading: { completed: 'bg-teal-300 dark:bg-teal-700', inProgress: 'bg-amber-300 dark:bg-amber-700' },
-            memorization: { completed: 'bg-sky-300 dark:bg-sky-700', inProgress: 'bg-indigo-300 dark:bg-indigo-700' }
-        };
         switch (status) {
-            case 'completed': return modeColors[loggingMode].completed;
-            case 'in-progress': return modeColors[loggingMode].inProgress;
+            case 'completed': return 'bg-teal-300 dark:bg-teal-700';
+            case 'in-progress': return 'bg-amber-300 dark:bg-amber-700';
             default: return 'bg-slate-300 dark:bg-gray-600';
         }
     };
@@ -1773,16 +1613,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // or if the logging mode has changed, we should not check for newly
         // completed surahs. Instead, we just update our references and wait
         // for the next change (e.g., a new achievement being logged).
-        if (typeof confetti === 'undefined' || !prevSurahStatusesRef.current || prevLoggingModeRef.current !== loggingMode) {
+        if (typeof confetti === 'undefined' || !prevSurahStatusesRef.current) {
             prevSurahStatusesRef.current = surahStatuses;
-            prevLoggingModeRef.current = loggingMode;
             return;
         }
 
         const prevStatuses = prevSurahStatusesRef.current;
         const newlyCompletedSurahs = surahStatuses.filter((current, index) => {
             const prev = prevStatuses[index];
-            // Check if the current status is completed and the previous was not.
             return prev && current.status === 'completed' && prev.status !== 'completed';
         });
 
@@ -1792,10 +1630,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             showToast(t('liveSession.surahCompleted', { name: completedNames }));
         }
 
-        // Always update the refs for the next render.
         prevSurahStatusesRef.current = surahStatuses;
-        prevLoggingModeRef.current = loggingMode;
-    }, [surahStatuses, loggingMode, showToast, t]);
+    }, [surahStatuses, showToast, t]);
     
     // Check if string contains Arabic characters
     const containsArabic = (str: string): boolean => {
@@ -2119,57 +1955,93 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, []);
 
     
+    // Helpers to check if a surah has any non-revision logs
+    const hasReadingForSurah = (surahNum: number) =>
+        recitationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
+    const hasHifzForSurah = (surahNum: number) =>
+        memorizationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
+
     const handleVerseClick = (surahNum: number, ayahNum: number) => {
-        const achievements = loggingMode === 'reading' ? recitationAchievements : memorizationAchievements;
-        const { isLogged, achievementId } = getVerseRangeInfo(surahNum, ayahNum, achievements);
+        // If a range is already pending (log modal open), ignore further clicks
+        if (pendingLogRange) return;
 
-        if (isLogged && achievementId) {
-            const ach = achievements.find(a => a.id === achievementId);
-            if (ach) {
-                const onConfirm = () => {
-                    if (loggingMode === 'reading') {
-                        onRemoveRecitationAchievement(student.id, achievementId);
-                        showToast(t('liveSession.rangeRemoved'));
-                    } else {
-                        onRemoveMemorizationAchievement(student.id, achievementId);
-                        showToast(t('liveSession.memorizationRangeRemoved'));
-                    }
-                };
+        // Clicking a logged (non-revision) verse when no selection is active → offer removal
+        if (!selectionStart) {
+            const readInfo = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision));
+            const memInfo  = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision));
 
-                const title = loggingMode === 'reading' ? t('liveSession.removeRangeTitle') : t('liveSession.removeMemorizationRangeTitle');
-                const messageKey = loggingMode === 'reading' ? 'liveSession.confirmRemoveRange' : 'liveSession.confirmRemoveMemorizationRange';
-                
-                setConfirmModalState({
-                    isOpen: true,
-                    title: title,
-                    message: t(messageKey, { 
-                        startSurah: QURAN_METADATA.find(s => s.number === ach.startSurah)?.transliteratedName, 
-                        startAyah: ach.startAyah,
-                        endSurah: QURAN_METADATA.find(s => s.number === ach.endSurah)?.transliteratedName, 
-                        endAyah: ach.endAyah
-                    }),
-                    onConfirm: onConfirm
-                });
+            if (readInfo.isLogged && readInfo.achievementId) {
+                const ach = recitationAchievements.find(a => a.id === readInfo.achievementId);
+                if (ach) {
+                    setConfirmModalState({
+                        isOpen: true,
+                        title: 'Remove Reading Log',
+                        message: `Remove reading log for ${QURAN_METADATA.find(s => s.number === ach.startSurah)?.transliteratedName} ${ach.startAyah} – ${QURAN_METADATA.find(s => s.number === ach.endSurah)?.transliteratedName} ${ach.endAyah}?`,
+                        onConfirm: () => { onRemoveRecitationAchievement(student.id, readInfo.achievementId!); showToast(t('liveSession.rangeRemoved')); },
+                    });
+                    return;
+                }
             }
+            if (memInfo.isLogged && memInfo.achievementId) {
+                const ach = memorizationAchievements.find(a => a.id === memInfo.achievementId);
+                if (ach) {
+                    setConfirmModalState({
+                        isOpen: true,
+                        title: 'Remove Hifz Log',
+                        message: `Remove hifz log for ${QURAN_METADATA.find(s => s.number === ach.startSurah)?.transliteratedName} ${ach.startAyah} – ${QURAN_METADATA.find(s => s.number === ach.endSurah)?.transliteratedName} ${ach.endAyah}?`,
+                        onConfirm: () => { onRemoveMemorizationAchievement(student.id, memInfo.achievementId!); showToast(t('liveSession.memorizationRangeRemoved')); },
+                    });
+                    return;
+                }
+            }
+
+            // Start a new range selection
+            setSelectionStart({ surah: surahNum, ayah: ayahNum });
             return;
         }
-    
+
+        // Second click — complete the range and open log type modal
         const clickedVerse = { surah: surahNum, ayah: ayahNum };
-        if (!selectionStart) {
-            setSelectionStart(clickedVerse);
-        } else {
-            if (!isVerseAfterOrEqual(clickedVerse, selectionStart)) {
-                showToast(t('liveSession.endVerseError')); setSelectionStart(null); return;
-            }
-            if (loggingMode === 'reading') {
-                onLogRecitationRange(student.id, { start: selectionStart, end: clickedVerse });
-                showToast(t('liveSession.rangeSaved'));
-            } else {
-                onLogMemorizationRange(student.id, { start: selectionStart, end: clickedVerse });
-                showToast(t('liveSession.memorizationRangeSaved'));
-            }
+        if (!isVerseAfterOrEqual(clickedVerse, selectionStart)) {
+            showToast(t('liveSession.endVerseError'));
             setSelectionStart(null);
+            return;
         }
+
+        setPendingLogRange({ start: selectionStart, end: clickedVerse });
+        setSelectionStart(null);
+        setLogQuality(8);
+        setSelectedLogType(null);
+        setLogTypeStep('type');
+    };
+
+    const confirmLog = () => {
+        if (!pendingLogRange || !selectedLogType) return;
+        if (selectedLogType === 'reading') {
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, false);
+            showToast(t('liveSession.rangeSaved'));
+        } else if (selectedLogType === 'reading-revision') {
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, true);
+            showToast('Reading revision saved');
+        } else if (selectedLogType === 'hifz') {
+            onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
+            showToast(t('liveSession.memorizationRangeSaved'));
+        } else if (selectedLogType === 'hifz-revision') {
+            onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
+            showToast('Hifz revision saved');
+        } else if (selectedLogType === 'tafseer') {
+            onLogTafseerRange(student.id, pendingLogRange);
+            showToast('Tafseer logged');
+        }
+        setPendingLogRange(null);
+        setLogTypeStep(null);
+        setSelectedLogType(null);
+    };
+
+    const cancelLogModal = () => {
+        setPendingLogRange(null);
+        setLogTypeStep(null);
+        setSelectedLogType(null);
     };
 
     const handleVerseNumberPressStart = (surahNum: number, ayahNum: number) => {
@@ -2212,7 +2084,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     
 
     const handleLetterClick = useCallback((letterKey: string) => {
-        if (loggingMode !== 'reading') return;
         
         const mistake = studentMistakes[letterKey];
         const currentState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
@@ -2244,7 +2115,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             setErrorTextInput('');
             setClickStateUpdateTrigger(prev => prev + 1); // Force re-render to show yellow color
         }
-    }, [loggingMode, studentMistakes, student.id, onClearMistake]);
+    }, [studentMistakes, student.id, onClearMistake]);
     
     const handleLetterTextSubmit = useCallback((letterKey: string, text: string) => {
         const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
@@ -2264,55 +2135,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, [editingLetterKey]);
 
     const handleVerseContainerClick = (e: React.MouseEvent<HTMLSpanElement>, surahNum: number, ayahNum: number) => {
-        if (wordLongPressFired.current) {
-            wordLongPressFired.current = false; // Reset the flag
-            return; // Don't proceed if a long press just fired
-        }
-
-        // If a long press was just completed, this click on the text should cancel any pending "hiding" action
-        // and reset the state so subsequent clicks work as expected.
+        // If a long press was just completed, reset and ignore this click
         if (longPressFired.current) {
-            longPressFired.current = false; // Reset the flag
-            if (longPressStart) {
-                setLongPressStart(null); // Cancel the hiding mode
-            }
-            return; // Don't proceed with other click actions on this specific click.
+            longPressFired.current = false;
+            if (longPressStart) setLongPressStart(null);
+            return;
         }
 
-        // Also cancel hiding mode if user clicks text while it's active
+        // Cancel hiding mode if user clicks text while it's active
         if (longPressStart) {
             setLongPressStart(null);
             return;
         }
 
-        // In memorization mode, clicking on a hidden verse should reveal it
-        if (loggingMode === 'memorization') {
-            const currentVerse = { surah: surahNum, ayah: ayahNum };
-            const containingRangeIndex = hiddenRanges.findIndex(range =>
-                isVerseAfterOrEqual(currentVerse, range.start) && isVerseAfterOrEqual(range.end, currentVerse)
-            );
-
-            if (containingRangeIndex > -1) {
-                // If it's in a hidden range, reveal it
-                setHiddenRanges(prev => prev.filter((_, index) => index !== containingRangeIndex));
-                return;
-            }
+        // Clicking on a hidden verse reveals it
+        const currentVerse = { surah: surahNum, ayah: ayahNum };
+        const containingRangeIndex = hiddenRanges.findIndex(range =>
+            isVerseAfterOrEqual(currentVerse, range.start) && isVerseAfterOrEqual(range.end, currentVerse)
+        );
+        if (containingRangeIndex > -1) {
+            setHiddenRanges(prev => prev.filter((_, index) => index !== containingRangeIndex));
         }
-
-        // In reading mode, letter clicks are handled by LetterWithError component
-        // In memorization mode, word selection is handled by drag selection
     };
 
 
     const VerseMarker: React.FC<{ number: number; surah: number; isSelectedStart: boolean }> = ({ number, surah, isSelectedStart }) => {
-        const verseKey = `${surah}:${number}`;
-        const isRead = getVerseRangeInfo(surah, number, recitationAchievements).isLogged;
-        const showReadFill = loggingMode === 'reading' && isRead;
-        const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements).isLogged;
+        const isRead     = getVerseRangeInfo(surah, number, recitationAchievements.filter(a => !a.isRevision)).isLogged;
+        const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements.filter(a => !a.isRevision)).isLogged;
         const isLongPressStart = longPressStart?.surah === surah && longPressStart?.ayah === number;
-        
         const glowClass = isSelectedStart ? 'ring-2 ring-offset-4 ring-teal-500 dark:ring-orange-500 animate-pulse' : '';
         const longPressGlowClass = isLongPressStart ? 'animate-glow' : '';
+        // sky = memorized (overrides), teal = read only
+        const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : 'currentColor';
 
         return (
             <span
@@ -2323,7 +2177,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 className={`inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 cursor-pointer relative transition-all rounded-full ${glowClass} ${longPressGlowClass}`}
                 style={{ verticalAlign: 'middle' }} role="button" aria-label={`Mark progress at verse ${number}`}
             >
-                <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill={ isMemorized ? '#38bdf8' : (showReadFill ? '#a7f3d0' : 'currentColor') }>
+                <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill={svgFill}>
                     <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
                     <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
                 </svg>
@@ -2363,158 +2217,66 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
             
             const verseKey = `${surahNum}:${ayahNum}`;
-            const isRead = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements).isLogged;
-            const showReadBg = loggingMode === 'reading' && isRead;
-            const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements).isLogged;
+            // isRead = covered by at least one non-revision recitation log
+            const isRead = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision)).isLogged;
+            // isMemorized = covered by at least one non-revision memorization log; sky overrides teal
+            const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision)).isLogged;
             const isVerseHidden = hiddenRanges.some(range => isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, range.start) && isVerseAfterOrEqual(range.end, { surah: surahNum, ayah: ayahNum }));
 
             const verseWords = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ').map((word, wordIndex, wordsArray) => {
-                if (loggingMode === 'reading') {
-                    // Letter-based error marking in reading mode
-                    const letters = parseWordIntoLetters(word);
-                    if (letters.length === 0) {
-                        // Fallback to showing the word as-is if no letters found
-                        return (
-                            <React.Fragment key={`word-${surahNum}:${ayahNum}:${wordIndex}`}>
-                                <span>{word}</span>{' '}
-                            </React.Fragment>
-                        );
-                    }
-                    const isLastWordInVerse = wordIndex === wordsArray.length - 1;
+                // Letter-based error marking (always shown)
+                const letters = parseWordIntoLetters(word);
+                if (letters.length === 0) {
                     return (
-                        <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
-                            {letters.map(({ letter, index: letterIndex }) => {
-                                const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
-                                const mistake = studentMistakes[letterKey];
-                                const isEditing = editingLetterKey === letterKey;
-                                const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
-                                const isLastLetterOfWord = letterIndex === letters.length - 1;
-                                
-                                return (
-                                    <LetterWithError
-                                        key={letterKey}
-                                        letter={letter}
-                                        letterKey={letterKey}
-                                        mistake={mistake}
-                                        isEditing={isEditing}
-                                        errorText={errorTextInput}
-                                        onLetterClick={handleLetterClick}
-                                        onTextChange={setErrorTextInput}
-                                        onTextSubmit={handleLetterTextSubmit}
-                                        onTextCancel={handleLetterTextCancel}
-                                        showQalqalah={showQalqalah}
-                                        showGhunnah={showGhunnah}
-                                        showMadd={showMadd}
-                                        clickState={clickState}
-                                        word={word}
-                                        nextWord={wordsArray[wordIndex + 1] || ''}
-                                        prevWord={wordsArray[wordIndex - 1] || ''}
-                                        letterIndex={letterIndex}
-                                        isLastWordInVerse={isLastWordInVerse}
-                                        isLastLetterOfWord={isLastLetterOfWord}
-                                    />
-                                );
-                            })}
-                            {' '}
-                        </span>
-                    );
-                } else {
-                    // New memorization mode: drag selection, highlighting, and hiding
-                    const key = `${surahNum}:${ayahNum}:${wordIndex}`;
-                    const mistakeLevel = studentMistakes[key]?.level || 0;
-                    const isSelected = selectedWords.has(key);
-                    const isHidden = hiddenWords.has(key);
-                    const isInDragRange = dragStartWord && dragEndWord && 
-                        (() => {
-                            const dragWords = getWordsBetween(dragStartWord, dragEndWord);
-                            return dragWords.includes(key);
-                        })();
-                    
-                    const handleMouseDown = (e: React.MouseEvent) => {
-                        if (e.button !== 0) return; // Only left mouse button
-                        e.preventDefault();
-                        setIsDragging(true);
-                        setDragStartWord(key);
-                        setDragEndWord(key);
-                        
-                        // If clicking on selected word, deselect it
-                        if (isSelected) {
-                            setSelectedWords(prev => {
-                                const newSet = new Set(prev);
-                                newSet.delete(key);
-                                return newSet;
-                            });
-                        } else {
-                            // Start new selection
-                            setSelectedWords(new Set([key]));
-                        }
-                    };
-                    
-                    const handleMouseEnter = () => {
-                        if (isDragging && dragStartWord) {
-                            setDragEndWord(key);
-                            // Update selection to include all words between start and end
-                            const wordsInRange = getWordsBetween(dragStartWord, key);
-                            setSelectedWords(new Set(wordsInRange));
-                        }
-                    };
-                    
-                    const handleMouseUp = () => {
-                        if (isDragging) {
-                            setIsDragging(false);
-                            // Finalize selection
-                            if (dragStartWord && dragEndWord) {
-                                const wordsInRange = getWordsBetween(dragStartWord, dragEndWord);
-                                setSelectedWords(new Set(wordsInRange));
-                            }
-                            setDragStartWord(null);
-                            setDragEndWord(null);
-                        }
-                    };
-                    
-                    const handleClick = (e: React.MouseEvent) => {
-                        if (!isDragging && isSelected) {
-                            // Click to deselect
-                            setSelectedWords(prev => {
-                                const newSet = new Set(prev);
-                                newSet.delete(key);
-                                return newSet;
-                            });
-                        }
-                    };
-                    
-                    // Determine if word should be highlighted (selected or in drag range)
-                    const shouldHighlight = isSelected || isInDragRange;
-
-                    return (
-                        <React.Fragment key={key}>
-                            <span
-                                data-word-key={key}
-                                data-word-index={wordIndex}
-                                className={`px-1 rounded-md transition-colors ${
-                                    shouldHighlight ? 'bg-yellow-200 dark:bg-yellow-800/60' : ''
-                                } ${getMistakeColor(mistakeLevel)}`}
-                                onMouseDown={handleMouseDown}
-                                onMouseEnter={handleMouseEnter}
-                                onMouseUp={handleMouseUp}
-                                onClick={handleClick}
-                                style={{
-                                    display: 'inline-block',
-                                    visibility: isHidden ? 'hidden' : 'visible'
-                                }}
-                            >
-                                <TajweedWord word={word} nextWord={wordsArray[wordIndex + 1] || ''} isLastWordInVerse={wordIndex === wordsArray.length - 1} showQalqalah={showQalqalah} showGhunnah={showGhunnah} showMadd={showMadd} />
-                            </span>{' '}
+                        <React.Fragment key={`word-${surahNum}:${ayahNum}:${wordIndex}`}>
+                            <span>{word}</span>{' '}
                         </React.Fragment>
                     );
                 }
+                const isLastWordInVerse = wordIndex === wordsArray.length - 1;
+                return (
+                    <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
+                        {letters.map(({ letter, index: letterIndex }) => {
+                            const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                            const mistake = studentMistakes[letterKey];
+                            const isEditing = editingLetterKey === letterKey;
+                            const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
+                            const isLastLetterOfWord = letterIndex === letters.length - 1;
+                            return (
+                                <LetterWithError
+                                    key={letterKey}
+                                    letter={letter}
+                                    letterKey={letterKey}
+                                    mistake={mistake}
+                                    isEditing={isEditing}
+                                    errorText={errorTextInput}
+                                    onLetterClick={handleLetterClick}
+                                    onTextChange={setErrorTextInput}
+                                    onTextSubmit={handleLetterTextSubmit}
+                                    onTextCancel={handleLetterTextCancel}
+                                    showQalqalah={showQalqalah}
+                                    showGhunnah={showGhunnah}
+                                    showMadd={showMadd}
+                                    clickState={clickState}
+                                    word={word}
+                                    nextWord={wordsArray[wordIndex + 1] || ''}
+                                    prevWord={wordsArray[wordIndex - 1] || ''}
+                                    letterIndex={letterIndex}
+                                    isLastWordInVerse={isLastWordInVerse}
+                                    isLastLetterOfWord={isLastLetterOfWord}
+                                />
+                            );
+                        })}
+                        {' '}
+                    </span>
+                );
             });
             const isSelectedStart = selectionStart?.surah === surahNum && selectionStart?.ayah === ayahNum;
             const verseMarker = (<VerseMarker key={`marker-${verse.verse_key}`} number={ayahNum} surah={surahNum} isSelectedStart={isSelectedStart}/>);
             const verseTextNode = (
                 <span
                     key={`text-${verse.verse_key}`}
-                    className={`px-1 py-1 rounded-md transition-opacity duration-300 ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : (showReadBg ? 'bg-teal-50 dark:bg-teal-900/30' : '')} ${isVerseHidden ? 'opacity-0' : 'opacity-100'} ${loggingMode === 'memorization' ? 'cursor-pointer' : ''}`}
+                    className={`px-1 py-1 rounded-md transition-opacity duration-300 ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : (isRead ? 'bg-teal-50 dark:bg-teal-900/30' : '')} ${isVerseHidden ? 'opacity-0' : 'opacity-100'}`}
                     onClick={(e) => handleVerseContainerClick(e, surahNum, ayahNum)}
                     onMouseEnter={() => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; }}
                     onMouseLeave={() => { hoveredVerse.current = null; }}
@@ -2564,7 +2326,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 );
              }
         });
-        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center text-${fontSize}xl select-none p-6 sm:p-12` + (showTranslation ? '' : (loggingMode === 'reading' ? ' leading-[2.6]' : ' leading-[2.8]'));
+        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center text-${fontSize}xl select-none p-6 sm:p-12` + (showTranslation ? '' : ' leading-[2.6]');
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
@@ -2579,8 +2341,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     }}
                 />
             )}
-            {/* Memorization counter display - center screen with fade effect */}
-            {loggingMode === 'memorization' && showCounter && memorizationCounter > 0 && (
+            {/* Repetition counter display - center screen with fade effect */}
+            {showCounter && memorizationCounter > 0 && (
                 <div 
                     className="fixed inset-0 z-[9998] pointer-events-none flex items-center justify-center"
                     style={{
@@ -2599,7 +2361,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
             )}
             {/* Try again display - center screen with fade and vibration effect */}
-            {loggingMode === 'memorization' && showTryAgain && (
+            {showTryAgain && (
                 <div 
                     className="fixed inset-0 z-[9998] pointer-events-none flex items-center justify-center"
                     style={{
@@ -2664,10 +2426,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     </div>
                      <div className="flex-shrink-0 flex items-center gap-2"><button onClick={() => onGoBack()} className="p-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg></button></div>
                 </div>
-                {loggingMode === 'reading' 
-                    ? <SurahProgressBar surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading" />
-                    : <SurahProgressBar surahStatuses={surahStatuses} title={t('liveSession.memorizationProgress')} type="memorization" />
-                }
+                <SurahProgressBar surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading" />
                 <MilestoneTracker studentProgress={studentProgress} />
             </div>
 
@@ -2675,80 +2434,31 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky top-[100px] z-30">
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls */}
                     <div className="flex items-center gap-2 min-w-0">
-                        {/* ── Left: mode toggle (always visible) ── */}
+                        {/* ── Left: error type toggle + reveal hidden ── */}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                            <div className="relative flex items-center rounded-full bg-slate-200 dark:bg-gray-700 p-1 w-28 h-10">
-                                {/* The moving part */}
-                                <span className={`absolute left-1 w-8 h-8 rounded-full bg-white dark:bg-gray-800 shadow-md transform transition-transform duration-300 ease-in-out ${
-                                    loggingMode === 'reading' ? 'translate-x-0' : 'translate-x-10'
-                                }`}/>
-                                
-                                {/* Reading mode button */}
+                            <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-full px-2 py-1 h-10">
                                 <button
-                                    onClick={() => setLoggingMode('reading')}
-                                    title={t('liveSession.reading')}
-                                    aria-label={t('liveSession.reading')}
-                                    className={`relative z-10 w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-300 ${
-                                        loggingMode === 'reading' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400'
-                                    }`}
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                                    </svg>
-                                </button>
-
-                                {/* Memorization mode button */}
+                                    onClick={() => setErrorType('reading')}
+                                    className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${errorType === 'reading' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
+                                    title={t('liveSession.readingError')}
+                                >R</button>
                                 <button
-                                    onClick={() => setLoggingMode('memorization')}
-                                    title={t('liveSession.memorization')}
-                                    aria-label={t('liveSession.memorization')}
-                                    className={`relative z-10 w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-300 ${
-                                        loggingMode === 'memorization' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400'
-                                    }`}
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                                    </svg>
-                                </button>
-                                
-                                {/* Reveal All — only visible in memorization mode when something is hidden */}
-                                {loggingMode === 'memorization' && (hiddenWords.size > 0 || hiddenRanges.length > 0) && (
+                                    onClick={() => setErrorType('tajweed')}
+                                    className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${errorType === 'tajweed' ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}
+                                    title={t('liveSession.tajweedError')}
+                                >T</button>
+                                {hiddenRanges.length > 0 && (
                                     <>
-                                        <div className="w-px h-6 bg-slate-300 dark:bg-gray-600 mx-1"></div>
+                                        <div className="w-px h-4 bg-slate-300 dark:bg-gray-600 mx-1" />
                                         <button
-                                            onClick={() => { setHiddenWords(new Set()); setHiddenRanges([]); }}
+                                            onClick={() => setHiddenRanges([])}
                                             title="Reveal all hidden verses"
-                                            className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
+                                            className="w-6 h-6 flex items-center justify-center rounded-full text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                             </svg>
-                                        </button>
-                                    </>
-                                )}
-
-                                {/* Error type toggle (R/T) - only visible in reading mode */}
-                                {loggingMode === 'reading' && (
-                                    <>
-                                        <div className="w-px h-6 bg-slate-300 dark:bg-gray-600 mx-1"></div>
-                                        <button
-                                            onClick={() => setErrorType('reading')}
-                                            className={`relative z-10 w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${
-                                                errorType === 'reading' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'
-                                            }`}
-                                            title={t('liveSession.readingError')}
-                                        >
-                                            R
-                                        </button>
-                                        <button
-                                            onClick={() => setErrorType('tajweed')}
-                                            className={`relative z-10 w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${
-                                                errorType === 'tajweed' ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'
-                                            }`}
-                                            title={t('liveSession.tajweedError')}
-                                        >
-                                            T
                                         </button>
                                     </>
                                 )}
@@ -2854,6 +2564,82 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             {toastMessage && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg transition-all animate-bounce z-50">{toastMessage}</div>}
             <SearchResultsModal isOpen={isSearchResultsModalOpen} onClose={() => setIsSearchResultsModalOpen(false)} results={searchResults} query={searchInput} onSelect={handleSelectSearchResult} />
             <ConfirmationModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} })} onConfirm={confirmModalState.onConfirm} title={confirmModalState.title} message={confirmModalState.message} />
+
+            {/* ── Log Type Modal ────────────────────────────────────────────── */}
+            {logTypeStep && pendingLogRange && (
+                <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4" onClick={cancelLogModal}>
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                        {logTypeStep === 'type' ? (
+                            <>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Log Progress</h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                                    {QURAN_METADATA.find(s => s.number === pendingLogRange.start.surah)?.transliteratedName} {pendingLogRange.start.ayah}
+                                    {' → '}
+                                    {QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} {pendingLogRange.end.ayah}
+                                </p>
+                                <div className="space-y-2">
+                                    {/* Reading */}
+                                    <button onClick={() => { setSelectedLogType('reading'); setLogTypeStep('quality'); }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
+                                        <span className="text-xl">📖</span> Log Reading
+                                    </button>
+                                    {/* Reading Revision — only if surah has existing reading */}
+                                    {hasReadingForSurah(pendingLogRange.start.surah) && (
+                                        <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50/60 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold transition-colors border border-teal-200 dark:border-teal-800">
+                                            <span className="text-xl">🔄</span> Log Reading Revision
+                                        </button>
+                                    )}
+                                    {/* Hifz */}
+                                    <button onClick={() => { setSelectedLogType('hifz'); setLogTypeStep('quality'); }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
+                                        <span className="text-xl">🧠</span> Log Hifz
+                                    </button>
+                                    {/* Hifz Revision — only if surah has existing hifz */}
+                                    {hasHifzForSurah(pendingLogRange.start.surah) && (
+                                        <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50/60 dark:bg-sky-900/20 hover:bg-sky-100 dark:hover:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-semibold transition-colors border border-sky-200 dark:border-sky-800">
+                                            <span className="text-xl">🔁</span> Log Hifz Revision
+                                        </button>
+                                    )}
+                                    {/* Tafseer — no quality score needed */}
+                                    <button onClick={() => {
+                                        if (!pendingLogRange) return;
+                                        onLogTafseerRange(student.id, pendingLogRange);
+                                        showToast('Tafseer logged');
+                                        setPendingLogRange(null); setLogTypeStep(null); setSelectedLogType(null);
+                                    }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-semibold transition-colors">
+                                        <span className="text-xl">📚</span> Log Tafseer
+                                    </button>
+                                </div>
+                                <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
+                                    {selectedLogType === 'reading' ? 'Reading Quality' :
+                                     selectedLogType === 'reading-revision' ? 'Reading Revision Quality' :
+                                     selectedLogType === 'hifz' ? 'Hifz Quality' : 'Hifz Revision Quality'}
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Rate the quality (1–10)</p>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <input
+                                        type="range" min={1} max={10} value={logQuality}
+                                        onChange={e => setLogQuality(Number(e.target.value))}
+                                        className="flex-1 accent-teal-600"
+                                    />
+                                    <span className="text-3xl font-bold text-teal-700 dark:text-teal-300 w-8 text-center">{logQuality}</span>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
+                                    <button onClick={confirmLog} className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors">Save</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
