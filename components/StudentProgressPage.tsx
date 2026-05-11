@@ -1981,19 +1981,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // Modal already open — ignore
         if (pendingLogRange) return;
 
-        const readInfo = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision));
-        const memInfo  = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision));
-        const isLogged = readInfo.isLogged || memInfo.isLogged;
-        const verse    = { surah: surahNum, ayah: ayahNum };
+        const verse = { surah: surahNum, ayah: ayahNum };
 
         if (!selectionStart) {
-            if (!isLogged) {
-                // Unlogged verse → open popup immediately for this single verse
-                openLogModal({ start: verse, end: verse });
-            } else {
-                // Already-logged verse → start a 2-click range selection
-                setSelectionStart(verse);
-            }
+            // First click — always start range selection regardless of logged state
+            setSelectionStart(verse);
             return;
         }
 
