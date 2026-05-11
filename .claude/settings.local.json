@@ -13,7 +13,8 @@
       "Bash(xcode-select -p)",
       "Read(//Library/Developer/**)",
       "Bash(git --version)",
-      "Bash(node -e \"const p = require\\('./node_modules/pdfjs-dist/package.json'\\); console.log\\(p.version\\)\")"
+      "Bash(node -e \"const p = require\\('./node_modules/pdfjs-dist/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(grep -v \"^$\\\\|gzip\\\\|chunks\\\\|rollup\\\\|chunk\")"
     ]
   }
 }
