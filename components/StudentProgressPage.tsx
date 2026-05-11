@@ -1250,6 +1250,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
+    // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
+    const [logModalIsOnExisting, setLogModalIsOnExisting] = useState(false);
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('tajweed');
     const [selectedSurahId, setSelectedSurahId] = useState<number>(studentProgress?.surah || 1);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
@@ -1955,18 +1957,95 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, []);
 
     
-    // Helpers to check if a surah has any non-revision logs
+    // ── Range-log helpers ─────────────────────────────────────────────────────
+    // Check if a surah has any non-revision reading/hifz logs
     const hasReadingForSurah = (surahNum: number) =>
         recitationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
     const hasHifzForSurah = (surahNum: number) =>
         memorizationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
+    // Check if a surah already has any tafseer log
+    const hasTafseerForSurah = (surahNum: number) =>
+        (student.tafsirReviews || []).some(r =>
+            r.startSurah !== undefined
+                ? r.startSurah <= surahNum && (r.endSurah ?? r.surah) >= surahNum
+                : r.surah === surahNum
+        );
+
+    const openLogModal = (range: { start: Progress; end: Progress }, onExisting: boolean) => {
+        setPendingLogRange(range);
+        setLogModalIsOnExisting(onExisting);
+        setLogQuality(8);
+        setSelectedLogType(null);
+        setLogTypeStep('type');
+    };
 
     const handleVerseClick = (surahNum: number, ayahNum: number) => {
-        // If a range is already pending (log modal open), ignore further clicks
+        // Modal already open — ignore
         if (pendingLogRange) return;
 
-        // Clicking a logged (non-revision) verse when no selection is active → offer removal
+        const readInfo = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision));
+        const memInfo  = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision));
+        const verse    = { surah: surahNum, ayah: ayahNum };
+
         if (!selectionStart) {
+            if (readInfo.isLogged || memInfo.isLogged) {
+                // Clicked on an already-logged verse → open revision/tafseer popup for that verse
+                openLogModal({ start: verse, end: verse }, true);
+            } else {
+                // Not yet logged → start a 2-click range selection
+                setSelectionStart(verse);
+            }
+            return;
+        }
+
+        // Second click — complete the range and open the full 5-option log modal
+        if (!isVerseAfterOrEqual(verse, selectionStart)) {
+            showToast(t('liveSession.endVerseError'));
+            setSelectionStart(null);
+            return;
+        }
+        openLogModal({ start: selectionStart, end: verse }, false);
+        setSelectionStart(null);
+    };
+
+    const confirmLog = () => {
+        if (!pendingLogRange || !selectedLogType) return;
+        if (selectedLogType === 'reading') {
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, false);
+            showToast(t('liveSession.rangeSaved'));
+        } else if (selectedLogType === 'reading-revision') {
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, true);
+            showToast('Reading revision saved');
+        } else if (selectedLogType === 'hifz') {
+            onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
+            showToast(t('liveSession.memorizationRangeSaved'));
+        } else if (selectedLogType === 'hifz-revision') {
+            onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
+            showToast('Hifz revision saved');
+        } else if (selectedLogType === 'tafseer') {
+            onLogTafseerRange(student.id, pendingLogRange);
+            showToast('Tafseer logged');
+        }
+        setPendingLogRange(null);
+        setLogTypeStep(null);
+        setSelectedLogType(null);
+        setLogModalIsOnExisting(false);
+    };
+
+    const cancelLogModal = () => {
+        setPendingLogRange(null);
+        setLogTypeStep(null);
+        setSelectedLogType(null);
+        setLogModalIsOnExisting(false);
+    };
+
+    const handleVerseNumberPressStart = (surahNum: number, ayahNum: number) => {
+        longPressFired.current = false;
+        longPressTimer.current = window.setTimeout(() => {
+            longPressFired.current = true;
+            const currentVerse = { surah: surahNum, ayah: ayahNum };
+
+            // ── Long-press on a LOGGED verse → offer removal ──────────────
             const readInfo = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision));
             const memInfo  = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision));
 
@@ -1995,81 +2074,22 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
             }
 
-            // Start a new range selection
-            setSelectionStart({ surah: surahNum, ayah: ayahNum });
-            return;
-        }
-
-        // Second click — complete the range and open log type modal
-        const clickedVerse = { surah: surahNum, ayah: ayahNum };
-        if (!isVerseAfterOrEqual(clickedVerse, selectionStart)) {
-            showToast(t('liveSession.endVerseError'));
-            setSelectionStart(null);
-            return;
-        }
-
-        setPendingLogRange({ start: selectionStart, end: clickedVerse });
-        setSelectionStart(null);
-        setLogQuality(8);
-        setSelectedLogType(null);
-        setLogTypeStep('type');
-    };
-
-    const confirmLog = () => {
-        if (!pendingLogRange || !selectedLogType) return;
-        if (selectedLogType === 'reading') {
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, false);
-            showToast(t('liveSession.rangeSaved'));
-        } else if (selectedLogType === 'reading-revision') {
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, true);
-            showToast('Reading revision saved');
-        } else if (selectedLogType === 'hifz') {
-            onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
-            showToast(t('liveSession.memorizationRangeSaved'));
-        } else if (selectedLogType === 'hifz-revision') {
-            onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
-            showToast('Hifz revision saved');
-        } else if (selectedLogType === 'tafseer') {
-            onLogTafseerRange(student.id, pendingLogRange);
-            showToast('Tafseer logged');
-        }
-        setPendingLogRange(null);
-        setLogTypeStep(null);
-        setSelectedLogType(null);
-    };
-
-    const cancelLogModal = () => {
-        setPendingLogRange(null);
-        setLogTypeStep(null);
-        setSelectedLogType(null);
-    };
-
-    const handleVerseNumberPressStart = (surahNum: number, ayahNum: number) => {
-        longPressFired.current = false;
-        longPressTimer.current = window.setTimeout(() => {
-            const currentVerse = { surah: surahNum, ayah: ayahNum };
-            
-            // Check if this verse is already hidden
+            // ── Long-press on a NON-logged verse → toggle hiding ──────────
             const containingRangeIndex = hiddenRanges.findIndex(range =>
                 isVerseAfterOrEqual(currentVerse, range.start) && isVerseAfterOrEqual(range.end, currentVerse)
             );
-
             if (containingRangeIndex > -1) {
-                // If it's in a hidden range, reveal it
-                setHiddenRanges(prev => prev.filter((_, index) => index !== containingRangeIndex));
+                setHiddenRanges(prev => prev.filter((_, i) => i !== containingRangeIndex));
                 setLongPressStart(null);
             } else if (!longPressStart) {
-                // If no start is set, set this as the start
                 setLongPressStart(currentVerse);
             } else {
-                // If a start is set, complete the range
                 const start = isVerseAfterOrEqual(currentVerse, longPressStart) ? longPressStart : currentVerse;
-                const end = isVerseAfterOrEqual(currentVerse, longPressStart) ? currentVerse : longPressStart;
+                const end   = isVerseAfterOrEqual(currentVerse, longPressStart) ? currentVerse : longPressStart;
                 setHiddenRanges(prev => [...prev, { start, end }]);
                 setLongPressStart(null);
             }
-            longPressFired.current = true;
-        }, 500); // 500ms for long press
+        }, 500);
     };
     
     const handleVerseNumberPressEnd = (surahNum: number, ayahNum: number) => {
@@ -2571,47 +2591,73 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                         {logTypeStep === 'type' ? (
                             <>
-                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Log Progress</h3>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
+                                    {logModalIsOnExisting ? 'Add to this verse' : 'Log Progress'}
+                                </h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                                     {QURAN_METADATA.find(s => s.number === pendingLogRange.start.surah)?.transliteratedName} {pendingLogRange.start.ayah}
-                                    {' → '}
-                                    {QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} {pendingLogRange.end.ayah}
+                                    {(pendingLogRange.start.surah !== pendingLogRange.end.surah || pendingLogRange.start.ayah !== pendingLogRange.end.ayah)
+                                        ? ` → ${QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} ${pendingLogRange.end.ayah}`
+                                        : ''}
                                 </p>
                                 <div className="space-y-2">
-                                    {/* Reading */}
-                                    <button onClick={() => { setSelectedLogType('reading'); setLogTypeStep('quality'); }}
-                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
-                                        <span className="text-xl">📖</span> Log Reading
-                                    </button>
-                                    {/* Reading Revision — only if surah has existing reading */}
-                                    {hasReadingForSurah(pendingLogRange.start.surah) && (
-                                        <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50/60 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold transition-colors border border-teal-200 dark:border-teal-800">
-                                            <span className="text-xl">🔄</span> Log Reading Revision
+
+                                    {/* ── Options shown only for a NEW (unlogged) range ── */}
+                                    {!logModalIsOnExisting && (
+                                        <>
+                                            <button onClick={() => { setSelectedLogType('reading'); setLogTypeStep('quality'); }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
+                                                <span className="text-xl">📖</span> Log Reading
+                                            </button>
+                                            {hasReadingForSurah(pendingLogRange.start.surah) && (
+                                                <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
+                                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50/60 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold transition-colors border border-teal-200 dark:border-teal-800">
+                                                    <span className="text-xl">🔄</span> Log Reading Revision
+                                                </button>
+                                            )}
+                                            <button onClick={() => { setSelectedLogType('hifz'); setLogTypeStep('quality'); }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
+                                                <span className="text-xl">🧠</span> Log Hifz
+                                            </button>
+                                            {hasHifzForSurah(pendingLogRange.start.surah) && (
+                                                <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
+                                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50/60 dark:bg-sky-900/20 hover:bg-sky-100 dark:hover:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-semibold transition-colors border border-sky-200 dark:border-sky-800">
+                                                    <span className="text-xl">🔁</span> Log Hifz Revision
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* ── Options shown when clicking an EXISTING logged verse ── */}
+                                    {logModalIsOnExisting && (
+                                        <>
+                                            {hasReadingForSurah(pendingLogRange.start.surah) && (
+                                                <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
+                                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
+                                                    <span className="text-xl">🔄</span> Log Reading Revision
+                                                </button>
+                                            )}
+                                            {hasHifzForSurah(pendingLogRange.start.surah) && (
+                                                <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
+                                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
+                                                    <span className="text-xl">🔁</span> Log Hifz Revision
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Tafseer — both modes, hidden once surah already has tafseer */}
+                                    {!hasTafseerForSurah(pendingLogRange.start.surah) && (
+                                        <button onClick={() => {
+                                            if (!pendingLogRange) return;
+                                            onLogTafseerRange(student.id, pendingLogRange);
+                                            showToast('Tafseer logged');
+                                            setPendingLogRange(null); setLogTypeStep(null); setSelectedLogType(null); setLogModalIsOnExisting(false);
+                                        }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-semibold transition-colors">
+                                            <span className="text-xl">📚</span> Log Tafseer
                                         </button>
                                     )}
-                                    {/* Hifz */}
-                                    <button onClick={() => { setSelectedLogType('hifz'); setLogTypeStep('quality'); }}
-                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
-                                        <span className="text-xl">🧠</span> Log Hifz
-                                    </button>
-                                    {/* Hifz Revision — only if surah has existing hifz */}
-                                    {hasHifzForSurah(pendingLogRange.start.surah) && (
-                                        <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50/60 dark:bg-sky-900/20 hover:bg-sky-100 dark:hover:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-semibold transition-colors border border-sky-200 dark:border-sky-800">
-                                            <span className="text-xl">🔁</span> Log Hifz Revision
-                                        </button>
-                                    )}
-                                    {/* Tafseer — no quality score needed */}
-                                    <button onClick={() => {
-                                        if (!pendingLogRange) return;
-                                        onLogTafseerRange(student.id, pendingLogRange);
-                                        showToast('Tafseer logged');
-                                        setPendingLogRange(null); setLogTypeStep(null); setSelectedLogType(null);
-                                    }}
-                                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-semibold transition-colors">
-                                        <span className="text-xl">📚</span> Log Tafseer
-                                    </button>
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
                             </>
