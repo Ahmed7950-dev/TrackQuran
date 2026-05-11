@@ -77,10 +77,11 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
   const historyRef = useRef<HistoryEntry[]>([]);
 
   // ── Toolbar state ─────────────────────────────────────────────────────────
-  const [tool,      setTool]      = useState<DrawTool>('pen');
-  const [color,     setColor]     = useState('#ef4444');
-  const [lineWidth, setLineWidth] = useState(4);
-  const [fontSize,  setFontSize]  = useState(28);
+  const [tool,       setTool]       = useState<DrawTool>('pen');
+  const [color,      setColor]      = useState('#ef4444');
+  const [lineWidth,  setLineWidth]  = useState(4);
+  const [fontSize,   setFontSize]   = useState(28);
+  const [showCanvas, setShowCanvas] = useState(true);   // false = PDF full-screen
 
   // ── Completion ────────────────────────────────────────────────────────────
   const [completedIds,      setCompletedIds]      = useState<Set<string>>(new Set());
@@ -307,6 +308,29 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
           <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
           {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}
         </div>
+        {/* Split / Full-screen toggle */}
+        <button
+          onClick={() => setShowCanvas(v => !v)}
+          title={showCanvas ? 'Hide canvas (full-screen PDF)' : 'Show canvas (split screen)'}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
+        >
+          {showCanvas ? (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+              </svg>
+              <span className="hidden sm:inline">Full Screen</span>
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
+              </svg>
+              <span className="hidden sm:inline">Split Screen</span>
+            </>
+          )}
+        </button>
+
         {students.length > 0 && (
           <select value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}
             className="px-2 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none max-w-[150px]">
@@ -328,14 +352,14 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
         {/* Left: PDF */}
-        <div ref={pdfContainerRef} className="w-1/2 flex items-center justify-center bg-gray-700 overflow-hidden border-r border-gray-600">
+        <div ref={pdfContainerRef} className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
           {loadingPdf && <div className="flex flex-col items-center gap-3 text-gray-300"><svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg><span className="text-sm">Loading PDF…</span></div>}
           {pdfError && !loadingPdf && <p className="text-red-400 text-sm px-6 text-center">{pdfError}</p>}
           {!loadingPdf && !pdfError && <canvas ref={pdfCanvasRef} className="shadow-xl" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%' }} />}
         </div>
 
         {/* Right: Whiteboard */}
-        <div className="w-1/2 flex flex-col">
+        <div className={`${showCanvas ? 'w-1/2 flex' : 'hidden'} flex-col`}>
 
           {/* Toolbar */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-100 border-b border-gray-200 flex-shrink-0 flex-wrap select-none">
