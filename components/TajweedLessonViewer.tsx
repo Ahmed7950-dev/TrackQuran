@@ -31,9 +31,31 @@ let _uid = 0;
 const genId = () => `t${++_uid}_${Date.now()}`;
 
 // ── Component ──────────────────────────────────────────────────────────────────
-interface Props { lesson: TajweedLesson; students: Student[]; tutorId: string; onClose: () => void; }
+interface Props {
+  lesson: TajweedLesson;
+  students: Student[];
+  tutorId: string;
+  onClose: () => void;
+  /** Pre-select a student in the dropdown (e.g. when opened from student detail page). */
+  preSelectedStudentId?: string;
+  /** Override completion fetcher. Defaults to tajweedService.getCompletedLessonIds. */
+  fetchCompletedIds?: (studentId: string) => Promise<Set<string>>;
+  /** Override mark-done. Defaults to tajweedService.markLessonCompleted. */
+  onMarkCompleted?:   (studentId: string, lessonId: string, tutorId: string) => Promise<boolean>;
+  /** Override unmark. Defaults to tajweedService.unmarkLessonCompleted. */
+  onUnmarkCompleted?: (studentId: string, lessonId: string) => Promise<boolean>;
+}
 
-const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClose }) => {
+const TajweedLessonViewer: React.FC<Props> = ({
+  lesson, students, tutorId, onClose,
+  preSelectedStudentId,
+  fetchCompletedIds, onMarkCompleted, onUnmarkCompleted,
+}) => {
+
+  // Resolve completion handlers — fall back to tajweedService defaults
+  const _fetchIds = fetchCompletedIds ?? getCompletedLessonIds;
+  const _mark     = onMarkCompleted   ?? markLessonCompleted;
+  const _unmark   = onUnmarkCompleted ?? unmarkLessonCompleted;
 
   // ── PDF ───────────────────────────────────────────────────────────────────
   // We render the PDF via an <iframe> using the browser's native PDF viewer
@@ -86,7 +108,7 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
 
   // ── Completion ────────────────────────────────────────────────────────────
   const [completedIds,      setCompletedIds]      = useState<Set<string>>(new Set());
-  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState(preSelectedStudentId ?? '');
   const [marking,           setMarking]           = useState(false);
 
   // ── PDF metadata load (page count only — no canvas rendering) ────────────
@@ -275,12 +297,12 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
   }, [totalPages, onClose, selectedId, newPos, editingId]);
 
   // ── Completion ────────────────────────────────────────────────────────────
-  useEffect(() => { if (selectedStudentId) getCompletedLessonIds(selectedStudentId).then(setCompletedIds); }, [selectedStudentId]);
+  useEffect(() => { if (selectedStudentId) _fetchIds(selectedStudentId).then(setCompletedIds); }, [selectedStudentId, _fetchIds]);
   const isCompleted = selectedStudentId ? completedIds.has(lesson.id) : false;
   const handleMark = async () => {
     if (!selectedStudentId || marking) return; setMarking(true);
-    if (isCompleted) { const ok = await unmarkLessonCompleted(selectedStudentId, lesson.id); if (ok) setCompletedIds(p => { const s = new Set(p); s.delete(lesson.id); return s; }); }
-    else { const ok = await markLessonCompleted(selectedStudentId, lesson.id, tutorId); if (ok) setCompletedIds(p => new Set([...p, lesson.id])); }
+    if (isCompleted) { const ok = await _unmark(selectedStudentId, lesson.id); if (ok) setCompletedIds(p => { const s = new Set(p); s.delete(lesson.id); return s; }); }
+    else { const ok = await _mark(selectedStudentId, lesson.id, tutorId); if (ok) setCompletedIds(p => new Set([...p, lesson.id])); }
     setMarking(false);
   };
 

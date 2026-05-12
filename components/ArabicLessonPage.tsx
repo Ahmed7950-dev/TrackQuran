@@ -20,7 +20,7 @@ import {
   saveArabicStudent,
 } from '../services/arabicService';
 import TajweedLessonViewer from './TajweedLessonViewer';
-import { TajweedLesson } from '../types';
+import { TajweedLesson, Student } from '../types';
 
 interface Props {
   students: ArabicStudent[];
@@ -332,213 +332,27 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         />
       )}
 
-      {/* PDF viewer — reuse TajweedLessonViewer */}
+      {/* PDF viewer — uses TajweedLessonViewer with Arabic completion handlers */}
       {viewing && (
-        <ArabicLessonViewerWrapper
-          lesson={viewing}
-          students={studentCompat}
+        <TajweedLessonViewer
+          lesson={toTajweedShape(viewing)}
+          students={studentCompat as Student[]}
           tutorId={teacherId}
-          completedMap={Object.fromEntries(
-            students.map(s => [s.id, new Set(s.completedLessonIds)])
-          )}
           preSelectedStudentId={preSelectedStudentId}
-          onMarkDone={handleMarkDone}
+          fetchCompletedIds={async (studentId) => {
+            const s = students.find(x => x.id === studentId);
+            return new Set(s?.completedLessonIds ?? []);
+          }}
+          onMarkCompleted={async (studentId, lessonId) => {
+            await handleMarkDone(studentId, lessonId, true);
+            return true;
+          }}
+          onUnmarkCompleted={async (studentId, lessonId) => {
+            await handleMarkDone(studentId, lessonId, false);
+            return true;
+          }}
           onClose={() => setViewing(null)}
         />
-      )}
-    </div>
-  );
-};
-
-// ── Wrapper around TajweedLessonViewer that intercepts completion calls ────────
-
-interface ViewerWrapperProps {
-  lesson: ArabicLesson;
-  students: any[];
-  tutorId: string;
-  completedMap: Record<string, Set<string>>;
-  preSelectedStudentId?: string;
-  onMarkDone: (studentId: string, lessonId: string, done: boolean) => void;
-  onClose: () => void;
-}
-
-const ArabicLessonViewerWrapper: React.FC<ViewerWrapperProps> = ({
-  lesson, students, tutorId, completedMap, preSelectedStudentId, onMarkDone, onClose,
-}) => {
-  // We patch the TajweedLessonViewer by providing it with overridden completion functions
-  // via importing the tajweedService module. Instead, we'll use a custom viewer that
-  // shares the same UI but overrides the completion layer.
-  // For simplicity we reuse TajweedLessonViewer which calls tajweedService internally,
-  // but also call our own onMarkDone to keep local state in sync.
-  // We wrap the lesson as a TajweedLesson shape and pass a custom tutorId.
-
-  const tajweedLesson: TajweedLesson = {
-    id: lesson.id, title: lesson.title, description: lesson.description,
-    orderIndex: lesson.orderIndex, pdfUrl: lesson.pdfUrl,
-    createdBy: lesson.createdBy, createdAt: lesson.createdAt, updatedAt: lesson.updatedAt,
-  };
-
-  // Since TajweedLessonViewer uses tajweedService for completions (Supabase),
-  // we layer our own local-storage completion on top via an override approach:
-  // We pass a custom students list and intercept the "mark done" action by
-  // listening for changes externally. The simplest approach: patch the viewer
-  // to also call onMarkDone when the mark button is clicked.
-  //
-  // Because TajweedLessonViewer doesn't expose onMarkDone, we instead provide
-  // our own thin viewer below that mirrors the same PDF display but wires
-  // completions to arabicService.
-
-  return (
-    <ArabicPdfViewer
-      lesson={lesson}
-      students={students}
-      completedMap={completedMap}
-      preSelectedStudentId={preSelectedStudentId}
-      onMarkDone={onMarkDone}
-      onClose={onClose}
-    />
-  );
-};
-
-// ── Minimal Arabic PDF viewer (same UX as TajweedLessonViewer, custom completion) ──
-
-import * as pdfjsLib from 'pdfjs-dist';
-// @ts-ignore
-import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
-
-interface PdfViewerProps {
-  lesson: ArabicLesson;
-  students: any[];
-  completedMap: Record<string, Set<string>>;
-  preSelectedStudentId?: string;
-  onMarkDone: (studentId: string, lessonId: string, done: boolean) => void;
-  onClose: () => void;
-}
-
-const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
-  lesson, students, completedMap, preSelectedStudentId, onMarkDone, onClose,
-}) => {
-  // The PDF is rendered inline via an <iframe> using the browser's native
-  // PDF viewer (PDFium in Chrome / built-in viewers in Firefox & Safari).
-  // This renders Arabic correctly without depending on PDF.js font handling.
-  // PDF.js is still used to read the page count for the navigation buttons.
-  const [pageNum,    setPageNum]   = useState(1);
-  const [totalPages, setTotalPages]= useState(0);
-  const [loading,    setLoading]   = useState(true);
-  const [pdfError,   setPdfError]  = useState('');
-
-  const [selectedStudentId, setSelectedStudentId] = useState(preSelectedStudentId ?? '');
-
-  // Load PDF metadata only (for page count)
-  useEffect(() => {
-    if (!lesson.pdfUrl) { setPdfError('No PDF attached.'); setLoading(false); return; }
-    setLoading(true); setPdfError('');
-    (async () => {
-      try {
-        const res = await fetch(lesson.pdfUrl!);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const doc = await pdfjsLib.getDocument({
-          data: await res.arrayBuffer(),
-          cMapUrl: '/pdfjs/cmaps/',
-          cMapPacked: true,
-          standardFontDataUrl: '/pdfjs/standard_fonts/',
-        }).promise;
-        setTotalPages(doc.numPages);
-        setPageNum(1);
-      } catch (e) { console.error(e); setPdfError('Failed to load PDF.'); }
-      finally { setLoading(false); }
-    })();
-  }, [lesson.pdfUrl]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') setPageNum(n => Math.min(totalPages, n + 1));
-      if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   setPageNum(n => Math.max(1, n - 1));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [totalPages, onClose]);
-
-  const isCompleted = selectedStudentId ? (completedMap[selectedStudentId]?.has(lesson.id) ?? false) : false;
-
-  // iframe URL with #page anchor — browser PDF viewer scrolls to the page
-  // without reloading the document (only the hash changes).
-  const iframeSrc = lesson.pdfUrl
-    ? `${lesson.pdfUrl}#page=${pageNum}&toolbar=0&navpanes=0&zoom=page-fit`
-    : '';
-
-  return (
-    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
-        <button onClick={onClose} title="Close (Esc)" className="p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
-          {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}
-        </div>
-
-        {students.length > 0 && (
-          <select value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}
-            className="px-2 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none max-w-[150px]">
-            <option value="">Select student…</option>
-            {students.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        )}
-
-        {selectedStudentId && (
-          <button
-            onClick={() => onMarkDone(selectedStudentId, lesson.id, !isCompleted)}
-            className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 transition-colors
-              ${isCompleted ? 'bg-green-600 text-white hover:bg-red-600' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-            </svg>
-            <span className="hidden sm:inline">{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
-          </button>
-        )}
-      </div>
-
-      {/* PDF — rendered by the browser's native PDF viewer (handles Arabic correctly) */}
-      <div className="flex-1 flex items-center justify-center bg-gray-700 overflow-hidden">
-        {loading  && <div className="flex flex-col items-center gap-3 text-gray-300"><svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg><span className="text-sm">Loading PDF…</span></div>}
-        {pdfError && !loading && <p className="text-red-400 text-sm px-6 text-center">{pdfError}</p>}
-        {!loading && !pdfError && iframeSrc && (
-          <iframe
-            src={iframeSrc}
-            title={lesson.title}
-            className="w-full h-full bg-white"
-            style={{ border: 'none' }}
-            allowFullScreen
-          />
-        )}
-      </div>
-
-      {/* Bottom nav */}
-      {!loading && !pdfError && totalPages > 0 && (
-        <div className="flex items-center justify-center gap-4 px-4 py-2.5 bg-gray-800 border-t border-gray-700 flex-shrink-0">
-          <button onClick={() => setPageNum(n => Math.max(1, n - 1))} disabled={pageNum <= 1}
-            className="flex items-center gap-2 px-5 py-1.5 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-            Previous
-          </button>
-          <span className="text-gray-300 text-sm tabular-nums min-w-[70px] text-center">{pageNum} / {totalPages}</span>
-          <button onClick={() => setPageNum(n => Math.min(totalPages, n + 1))} disabled={pageNum >= totalPages}
-            className="flex items-center gap-2 px-5 py-1.5 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:opacity-30 disabled:cursor-not-allowed">
-            Next
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-            </svg>
-          </button>
-        </div>
       )}
     </div>
   );
