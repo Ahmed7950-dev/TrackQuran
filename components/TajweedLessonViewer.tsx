@@ -276,7 +276,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
         <button
           onClick={() => setShowCanvas(v => !v)}
           title={showCanvas ? 'Hide whiteboard — PDF only' : 'Show whiteboard — split view'}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0 whitespace-nowrap"
         >
           {showCanvas ? (
             <>
@@ -316,17 +316,32 @@ const TajweedLessonViewer: React.FC<Props> = ({
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
         {/* Left: PDF (rendered by the browser's native PDF viewer via iframe) */}
-        <div ref={pdfContainerRef} className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
-          {loadingPdf && <div className="flex flex-col items-center gap-3 text-gray-300"><svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg><span className="text-sm">Loading PDF…</span></div>}
-          {pdfError && !loadingPdf && <p className="text-red-400 text-sm px-6 text-center">{pdfError}</p>}
-          {!loadingPdf && !pdfError && iframeSrc && (
+        <div ref={pdfContainerRef} className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} relative flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
+          {/* Loading overlay — hidden once iframe fires onLoad */}
+          {loadingPdf && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300 z-10 bg-gray-700">
+              <svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/>
+              </svg>
+              <span className="text-sm">Loading PDF…</span>
+            </div>
+          )}
+          {pdfError && (
+            <p className="absolute z-10 text-red-400 text-sm px-6 text-center">{pdfError}</p>
+          )}
+          {iframeSrc ? (
             <iframe
               src={iframeSrc}
               title={lesson.title}
               className="w-full h-full bg-white"
               style={{ border: 'none' }}
               allowFullScreen
+              onLoad={() => { setLoadingPdf(false); setPdfError(''); }}
+              onError={() => { setLoadingPdf(false); setPdfError('Failed to load PDF. Check the file URL.'); }}
             />
+          ) : (
+            !loadingPdf && <p className="text-gray-400 text-sm">No PDF attached to this lesson.</p>
           )}
         </div>
 

@@ -1106,6 +1106,56 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             </div>
           </div>
 
+          {/* Spaced-rep progress — tutor only, when student selected */}
+          {!isAdmin && selectedStudentId && (
+            (() => {
+              const completed   = attempts.filter(a => a.completedAt).length;
+              const totalExpected = words.length * 10; // 5 attempts × 2 modes
+              const pct = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
+              const status: 'not_started' | 'in_progress' | 'complete' =
+                completed === 0 ? 'not_started' :
+                completed >= totalExpected ? 'complete' : 'in_progress';
+              return (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-200">Spaced-Repetition Progress</h3>
+                    {status === 'complete' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
+                        All sessions complete
+                      </span>
+                    )}
+                    {status === 'in_progress' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
+                        In progress
+                      </span>
+                    )}
+                    {status === 'not_started' && (
+                      <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-400 text-xs font-semibold rounded-full">Not started</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          status === 'complete'    ? 'bg-emerald-500' :
+                          status === 'in_progress' ? 'bg-amber-400'  : 'bg-slate-200 dark:bg-gray-600'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500 flex-shrink-0">{pct}%</span>
+                  </div>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {completed} / {totalExpected} spaced-repetition sessions completed
+                    &nbsp;({words.length} words × 2 modes × 5 rounds)
+                  </p>
+                </div>
+              );
+            })()
+          )}
+
           {/* Challenge section — tutor only */}
           {!isAdmin && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-4">
@@ -1318,7 +1368,7 @@ const VideoTab: React.FC<{ lesson: ArabicLesson; isAdmin: boolean; onLessonUpdat
           onContextMenu={e => e.preventDefault()}
         >
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&controls=0`}
             title="Dialogue video"
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
