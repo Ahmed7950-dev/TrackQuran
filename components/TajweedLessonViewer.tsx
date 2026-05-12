@@ -36,10 +36,11 @@ interface Props { lesson: TajweedLesson; students: Student[]; tutorId: string; o
 const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClose }) => {
 
   // ── PDF ───────────────────────────────────────────────────────────────────
-  const pdfCanvasRef    = useRef<HTMLCanvasElement>(null);
+  // We render the PDF via an <iframe> using the browser's native PDF viewer
+  // (PDFium in Chrome / built-in viewers in Firefox & Safari) — this renders
+  // Arabic and other complex scripts correctly, sidestepping PDF.js font issues.
+  // PDF.js is still used just to read the page count for the navigation buttons.
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const renderTaskRef   = useRef<pdfjsLib.RenderTask | null>(null);
-  const [pdfDoc,      setPdfDoc]     = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [pageNum,     setPageNum]    = useState(1);
   const [totalPages,  setTotalPages] = useState(0);
   const [loadingPdf,  setLoadingPdf] = useState(true);
@@ -88,7 +89,7 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [marking,           setMarking]           = useState(false);
 
-  // ── PDF load ──────────────────────────────────────────────────────────────
+  // ── PDF metadata load (page count only — no canvas rendering) ────────────
   useEffect(() => {
     if (!lesson.pdfUrl) { setPdfError('No PDF attached.'); setLoadingPdf(false); return; }
     setLoadingPdf(true); setPdfError('');
@@ -98,42 +99,23 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = await pdfjsLib.getDocument({
           data: await res.arrayBuffer(),
-          // Local CMap + font files served from public/pdfjs/.
-          // Required for correct rendering of Arabic / Hebrew / CJK text.
           cMapUrl: '/pdfjs/cmaps/',
           cMapPacked: true,
           standardFontDataUrl: '/pdfjs/standard_fonts/',
-          useSystemFonts: true,
-          disableFontFace: false,
         }).promise;
-        setPdfDoc(doc); setTotalPages(doc.numPages); setPageNum(1);
+        setTotalPages(doc.numPages);
+        setPageNum(1);
       } catch (e) { console.error(e); setPdfError('Failed to load PDF. Please try again.'); }
       finally { setLoadingPdf(false); }
     })();
   }, [lesson.pdfUrl]);
 
-  // ── PDF render ────────────────────────────────────────────────────────────
-  const renderPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, n: number) => {
-    const canvas = pdfCanvasRef.current, cont = pdfContainerRef.current;
-    if (!canvas || !cont) return;
-    if (renderTaskRef.current) { try { renderTaskRef.current.cancel(); } catch {} renderTaskRef.current = null; }
-    const page = await doc.getPage(n);
-    const dpr  = window.devicePixelRatio || 1;
-    const vp0  = page.getViewport({ scale: 1 });
-    const scale = Math.min(cont.clientWidth / vp0.width, cont.clientHeight / vp0.height) * dpr;
-    const vp    = page.getViewport({ scale });
-    canvas.width = vp.width; canvas.height = vp.height;
-    canvas.style.width = `${vp.width / dpr}px`; canvas.style.height = `${vp.height / dpr}px`;
-    const task = page.render({ canvasContext: canvas.getContext('2d') as unknown as CanvasRenderingContext2D, viewport: vp, canvas });
-    renderTaskRef.current = task;
-    try { await task.promise; } catch (e: unknown) { if (e instanceof Error && e.name !== 'RenderingCancelledException') console.error(e); }
-  }, []);
-
-  useEffect(() => { if (pdfDoc) renderPage(pdfDoc, pageNum); }, [pdfDoc, pageNum, renderPage]);
-  useEffect(() => {
-    const el = pdfContainerRef.current; if (!el || !pdfDoc) return;
-    const ro = new ResizeObserver(() => renderPage(pdfDoc, pageNum)); ro.observe(el); return () => ro.disconnect();
-  }, [pdfDoc, pageNum, renderPage]);
+  // iframe src — includes #page anchor for navigation. The browser's native
+  // PDF viewer interprets the hash and scrolls to the requested page without
+  // reloading the document.
+  const iframeSrc = lesson.pdfUrl
+    ? `${lesson.pdfUrl}#page=${pageNum}&toolbar=0&navpanes=0&zoom=page-fit`
+    : '';
 
   // ── Strokes canvas init/resize ────────────────────────────────────────────
   const initCanvas = useCallback(() => {
@@ -340,22 +322,6 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
           )}
         </button>
 
-        {/* Open in new tab — uses browser's native PDF viewer (best Arabic rendering) */}
-        {lesson.pdfUrl && (
-          <a
-            href={lesson.pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open in new tab (uses browser's PDF viewer — best for Arabic)"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span className="hidden sm:inline">Open in tab</span>
-          </a>
-        )}
-
         {students.length > 0 && (
           <select value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}
             className="px-2 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg border border-gray-600 focus:outline-none max-w-[150px]">
@@ -376,11 +342,19 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
       {/* Body */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
 
-        {/* Left: PDF */}
+        {/* Left: PDF (rendered by the browser's native PDF viewer via iframe) */}
         <div ref={pdfContainerRef} className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
           {loadingPdf && <div className="flex flex-col items-center gap-3 text-gray-300"><svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg><span className="text-sm">Loading PDF…</span></div>}
           {pdfError && !loadingPdf && <p className="text-red-400 text-sm px-6 text-center">{pdfError}</p>}
-          {!loadingPdf && !pdfError && <canvas ref={pdfCanvasRef} className="shadow-xl" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%' }} />}
+          {!loadingPdf && !pdfError && iframeSrc && (
+            <iframe
+              src={iframeSrc}
+              title={lesson.title}
+              className="w-full h-full bg-white"
+              style={{ border: 'none' }}
+              allowFullScreen
+            />
+          )}
         </div>
 
         {/* Right: Whiteboard */}

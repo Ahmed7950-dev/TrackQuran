@@ -419,11 +419,10 @@ interface PdfViewerProps {
 const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
   lesson, students, completedMap, preSelectedStudentId, onMarkDone, onClose,
 }) => {
-  const pdfCanvasRef    = useRef<HTMLCanvasElement>(null);
-  const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const renderTaskRef   = useRef<pdfjsLib.RenderTask | null>(null);
-
-  const [pdfDoc,     setPdfDoc]    = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  // The PDF is rendered inline via an <iframe> using the browser's native
+  // PDF viewer (PDFium in Chrome / built-in viewers in Firefox & Safari).
+  // This renders Arabic correctly without depending on PDF.js font handling.
+  // PDF.js is still used to read the page count for the navigation buttons.
   const [pageNum,    setPageNum]   = useState(1);
   const [totalPages, setTotalPages]= useState(0);
   const [loading,    setLoading]   = useState(true);
@@ -431,7 +430,7 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
 
   const [selectedStudentId, setSelectedStudentId] = useState(preSelectedStudentId ?? '');
 
-  // Load PDF
+  // Load PDF metadata only (for page count)
   useEffect(() => {
     if (!lesson.pdfUrl) { setPdfError('No PDF attached.'); setLoading(false); return; }
     setLoading(true); setPdfError('');
@@ -441,42 +440,16 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = await pdfjsLib.getDocument({
           data: await res.arrayBuffer(),
-          // Local CMap + font files served from public/pdfjs/.
-          // Required for correct rendering of Arabic / Hebrew / CJK text.
           cMapUrl: '/pdfjs/cmaps/',
           cMapPacked: true,
           standardFontDataUrl: '/pdfjs/standard_fonts/',
-          useSystemFonts: true,
-          disableFontFace: false,
         }).promise;
-        setPdfDoc(doc); setTotalPages(doc.numPages); setPageNum(1);
+        setTotalPages(doc.numPages);
+        setPageNum(1);
       } catch (e) { console.error(e); setPdfError('Failed to load PDF.'); }
       finally { setLoading(false); }
     })();
   }, [lesson.pdfUrl]);
-
-  // Render page
-  const renderPage = React.useCallback(async (doc: pdfjsLib.PDFDocumentProxy, n: number) => {
-    const canvas = pdfCanvasRef.current, cont = pdfContainerRef.current;
-    if (!canvas || !cont) return;
-    if (renderTaskRef.current) { try { renderTaskRef.current.cancel(); } catch {} renderTaskRef.current = null; }
-    const page = await doc.getPage(n);
-    const dpr  = window.devicePixelRatio || 1;
-    const vp0  = page.getViewport({ scale: 1 });
-    const scale = Math.min(cont.clientWidth / vp0.width, cont.clientHeight / vp0.height) * dpr;
-    const vp   = page.getViewport({ scale });
-    canvas.width = vp.width; canvas.height = vp.height;
-    canvas.style.width = `${vp.width / dpr}px`; canvas.style.height = `${vp.height / dpr}px`;
-    const task = page.render({ canvasContext: canvas.getContext('2d') as any, viewport: vp, canvas });
-    renderTaskRef.current = task;
-    try { await task.promise; } catch (e: any) { if (e?.name !== 'RenderingCancelledException') console.error(e); }
-  }, []);
-
-  useEffect(() => { if (pdfDoc) renderPage(pdfDoc, pageNum); }, [pdfDoc, pageNum, renderPage]);
-  useEffect(() => {
-    const el = pdfContainerRef.current; if (!el || !pdfDoc) return;
-    const ro = new ResizeObserver(() => renderPage(pdfDoc, pageNum)); ro.observe(el); return () => ro.disconnect();
-  }, [pdfDoc, pageNum, renderPage]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -489,6 +462,12 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
   }, [totalPages, onClose]);
 
   const isCompleted = selectedStudentId ? (completedMap[selectedStudentId]?.has(lesson.id) ?? false) : false;
+
+  // iframe URL with #page anchor — browser PDF viewer scrolls to the page
+  // without reloading the document (only the hash changes).
+  const iframeSrc = lesson.pdfUrl
+    ? `${lesson.pdfUrl}#page=${pageNum}&toolbar=0&navpanes=0&zoom=page-fit`
+    : '';
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
@@ -503,22 +482,6 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
           <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
           {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}
         </div>
-
-        {/* Open in new tab — uses browser's native PDF viewer (best Arabic rendering) */}
-        {lesson.pdfUrl && (
-          <a
-            href={lesson.pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open in new tab (uses browser's PDF viewer — best for Arabic)"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span className="hidden sm:inline">Open in tab</span>
-          </a>
-        )}
 
         {students.length > 0 && (
           <select value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}
@@ -542,11 +505,19 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
         )}
       </div>
 
-      {/* PDF */}
-      <div ref={pdfContainerRef} className="flex-1 flex items-center justify-center bg-gray-700 overflow-hidden">
+      {/* PDF — rendered by the browser's native PDF viewer (handles Arabic correctly) */}
+      <div className="flex-1 flex items-center justify-center bg-gray-700 overflow-hidden">
         {loading  && <div className="flex flex-col items-center gap-3 text-gray-300"><svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg><span className="text-sm">Loading PDF…</span></div>}
         {pdfError && !loading && <p className="text-red-400 text-sm px-6 text-center">{pdfError}</p>}
-        {!loading && !pdfError && <canvas ref={pdfCanvasRef} className="shadow-xl" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%' }} />}
+        {!loading && !pdfError && iframeSrc && (
+          <iframe
+            src={iframeSrc}
+            title={lesson.title}
+            className="w-full h-full bg-white"
+            style={{ border: 'none' }}
+            allowFullScreen
+          />
+        )}
       </div>
 
       {/* Bottom nav */}
