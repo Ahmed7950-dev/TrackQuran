@@ -16,7 +16,7 @@ const SubjectSelectionPage: React.FC<Props> = ({ onSelect }) => (
     {/* Branding */}
     <div className="mb-10 text-center">
       <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
-        TrackQuran
+        Lisan &amp; Quran
       </h1>
       <p className="mt-2 text-slate-500 dark:text-slate-400 text-lg">
         Choose a teaching section to continue

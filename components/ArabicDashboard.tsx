@@ -128,7 +128,7 @@ const StudentCard: React.FC<{ student: ArabicStudent; onClick: () => void }> = (
         </div>
         <div className="min-w-0">
           <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{s.arabicLevel || 'No level set'}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{s.arabicLevel ? `Level ${s.arabicLevel} / 10` : 'No level set'}</p>
         </div>
       </div>
 

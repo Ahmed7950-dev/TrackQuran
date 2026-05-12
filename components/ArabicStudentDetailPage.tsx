@@ -164,7 +164,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                 <span key={d} className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">{dialectLabel(d)}</span>
               ))}
               {student.arabicLevel && (
-                <span className="px-2.5 py-0.5 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-full text-xs font-semibold border border-slate-200 dark:border-gray-700">{student.arabicLevel}</span>
+                <span className="px-2.5 py-0.5 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-full text-xs font-semibold border border-slate-200 dark:border-gray-700">
+                  Level {student.arabicLevel} / 10
+                </span>
               )}
             </div>
           </div>

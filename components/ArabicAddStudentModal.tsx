@@ -31,12 +31,66 @@ const TIMEZONES = [
   'America/Toronto', 'America/Sao_Paulo',
 ];
 
-const LEVELS = ['Complete Beginner', 'Beginner', 'Elementary', 'Pre-Intermediate', 'Intermediate', 'Upper-Intermediate', 'Advanced', 'Near Native'];
-const PURPOSES = ['Conversation', 'Reading & Writing', 'Academic', 'Business', 'Travel', 'Religious texts', 'Heritage language', 'Other'];
-const TOPICS = ['Grammar', 'Vocabulary', 'Pronunciation', 'Listening', 'Speaking', 'Reading', 'Writing', 'Quranic Arabic', 'Classical texts', 'Dialects', 'Culture'];
 const NATIONALITIES = ['Saudi', 'Emirati', 'Jordanian', 'Lebanese', 'Syrian', 'Egyptian', 'Moroccan', 'Tunisian', 'Algerian', 'Libyan', 'Yemeni', 'Iraqi', 'Palestinian', 'Kuwaiti', 'Bahraini', 'Qatari', 'Omani', 'Sudanese', 'British', 'American', 'Canadian', 'Australian', 'French', 'German', 'Turkish', 'Pakistani', 'Indian', 'Indonesian', 'Malaysian', 'Other'];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Level label based on 1–10 numeric score
+function levelLabel(n: number): string {
+  if (n <= 1)  return 'Absolute Beginner';
+  if (n <= 2)  return 'Beginner';
+  if (n <= 3)  return 'Elementary';
+  if (n <= 4)  return 'Pre-Intermediate';
+  if (n <= 5)  return 'Intermediate';
+  if (n <= 6)  return 'Upper-Intermediate';
+  if (n <= 7)  return 'Advanced';
+  if (n <= 8)  return 'Proficient';
+  if (n <= 9)  return 'Near Native';
+  return 'Native / Fluent';
+}
+
+function levelColor(n: number): string {
+  if (n <= 3)  return 'text-blue-500 dark:text-blue-400';
+  if (n <= 6)  return 'text-amber-500 dark:text-amber-400';
+  return 'text-emerald-500 dark:text-emerald-400';
+}
+
+// ── Timezone helpers ─────────────────────────────────────────────────────────
+
+/** Returns the UTC offset of `tz` in whole minutes, e.g. Asia/Dubai → +240 */
+function getTzOffsetMinutes(tz: string): number {
+  try {
+    const now = new Date();
+    const utcMs = Date.parse(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzMs  = Date.parse(now.toLocaleString('en-US', { timeZone: tz }));
+    return Math.round((tzMs - utcMs) / 60000);
+  } catch {
+    return 0;
+  }
+}
+
+/** Format a local hour as "12:00 PM" */
+function formatHour(h: number): string {
+  const norm = ((h % 24) + 24) % 24;
+  const ampm = norm >= 12 ? 'PM' : 'AM';
+  const disp = norm > 12 ? norm - 12 : norm === 0 ? 12 : norm;
+  return `${disp}:00 ${ampm}`;
+}
+
+/** Given a local hour and the TZ offset in minutes, return the UTC equivalent label */
+function formatUtcEquiv(localHour: number, offsetMins: number): string {
+  const utcTotal = localHour * 60 - offsetMins;
+  const utcHour  = ((Math.floor(utcTotal / 60)) % 24 + 24) % 24;
+  return formatHour(utcHour) + ' UTC';
+}
+
+/** Format the UTC offset as a readable string, e.g. "+4" or "+5:30" */
+function formatOffsetLabel(offsetMins: number): string {
+  const sign = offsetMins >= 0 ? '+' : '−';
+  const h    = Math.floor(Math.abs(offsetMins) / 60);
+  const m    = Math.abs(offsetMins) % 60;
+  return m > 0 ? `UTC${sign}${h}:${m.toString().padStart(2, '0')}` : `UTC${sign}${h}`;
+}
+
+// ── Calendar grid helpers ────────────────────────────────────────────────────
 
 function slotsToGrid(slots: WeeklySlot[]): Set<string> {
   const s = new Set<string>();
@@ -51,12 +105,6 @@ function gridToSlots(grid: Set<string>): WeeklySlot[] {
   }).sort((a, b) => a.day - b.day || a.startHour - b.startHour);
 }
 
-function formatHour(h: number): string {
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const disp = h > 12 ? h - 12 : h;
-  return `${disp}:00 ${ampm}`;
-}
-
 function weeksUntil(dateStr: string): number {
   const ms = new Date(dateStr).getTime() - Date.now();
   return Math.max(0, ms / (7 * 24 * 3600 * 1000));
@@ -69,51 +117,120 @@ function lessonsPerWeekNeeded(completed: number, deadlineStr?: string): number |
   return Math.ceil((60 - completed) / weeks);
 }
 
+// ── Tag input component ──────────────────────────────────────────────────────
+
+const TagInput: React.FC<{
+  tags: string[];
+  onAdd: (v: string) => void;
+  onRemove: (v: string) => void;
+  placeholder?: string;
+}> = ({ tags, onAdd, onRemove, placeholder = 'Type and press Enter…' }) => {
+  const [val, setVal] = useState('');
+
+  const commit = () => {
+    const trimmed = val.trim();
+    if (trimmed && !tags.includes(trimmed)) onAdd(trimmed);
+    setVal('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
+          placeholder={placeholder}
+          className="flex-1 px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={commit}
+          disabled={!val.trim()}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          Add
+        </button>
+      </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tags.map(tag => (
+            <span
+              key={tag}
+              className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-full text-sm font-medium"
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => onRemove(tag)}
+                className="text-amber-400 hover:text-red-500 transition-colors leading-none"
+                aria-label={`Remove ${tag}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, onSave, existing }) => {
   const isEdit = !!existing;
 
   // Form fields
-  const [name,       setName]       = useState(existing?.name        ?? '');
-  const [dob,        setDob]        = useState(existing?.dob         ?? '');
-  const [forSelf,    setForSelf]    = useState(existing?.forSelf     ?? true);
-  const [forWhom,    setForWhom]    = useState(existing?.forWhom     ?? '');
-  const [dialects,   setDialects]   = useState<ArabicDialect[]>(existing?.arabicDialects ?? []);
-  const [whatsapp,   setWhatsapp]   = useState(existing?.whatsapp    ?? '');
-  const [level,      setLevel]      = useState(existing?.arabicLevel ?? '');
-  const [purposes,   setPurposes]   = useState<string[]>(existing?.learningPurposes ?? []);
-  const [topics,     setTopics]     = useState<string[]>(existing?.topicsToFocus    ?? []);
-  const [nationality,setNationality]= useState(existing?.nationality ?? '');
-  const [timezone,   setTimezone]   = useState(existing?.timezone    ?? 'UTC');
-  const [deadline,   setDeadline]   = useState(existing?.goalDeadline ?? '');
-  const [grid,       setGrid]       = useState<Set<string>>(
+  const [name,        setName]        = useState(existing?.name        ?? '');
+  const [dob,         setDob]         = useState(existing?.dob         ?? '');
+  const [forSelf,     setForSelf]     = useState(existing?.forSelf     ?? true);
+  const [forWhom,     setForWhom]     = useState(existing?.forWhom     ?? '');
+  const [dialects,    setDialects]    = useState<ArabicDialect[]>(existing?.arabicDialects ?? []);
+  const [whatsapp,    setWhatsapp]    = useState(existing?.whatsapp    ?? '');
+
+  // Level as 1–10 slider (store as string in DB, parse on load)
+  const [levelNum, setLevelNum] = useState<number>(() => {
+    const v = existing?.arabicLevel;
+    if (!v) return 5;
+    const n = parseInt(v, 10);
+    return !isNaN(n) && n >= 1 && n <= 10 ? n : 5;
+  });
+
+  const [purposes,    setPurposes]    = useState<string[]>(existing?.learningPurposes ?? []);
+  const [topics,      setTopics]      = useState<string[]>(existing?.topicsToFocus    ?? []);
+  const [nationality, setNationality] = useState(existing?.nationality ?? '');
+  const [timezone,    setTimezone]    = useState(existing?.timezone    ?? 'UTC');
+  const [deadline,    setDeadline]    = useState(existing?.goalDeadline ?? '');
+  const [grid,        setGrid]        = useState<Set<string>>(
     () => slotsToGrid(existing?.availability ?? [])
   );
 
-  // Drag state
-  const isDragging   = useRef(false);
-  const dragAdding   = useRef(true); // true = selecting, false = deselecting
-  const dragStart    = useRef<string | null>(null);
+  // Drag state (refs so state update doesn't cause lag during drag)
+  const isDragging = useRef(false);
+  const dragAdding = useRef(true);
 
   // Submit state
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
+  // ── Timezone offset ─────────────────────────────────────────────────────
+  const tzOffsetMins  = getTzOffsetMinutes(timezone);
+  const tzOffsetLabel = formatOffsetLabel(tzOffsetMins);
+  const showUtcEquiv  = tzOffsetMins !== 0;
+
   // ── Dialect toggle ──────────────────────────────────────────────────────
   const toggleDialect = (d: ArabicDialect) =>
     setDialects(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
 
-  // ── Multi-select toggle ─────────────────────────────────────────────────
-  const toggleArr = <T extends string>(arr: T[], setArr: (a: T[]) => void, val: T) =>
-    setArr(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
-
   // ── Calendar drag ───────────────────────────────────────────────────────
   const cellKey = (day: number, hour: number) => `${day}:${hour}`;
 
-  const handleCellEnter = (key: string) => {
-    if (!isDragging.current) return;
+  const handleCellDown = (key: string) => {
+    isDragging.current = true;
+    dragAdding.current = !grid.has(key);
     setGrid(prev => {
       const next = new Set(prev);
       if (dragAdding.current) next.add(key); else next.delete(key);
@@ -121,10 +238,8 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
     });
   };
 
-  const handleCellDown = (key: string) => {
-    isDragging.current = true;
-    dragStart.current  = key;
-    dragAdding.current = !grid.has(key); // toggle: if already selected, we deselect
+  const handleCellEnter = (key: string) => {
+    if (!isDragging.current) return;
     setGrid(prev => {
       const next = new Set(prev);
       if (dragAdding.current) next.add(key); else next.delete(key);
@@ -146,31 +261,31 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
     if (dialects.length === 0) { setError('Please select at least one Arabic variant.'); return; }
 
     const student: ArabicStudent = {
-      id:               existing?.id       ?? `ar-${Date.now()}`,
+      id:                 existing?.id ?? `ar-${Date.now()}`,
       teacherId,
-      name:             name.trim(),
-      dob:              dob  || undefined,
+      name:               name.trim(),
+      dob:                dob  || undefined,
       forSelf,
-      forWhom:          forSelf ? undefined : forWhom.trim() || undefined,
-      arabicDialects:   dialects,
-      whatsapp:         whatsapp.trim() || undefined,
-      arabicLevel:      level,
-      learningPurposes: purposes,
-      topicsToFocus:    topics,
-      nationality:      nationality || undefined,
+      forWhom:            forSelf ? undefined : forWhom.trim() || undefined,
+      arabicDialects:     dialects,
+      whatsapp:           whatsapp.trim() || undefined,
+      arabicLevel:        String(levelNum),
+      learningPurposes:   purposes,
+      topicsToFocus:      topics,
+      nationality:        nationality || undefined,
       timezone,
-      availability:     gridToSlots(grid),
-      goalDeadline:     deadline || undefined,
+      availability:       gridToSlots(grid),
+      goalDeadline:       deadline || undefined,
       completedLessonIds: existing?.completedLessonIds ?? [],
-      createdAt:        existing?.createdAt ?? new Date().toISOString(),
+      createdAt:          existing?.createdAt ?? new Date().toISOString(),
     };
 
     onSave(student);
   };
 
-  // ── Shared input styles ──────────────────────────────────────────────────
-  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none';
-  const lbl = 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1';
+  // ── Shared styles ─────────────────────────────────────────────────────────
+  const inp  = 'w-full px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none';
+  const lbl  = 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1';
   const pill = (active: boolean) =>
     `px-3 py-1.5 rounded-full text-sm font-medium border transition-colors cursor-pointer select-none ${
       active
@@ -248,35 +363,73 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
             <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className={inp} placeholder="+1 234 567 8901 (include country code)" />
           </Section>
 
-          {/* ── E. Arabic level ── */}
+          {/* ── E. Arabic level — slider 1–10 ── */}
           <Section title="E. Arabic level">
-            <div className="flex flex-wrap gap-2">
-              {LEVELS.map(l => (
-                <button key={l} type="button" onClick={() => setLevel(l)} className={pill(level === l)}>{l}</button>
-              ))}
+            <div className="space-y-3 px-1">
+              {/* Value + label display */}
+              <div className="flex items-end justify-between">
+                <div>
+                  <span className={`text-5xl font-extrabold tabular-nums ${levelColor(levelNum)}`}>{levelNum}</span>
+                  <span className="text-slate-400 dark:text-slate-500 text-lg font-semibold"> / 10</span>
+                </div>
+                <span className={`text-sm font-semibold ${levelColor(levelNum)}`}>{levelLabel(levelNum)}</span>
+              </div>
+
+              {/* Slider */}
+              <input
+                type="range"
+                min={1} max={10} step={1}
+                value={levelNum}
+                onChange={e => setLevelNum(parseInt(e.target.value, 10))}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer accent-amber-500"
+                style={{
+                  background: `linear-gradient(to right, #f59e0b ${(levelNum - 1) / 9 * 100}%, #e2e8f0 ${(levelNum - 1) / 9 * 100}%)`,
+                }}
+              />
+
+              {/* Tick labels */}
+              <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 px-px select-none">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                  <span
+                    key={n}
+                    className={`font-mono transition-colors ${n === levelNum ? levelColor(levelNum) + ' font-bold' : ''}`}
+                  >
+                    {n}
+                  </span>
+                ))}
+              </div>
+
+              {/* Band labels */}
+              <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                <span>Beginner</span>
+                <span>Intermediate</span>
+                <span>Native</span>
+              </div>
             </div>
           </Section>
 
-          {/* ── F. Learning purposes ── */}
+          {/* ── F. Learning purposes — free-text tag input ── */}
           <Section title="F. Learning purposes">
-            <div className="flex flex-wrap gap-2">
-              {PURPOSES.map(p => (
-                <button key={p} type="button" onClick={() => toggleArr(purposes, setPurposes, p)} className={pill(purposes.includes(p))}>{p}</button>
-              ))}
-            </div>
+            <TagInput
+              tags={purposes}
+              onAdd={v => setPurposes(prev => [...prev, v])}
+              onRemove={v => setPurposes(prev => prev.filter(x => x !== v))}
+              placeholder="e.g. Conversation, Travel, Business… then press Enter"
+            />
           </Section>
 
-          {/* ── G. Topics to focus on ── */}
+          {/* ── G. Topics to focus on — free-text tag input ── */}
           <Section title="G. Topics to focus on">
-            <div className="flex flex-wrap gap-2">
-              {TOPICS.map(t => (
-                <button key={t} type="button" onClick={() => toggleArr(topics, setTopics, t)} className={pill(topics.includes(t))}>{t}</button>
-              ))}
-            </div>
+            <TagInput
+              tags={topics}
+              onAdd={v => setTopics(prev => [...prev, v])}
+              onRemove={v => setTopics(prev => prev.filter(x => x !== v))}
+              placeholder="e.g. Grammar, Vocabulary, Speaking… then press Enter"
+            />
           </Section>
 
           {/* ── H & I. Nationality + Timezone ── */}
-          <Section title="H & I. Nationality &amp; Timezone">
+          <Section title="H &amp; I. Nationality &amp; Timezone">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={lbl}>Nationality</label>
@@ -297,13 +450,21 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
           {/* ── J. Availability calendar ── */}
           <Section title="J. Weekly availability">
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-              Times shown in <strong>{timezone}</strong>. Click or drag over cells to mark availability (shown in green).
+              Times are in{' '}
+              <strong className="text-amber-600 dark:text-amber-400">{timezone}</strong>
+              {' '}
+              <span className="font-mono text-amber-500">({tzOffsetLabel})</span>.
+              {showUtcEquiv && <span className="text-slate-400 dark:text-slate-500"> Small text shows UTC equivalent.</span>}
+              {' '}Click or drag cells to mark availability (green).
             </p>
+
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-600 select-none">
-              <table className="w-full text-xs border-collapse min-w-[460px]">
+              <table className="w-full text-xs border-collapse min-w-[480px]">
                 <thead>
                   <tr>
-                    <th className="w-16 bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 px-2 text-slate-500 dark:text-slate-400 font-semibold text-left">Time</th>
+                    <th className={`w-${showUtcEquiv ? '20' : '16'} bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 px-2 text-slate-500 dark:text-slate-400 font-semibold text-left`}>
+                      Local
+                    </th>
                     {DAY_SHORT.map((d, i) => (
                       <th key={i} className="bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 text-center font-semibold text-slate-600 dark:text-slate-300">{d}</th>
                     ))}
@@ -312,8 +473,13 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                 <tbody>
                   {HOURS.map(h => (
                     <tr key={h}>
-                      <td className="bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 px-2 py-1.5 text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap">
-                        {formatHour(h)}
+                      <td className="bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 px-2 py-1 whitespace-nowrap">
+                        <div className="font-mono text-slate-600 dark:text-slate-300">{formatHour(h)}</div>
+                        {showUtcEquiv && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono leading-tight">
+                            {formatUtcEquiv(h, tzOffsetMins)}
+                          </div>
+                        )}
                       </td>
                       {DAYS.map((_, d) => {
                         const key = cellKey(d, h);
@@ -323,7 +489,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                             key={d}
                             onMouseDown={() => handleCellDown(key)}
                             onMouseEnter={() => handleCellEnter(key)}
-                            className={`border-b border-r border-slate-200 dark:border-gray-600 cursor-pointer transition-colors h-8 ${
+                            className={`border-b border-r border-slate-200 dark:border-gray-600 cursor-pointer transition-colors h-9 ${
                               active
                                 ? 'bg-emerald-400 dark:bg-emerald-600'
                                 : 'bg-white dark:bg-gray-800 hover:bg-amber-50 dark:hover:bg-amber-900/20'
@@ -336,6 +502,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                 </tbody>
               </table>
             </div>
+
             <button
               type="button"
               onClick={() => setGrid(new Set())}
@@ -355,7 +522,6 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                   The date by which the student wants to reach their goal (60 lessons total).
                 </p>
               </div>
-              {/* Equation result */}
               {deadline && lpw !== null && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
                   <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold uppercase tracking-wide mb-1">Lesson plan</p>
