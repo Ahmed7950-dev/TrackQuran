@@ -44,12 +44,19 @@ interface Props {
   onMarkCompleted?:   (studentId: string, lessonId: string, tutorId: string) => Promise<boolean>;
   /** Override unmark. Defaults to tajweedService.unmarkLessonCompleted. */
   onUnmarkCompleted?: (studentId: string, lessonId: string) => Promise<boolean>;
+  /**
+   * When true the viewer renders as a flex column filling its parent instead of
+   * a fixed full-screen overlay. The close button is hidden; the parent manages
+   * navigation. Defaults to false.
+   */
+  embedded?: boolean;
 }
 
 const TajweedLessonViewer: React.FC<Props> = ({
   lesson, students, tutorId, onClose,
   preSelectedStudentId,
   fetchCompletedIds, onMarkCompleted, onUnmarkCompleted,
+  embedded = false,
 }) => {
 
   // Resolve completion handlers — fall back to tajweedService defaults
@@ -310,13 +317,15 @@ const TajweedLessonViewer: React.FC<Props> = ({
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
+    <div className={embedded ? 'flex flex-col h-full bg-gray-900' : 'fixed inset-0 z-50 bg-gray-900 flex flex-col'}>
 
       {/* Top bar */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
-        <button onClick={onClose} title="Close (Esc)" className="p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-        </button>
+        {!embedded && (
+          <button onClick={onClose} title="Close (Esc)" className="p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
           {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}

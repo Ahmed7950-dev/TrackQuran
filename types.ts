@@ -237,7 +237,57 @@ export interface ArabicLesson {
   description?: string;
   orderIndex: number;
   pdfUrl?: string;
+  videoUrl?: string;   // YouTube URL for the dialogue video section
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Homework (exercises per lesson) ──────────────────────────────────────────
+
+export type HomeworkQuestionType =
+  | 'multiple_choice'
+  | 'true_false'
+  | 'translate_to_arabic'
+  | 'translate_to_english'
+  | 'fill_blank'
+  | 'fill_blank_options';
+
+export interface HomeworkQuestion {
+  id: string;
+  lessonId: string;
+  type: HomeworkQuestionType;
+  question: string;
+  options?: string[];       // for multiple_choice and fill_blank_options
+  correctAnswer: string;
+  orderIndex: number;
+  createdAt: string;
+}
+
+// ── Vocabulary (word table per lesson) ────────────────────────────────────────
+
+export interface VocabWord {
+  id: string;
+  lessonId: string;
+  arabic: string;
+  transliteration: string;
+  english: string;
+  orderIndex: number;
+  createdAt: string;
+}
+
+export type VocabMode = 'arabic' | 'transliteration';
+
+// One spaced-repetition slot per (student × word × mode)
+// Attempt numbers 1-5; scheduled_at = when it's due; completed_at = when done.
+export interface VocabAttempt {
+  id: string;
+  studentId: string;
+  wordId: string;
+  lessonId: string;
+  attemptNumber: number;   // 1–5
+  mode: VocabMode;
+  scheduledAt: string;     // ISO — when this attempt is/was due
+  completedAt?: string;    // ISO — null = pending
+  createdAt: string;
 }

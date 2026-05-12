@@ -16,11 +16,8 @@ import {
   deleteArabicLesson as deleteLessonSvc,
   reorderArabicLessons,
   uploadArabicLessonPdf,
-  setArabicLessonCompletion,
-  saveArabicStudent,
 } from '../services/arabicService';
-import TajweedLessonViewer from './TajweedLessonViewer';
-import { TajweedLesson, Student } from '../types';
+import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 
 interface Props {
   students: ArabicStudent[];
@@ -217,33 +214,6 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   };
   const handleDragEnd   = () => { dragIdx.current = null; setOverIdx(null); };
 
-  // ── Marking a lesson done — update student in Supabase + propagate up ────
-  const handleMarkDone = async (studentId: string, lessonId: string, done: boolean) => {
-    await setArabicLessonCompletion(teacherId, studentId, lessonId, done);
-    const updated = students.find(s => s.id === studentId);
-    if (!updated) return;
-    const ids = new Set(updated.completedLessonIds);
-    if (done) ids.add(lessonId); else ids.delete(lessonId);
-    onStudentUpdated?.({ ...updated, completedLessonIds: [...ids] });
-  };
-
-  // Convert ArabicLesson → TajweedLesson shape so we can reuse TajweedLessonViewer
-  const toTajweedShape = (l: ArabicLesson): TajweedLesson => ({
-    id: l.id, title: l.title, description: l.description,
-    orderIndex: l.orderIndex, pdfUrl: l.pdfUrl,
-    createdBy: l.createdBy, createdAt: l.createdAt, updatedAt: l.updatedAt,
-  });
-
-  // Convert ArabicStudent → Student-compatible object for viewer's student selector
-  // The viewer only needs { id, name } and uses student id for completions
-  const studentCompat = students.map(s => ({
-    id: s.id, name: s.name,
-    // minimum fields TajweedLessonViewer needs (it only reads .id and .name)
-    recitationAchievements: [], memorizationAchievements: [],
-    attendance: [], masteredTajweedRules: [],
-    tafsirReviews: [], tafsirMemorizationReviews: [],
-    mistakes: {},
-  })) as any[];
 
   if (loading) {
     return (
@@ -332,26 +302,15 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         />
       )}
 
-      {/* PDF viewer — uses TajweedLessonViewer with Arabic completion handlers */}
+      {/* Lesson detail page — full-screen overlay with PDF / Homework / Vocabulary / Video tabs */}
       {viewing && (
-        <TajweedLessonViewer
-          lesson={toTajweedShape(viewing)}
-          students={studentCompat as Student[]}
-          tutorId={teacherId}
+        <ArabicLessonDetailPage
+          lesson={viewing}
+          students={students}
+          teacherId={teacherId}
           preSelectedStudentId={preSelectedStudentId}
-          fetchCompletedIds={async (studentId) => {
-            const s = students.find(x => x.id === studentId);
-            return new Set(s?.completedLessonIds ?? []);
-          }}
-          onMarkCompleted={async (studentId, lessonId) => {
-            await handleMarkDone(studentId, lessonId, true);
-            return true;
-          }}
-          onUnmarkCompleted={async (studentId, lessonId) => {
-            await handleMarkDone(studentId, lessonId, false);
-            return true;
-          }}
           onClose={() => setViewing(null)}
+          onStudentUpdated={onStudentUpdated}
         />
       )}
     </div>
