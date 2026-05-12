@@ -2,107 +2,220 @@
 // ---------------------------------------------------------------------------
 // Data layer for the Arabic-language-teaching feature.
 //
-// Arabic students  → localStorage, keyed per teacher
-//   `arabic_students_{teacherId}` → ArabicStudent[]
-//
-// Arabic lessons   → localStorage (shared, admin-managed)
-//   `arabic_lessons` → ArabicLesson[]
-//   PDF files       → Supabase Storage bucket `tajweed-assets` / arabic-pdfs/
+// arabic_students  → Supabase table `arabic_students`  (per teacher)
+// arabic_lessons   → Supabase table `arabic_lessons`   (shared, admin-managed)
+// PDF files        → Supabase Storage bucket `tajweed-assets` / arabic-pdfs/
 // ---------------------------------------------------------------------------
 
 import { supabase } from '../lib/supabase';
-import { ArabicStudent, ArabicLesson } from '../types';
+import { ArabicStudent, ArabicLesson, ArabicDialect, WeeklySlot } from '../types';
 
-// ── keys ────────────────────────────────────────────────────────────────────
+const PDF_BUCKET = 'tajweed-assets';
+const PDF_PREFIX = 'arabic-pdfs';
 
-const studentsKey = (tid: string) => `arabic_students_${tid}`;
-const LESSONS_KEY = 'arabic_lessons';
-const PDF_BUCKET  = 'tajweed-assets';          // reuse existing bucket
-const PDF_PREFIX  = 'arabic-pdfs';
+// ── DB row types ─────────────────────────────────────────────────────────────
+
+interface ArabicStudentRow {
+  id: string;
+  teacher_id: string;
+  name: string;
+  dob: string | null;
+  for_self: boolean;
+  for_whom: string | null;
+  arabic_dialects: ArabicDialect[];
+  whatsapp: string | null;
+  arabic_level: string;
+  learning_purposes: string[];
+  topics_to_focus: string[];
+  nationality: string | null;
+  timezone: string;
+  availability: WeeklySlot[];
+  goal_deadline: string | null;
+  completed_lesson_ids: string[];
+  created_at: string;
+}
+
+interface ArabicLessonRow {
+  id: string;
+  title: string;
+  description: string | null;
+  order_index: number;
+  pdf_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Converters ───────────────────────────────────────────────────────────────
+
+function rowToStudent(r: ArabicStudentRow): ArabicStudent {
+  return {
+    id:                  r.id,
+    teacherId:           r.teacher_id,
+    name:                r.name,
+    dob:                 r.dob        ?? undefined,
+    forSelf:             r.for_self,
+    forWhom:             r.for_whom   ?? undefined,
+    arabicDialects:      r.arabic_dialects,
+    whatsapp:            r.whatsapp   ?? undefined,
+    arabicLevel:         r.arabic_level,
+    learningPurposes:    r.learning_purposes,
+    topicsToFocus:       r.topics_to_focus,
+    nationality:         r.nationality ?? undefined,
+    timezone:            r.timezone,
+    availability:        r.availability,
+    goalDeadline:        r.goal_deadline ?? undefined,
+    completedLessonIds:  r.completed_lesson_ids,
+    createdAt:           r.created_at,
+  };
+}
+
+function studentToRow(s: ArabicStudent): ArabicStudentRow {
+  return {
+    id:                  s.id,
+    teacher_id:          s.teacherId,
+    name:                s.name,
+    dob:                 s.dob         ?? null,
+    for_self:            s.forSelf,
+    for_whom:            s.forWhom     ?? null,
+    arabic_dialects:     s.arabicDialects,
+    whatsapp:            s.whatsapp    ?? null,
+    arabic_level:        s.arabicLevel,
+    learning_purposes:   s.learningPurposes,
+    topics_to_focus:     s.topicsToFocus,
+    nationality:         s.nationality ?? null,
+    timezone:            s.timezone,
+    availability:        s.availability,
+    goal_deadline:       s.goalDeadline ?? null,
+    completed_lesson_ids: s.completedLessonIds,
+    created_at:          s.createdAt,
+  };
+}
+
+function rowToLesson(r: ArabicLessonRow): ArabicLesson {
+  return {
+    id:          r.id,
+    title:       r.title,
+    description: r.description ?? undefined,
+    orderIndex:  r.order_index,
+    pdfUrl:      r.pdf_url     ?? undefined,
+    createdBy:   r.created_by  ?? undefined,
+    createdAt:   r.created_at,
+    updatedAt:   r.updated_at,
+  };
+}
 
 // ── Arabic students ──────────────────────────────────────────────────────────
 
-export function getArabicStudents(teacherId: string): ArabicStudent[] {
-  try {
-    const raw = localStorage.getItem(studentsKey(teacherId));
-    return raw ? (JSON.parse(raw) as ArabicStudent[]) : [];
-  } catch {
-    return [];
-  }
+export async function getArabicStudents(teacherId: string): Promise<ArabicStudent[]> {
+  const { data, error } = await supabase
+    .from('arabic_students')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('getArabicStudents:', error.message); return []; }
+  return (data ?? []).map(rowToStudent);
 }
 
-export function saveArabicStudent(teacherId: string, student: ArabicStudent): void {
-  const all = getArabicStudents(teacherId);
-  const idx = all.findIndex(s => s.id === student.id);
-  if (idx >= 0) all[idx] = student; else all.push(student);
-  localStorage.setItem(studentsKey(teacherId), JSON.stringify(all));
+export async function saveArabicStudent(teacherId: string, student: ArabicStudent): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_students')
+    .upsert(studentToRow(student), { onConflict: 'id' });
+  if (error) console.error('saveArabicStudent:', error.message);
 }
 
-export function deleteArabicStudent(teacherId: string, studentId: string): void {
-  const all = getArabicStudents(teacherId).filter(s => s.id !== studentId);
-  localStorage.setItem(studentsKey(teacherId), JSON.stringify(all));
+export async function deleteArabicStudent(teacherId: string, studentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_students')
+    .delete()
+    .eq('id', studentId)
+    .eq('teacher_id', teacherId);
+  if (error) console.error('deleteArabicStudent:', error.message);
 }
 
 // ── Arabic lessons ───────────────────────────────────────────────────────────
 
-export function getArabicLessons(): ArabicLesson[] {
-  try {
-    const raw = localStorage.getItem(LESSONS_KEY);
-    return raw ? (JSON.parse(raw) as ArabicLesson[]) : [];
-  } catch {
-    return [];
-  }
+export async function getArabicLessons(): Promise<ArabicLesson[]> {
+  const { data, error } = await supabase
+    .from('arabic_lessons')
+    .select('*')
+    .order('order_index', { ascending: true });
+  if (error) { console.error('getArabicLessons:', error.message); return []; }
+  return (data ?? []).map(rowToLesson);
 }
 
-function persistLessons(lessons: ArabicLesson[]): void {
-  localStorage.setItem(LESSONS_KEY, JSON.stringify(lessons));
-}
-
-export function createArabicLesson(input: {
+export async function createArabicLesson(input: {
   title: string;
   description?: string;
   pdfUrl?: string;
   createdBy?: string;
-}): ArabicLesson {
-  const all = getArabicLessons();
-  const maxOrder = all.reduce((m, l) => Math.max(m, l.orderIndex), 0);
-  const lesson: ArabicLesson = {
+}): Promise<ArabicLesson | null> {
+  // Get current max order_index
+  const { data: existing } = await supabase
+    .from('arabic_lessons')
+    .select('order_index')
+    .order('order_index', { ascending: false })
+    .limit(1);
+  const maxOrder = (existing?.[0] as any)?.order_index ?? 0;
+
+  const row: ArabicLessonRow = {
     id:          `al-${Date.now()}`,
     title:       input.title,
-    description: input.description,
-    orderIndex:  maxOrder + 1,
-    pdfUrl:      input.pdfUrl,
-    createdBy:   input.createdBy,
-    createdAt:   new Date().toISOString(),
-    updatedAt:   new Date().toISOString(),
+    description: input.description ?? null,
+    order_index: maxOrder + 1,
+    pdf_url:     input.pdfUrl    ?? null,
+    created_by:  input.createdBy ?? null,
+    created_at:  new Date().toISOString(),
+    updated_at:  new Date().toISOString(),
   };
-  persistLessons([...all, lesson]);
-  return lesson;
+
+  const { data, error } = await supabase
+    .from('arabic_lessons')
+    .insert(row)
+    .select()
+    .single();
+  if (error) { console.error('createArabicLesson:', error.message); return null; }
+  return rowToLesson(data as ArabicLessonRow);
 }
 
-export function updateArabicLesson(
+export async function updateArabicLesson(
   id: string,
   patch: Partial<Pick<ArabicLesson, 'title' | 'description' | 'pdfUrl' | 'orderIndex'>>,
-): boolean {
-  const all = getArabicLessons();
-  const idx = all.findIndex(l => l.id === id);
-  if (idx < 0) return false;
-  all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
-  persistLessons(all);
+): Promise<boolean> {
+  const update: Partial<ArabicLessonRow> & { updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.title       !== undefined) update.title       = patch.title;
+  if (patch.description !== undefined) update.description = patch.description ?? null;
+  if (patch.pdfUrl      !== undefined) update.pdf_url     = patch.pdfUrl ?? null;
+  if (patch.orderIndex  !== undefined) update.order_index = patch.orderIndex;
+
+  const { error } = await supabase
+    .from('arabic_lessons')
+    .update(update)
+    .eq('id', id);
+  if (error) { console.error('updateArabicLesson:', error.message); return false; }
   return true;
 }
 
-export function deleteArabicLesson(id: string): boolean {
-  const all = getArabicLessons();
-  const filtered = all.filter(l => l.id !== id);
-  if (filtered.length === all.length) return false;
-  persistLessons(filtered);
+export async function deleteArabicLesson(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('arabic_lessons')
+    .delete()
+    .eq('id', id);
+  if (error) { console.error('deleteArabicLesson:', error.message); return false; }
   return true;
 }
 
-export function reorderArabicLessons(ordered: ArabicLesson[]): void {
-  const updated = ordered.map((l, i) => ({ ...l, orderIndex: i + 1, updatedAt: new Date().toISOString() }));
-  persistLessons(updated);
+export async function reorderArabicLessons(ordered: ArabicLesson[]): Promise<void> {
+  await Promise.all(
+    ordered.map((l, i) =>
+      supabase
+        .from('arabic_lessons')
+        .update({ order_index: i + 1, updated_at: new Date().toISOString() })
+        .eq('id', l.id)
+    )
+  );
 }
 
 // ── PDF upload (Supabase Storage) ────────────────────────────────────────────
@@ -117,21 +230,29 @@ export async function uploadArabicLessonPdf(file: File): Promise<string | null> 
   return supabase.storage.from(PDF_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-// ── Lesson completion helpers ────────────────────────────────────────────────
+// ── Lesson completion ────────────────────────────────────────────────────────
 
-/** Mark or unmark a lesson as completed for a student; persists to localStorage. */
-export function setArabicLessonCompletion(
+export async function setArabicLessonCompletion(
   teacherId: string,
   studentId: string,
   lessonId: string,
   done: boolean,
-): void {
-  const all = getArabicStudents(teacherId);
-  const student = all.find(s => s.id === studentId);
-  if (!student) return;
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('arabic_students')
+    .select('completed_lesson_ids')
+    .eq('id', studentId)
+    .eq('teacher_id', teacherId)
+    .single();
+  if (error || !data) { console.error('setArabicLessonCompletion fetch:', error?.message); return; }
 
-  const ids = new Set(student.completedLessonIds);
+  const ids = new Set<string>((data as any).completed_lesson_ids ?? []);
   if (done) ids.add(lessonId); else ids.delete(lessonId);
-  student.completedLessonIds = [...ids];
-  saveArabicStudent(teacherId, student);
+
+  const { error: updateError } = await supabase
+    .from('arabic_students')
+    .update({ completed_lesson_ids: [...ids] })
+    .eq('id', studentId)
+    .eq('teacher_id', teacherId);
+  if (updateError) console.error('setArabicLessonCompletion update:', updateError.message);
 }

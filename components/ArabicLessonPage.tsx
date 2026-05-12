@@ -79,14 +79,15 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
     }
 
     if (isEdit && existing) {
-      const ok = updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl });
+      const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl });
       setSaving(false);
       if (!ok) { setErr('Failed to save changes.'); return; }
       onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl });
       handleClose();
     } else {
-      const lesson = createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, pdfUrl, createdBy });
+      const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, pdfUrl, createdBy });
       setSaving(false);
+      if (!lesson) { setErr('Failed to create lesson. Please try again.'); return; }
       onCreated?.(lesson);
       handleClose();
     }
@@ -190,19 +191,19 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    setLessons(getArabicLessons());
-    setLoading(false);
+    getArabicLessons().then(data => { setLessons(data); setLoading(false); });
   }, []);
 
-  const handleDelete = (l: ArabicLesson) => {
+  const handleDelete = async (l: ArabicLesson) => {
     if (!confirm(`Delete lesson "${l.title}"? This cannot be undone.`)) return;
-    if (deleteLessonSvc(l.id)) setLessons(prev => prev.filter(x => x.id !== l.id));
+    const ok = await deleteLessonSvc(l.id);
+    if (ok) setLessons(prev => prev.filter(x => x.id !== l.id));
   };
 
   // ── Drag-to-reorder ──────────────────────────────────────────────────────
   const handleDragStart = (idx: number) => { dragIdx.current = idx; };
   const handleDragOver  = (e: React.DragEvent, idx: number) => { e.preventDefault(); setOverIdx(idx); };
-  const handleDrop      = (e: React.DragEvent, dropIdx: number) => {
+  const handleDrop      = async (e: React.DragEvent, dropIdx: number) => {
     e.preventDefault();
     const from = dragIdx.current;
     dragIdx.current = null; setOverIdx(null);
@@ -210,14 +211,15 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     const reordered = [...lessons];
     const [moved] = reordered.splice(from, 1);
     reordered.splice(dropIdx, 0, moved);
-    reorderArabicLessons(reordered);
-    setLessons(getArabicLessons()); // reload sorted
+    // Update UI immediately, then persist to Supabase
+    setLessons(reordered.map((l, i) => ({ ...l, orderIndex: i + 1 })));
+    await reorderArabicLessons(reordered);
   };
   const handleDragEnd   = () => { dragIdx.current = null; setOverIdx(null); };
 
-  // ── Marking a lesson done — update student in memory + localStorage ──────
-  const handleMarkDone = (studentId: string, lessonId: string, done: boolean) => {
-    setArabicLessonCompletion(teacherId, studentId, lessonId, done);
+  // ── Marking a lesson done — update student in Supabase + propagate up ────
+  const handleMarkDone = async (studentId: string, lessonId: string, done: boolean) => {
+    await setArabicLessonCompletion(teacherId, studentId, lessonId, done);
     const updated = students.find(s => s.id === studentId);
     if (!updated) return;
     const ids = new Set(updated.completedLessonIds);

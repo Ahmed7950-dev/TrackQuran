@@ -129,21 +129,21 @@ const App: React.FC = () => {
   const [arabicStudents, setArabicStudents] = useState<ArabicStudent[]>([]);
   const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(null);
 
-  const handleAddArabicStudent = (student: ArabicStudent) => {
+  const handleAddArabicStudent = async (student: ArabicStudent) => {
     setArabicStudents(prev => {
       const idx = prev.findIndex(s => s.id === student.id);
       return idx >= 0 ? prev.map(s => s.id === student.id ? student : s) : [...prev, student];
     });
-    if (currentUser?.role === 'teacher') saveArabicStudent(currentUser.id, student);
+    if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
   };
-  const handleUpdateArabicStudent = (student: ArabicStudent) => {
+  const handleUpdateArabicStudent = async (student: ArabicStudent) => {
     setArabicStudents(prev => prev.map(s => s.id === student.id ? student : s));
-    if (currentUser?.role === 'teacher') saveArabicStudent(currentUser.id, student);
+    if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
   };
-  const handleDeleteArabicStudent = (studentId: string) => {
+  const handleDeleteArabicStudent = async (studentId: string) => {
     setArabicStudents(prev => prev.filter(s => s.id !== studentId));
     setSelectedArabicStudentId(null);
-    if (currentUser?.role === 'teacher') deleteArabicStudent(currentUser.id, studentId);
+    if (currentUser?.role === 'teacher') await deleteArabicStudent(currentUser.id, studentId);
   };
 
   const [isAddStudentModalOpen,    setIsAddStudentModalOpen]    = useState(false);
@@ -199,7 +199,7 @@ const App: React.FC = () => {
     const teacherId = currentUser.id;
     getStudents(teacherId).then(setStudents);
     getTajweedRules(teacherId).then(setTajweedRules);
-    setArabicStudents(getArabicStudents(teacherId));
+    getArabicStudents(teacherId).then(setArabicStudents);
   }, [currentUser]);
   
   // Initialize progress from recitation achievements

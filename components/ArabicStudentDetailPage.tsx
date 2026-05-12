@@ -105,7 +105,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [activeSection, setActiveSection] = useState<'profile' | 'lessons'>('lessons');
 
   useEffect(() => {
-    setLessons(getArabicLessons());
+    getArabicLessons().then(setLessons);
   }, []);
 
   const completedCount = student.completedLessonIds.length;
