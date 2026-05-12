@@ -96,7 +96,14 @@ const TajweedLessonViewer: React.FC<Props> = ({ lesson, students, tutorId, onClo
       try {
         const res = await fetch(lesson.pdfUrl!);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const doc = await pdfjsLib.getDocument({ data: await res.arrayBuffer() }).promise;
+        const doc = await pdfjsLib.getDocument({
+          data: await res.arrayBuffer(),
+          // CMap files are required for proper rendering of Arabic, Hebrew,
+          // CJK and other non-Latin character encodings in PDFs.
+          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/cmaps/',
+          cMapPacked: true,
+          standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/standard_fonts/',
+        }).promise;
         setPdfDoc(doc); setTotalPages(doc.numPages); setPageNum(1);
       } catch (e) { console.error(e); setPdfError('Failed to load PDF. Please try again.'); }
       finally { setLoadingPdf(false); }
