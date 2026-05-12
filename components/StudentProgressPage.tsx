@@ -1974,17 +1974,30 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     
     // ── Range-log helpers ─────────────────────────────────────────────────────
     // Check if a surah has any non-revision reading/hifz logs
-    const hasReadingForSurah = (surahNum: number) =>
-        recitationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
-    const hasHifzForSurah = (surahNum: number) =>
-        memorizationAchievements.some(a => !a.isRevision && a.startSurah <= surahNum && a.endSurah >= surahNum);
-    // Check if a surah already has any tafseer log
-    const hasTafseerForSurah = (surahNum: number) =>
-        (student.tafsirReviews || []).some(r =>
-            r.startSurah !== undefined
-                ? r.startSurah <= surahNum && (r.endSurah ?? r.surah) >= surahNum
-                : r.surah === surahNum
+    // Returns true when any existing non-revision reading log overlaps the given verse range.
+    // Using range overlap (not just surah membership) so removed verses don't falsely trigger
+    // "Revision" when the same or nearby verses are logged again.
+    const hasReadingForRange = (start: Progress, end: Progress) =>
+        recitationAchievements.some(a =>
+            !a.isRevision &&
+            isVerseAfterOrEqual({ surah: a.endSurah, ayah: a.endAyah }, start) &&
+            isVerseAfterOrEqual(end, { surah: a.startSurah, ayah: a.startAyah })
         );
+
+    const hasHifzForRange = (start: Progress, end: Progress) =>
+        memorizationAchievements.some(a =>
+            !a.isRevision &&
+            isVerseAfterOrEqual({ surah: a.endSurah, ayah: a.endAyah }, start) &&
+            isVerseAfterOrEqual(end, { surah: a.startSurah, ayah: a.startAyah })
+        );
+
+    // Returns true when any tafseer log overlaps the given verse range.
+    const hasTafseerForRange = (start: Progress, end: Progress) =>
+        (student.tafsirReviews || []).some(r => {
+            const rStart: Progress = { surah: r.startSurah ?? r.surah, ayah: r.startAyah ?? 1 };
+            const rEnd:   Progress = { surah: r.endSurah ?? r.surah,   ayah: r.endAyah   ?? (QURAN_METADATA.find(m => m.number === (r.endSurah ?? r.surah))?.numberOfAyahs ?? 1) };
+            return isVerseAfterOrEqual(rEnd, start) && isVerseAfterOrEqual(end, rStart);
+        });
 
     const openLogModal = (range: { start: Progress; end: Progress }) => {
         setPendingLogRange(range);
@@ -2628,7 +2641,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <div className="space-y-2">
 
                                     {/* ── Reading: show Revision if surah already has reading, else first-time Reading ── */}
-                                    {hasReadingForSurah(pendingLogRange.start.surah) ? (
+                                    {hasReadingForRange(pendingLogRange.start, pendingLogRange.end) ? (
                                         <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
                                             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
                                             <span className="text-xl">🔄</span> Log Reading Revision
@@ -2641,7 +2654,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     )}
 
                                     {/* ── Hifz: show Revision if surah already has hifz, else first-time Hifz ── */}
-                                    {hasHifzForSurah(pendingLogRange.start.surah) ? (
+                                    {hasHifzForRange(pendingLogRange.start, pendingLogRange.end) ? (
                                         <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
                                             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
                                             <span className="text-xl">🔁</span> Log Hifz Revision
@@ -2654,7 +2667,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     )}
 
                                     {/* ── Tafseer — hidden once surah already has tafseer ── */}
-                                    {!hasTafseerForSurah(pendingLogRange.start.surah) && (
+                                    {!hasTafseerForRange(pendingLogRange.start, pendingLogRange.end) && (
                                         <button onClick={() => {
                                             if (!pendingLogRange) return;
                                             onLogTafseerRange(student.id, pendingLogRange);
