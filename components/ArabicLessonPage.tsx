@@ -441,11 +441,13 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = await pdfjsLib.getDocument({
           data: await res.arrayBuffer(),
-          // CMap files are required for proper rendering of Arabic, Hebrew,
-          // CJK and other non-Latin character encodings in PDFs.
-          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/cmaps/',
+          // Local CMap + font files served from public/pdfjs/.
+          // Required for correct rendering of Arabic / Hebrew / CJK text.
+          cMapUrl: '/pdfjs/cmaps/',
           cMapPacked: true,
-          standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/standard_fonts/',
+          standardFontDataUrl: '/pdfjs/standard_fonts/',
+          useSystemFonts: true,
+          disableFontFace: false,
         }).promise;
         setPdfDoc(doc); setTotalPages(doc.numPages); setPageNum(1);
       } catch (e) { console.error(e); setPdfError('Failed to load PDF.'); }
@@ -501,6 +503,22 @@ const ArabicPdfViewer: React.FC<PdfViewerProps> = ({
           <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
           {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}
         </div>
+
+        {/* Open in new tab — uses browser's native PDF viewer (best Arabic rendering) */}
+        {lesson.pdfUrl && (
+          <a
+            href={lesson.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open in new tab (uses browser's PDF viewer — best for Arabic)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            <span className="hidden sm:inline">Open in tab</span>
+          </a>
+        )}
 
         {students.length > 0 && (
           <select value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}
