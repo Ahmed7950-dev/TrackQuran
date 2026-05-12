@@ -1305,6 +1305,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const prevSurahStatusesRef = useRef<SurahStatus[]>();
     const scrollIntervalRef = useRef<number | null>(null);
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
+    const quranBodyRef = useRef<HTMLDivElement>(null); // For scroll-to-top on page navigation
     const [clickStateUpdateTrigger, setClickStateUpdateTrigger] = useState(0); // Force re-render when click states change
     const [showMistakeHighlight, setShowMistakeHighlight] = useState(false);
     const mistakeSoundRef = useRef<(() => void) | null>(null);
@@ -1466,15 +1467,44 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             if (!selectedSurahId) return;
             setIsLoading(true); setError(null);
             try {
-                const response = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedSurahId}`);
-                if (!response.ok) throw new Error('Failed to fetch Surah data.');
-                const data = await response.json();
-                setVerses(data.verses);
-                
-                // Reset to first page range when surah changes
-                if (data.verses && data.verses.length > 0) {
-                    const firstVerse = data.verses[0];
-                    const [surahNum, ayahNum] = firstVerse.verse_key.split(':').map(Number);
+                const selectedMeta = QURAN_METADATA.find(s => s.number === selectedSurahId);
+                if (!selectedMeta) throw new Error('Surah not found.');
+
+                // If the selected surah fits on a single page, fetch ALL surahs on that page
+                // together so they display as one continuous page (like in the Mushaf).
+                // For longer surahs that span multiple pages, just fetch that surah alone.
+                const isSinglePage = selectedMeta.startPage === selectedMeta.endPage;
+                const surahsToFetch = isSinglePage
+                    ? QURAN_METADATA.filter(s => s.startPage === selectedMeta.startPage)
+                    : [selectedMeta];
+
+                const responses = await Promise.all(
+                    surahsToFetch.map(s =>
+                        fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${s.number}`)
+                    )
+                );
+                for (const resp of responses) {
+                    if (!resp.ok) throw new Error('Failed to fetch Surah data.');
+                }
+                const dataArr = await Promise.all(responses.map(r => r.json()));
+
+                // Merge and sort verses by (surah, ayah) so multi-surah pages are in Quran order
+                const mergedVerses = dataArr
+                    .flatMap((d: any) => d.verses)
+                    .sort((a: any, b: any) => {
+                        const [aS, aA] = a.verse_key.split(':').map(Number);
+                        const [bS, bA] = b.verse_key.split(':').map(Number);
+                        return aS !== bS ? aS - bS : aA - bA;
+                    });
+
+                setVerses(mergedVerses);
+
+                // Reset page range to where the selected surah starts
+                if (mergedVerses.length > 0) {
+                    const firstSelectedVerse =
+                        mergedVerses.find((v: any) => parseInt(v.verse_key.split(':')[0], 10) === selectedSurahId) ||
+                        mergedVerses[0];
+                    const [surahNum, ayahNum] = firstSelectedVerse.verse_key.split(':').map(Number);
                     const firstPage = getPageOfAyah(surahNum, ayahNum);
                     const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
                     const newEnd = Math.min(604, newStart + 4);
@@ -1639,7 +1669,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const containsArabic = (str: string): boolean => {
         return /[\u0600-\u06FF]/.test(str);
     };
-    
+
+    // Strip Arabic diacritical marks (tashkeel) so "\u0627\u0644\u0641\u0627\u062A\u062D\u0629" matches "\u0627\u0644\u0641\u064E\u0627\u062A\u0650\u062D\u064E\u0629"
+    const stripArabicDiacritics = (str: string): string =>
+        str.replace(/[\u064B-\u065F\u0610-\u061A\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '');
+
     // Normalize string for comparison (lowercase for non-Arabic, trim for Arabic)
     const normalizeString = (str: string): string => {
         const trimmed = str.trim();
@@ -1707,10 +1741,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
         
         // Then try fuzzy matching on names (including Arabic name)
+        const isArabicQuery = containsArabic(term);
+        const strippedTerm = isArabicQuery ? stripArabicDiacritics(term.trim()) : normalizedTerm;
+
         for (const surah of QURAN_METADATA) {
+            const strippedSurahName = stripArabicDiacritics(surah.name);
             const scores = [
-                // Arabic name matching (highest priority for Arabic input)
-                containsArabic(term) ? calculateSimilarity(term, surah.name) : 0,
+                // Arabic name matching — compare stripped versions so diacritics don't cause mismatches
+                isArabicQuery ? calculateSimilarity(strippedTerm, strippedSurahName) : 0,
+                // Arabic substring match (very reliable: "الفلق" is contained in "سورة الفلق")
+                isArabicQuery && strippedSurahName.includes(strippedTerm) ? 0.95 : 0,
+                isArabicQuery && strippedTerm.includes(strippedSurahName) ? 0.9 : 0,
                 // English name matching
                 calculateSimilarity(normalizedTerm, surah.englishName),
                 // Transliterated name matching
@@ -1718,13 +1759,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 calculateSimilarity(normalizedTerm, surah.transliteratedName.replace(/-/g, ' ')),
                 calculateSimilarity(normalizedTerm, surah.transliteratedName.replace(/-/g, '')),
                 // Check if term matches part of the name
-                !containsArabic(term) && surah.englishName.toLowerCase().includes(normalizedTerm) ? 0.7 : 0,
-                !containsArabic(term) && surah.transliteratedName.toLowerCase().replace(/-/g, ' ').includes(normalizedTerm) ? 0.7 : 0,
-                containsArabic(term) && surah.name.includes(term.trim()) ? 0.8 : 0,
+                !isArabicQuery && surah.englishName.toLowerCase().includes(normalizedTerm) ? 0.7 : 0,
+                !isArabicQuery && surah.transliteratedName.toLowerCase().replace(/-/g, ' ').includes(normalizedTerm) ? 0.7 : 0,
             ];
-            
+
             const maxScore = Math.max(...scores);
-            if (maxScore > bestScore && maxScore > 0.4) { // Minimum threshold of 40% similarity
+            // Lower threshold for Arabic queries since they tend to be shorter and more precise
+            const threshold = isArabicQuery ? 0.3 : 0.4;
+            if (maxScore > bestScore && maxScore > threshold) {
                 bestScore = maxScore;
                 bestMatch = { surah, score: maxScore };
             }
@@ -1742,12 +1784,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const newStart = Math.min(604, currentPageRange.end + 1);
         const newEnd = Math.min(604, newStart + 4);
         setCurrentPageRange({ start: newStart, end: newEnd });
+        quranBodyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
-    
+
     const handlePreviousPages = () => {
         const newEnd = Math.max(1, currentPageRange.start - 1);
         const newStart = Math.max(1, newEnd - 4);
         setCurrentPageRange({ start: newStart, end: newEnd });
+        quranBodyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
     
     // Calculate if there are more pages to show
@@ -1900,7 +1944,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const allMatches = QURAN_METADATA.map(s => ({
             surah: s,
             score: Math.max(
-                containsArabic(term) ? calculateSimilarity(term, s.name) : 0,
+                containsArabic(term) ? calculateSimilarity(stripArabicDiacritics(term), stripArabicDiacritics(s.name)) : 0,
                 calculateSimilarity(normalizeString(term), s.englishName),
                 calculateSimilarity(normalizeString(term), s.transliteratedName),
                 calculateSimilarity(normalizeString(term), s.transliteratedName.replace(/-/g, ' '))
@@ -2253,25 +2297,45 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const renderSurahContent = () => {
         if (isLoading) return <div className="flex justify-center items-center h-full p-12"><p>{t('liveSession.loadingSurah')}</p></div>;
         if (error) return <div className="text-center text-red-500 p-12">{error}</div>;
-    
+
         const surahContent: React.ReactNode[] = []; let currentPage = -1;
         let hasShownFirstPageInRange = false;
-    
+        let currentRenderedSurah = -1; // Track surah transitions for multi-surah pages
+
         verses.forEach((verse, verseIndex) => {
             const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
             const versePage = getPageOfAyah(surahNum, ayahNum);
-            
+
             // Only render verses within the current page range
             if (versePage < currentPageRange.start || versePage > currentPageRange.end) {
                 return;
             }
-    
+
             if (!hasShownFirstPageInRange) {
                 currentPage = versePage;
                 hasShownFirstPageInRange = true;
-            } else if (versePage !== currentPage) { 
-                surahContent.push(<PageSeparator key={`page-${currentPage}`} pageNumber={currentPage} />); 
-                currentPage = versePage; 
+            } else if (versePage !== currentPage) {
+                surahContent.push(<PageSeparator key={`page-${currentPage}`} pageNumber={currentPage} />);
+                currentPage = versePage;
+            }
+
+            // Insert a surah name header when the surah changes (handles multi-surah pages)
+            // The first surah is already shown in the top header, so only add headers for subsequent surahs
+            if (surahNum !== currentRenderedSurah) {
+                if (currentRenderedSurah !== -1) {
+                    // A new surah starts mid-content — show its header
+                    const surahMeta = QURAN_METADATA.find(s => s.number === surahNum);
+                    if (surahMeta) {
+                        surahContent.push(
+                            <div key={`surah-header-${surahNum}`} className="text-center pt-10 pb-6 px-6 sm:px-12">
+                                <p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{surahMeta.name}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{surahMeta.englishName} · {surahMeta.transliteratedName}</p>
+                                <hr className="w-48 h-1 mx-auto my-6 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
+                            </div>
+                        );
+                    }
+                }
+                currentRenderedSurah = surahNum;
             }
             
             const verseKey = `${surahNum}:${ayahNum}`;
@@ -2522,18 +2586,45 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 )}
                             </div>
                         </div>
-                        {/* ── Middle: surah pills — only this section scrolls ── */}
-                        <div className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
-                            <div className="flex items-center gap-2 pb-0.5">
-                                {surahStatuses.map(({ id, transliteratedName, status }) => (
-                                    <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
-                                        className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status)}`}>
-                                        <span className="font-mono text-xs">{id}</span>
-                                        <div className={`w-px h-4 ${getDividerClass(id, status)}`} />
-                                        <span className="tracking-wide">{transliteratedName}</span>
-                                    </button>
-                                ))}
+                        {/* ── Middle: surah pills — first & last pinned, middle scrolls ── */}
+                        <div className="flex-1 flex items-center gap-2 min-w-0 overflow-hidden">
+                            {/* First surah (Al-Fatihah) — pinned */}
+                            {surahStatuses[0] && (
+                                <button
+                                    id={`surah-nav-${surahStatuses[0].id}`}
+                                    onClick={() => handleSurahSelection(surahStatuses[0].id)}
+                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status)}`}>
+                                    <span className="font-mono text-xs">{surahStatuses[0].id}</span>
+                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status)}`} />
+                                    <span className="tracking-wide">{surahStatuses[0].transliteratedName}</span>
+                                </button>
+                            )}
+                            <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
+                            {/* Surahs 2–113 — scrollable */}
+                            <div className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
+                                <div className="flex items-center gap-2 pb-0.5">
+                                    {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status }) => (
+                                        <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
+                                            className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status)}`}>
+                                            <span className="font-mono text-xs">{id}</span>
+                                            <div className={`w-px h-4 ${getDividerClass(id, status)}`} />
+                                            <span className="tracking-wide">{transliteratedName}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+                            <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
+                            {/* Last surah (An-Nas) — pinned */}
+                            {surahStatuses.length > 1 && surahStatuses[surahStatuses.length - 1] && (
+                                <button
+                                    id={`surah-nav-${surahStatuses[surahStatuses.length - 1].id}`}
+                                    onClick={() => handleSurahSelection(surahStatuses[surahStatuses.length - 1].id)}
+                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status)}`}>
+                                    <span className="font-mono text-xs">{surahStatuses[surahStatuses.length - 1].id}</span>
+                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status)}`} />
+                                    <span className="tracking-wide">{surahStatuses[surahStatuses.length - 1].transliteratedName}</span>
+                                </button>
+                            )}
                         </div>
 
                         {/* ── Right: tool controls (always visible) ── */}
@@ -2571,7 +2662,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         </div>
                     </div>
                 </div>
-                <div dir="rtl" className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
+                <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
                     <div>
                         <div className="text-center pt-12 pb-8 px-6 sm:px-12"><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></div>
                         {showTranslation && isTranslationLoading && <div className="text-center my-4 p-3 bg-slate-100 dark:bg-gray-700 rounded-lg mx-6 sm:mx-12"><p className="text-slate-600 dark:text-slate-300 animate-pulse font-semibold">{t('liveSession.loadingTranslation')}</p></div>}
