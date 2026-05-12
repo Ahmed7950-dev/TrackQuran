@@ -200,3 +200,44 @@ export interface ProgressRange {
   onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
 }
+
+// ── Arabic feature types ─────────────────────────────────────────────────────
+
+export interface WeeklySlot {
+  day: number;       // 0 = Monday … 5 = Saturday
+  startHour: number; // 12–22  (12:00 PM → 11:00 PM)
+  endHour: number;   // startHour + 1
+}
+
+export type ArabicDialect = 'msa' | 'levantine' | 'quranic';
+
+export interface ArabicStudent {
+  id: string;
+  teacherId: string;
+  name: string;
+  dob?: string;                    // ISO date
+  forSelf: boolean;
+  forWhom?: string;                // e.g. "son", "wife"
+  arabicDialects: ArabicDialect[];
+  whatsapp?: string;
+  arabicLevel: string;
+  learningPurposes: string[];
+  topicsToFocus: string[];
+  nationality?: string;
+  timezone: string;                // IANA tz id, e.g. "America/New_York"
+  availability: WeeklySlot[];
+  goalDeadline?: string;           // ISO date
+  completedLessonIds: string[];    // arabic lesson ids
+  createdAt: string;
+}
+
+export interface ArabicLesson {
+  id: string;
+  title: string;
+  description?: string;
+  orderIndex: number;
+  pdfUrl?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview } from './types';
+import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup } from './services/dataService';
+import { getArabicStudents, saveArabicStudent, deleteArabicStudent } from './services/arabicService';
 import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
 import { useI18n } from './context/I18nProvider';
 import Footer from './components/Footer';
@@ -21,6 +22,9 @@ import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
 import TajweedPage from './components/TajweedPage';
+import SubjectSelectionPage from './components/SubjectSelectionPage';
+import ArabicDashboard from './components/ArabicDashboard';
+import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -108,7 +112,40 @@ const App: React.FC = () => {
   const { currentTheme, toggleTheme } = useTheme();
   const { currentFont, setFont, fonts } = useQuranicFont();
   const { t, language } = useI18n();
-  
+
+  // ── Subject mode: 'quran' | 'arabic' | null (null = show selector) ─────────
+  const [subjectMode, setSubjectMode] = useState<'quran' | 'arabic' | null>(() => {
+    const saved = localStorage.getItem('subjectMode');
+    if (saved === 'quran' || saved === 'arabic') return saved;
+    return null;
+  });
+
+  const handleSelectSubject = (mode: 'quran' | 'arabic') => {
+    setSubjectMode(mode);
+    localStorage.setItem('subjectMode', mode);
+  };
+
+  // ── Arabic students ───────────────────────────────────────────────────────
+  const [arabicStudents, setArabicStudents] = useState<ArabicStudent[]>([]);
+  const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(null);
+
+  const handleAddArabicStudent = (student: ArabicStudent) => {
+    setArabicStudents(prev => {
+      const idx = prev.findIndex(s => s.id === student.id);
+      return idx >= 0 ? prev.map(s => s.id === student.id ? student : s) : [...prev, student];
+    });
+    if (currentUser?.role === 'teacher') saveArabicStudent(currentUser.id, student);
+  };
+  const handleUpdateArabicStudent = (student: ArabicStudent) => {
+    setArabicStudents(prev => prev.map(s => s.id === student.id ? student : s));
+    if (currentUser?.role === 'teacher') saveArabicStudent(currentUser.id, student);
+  };
+  const handleDeleteArabicStudent = (studentId: string) => {
+    setArabicStudents(prev => prev.filter(s => s.id !== studentId));
+    setSelectedArabicStudentId(null);
+    if (currentUser?.role === 'teacher') deleteArabicStudent(currentUser.id, studentId);
+  };
+
   const [isAddStudentModalOpen,    setIsAddStudentModalOpen]    = useState(false);
   const [isUserMenuOpen,           setIsUserMenuOpen]           = useState(false);
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
@@ -151,16 +188,18 @@ const App: React.FC = () => {
   // State for live session tracking
   const [progress, setProgress] = useState<{[key: string]: Progress}>({});
 
-  // Load data from Supabase when the logged-in teacher changes
+  // Load data from Supabase / localStorage when the logged-in teacher changes
   useEffect(() => {
     if (currentUser?.role !== 'teacher') {
       setStudents([]);
       setTajweedRules([]);
+      setArabicStudents([]);
       return;
     }
     const teacherId = currentUser.id;
     getStudents(teacherId).then(setStudents);
     getTajweedRules(teacherId).then(setTajweedRules);
+    setArabicStudents(getArabicStudents(teacherId));
   }, [currentUser]);
   
   // Initialize progress from recitation achievements
@@ -580,7 +619,72 @@ const App: React.FC = () => {
     return <AdminPanel currentUser={currentUser} onLogout={logout} />;
   }
 
-  // Teacher View
+  // ── Subject selection (shown once after login until user picks a mode) ─────
+  if (subjectMode === null) {
+    return <SubjectSelectionPage onSelect={handleSelectSubject} />;
+  }
+
+  // ── Arabic section ────────────────────────────────────────────────────────
+  if (subjectMode === 'arabic') {
+    const selectedArabicStudent = arabicStudents.find(s => s.id === selectedArabicStudentId) ?? null;
+    return (
+      <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
+        {/* Arabic header */}
+        <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
+            <button onClick={() => { setSelectedArabicStudentId(null); }} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to Arabic dashboard">
+              <Logo />
+            </button>
+            <span className="hidden sm:block text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full" style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</span>
+            <div className="flex-1" />
+            {/* Switch to Quran */}
+            <button
+              onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); }}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-gray-700 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+              </svg>
+              <span className="hidden sm:inline">Switch to Quran</span>
+            </button>
+            <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+              {currentTheme === 'dark' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+              ) : currentTheme === 'reading' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25c0 5.385 4.365 9.75 9.75 9.75 2.572 0 4.921-.994 6.697-2.648Z" /></svg>
+              )}
+            </button>
+            <button onClick={logout} className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
+            </button>
+          </div>
+        </header>
+        <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
+          {selectedArabicStudent ? (
+            <ArabicStudentDetailPage
+              student={selectedArabicStudent}
+              teacherId={currentUser.id}
+              onBack={() => setSelectedArabicStudentId(null)}
+              onUpdateStudent={handleUpdateArabicStudent}
+              onDeleteStudent={handleDeleteArabicStudent}
+            />
+          ) : (
+            <ArabicDashboard
+              teacherId={currentUser.id}
+              students={arabicStudents}
+              onAddStudent={handleAddArabicStudent}
+              onSelectStudent={setSelectedArabicStudentId}
+            />
+          )}
+        </main>
+        <div className="no-print"><Footer /></div>
+      </div>
+    );
+  }
+
+  // Teacher View (Quran)
   const selectedStudent = students.find((s) => s.id === selectedStudentId) || null;
   const sessionStudent = students.find((s) => s.id === sessionStudentId) || null;
   const isDetailedView = !!selectedStudentId || !!sessionStudentId;
@@ -620,6 +724,12 @@ const App: React.FC = () => {
                     onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); }}
                     className={`text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
                 >{t('header.tajweed')}</button>
+                {/* Switch to Arabic */}
+                <button
+                    onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); }}
+                    className="text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+                    style={{ fontFamily: 'Amiri Regular, serif' }}
+                >العربية</button>
             </nav>
             <div className="flex items-center gap-2">
                 {!isDetailedView && (

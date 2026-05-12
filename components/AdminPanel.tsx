@@ -12,6 +12,7 @@ import {
 import { supabase } from '../lib/supabase';
 import Logo from './Logo';
 import TajweedPage from './TajweedPage';
+import ArabicLessonPage from './ArabicLessonPage';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 interface Props { currentUser: TeacherUser; onLogout: () => void; }
 
 const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'support' | 'tajweed'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'support' | 'tajweed' | 'arabic'>('teachers');
 
   // ── Teachers state ────────────────────────────────────────
   const [teachers,        setTeachers]        = useState<TeacherProfile[]>([]);
@@ -183,18 +184,23 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
         </div>
 
         {/* ── Tabs ───────────────────────────────────────────── */}
-        <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm w-fit">
-          {(['teachers', 'support', 'tajweed'] as const).map(tab => (
+        <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm w-fit flex-wrap">
+          {(['teachers', 'support', 'tajweed', 'arabic'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`relative px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 activeTab === tab
-                  ? 'bg-teal-600 text-white shadow'
+                  ? tab === 'arabic'
+                    ? 'bg-amber-500 text-white shadow'
+                    : 'bg-teal-600 text-white shadow'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'
               }`}
             >
-              {tab === 'teachers' ? 'Teachers' : tab === 'support' ? 'Support Inbox' : 'Tajweed Lessons'}
+              {tab === 'teachers' ? 'Teachers'
+                : tab === 'support' ? 'Support Inbox'
+                : tab === 'tajweed' ? 'Tajweed Lessons'
+                : 'Arabic Lessons'}
               {tab === 'support' && openCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">
                   {openCount}
@@ -489,6 +495,13 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
         {activeTab === 'tajweed' && (
           <div className="flex-1">
             <TajweedPage students={[]} />
+          </div>
+        )}
+
+        {/* ── Arabic Lessons Tab ─────────────────────────────── */}
+        {activeTab === 'arabic' && (
+          <div className="flex-1">
+            <ArabicLessonPage students={[]} teacherId={currentUser.id} />
           </div>
         )}
 
