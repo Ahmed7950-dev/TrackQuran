@@ -125,15 +125,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         const lastAchievement = student.recitationAchievements.length > 0 ? [...student.recitationAchievements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
         const lastAchievementText = lastAchievement ? `${quranMetadata.find(s => s.number === lastAchievement.endSurah)?.name} ${lastAchievement.endAyah}` : 'N/A';
 
-        // FIX: Add explicit type to fix type inference issue with generic function.
-        const tafsirReviews: TafsirReview[] = filterByTimePeriod(student.tafsirReviews, timePeriod);
-        const tafsirBySurah = tafsirReviews.reduce((acc, review) => {
-            if (!acc[review.surah]) { acc[review.surah] = []; }
-            acc[review.surah].push(review.reviewQuality);
-            return acc;
-        }, {} as Record<number, number[]>);
-
-        return { totalPages: recitedPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText, tafsirBySurah };
+        return { totalPages: recitedPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText };
     }, [student, timePeriod, quranMetadata, recitedPages]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
@@ -165,13 +157,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             allReviews.push({ surah: review.surah, quality: review.reviewQuality, date: review.date });
         });
 
-        const tafsirBySurah = allReviews.reduce((acc, review) => {
-            if (!acc[review.surah]) { acc[review.surah] = []; }
-            acc[review.surah].push(review.quality);
-            return acc;
-        }, {} as Record<number, number[]>);
-
-        return { totalPages: memorizedPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText, tafsirBySurah };
+        return { totalPages: memorizedPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText };
     }, [student, timePeriod, quranMetadata, memorizedPages]);
 
     const getSurahQualityMap = (achievements: RecitationAchievement[] | MemorizationAchievement[]): Record<number, number> => {
@@ -195,6 +181,33 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const recitedSurahsQuality = useMemo(() => getSurahQualityMap(student.recitationAchievements), [student.recitationAchievements]);
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const memorizedSurahsQuality = useMemo(() => getSurahQualityMap(student.memorizationAchievements), [student.memorizationAchievements]);
+
+    // Per-surah progress table: reading × hifz × tafseer counts
+    const surahProgressTable = useMemo(() => {
+        const map: Record<number, { reading: number; hifz: number; tafseer: number }> = {};
+        const ensure = (s: number) => { if (!map[s]) map[s] = { reading: 0, hifz: 0, tafseer: 0 }; };
+
+        // Reading (all logs, including revisions)
+        (filterByTimePeriod(student.recitationAchievements, timePeriod) as RecitationAchievement[]).forEach(ach => {
+            for (let s = ach.startSurah; s <= ach.endSurah; s++) { ensure(s); map[s].reading++; }
+        });
+
+        // Hifz (all logs, including revisions)
+        (filterByTimePeriod(student.memorizationAchievements, timePeriod) as MemorizationAchievement[]).forEach(ach => {
+            for (let s = ach.startSurah; s <= ach.endSurah; s++) { ensure(s); map[s].hifz++; }
+        });
+
+        // Tafseer — supports both old single-surah format and new verse-range format
+        (filterByTimePeriod(student.tafsirReviews, timePeriod) as TafsirReview[]).forEach(r => {
+            const start = r.startSurah ?? r.surah;
+            const end   = r.endSurah   ?? r.surah;
+            for (let s = start; s <= end; s++) { ensure(s); map[s].tafseer++; }
+        });
+
+        return Object.entries(map)
+            .map(([surahNum, counts]) => ({ surahNum: +surahNum, ...counts }))
+            .sort((a, b) => a.surahNum - b.surahNum);
+    }, [student, timePeriod]);
 
     const handleAddAchievement = (achievementData: (Omit<RecitationAchievement, 'id' | 'pagesCompleted' | 'versesCompleted'> & { type: 'reading' }) | (Omit<MemorizationAchievement, 'id' | 'pagesCompleted' | 'versesCompleted'> & { type: 'memorization' })) => {
         const achievementDate = new Date(achievementData.date);
@@ -382,29 +395,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         </div>
     );
     
-    const TafsirSection = ({ tafsirBySurah }: { tafsirBySurah: Record<number, number[]> }) => (
-        <>
-            {Object.keys(tafsirBySurah).length > 0 ? (
-                <div className="space-y-4 max-h-60 overflow-y-auto pe-2">
-                    {Object.entries(tafsirBySurah).map(([surahNum, qualities]) => {
-                        const surah = quranMetadata.find(s => s.number === +surahNum); if (!surah) return null;
-                        const avgQuality = qualities.reduce((a, b) => a + b, 0) / qualities.length;
-                        const getQualityColor = (q: number) => { if (q >= 8) return 'bg-green-500'; if (q >= 5) return 'bg-yellow-500'; return 'bg-red-500'; };
-                        return (
-                            <div key={surahNum}>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                    <h4 className="font-bold text-slate-800 dark:text-slate-200">{surah.transliteratedName}</h4>
-                                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium bg-slate-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">{t('studentDetail.reviewsCount', { count: qualities.length })}</span>
-                                    <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">{t('studentDetail.avgQuality', { quality: avgQuality.toFixed(1) })}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-2 mt-2">{qualities.map((quality, index) => (<div key={index} title={`Review ${index + 1}: ${quality}/10`} className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm ${getQualityColor(quality)}`}>{quality}</div>))}</div>
-                            </div>
-                        )
-                    })}
-                </div>
-            ) : <p className="text-slate-500 dark:text-slate-400 italic text-sm">{t('studentDetail.noReviews')}</p>}
-        </>
-    );
 
 
     return (
@@ -588,15 +578,54 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                             <p className="text-slate-500 dark:text-slate-400 italic text-sm">No tajweed lessons completed yet.</p>
                         )}
                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                            <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.tafsirReviews')}</h3>
-                             <TafsirSection tafsirBySurah={readingData.tafsirBySurah} /> 
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                            <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.memorizationRecall')}</h3>
-                            <TafsirSection tafsirBySurah={memorizationData.tafsirBySurah} />
-                        </div>
+                    {/* ── Surah progress table ── */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
+                        <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3">Surah Progress</h3>
+                        {surahProgressTable.length === 0 ? (
+                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">No progress logged yet.</p>
+                        ) : (
+                            <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="sticky top-0 bg-white dark:bg-gray-800">
+                                        <tr className="border-b border-slate-200 dark:border-gray-700">
+                                            <th className="text-left py-2 pr-4 font-semibold text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Surah</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-teal-600 dark:text-teal-400 text-xs uppercase tracking-wide">📖 Reading</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-sky-600 dark:text-sky-400 text-xs uppercase tracking-wide">🧠 Hifz</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wide">📚 Tafseer</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-gray-700/60">
+                                        {surahProgressTable.map(row => {
+                                            const surah = quranMetadata.find(s => s.number === row.surahNum);
+                                            if (!surah) return null;
+                                            return (
+                                                <tr key={row.surahNum} className="hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors">
+                                                    <td className="py-2 pr-4 font-medium text-slate-700 dark:text-slate-200">
+                                                        <span className="text-xs text-slate-400 dark:text-slate-500 mr-1.5">{row.surahNum}.</span>
+                                                        {surah.transliteratedName}
+                                                    </td>
+                                                    <td className="text-center py-2 px-3">
+                                                        {row.reading > 0
+                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-bold text-xs">{row.reading}</span>
+                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                    </td>
+                                                    <td className="text-center py-2 px-3">
+                                                        {row.hifz > 0
+                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-bold text-xs">{row.hifz}</span>
+                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                    </td>
+                                                    <td className="text-center py-2 px-3">
+                                                        {row.tafseer > 0
+                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-xs">{row.tafseer}</span>
+                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="space-y-6"><Calendar /></div>
