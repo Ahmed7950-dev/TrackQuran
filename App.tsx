@@ -440,6 +440,16 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
+  const handleRemoveTafseerRange = (studentId: string, reviewId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    const updatedStudent = {
+      ...student,
+      tafsirReviews: (student.tafsirReviews || []).filter(r => r.id !== reviewId),
+    };
+    handleUpdateStudent(updatedStudent);
+  };
+
   const handleBack = () => {
     if (sessionStudentId) {
       setSessionStudentId(null);
@@ -731,6 +741,7 @@ const App: React.FC = () => {
             onLogMemorizationRange={handleLogMemorizationRange}
             onRemoveMemorizationAchievement={handleRemoveMemorizationAchievement}
             onLogTafseerRange={handleLogTafseerRange}
+            onRemoveTafseerRange={handleRemoveTafseerRange}
             onGoBack={() => setSessionStudentId(null)}
           />
         ) : selectedStudent ? (

@@ -27,6 +27,7 @@ interface StudentProgressPageProps {
   onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
+  onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
   onGoBack: () => void;
 }
 
@@ -1244,7 +1245,7 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onGoBack }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
@@ -1955,6 +1956,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return { isLogged: false, achievementId: null };
     }, []);
 
+    // Returns the id of the first tafseer review covering this verse, or null
+    const getTafseerRangeInfo = useCallback((surahNum: number, ayahNum: number): { isLogged: boolean; reviewId: string | null } => {
+        const v = { surah: surahNum, ayah: ayahNum };
+        for (const r of (student.tafsirReviews || [])) {
+            const startSurah = r.startSurah ?? r.surah;
+            const startAyah  = r.startAyah  ?? 1;
+            const endSurah   = r.endSurah   ?? r.surah;
+            const endAyah    = r.endAyah    ?? (QURAN_METADATA.find(m => m.number === endSurah)?.numberOfAyahs ?? 1);
+            if (isVerseAfterOrEqual(v, { surah: startSurah, ayah: startAyah }) && isVerseAfterOrEqual({ surah: endSurah, ayah: endAyah }, v)) {
+                return { isLogged: true, reviewId: r.id };
+            }
+        }
+        return { isLogged: false, reviewId: null };
+    }, [student.tafsirReviews]);
+
     
     // ── Range-log helpers ─────────────────────────────────────────────────────
     // Check if a surah has any non-revision reading/hifz logs
@@ -2035,8 +2051,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const currentVerse = { surah: surahNum, ayah: ayahNum };
 
             // ── Long-press on a LOGGED verse → offer removal ──────────────
-            const readInfo = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision));
-            const memInfo  = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision));
+            // Check ALL achievements (including revisions) so they can all be deleted
+            const readInfo    = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements);
+            const memInfo     = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements);
+            const tafseerInfo = getTafseerRangeInfo(surahNum, ayahNum);
 
             if (readInfo.isLogged && readInfo.achievementId) {
                 const ach = recitationAchievements.find(a => a.id === readInfo.achievementId);
@@ -2058,6 +2076,22 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         title: 'Remove Hifz Log',
                         message: `Remove hifz log for ${QURAN_METADATA.find(s => s.number === ach.startSurah)?.transliteratedName} ${ach.startAyah} – ${QURAN_METADATA.find(s => s.number === ach.endSurah)?.transliteratedName} ${ach.endAyah}?`,
                         onConfirm: () => { onRemoveMemorizationAchievement(student.id, memInfo.achievementId!); showToast(t('liveSession.memorizationRangeRemoved')); },
+                    });
+                    return;
+                }
+            }
+            if (tafseerInfo.isLogged && tafseerInfo.reviewId) {
+                const rev = (student.tafsirReviews || []).find(r => r.id === tafseerInfo.reviewId);
+                if (rev) {
+                    const startSurah = rev.startSurah ?? rev.surah;
+                    const endSurah   = rev.endSurah   ?? rev.surah;
+                    const startAyah  = rev.startAyah  ?? 1;
+                    const endAyah    = rev.endAyah    ?? (QURAN_METADATA.find(m => m.number === endSurah)?.numberOfAyahs ?? '?');
+                    setConfirmModalState({
+                        isOpen: true,
+                        title: 'Remove Tafseer Log',
+                        message: `Remove tafseer log for ${QURAN_METADATA.find(s => s.number === startSurah)?.transliteratedName} ${startAyah} – ${QURAN_METADATA.find(s => s.number === endSurah)?.transliteratedName} ${endAyah}?`,
+                        onConfirm: () => { onRemoveTafseerRange(student.id, tafseerInfo.reviewId!); showToast('Tafseer log removed'); },
                     });
                     return;
                 }
