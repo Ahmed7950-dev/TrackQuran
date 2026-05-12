@@ -2203,13 +2203,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
 
     const VerseMarker: React.FC<{ number: number; surah: number; isSelectedStart: boolean }> = ({ number, surah, isSelectedStart }) => {
-        const isRead     = getVerseRangeInfo(surah, number, recitationAchievements.filter(a => !a.isRevision)).isLogged;
-        const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements.filter(a => !a.isRevision)).isLogged;
+        // Include ALL logs (first-time + revisions) so the table and live page stay in sync
+        const isRead      = getVerseRangeInfo(surah, number, recitationAchievements).isLogged;
+        const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements).isLogged;
+        const isTafseer   = getTafseerRangeInfo(surah, number).isLogged;
         const isLongPressStart = longPressStart?.surah === surah && longPressStart?.ayah === number;
         const glowClass = isSelectedStart ? 'ring-2 ring-offset-4 ring-teal-500 dark:ring-orange-500 animate-pulse' : '';
         const longPressGlowClass = isLongPressStart ? 'animate-glow' : '';
-        // sky = memorized (overrides), teal = read only
-        const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : 'currentColor';
+        // sky = memorized (highest priority), teal = read, amber = tafseer only
+        const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : isTafseer ? '#fde68a' : 'currentColor';
 
         return (
             <span
@@ -2260,10 +2262,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
             
             const verseKey = `${surahNum}:${ayahNum}`;
-            // isRead = covered by at least one non-revision recitation log
-            const isRead = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements.filter(a => !a.isRevision)).isLogged;
-            // isMemorized = covered by at least one non-revision memorization log; sky overrides teal
-            const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements.filter(a => !a.isRevision)).isLogged;
+            // Include ALL logs (first-time + revisions + tafseer) so highlighting matches the progress table
+            const isRead      = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements).isLogged;
+            const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements).isLogged;
+            const isTafseer   = getTafseerRangeInfo(surahNum, ayahNum).isLogged;
             const isVerseHidden = hiddenRanges.some(range => isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, range.start) && isVerseAfterOrEqual(range.end, { surah: surahNum, ayah: ayahNum }));
 
             const verseWords = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ').map((word, wordIndex, wordsArray) => {
@@ -2319,7 +2321,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const verseTextNode = (
                 <span
                     key={`text-${verse.verse_key}`}
-                    className={`px-1 py-1 rounded-md transition-opacity duration-300 ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : (isRead ? 'bg-teal-50 dark:bg-teal-900/30' : '')} ${isVerseHidden ? 'opacity-0' : 'opacity-100'}`}
+                    className={`px-1 py-1 rounded-md transition-opacity duration-300 ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : isRead ? 'bg-teal-50 dark:bg-teal-900/30' : isTafseer ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isVerseHidden ? 'opacity-0' : 'opacity-100'}`}
                     onClick={(e) => handleVerseContainerClick(e, surahNum, ayahNum)}
                     onMouseEnter={() => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; }}
                     onMouseLeave={() => { hoveredVerse.current = null; }}
