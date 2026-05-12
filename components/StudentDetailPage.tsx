@@ -5,7 +5,6 @@ import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
 import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah } from '../services/dataService';
 import { getStudentRankAndProgress } from '../services/rankingService';
-import AddTajweedAchievementModal from './AddTajweedAchievementModal';
 import AddTafsirAchievementModal from './AddTafsirAchievementModal';
 import EditStudentDataModal from './EditStudentModal';
 import ExportReportModal from './ExportReportModal';
@@ -54,7 +53,7 @@ const StatCard: React.FC<{ title: string; value: string | number; subtext?: stri
     </div>
 );
 
-const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, onUpdateStudent, onDeleteStudent, onStartSession, quranMetadata, tajweedRules, onUpdateTajweedRules, onReviewMistakes }) => {
+const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, onUpdateStudent, onDeleteStudent, onStartSession, quranMetadata, onReviewMistakes }) => {
     // Fix: Replaced 'a.useState' with 'useState'.
     const [timePeriod, setTimePeriod] = useState<TimePeriod>(TimePeriod.AllTime);
     // Fix: Replaced 'a.useState' with 'useState'.
@@ -182,32 +181,74 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const memorizedSurahsQuality = useMemo(() => getSurahQualityMap(student.memorizationAchievements), [student.memorizationAchievements]);
 
-    // Per-surah progress table: reading × hifz × tafseer counts
+    // Per-surah progress table: full-surah completion counts + partial verse ranges
     const surahProgressTable = useMemo(() => {
-        const map: Record<number, { reading: number; hifz: number; tafseer: number }> = {};
-        const ensure = (s: number) => { if (!map[s]) map[s] = { reading: 0, hifz: 0, tafseer: 0 }; };
+        type TypeData = { fullCount: number; partialRanges: string[] };
+        const map: Record<number, { reading: TypeData; hifz: TypeData; tafseer: TypeData }> = {};
+        const ensure = (s: number) => {
+            if (!map[s]) map[s] = {
+                reading:  { fullCount: 0, partialRanges: [] },
+                hifz:     { fullCount: 0, partialRanges: [] },
+                tafseer:  { fullCount: 0, partialRanges: [] },
+            };
+        };
 
-        // Reading (all logs, including revisions)
+        // Returns true when surah `s` is fully covered by this achievement
+        const isFull = (s: number, ach: { startSurah: number; startAyah: number; endSurah: number; endAyah: number }) => {
+            const meta = quranMetadata.find(m => m.number === s);
+            if (!meta) return false;
+            const last = meta.numberOfAyahs;
+            const startOk = s === ach.startSurah ? ach.startAyah === 1 : true;
+            const endOk   = s === ach.endSurah   ? ach.endAyah   === last : true;
+            return startOk && endOk;
+        };
+
+        // Returns "from–to" string when coverage is partial; null when the whole surah is covered
+        const partialRange = (s: number, ach: { startSurah: number; startAyah: number; endSurah: number; endAyah: number }): string | null => {
+            const meta = quranMetadata.find(m => m.number === s);
+            if (!meta) return null;
+            const last  = meta.numberOfAyahs;
+            const from  = s === ach.startSurah ? ach.startAyah : 1;
+            const to    = s === ach.endSurah   ? ach.endAyah   : last;
+            return (from === 1 && to === last) ? null : `${from}–${to}`;
+        };
+
+        // Reading
         (filterByTimePeriod(student.recitationAchievements, timePeriod) as RecitationAchievement[]).forEach(ach => {
-            for (let s = ach.startSurah; s <= ach.endSurah; s++) { ensure(s); map[s].reading++; }
+            for (let s = ach.startSurah; s <= ach.endSurah; s++) {
+                ensure(s);
+                if (isFull(s, ach)) { map[s].reading.fullCount++; }
+                else { const r = partialRange(s, ach); if (r) map[s].reading.partialRanges.push(r); }
+            }
         });
 
-        // Hifz (all logs, including revisions)
+        // Hifz
         (filterByTimePeriod(student.memorizationAchievements, timePeriod) as MemorizationAchievement[]).forEach(ach => {
-            for (let s = ach.startSurah; s <= ach.endSurah; s++) { ensure(s); map[s].hifz++; }
+            for (let s = ach.startSurah; s <= ach.endSurah; s++) {
+                ensure(s);
+                if (isFull(s, ach)) { map[s].hifz.fullCount++; }
+                else { const r = partialRange(s, ach); if (r) map[s].hifz.partialRanges.push(r); }
+            }
         });
 
-        // Tafseer — supports both old single-surah format and new verse-range format
-        (filterByTimePeriod(student.tafsirReviews, timePeriod) as TafsirReview[]).forEach(r => {
-            const start = r.startSurah ?? r.surah;
-            const end   = r.endSurah   ?? r.surah;
-            for (let s = start; s <= end; s++) { ensure(s); map[s].tafseer++; }
+        // Tafseer — old single-surah and new verse-range format
+        (filterByTimePeriod(student.tafsirReviews, timePeriod) as TafsirReview[]).forEach(rev => {
+            const startSurah = rev.startSurah ?? rev.surah;
+            const endSurah   = rev.endSurah   ?? rev.surah;
+            const startAyah  = rev.startAyah  ?? 1;
+            const endAyah    = rev.endAyah    ?? (quranMetadata.find(m => m.number === endSurah)?.numberOfAyahs ?? 1);
+            const achLike    = { startSurah, startAyah, endSurah, endAyah };
+            for (let s = startSurah; s <= endSurah; s++) {
+                ensure(s);
+                if (isFull(s, achLike)) { map[s].tafseer.fullCount++; }
+                else { const r = partialRange(s, achLike); if (r) map[s].tafseer.partialRanges.push(r); }
+            }
         });
 
         return Object.entries(map)
-            .map(([surahNum, counts]) => ({ surahNum: +surahNum, ...counts }))
+            .map(([surahNum, data]) => ({ surahNum: +surahNum, ...data }))
             .sort((a, b) => a.surahNum - b.surahNum);
-    }, [student, timePeriod]);
+    }, [student, timePeriod, quranMetadata]);
 
     const handleAddAchievement = (achievementData: (Omit<RecitationAchievement, 'id' | 'pagesCompleted' | 'versesCompleted'> & { type: 'reading' }) | (Omit<MemorizationAchievement, 'id' | 'pagesCompleted' | 'versesCompleted'> & { type: 'memorization' })) => {
         const achievementDate = new Date(achievementData.date);
@@ -285,10 +326,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         setActiveModal(null);
     };
 
-    const handleAddTajweed = (rules: string[]) => {
-        onUpdateStudent({ ...student, masteredTajweedRules: [...new Set([...student.masteredTajweedRules, ...rules])] });
-        setActiveModal(null);
-    };
     
     const handleAddTafsirReviews = (reviews: Array<{ surah: number, quality: number }>) => {
         const newTafsirReviews: TafsirReview[] = reviews.map(r => ({ id: `tafsir-${Date.now()}-${r.surah}`, date: new Date().toISOString(), surah: r.surah, reviewQuality: r.quality }));
@@ -430,17 +467,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         {t('studentDetail.readingHifdh')}
                     </button>
 
-                    {/* Tajweed */}
-                    <button
-                        onClick={() => setActiveModal('tajweed')}
-                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/25 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all font-medium text-sm"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
-                        </svg>
-                        {t('studentDetail.tajweed')}
-                    </button>
-
                     {/* Tafsir */}
                     <button
                         onClick={() => setActiveModal('tafsir')}
@@ -545,13 +571,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                         <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.masteredTajweed')}</h3>
-                         {student.masteredTajweedRules.length > 0 ? (
-                            <ul className="space-y-3">{student.masteredTajweedRules.map(rule => (<li key={rule} className="flex items-center"><div className="bg-green-100 dark:bg-green-900/50 rounded-full p-1 me-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600 dark:text-green-400"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg></div><span className="text-slate-700 dark:text-slate-300 text-sm">{rule}</span></li>))}</ul>
-                         ) : <p className="text-slate-500 dark:text-slate-400 italic text-sm">{t('studentDetail.noRulesMastered')}</p>}
-                    </div>
-
                     {/* Completed Tajweed Lessons */}
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                         <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
@@ -598,6 +617,28 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                         {surahProgressTable.map(row => {
                                             const surah = quranMetadata.find(s => s.number === row.surahNum);
                                             if (!surah) return null;
+
+                                            const renderCell = (data: { fullCount: number; partialRanges: string[] }, colorFull: string, colorPartial: string) => {
+                                                const hasPartial = data.partialRanges.length > 0;
+                                                if (data.fullCount === 0 && !hasPartial) {
+                                                    return <span className="text-slate-300 dark:text-slate-600 text-base">—</span>;
+                                                }
+                                                return (
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        {data.fullCount > 0 && (
+                                                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-bold text-xs ${colorFull}`}>
+                                                                {data.fullCount}
+                                                            </span>
+                                                        )}
+                                                        {hasPartial && (
+                                                            <span className={`text-[10px] font-medium leading-tight ${colorPartial}`}>
+                                                                {data.partialRanges.join(', ')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            };
+
                                             return (
                                                 <tr key={row.surahNum} className="hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors">
                                                     <td className="py-2 pr-4 font-medium text-slate-700 dark:text-slate-200">
@@ -605,19 +646,13 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                                         {surah.transliteratedName}
                                                     </td>
                                                     <td className="text-center py-2 px-3">
-                                                        {row.reading > 0
-                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-bold text-xs">{row.reading}</span>
-                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                        {renderCell(row.reading, 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300', 'text-teal-600 dark:text-teal-400')}
                                                     </td>
                                                     <td className="text-center py-2 px-3">
-                                                        {row.hifz > 0
-                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 font-bold text-xs">{row.hifz}</span>
-                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                        {renderCell(row.hifz, 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300', 'text-sky-600 dark:text-sky-400')}
                                                     </td>
                                                     <td className="text-center py-2 px-3">
-                                                        {row.tafseer > 0
-                                                            ? <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-bold text-xs">{row.tafseer}</span>
-                                                            : <span className="text-slate-300 dark:text-slate-600 text-base">—</span>}
+                                                        {renderCell(row.tafseer, 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300', 'text-amber-600 dark:text-amber-400')}
                                                     </td>
                                                 </tr>
                                             );
@@ -632,7 +667,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             </div>
 
             <AddRecitationAchievementModal isOpen={activeModal === 'recitation'} onClose={() => setActiveModal(null)} onAddAchievement={handleAddAchievement} quranMetadata={quranMetadata} />
-            <AddTajweedAchievementModal isOpen={activeModal === 'tajweed'} onClose={() => setActiveModal(null)} onAddTajweedRules={handleAddTajweed} studentMasteredRules={student.masteredTajweedRules} allTajweedRules={tajweedRules} onUpdateTajweedRules={onUpdateTajweedRules} />
             <AddTafsirAchievementModal
                 isOpen={activeModal === 'tafsir'}
                 onClose={() => setActiveModal(null)}
