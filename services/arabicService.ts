@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 import {
   ArabicStudent, ArabicLesson, ArabicDialect, WeeklySlot,
   HomeworkQuestion, HomeworkQuestionType,
-  VocabWord, VocabMode, VocabAttempt,
+  VocabWord, VocabMode, VocabAttempt, VocabMistakeDetail,
 } from '../types';
 
 const PDF_BUCKET = 'tajweed-assets';
@@ -487,4 +487,96 @@ export async function setArabicLessonCompletion(
     .eq('id', studentId)
     .eq('teacher_id', teacherId);
   if (updateError) console.error('setArabicLessonCompletion update:', updateError.message);
+}
+
+// ── All vocab attempts for a student (cross-lesson) ──────────────────────────
+
+export async function getAllVocabAttemptsForStudent(studentId: string): Promise<VocabAttempt[]> {
+  const { data, error } = await supabase
+    .from('arabic_vocab_attempts')
+    .select('*')
+    .eq('student_id', studentId);
+  if (error) { console.error('getAllVocabAttemptsForStudent:', error.message); return []; }
+  return (data ?? []).map(rowToVocabAttempt);
+}
+
+// ── Vocab word counts per lesson (lightweight) ────────────────────────────────
+
+export async function getVocabWordCountsByLesson(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_vocabulary')
+    .select('id, lesson_id');
+  if (error) { console.error('getVocabWordCountsByLesson:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  (data ?? []).forEach((r: any) => {
+    counts[r.lesson_id] = (counts[r.lesson_id] ?? 0) + 1;
+  });
+  return counts;
+}
+
+// ── Vocab mistakes ────────────────────────────────────────────────────────────
+
+export async function getVocabMistakesForStudent(studentId: string): Promise<VocabMistakeDetail[]> {
+  const { data, error } = await supabase
+    .from('arabic_vocab_mistakes')
+    .select('*, word:arabic_lesson_vocabulary(arabic, transliteration, english)')
+    .eq('student_id', studentId)
+    .order('last_missed_at', { ascending: false });
+  if (error) { console.error('getVocabMistakesForStudent:', error.message); return []; }
+  return (data ?? []).map((r: any) => ({
+    id:              r.id,
+    studentId:       r.student_id,
+    wordId:          r.word_id,
+    lessonId:        r.lesson_id,
+    missCount:       r.miss_count,
+    lastMissedAt:    r.last_missed_at,
+    createdAt:       r.created_at,
+    arabic:          r.word?.arabic          ?? '',
+    transliteration: r.word?.transliteration ?? '',
+    english:         r.word?.english         ?? '',
+  }));
+}
+
+export async function saveVocabMistakes(
+  studentId: string,
+  words: Array<{ wordId: string; lessonId: string }>,
+): Promise<void> {
+  if (!words.length) return;
+  const now = new Date().toISOString();
+  await Promise.all(words.map(async ({ wordId, lessonId }) => {
+    const { data: existing } = await supabase
+      .from('arabic_vocab_mistakes')
+      .select('id, miss_count')
+      .eq('student_id', studentId)
+      .eq('word_id', wordId)
+      .maybeSingle();
+    if (existing) {
+      await supabase
+        .from('arabic_vocab_mistakes')
+        .update({ miss_count: (existing as any).miss_count + 1, last_missed_at: now })
+        .eq('id', (existing as any).id);
+    } else {
+      await supabase
+        .from('arabic_vocab_mistakes')
+        .insert({
+          id:             `vm-${Date.now()}-${wordId}`,
+          student_id:     studentId,
+          word_id:        wordId,
+          lesson_id:      lessonId,
+          miss_count:     1,
+          last_missed_at: now,
+          created_at:     now,
+        });
+    }
+  }));
+}
+
+export async function removeVocabMistakes(studentId: string, wordIds: string[]): Promise<void> {
+  if (!wordIds.length) return;
+  const { error } = await supabase
+    .from('arabic_vocab_mistakes')
+    .delete()
+    .eq('student_id', studentId)
+    .in('word_id', wordIds);
+  if (error) console.error('removeVocabMistakes:', error.message);
 }

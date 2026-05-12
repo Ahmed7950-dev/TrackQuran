@@ -4,13 +4,8 @@
 // Pen/eraser strokes live on a canvas underneath.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
-// @ts-ignore
-import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Student, TajweedLesson } from '../types';
 import { markLessonCompleted, unmarkLessonCompleted, getCompletedLessonIds } from '../services/tajweedService';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type DrawTool = 'pen' | 'eraser' | 'text';
@@ -65,14 +60,10 @@ const TajweedLessonViewer: React.FC<Props> = ({
   const _unmark   = onUnmarkCompleted ?? unmarkLessonCompleted;
 
   // ── PDF ───────────────────────────────────────────────────────────────────
-  // We render the PDF via an <iframe> using the browser's native PDF viewer
-  // (PDFium in Chrome / built-in viewers in Firefox & Safari) — this renders
-  // Arabic and other complex scripts correctly, sidestepping PDF.js font issues.
-  // PDF.js is still used just to read the page count for the navigation buttons.
+  // We render the PDF via an <iframe> using the browser's native PDF viewer.
+  // PDF.js is no longer used; the iframe handles loading and display entirely.
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [pageNum,     setPageNum]    = useState(1);
-  const [totalPages,  setTotalPages] = useState(0);
-  const [loadingPdf,  setLoadingPdf] = useState(true);
+  const [loadingPdf,  setLoadingPdf] = useState(!!lesson.pdfUrl);
   const [pdfError,    setPdfError]   = useState('');
 
   // ── Drawing canvas (pen/eraser strokes) ───────────────────────────────────
@@ -101,9 +92,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
   // Drag
   const dragRef = useRef<{ id: string; sx: number; sy: number; ox: number; oy: number } | null>(null);
 
-  // Per-page store & undo
-  const pageStore  = useRef<Map<number, PageData>>(new Map());
-  const prevPage   = useRef(1);
+  // Undo history
   const historyRef = useRef<HistoryEntry[]>([]);
 
   // ── Toolbar state ─────────────────────────────────────────────────────────
@@ -118,33 +107,8 @@ const TajweedLessonViewer: React.FC<Props> = ({
   const [selectedStudentId, setSelectedStudentId] = useState(preSelectedStudentId ?? '');
   const [marking,           setMarking]           = useState(false);
 
-  // ── PDF metadata load (page count only — no canvas rendering) ────────────
-  useEffect(() => {
-    if (!lesson.pdfUrl) { setPdfError('No PDF attached.'); setLoadingPdf(false); return; }
-    setLoadingPdf(true); setPdfError('');
-    (async () => {
-      try {
-        const res = await fetch(lesson.pdfUrl!);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const doc = await pdfjsLib.getDocument({
-          data: await res.arrayBuffer(),
-          cMapUrl: '/pdfjs/cmaps/',
-          cMapPacked: true,
-          standardFontDataUrl: '/pdfjs/standard_fonts/',
-        }).promise;
-        setTotalPages(doc.numPages);
-        setPageNum(1);
-      } catch (e) { console.error(e); setPdfError('Failed to load PDF. Please try again.'); }
-      finally { setLoadingPdf(false); }
-    })();
-  }, [lesson.pdfUrl]);
-
-  // iframe src — includes #page anchor for navigation. The browser's native
-  // PDF viewer interprets the hash and scrolls to the requested page without
-  // reloading the document.
-  const iframeSrc = lesson.pdfUrl
-    ? `${lesson.pdfUrl}#page=${pageNum}&toolbar=0&navpanes=0&zoom=page-fit`
-    : '';
+  // iframe src — the browser's native PDF viewer handles all rendering and navigation
+  const iframeSrc = lesson.pdfUrl ?? '';
 
   // ── Strokes canvas init/resize ────────────────────────────────────────────
   const initCanvas = useCallback(() => {
@@ -163,25 +127,6 @@ const TajweedLessonViewer: React.FC<Props> = ({
     initCanvas();
     const ro = new ResizeObserver(initCanvas); ro.observe(el); return () => ro.disconnect();
   }, [initCanvas]);
-
-  // ── Per-page save/restore ─────────────────────────────────────────────────
-  useEffect(() => {
-    const c = strokesRef.current; if (!c) return;
-    // Save old page
-    pageStore.current.set(prevPage.current, { strokes: c.toDataURL(), texts: [...textsRef.current] });
-    prevPage.current = pageNum;
-    historyRef.current = [];
-    // Restore new page
-    const dpr = window.devicePixelRatio || 1;
-    const ctx = c.getContext('2d')!;
-    ctx.clearRect(0, 0, c.width / dpr, c.height / dpr);
-    setTexts([]); setSelectedId(null); setEditingId(null); setNewPos(null);
-    const saved = pageStore.current.get(pageNum);
-    if (saved) {
-      const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, c.width / dpr, c.height / dpr); img.src = saved.strokes;
-      setTexts(saved.texts);
-    }
-  }, [pageNum, setTexts]);
 
   // ── History ───────────────────────────────────────────────────────────────
   const pushHistory = () => {
@@ -293,15 +238,13 @@ const TajweedLessonViewer: React.FC<Props> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (newPos || editingId) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') setPageNum(n => Math.min(totalPages, n + 1));
-      if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   setPageNum(n => Math.max(1, n - 1));
       if (e.key === 'Escape') { if (selectedId) { setSelectedId(null); return; } onClose(); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !['INPUT','TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) deleteSelected();
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [totalPages, onClose, selectedId, newPos, editingId]);
+  }, [onClose, selectedId, newPos, editingId]);
 
   // ── Completion ────────────────────────────────────────────────────────────
   useEffect(() => { if (selectedStudentId) _fetchIds(selectedStudentId).then(setCompletedIds); }, [selectedStudentId, _fetchIds]);
@@ -328,12 +271,11 @@ const TajweedLessonViewer: React.FC<Props> = ({
         )}
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-white text-sm truncate">{lesson.title}</h2>
-          {totalPages > 0 && <p className="text-xs text-gray-400">Page {pageNum} of {totalPages}</p>}
         </div>
-        {/* Split / Full-screen toggle */}
+        {/* Canvas toggle */}
         <button
           onClick={() => setShowCanvas(v => !v)}
-          title={showCanvas ? 'Hide canvas (full-screen PDF)' : 'Show canvas (split screen)'}
+          title={showCanvas ? 'Hide whiteboard — PDF only' : 'Show whiteboard — split view'}
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors flex-shrink-0"
         >
           {showCanvas ? (
@@ -341,14 +283,14 @@ const TajweedLessonViewer: React.FC<Props> = ({
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
               </svg>
-              <span className="hidden sm:inline">Full Screen</span>
+              <span>PDF Only</span>
             </>
           ) : (
             <>
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
               </svg>
-              <span className="hidden sm:inline">Split Screen</span>
+              <span>Show Whiteboard</span>
             </>
           )}
         </button>
@@ -365,7 +307,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
             className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 disabled:opacity-50 ${isCompleted ? 'bg-green-600 text-white hover:bg-red-600' : 'bg-teal-600 text-white hover:bg-teal-700'}`}>
             {marking ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
               : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
-            <span className="hidden sm:inline">{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
+            <span>{isCompleted ? 'Done ✓' : 'Mark Done'}</span>
           </button>
         )}
       </div>
@@ -525,22 +467,6 @@ const TajweedLessonViewer: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Bottom nav */}
-      {!loadingPdf && !pdfError && totalPages > 0 && (
-        <div className="flex items-center justify-center gap-4 px-4 py-2.5 bg-gray-800 border-t border-gray-700 flex-shrink-0">
-          <button onClick={() => setPageNum(n => Math.max(1, n - 1))} disabled={pageNum <= 1}
-            className="flex items-center gap-2 px-5 py-1.5 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-            Previous
-          </button>
-          <span className="text-gray-300 text-sm tabular-nums min-w-[70px] text-center">{pageNum} / {totalPages}</span>
-          <button onClick={() => setPageNum(n => Math.min(totalPages, n + 1))} disabled={pageNum >= totalPages}
-            className="flex items-center gap-2 px-5 py-1.5 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed">
-            Next
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 };

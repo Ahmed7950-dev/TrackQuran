@@ -278,6 +278,21 @@ export interface VocabWord {
 
 export type VocabMode = 'arabic' | 'transliteration';
 
+// Wrong-word mistake tracking per student per word
+export interface VocabMistakeDetail {
+  id: string;
+  studentId: string;
+  wordId: string;
+  lessonId: string;
+  missCount: number;
+  lastMissedAt: string;
+  createdAt: string;
+  // denormalised word fields (joined from arabic_lesson_vocabulary)
+  arabic: string;
+  transliteration: string;
+  english: string;
+}
+
 // One spaced-repetition slot per (student × word × mode)
 // Attempt numbers 1-5; scheduled_at = when it's due; completed_at = when done.
 export interface VocabAttempt {
