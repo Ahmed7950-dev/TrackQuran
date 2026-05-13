@@ -666,3 +666,38 @@ export async function getVocabRoundsByLesson(studentId: string): Promise<Record<
   });
   return maxRound;
 }
+
+// ── Lesson notes (canvas / rich notes) ───────────────────────────────────────
+// Table: arabic_lesson_notes(lesson_id, author_id, content JSONB, updated_at)
+// author_id = student_id when accessed by a student, teacher_id when the tutor
+// browses without a specific student. Either party can read/write the same row.
+
+export async function getLessonNotes(lessonId: string, authorId: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_notes')
+    .select('content')
+    .eq('lesson_id', lessonId)
+    .eq('author_id', authorId)
+    .single();
+  if (error) return [];
+  return (data as any)?.content ?? [];
+}
+
+export async function saveLessonNotes(lessonId: string, authorId: string, content: any[]): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_notes')
+    .upsert(
+      { lesson_id: lessonId, author_id: authorId, content, updated_at: new Date().toISOString() },
+      { onConflict: 'lesson_id,author_id' },
+    );
+  if (error) console.error('saveLessonNotes:', error.message);
+}
+
+export async function uploadNoteImage(lessonId: string, authorId: string, file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+  const path = `arabic-notes/${lessonId}/${authorId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from(PDF_BUCKET).upload(path, file, { upsert: true });
+  if (error) { console.error('uploadNoteImage:', error.message); return null; }
+  const { data } = supabase.storage.from(PDF_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
