@@ -22,8 +22,8 @@ import {
   updateArabicLesson,
   setArabicLessonCompletion,
   markHomeworkComplete,
+  getWhiteboardData, saveWhiteboardData, uploadNoteImage,
 } from '../services/arabicService';
-import LessonNotesCanvas from './LessonNotesCanvas';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 const SR_DELAYS = [1, 3, 7, 14];
 
-type Tab = 'lesson' | 'homework' | 'vocabulary' | 'video' | 'notes';
+type Tab = 'lesson' | 'homework' | 'vocabulary' | 'video';
 
 const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
   multiple_choice:      'Multiple Choice',
@@ -116,11 +116,10 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
     { id: 'homework',   icon: '📝', label: 'Homework'       },
     { id: 'vocabulary', icon: '🔤', label: 'Vocabulary'     },
     { id: 'video',      icon: '🎬', label: 'Dialogue Video' },
-    { id: 'notes',      icon: '📓', label: 'Notes & Canvas' },
   ];
 
-  // Notes are shared per student — authorId = the student being viewed, or the teacher if no student context
-  const notesAuthorId = preSelectedStudentId ?? teacherId;
+  // Whiteboard is shared per student — authorId = student being viewed, or teacher if no student context
+  const wbAuthorId = preSelectedStudentId ?? teacherId;
 
   const tajweedLesson: TajweedLesson = {
     id: lesson.id, title: lesson.title, description: lesson.description,
@@ -185,6 +184,9 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               onMarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, true); return true; }}
               onUnmarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, false); return true; }}
               onClose={() => {}}
+              onSaveWhiteboard={async (data) => { await saveWhiteboardData(lesson.id, wbAuthorId, data); }}
+              onLoadWhiteboard={async () => getWhiteboardData(lesson.id, wbAuthorId)}
+              onUploadImage={async (file) => uploadNoteImage(lesson.id, wbAuthorId, file)}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 dark:text-slate-400">
@@ -215,17 +217,6 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
           <div className="h-full overflow-y-auto">
             <VideoTab lesson={lesson} isAdmin={isAdmin} onLessonUpdated={setLesson} />
           </div>
-        )}
-        {activeTab === 'notes' && (
-          <LessonNotesCanvas
-            lessonId={lesson.id}
-            authorId={notesAuthorId}
-            authorLabel={
-              preSelectedStudentId
-                ? (students.find(s => s.id === preSelectedStudentId)?.name ?? undefined)
-                : undefined
-            }
-          />
         )}
       </div>
     </div>

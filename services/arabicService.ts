@@ -667,30 +667,48 @@ export async function getVocabRoundsByLesson(studentId: string): Promise<Record<
   return maxRound;
 }
 
-// ── Lesson notes (canvas / rich notes) ───────────────────────────────────────
-// Table: arabic_lesson_notes(lesson_id, author_id, content JSONB, updated_at)
-// author_id = student_id when accessed by a student, teacher_id when the tutor
-// browses without a specific student. Either party can read/write the same row.
+// ── Lesson whiteboard persistence ─────────────────────────────────────────────
+// Table: arabic_lesson_whiteboard(lesson_id, author_id, strokes TEXT, objects JSONB, updated_at)
+// author_id = student_id or teacher_id — both sides share the same whiteboard row.
 
-export async function getLessonNotes(lessonId: string, authorId: string): Promise<any[]> {
+export interface WhiteboardData {
+  strokes: string;       // base64 PNG data URL of canvas strokes
+  texts:   any[];        // TextObj[]
+  tables:  any[];        // TableObj[]
+  images:  any[];        // WBImageObj[]
+}
+
+export async function getWhiteboardData(lessonId: string, authorId: string): Promise<WhiteboardData | null> {
   const { data, error } = await supabase
-    .from('arabic_lesson_notes')
-    .select('content')
+    .from('arabic_lesson_whiteboard')
+    .select('strokes, objects')
     .eq('lesson_id', lessonId)
     .eq('author_id', authorId)
     .single();
-  if (error) return [];
-  return (data as any)?.content ?? [];
+  if (error || !data) return null;
+  const d = data as any;
+  return {
+    strokes: d.strokes ?? '',
+    texts:   d.objects?.texts  ?? [],
+    tables:  d.objects?.tables ?? [],
+    images:  d.objects?.images ?? [],
+  };
 }
 
-export async function saveLessonNotes(lessonId: string, authorId: string, content: any[]): Promise<void> {
+export async function saveWhiteboardData(lessonId: string, authorId: string, wb: WhiteboardData): Promise<void> {
   const { error } = await supabase
-    .from('arabic_lesson_notes')
+    .from('arabic_lesson_whiteboard')
     .upsert(
-      { lesson_id: lessonId, author_id: authorId, content, updated_at: new Date().toISOString() },
+      {
+        lesson_id:  lessonId,
+        author_id:  authorId,
+        strokes:    wb.strokes,
+        objects:    { texts: wb.texts, tables: wb.tables, images: wb.images },
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: 'lesson_id,author_id' },
     );
-  if (error) console.error('saveLessonNotes:', error.message);
+  if (error) console.error('saveWhiteboardData:', error.message);
 }
 
 export async function uploadNoteImage(lessonId: string, authorId: string, file: File): Promise<string | null> {
