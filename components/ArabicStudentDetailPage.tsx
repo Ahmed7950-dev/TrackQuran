@@ -342,16 +342,53 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   // ── Lessons with vocabulary ───────────────────────────────────────────────
   const lessonsWithVocab = lessons.filter(l => (wordCounts[l.id] ?? 0) > 0);
 
-  // Compute per-lesson spaced-rep status
-  function getLessonStatus(lessonId: string): { status: 'not_started' | 'in_progress' | 'complete'; completed: number; total: number } {
-    const wordCount = wordCounts[lessonId] ?? 0;
-    if (wordCount === 0) return { status: 'not_started', completed: 0, total: 0 };
-    const total = wordCount * 10; // 5 attempts × 2 modes
+  // ── Spaced-rep timeline per lesson ───────────────────────────────────────
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  }
+
+  interface TimelineCol {
+    attemptNumber: number;
+    scheduledDate: string | null;
+    completedAt: string | null;
+    isOverdue: boolean;
+  }
+
+  interface LessonTimeline {
+    firstDone: string;
+    cols: TimelineCol[];
+    allComplete: boolean;
+  }
+
+  function getSpacedRepTimeline(lessonId: string): LessonTimeline | null {
     const lessonAttempts = attempts.filter(a => a.lessonId === lessonId);
-    if (lessonAttempts.length === 0) return { status: 'not_started', completed: 0, total };
-    const completed = lessonAttempts.filter(a => a.completedAt).length;
-    if (completed >= total) return { status: 'complete', completed, total };
-    return { status: 'in_progress', completed, total };
+    if (lessonAttempts.length === 0) return null;
+
+    // First done = earliest completedAt among attemptNumber===1
+    const firstDoneList = lessonAttempts
+      .filter(a => a.attemptNumber === 1 && a.completedAt)
+      .map(a => a.completedAt as string);
+    if (firstDoneList.length === 0) return null;
+    const firstDone = firstDoneList.sort()[0];
+
+    const now = new Date();
+
+    // Attempts 2-5 represent the +1, +3, +7, +14 day checkpoints
+    const cols: TimelineCol[] = [2, 3, 4, 5].map(attemptNum => {
+      const attemptsForNum = lessonAttempts.filter(a => a.attemptNumber === attemptNum);
+      const completedEntry = attemptsForNum.find(a => a.completedAt);
+      const scheduledDate = attemptsForNum[0]?.scheduledDate ?? null;
+      const isOverdue = !completedEntry && !!scheduledDate && new Date(scheduledDate) < now;
+      return {
+        attemptNumber: attemptNum,
+        scheduledDate,
+        completedAt: completedEntry?.completedAt ?? null,
+        isOverdue,
+      };
+    });
+
+    const allComplete = cols.every(c => !!c.completedAt);
+    return { firstDone, cols, allComplete };
   }
 
   // ── Wrong words grouped by lesson ────────────────────────────────────────
@@ -366,73 +403,90 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   return (
     <div className="space-y-8">
 
-      {/* ── Spaced-Repetition Progress ───────────────────────────────────── */}
+      {/* ── Spaced-Repetition Timeline ───────────────────────────────────── */}
       <section>
-        <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+        <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
           <span className="inline-block w-1.5 h-5 bg-amber-400 rounded-full" />
-          Vocabulary Progress by Lesson
+          Spaced-Repetition Schedule
         </h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+          Each lesson's flashcard sessions scheduled at +1, +3, +7 and +14 days from the first attempt.
+          <span className="ml-1 text-red-400">Red dates</span> are overdue.
+        </p>
 
         {lessonsWithVocab.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center">
             <p className="text-slate-400 dark:text-slate-500 text-sm">No lessons with vocabulary yet.</p>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-gray-700">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Lesson</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Words</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Progress</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">First Done</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+1 day</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+3 days</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+7 days</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+14 days</th>
                 </tr>
               </thead>
               <tbody>
-                {lessonsWithVocab.map((lesson, idx) => {
-                  const { status, completed, total } = getLessonStatus(lesson.id);
-                  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                {lessonsWithVocab.map((lesson) => {
+                  const timeline = getSpacedRepTimeline(lesson.id);
+                  const allComplete = timeline?.allComplete ?? false;
+                  const rowBg = allComplete
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                    : '';
                   return (
-                    <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${idx % 2 === 0 ? '' : 'bg-slate-50/40 dark:bg-gray-700/20'}`}>
-                      <td className="px-5 py-3 font-medium text-slate-700 dark:text-slate-200">
-                        {lesson.title}
-                      </td>
-                      <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
-                        {wordCounts[lesson.id] ?? 0}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 justify-center">
-                          <div className="w-24 h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                status === 'complete' ? 'bg-emerald-500' :
-                                status === 'in_progress' ? 'bg-amber-400' : 'bg-slate-200 dark:bg-gray-600'
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-slate-400 font-mono w-8">{pct}%</span>
+                    <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
+                      {/* Lesson name */}
+                      <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {allComplete && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
+                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {lesson.title}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {status === 'complete' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
-                            Complete
-                          </span>
-                        )}
-                        {status === 'in_progress' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-full">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
-                            In Progress
-                          </span>
-                        )}
-                        {status === 'not_started' && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 text-xs font-semibold rounded-full">
-                            Not started
-                          </span>
-                        )}
+
+                      {/* First Done */}
+                      <td className="px-3 py-3 text-center">
+                        {timeline
+                          ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
+                          : <span className="text-slate-300 dark:text-slate-600">—</span>
+                        }
                       </td>
+
+                      {/* +1 / +3 / +7 / +14 day columns */}
+                      {timeline
+                        ? timeline.cols.map(col => (
+                          <td key={col.attemptNumber} className="px-3 py-3 text-center">
+                            {col.completedAt ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                                </svg>
+                                Done
+                              </span>
+                            ) : col.scheduledDate ? (
+                              <span className={`text-xs font-medium ${col.isOverdue ? 'text-red-500 dark:text-red-400 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
+                                {col.isOverdue && '⚠ '}
+                                {formatDate(col.scheduledDate)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600">—</span>
+                            )}
+                          </td>
+                        ))
+                        : [2, 3, 4, 5].map(n => (
+                          <td key={n} className="px-3 py-3 text-center">
+                            <span className="text-slate-300 dark:text-slate-600">—</span>
+                          </td>
+                        ))
+                      }
                     </tr>
                   );
                 })}

@@ -9,6 +9,7 @@ import {
   VocabWord, VocabMode, VocabAttempt,
   TajweedLesson, Student,
 } from '../types';
+// VocabMode kept in types import for saveSpacedRep (both modes saved)
 import { useAuth } from '../context/AuthProvider';
 import TajweedLessonViewer from './TajweedLessonViewer';
 import {
@@ -20,6 +21,7 @@ import {
   saveVocabMistakes,
   updateArabicLesson,
   setArabicLessonCompletion,
+  markHomeworkComplete,
 } from '../services/arabicService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,7 +189,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         )}
         {activeTab === 'homework' && (
           <div className="h-full overflow-y-auto">
-            <HomeworkTab lessonId={lesson.id} isAdmin={isAdmin} />
+            <HomeworkTab lessonId={lesson.id} isAdmin={isAdmin} studentId={preSelectedStudentId} />
           </div>
         )}
         {activeTab === 'vocabulary' && (
@@ -214,7 +216,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
 
 type PracticePhase = 'idle' | 'practising' | 'done';
 
-const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean }> = ({ lessonId, isAdmin }) => {
+const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: string }> = ({ lessonId, isAdmin, studentId }) => {
   const [questions, setQuestions]   = useState<HomeworkQuestion[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
@@ -253,7 +255,11 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean }> = ({ lessonI
   };
 
   const nextQuestion = () => {
-    if (qIndex + 1 >= questions.length) { setPhase('done'); return; }
+    if (qIndex + 1 >= questions.length) {
+      setPhase('done');
+      if (studentId) markHomeworkComplete(studentId, lessonId).catch(console.error);
+      return;
+    }
     setQIndex(i => i + 1); setUserAnswer(''); setBlankAnswers({}); setFeedback(null);
   };
 
@@ -801,20 +807,16 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [loading, setLoading]       = useState(true);
   const [showAddWord, setShowAdd]   = useState(false);
   const [showBulk, setShowBulk]     = useState(false);
-  const [mode, setMode]             = useState<VocabMode>('arabic');
   // Only show student selector if no student pre-selected
   const [selectedStudentId, setStudentId] = useState(preSelectedStudentId ?? '');
   const [attempts, setAttempts]     = useState<VocabAttempt[]>([]);
 
-  // Challenge state
+  // Challenge state — "I know / Not sure" button flow
   const [phase, setPhase]           = useState<ChallengePhase>('idle');
   const [shuffled, setShuffled]     = useState<VocabWord[]>([]);
   const [cardIndex, setCardIndex]   = useState(0);
-  const [userInput, setUserInput]   = useState('');
-  const [cardFeedback, setCardFb]   = useState<'correct' | 'wrong' | 'revealed' | null>(null);
   const [wrongWords, setWrongWords] = useState<VocabWord[]>([]);
   const [saving, setSaving]         = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getVocabWords(lessonId).then(ws => { setWords(ws); setLoading(false); });
@@ -827,67 +829,88 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   const startChallenge = () => {
     setShuffled(shuffleArray(words)); setCardIndex(0);
-    setUserInput(''); setCardFb(null); setWrongWords([]);
+    setWrongWords([]);
     setPhase('active');
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
-
-  const submitCard = () => {
-    const word = shuffled[cardIndex];
-    const correct = answersMatch(mode === 'arabic' ? word.arabic : word.transliteration, userInput);
-    if (correct) {
-      setCardFb('correct');
-    } else {
-      setCardFb('wrong');
-      setWrongWords(prev => [...prev.filter(w => w.id !== word.id), word]);
-      setPhase('wrong');
-    }
-  };
-
-  const revealAnswer = () => {
-    setCardFb('revealed');
-    setWrongWords(prev => [...prev.filter(w => w.id !== shuffled[cardIndex].id), shuffled[cardIndex]]);
-    setPhase('wrong');
   };
 
   const restartChallenge = () => {
     setShuffled(shuffleArray(words)); setCardIndex(0);
-    setUserInput(''); setCardFb(null);
     setPhase('active');
-    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const nextCard = () => {
+  /** "I know" — move to next card */
+  const handleKnow = () => {
     if (cardIndex + 1 >= shuffled.length) {
       setPhase('complete');
       if (selectedStudentId) saveSpacedRep();
+      // Save any wrong words accumulated before the final correct streak
       if (selectedStudentId && wrongWords.length > 0) {
         saveVocabMistakes(selectedStudentId, wrongWords.map(w => ({ wordId: w.id, lessonId }))).catch(console.error);
       }
     } else {
-      setCardIndex(i => i + 1); setUserInput(''); setCardFb(null);
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setCardIndex(i => i + 1);
     }
   };
 
+  /** "Not Sure" — record word as wrong, show answer, then restart */
+  const handleNotSure = () => {
+    const word = shuffled[cardIndex];
+    setWrongWords(prev => prev.some(w => w.id === word.id) ? prev : [...prev, word]);
+    setPhase('wrong');
+  };
+
+  /** After user acknowledges wrong answer, restart challenge */
+  const handleRestartAfterWrong = () => {
+    restartChallenge();
+  };
+
+  // Saves spaced-repetition progress for BOTH modes (arabic + transliteration)
+  // All 5 future attempt dates are calculated from the first attempt date.
   const saveSpacedRep = async () => {
     setSaving(true);
-    const now = new Date();
+    const now  = new Date();
+    const DELAYS = [0, 1, 3, 7, 14]; // days from first-attempt date
     const newAttempts: VocabAttempt[] = [];
+
     for (const word of words) {
-      const existing = attempts.filter(a => a.wordId === word.id && a.mode === mode && a.completedAt);
-      const pending  = attempts.find(a => a.wordId === word.id && a.mode === mode && !a.completedAt);
-      if (existing.filter(Boolean).length >= 5) continue;
-      if (pending) {
-        newAttempts.push({ ...pending, completedAt: now.toISOString() });
-        if (pending.attemptNumber < 5) {
-          const d = new Date(now); d.setDate(d.getDate() + (SR_DELAYS[pending.attemptNumber - 1] ?? 14));
-          newAttempts.push({ id: `vat-${Date.now()}-${word.id}-${pending.attemptNumber + 1}`, studentId: selectedStudentId, wordId: word.id, lessonId, attemptNumber: pending.attemptNumber + 1, mode, scheduledAt: d.toISOString(), completedAt: undefined, createdAt: now.toISOString() });
+      for (const wMode of (['arabic', 'transliteration'] as VocabMode[])) {
+        const existing = attempts.filter(a => a.wordId === word.id && a.mode === wMode);
+        const completedNums = new Set(existing.filter(a => a.completedAt).map(a => a.attemptNumber));
+        const pending = existing.find(a => !a.completedAt);
+
+        if (completedNums.size === 0 && !pending) {
+          // First session — create all 5 attempts; mark #1 as done now
+          DELAYS.forEach((days, i) => {
+            const d = new Date(now); d.setDate(d.getDate() + days);
+            newAttempts.push({
+              id: `vat-${now.getTime()}-${Math.random().toString(36).slice(2)}-${word.id}-${wMode}-${i + 1}`,
+              studentId: selectedStudentId, wordId: word.id, lessonId,
+              attemptNumber: i + 1, mode: wMode,
+              scheduledAt: d.toISOString(),
+              completedAt: i === 0 ? now.toISOString() : undefined,
+              createdAt: now.toISOString(),
+            });
+          });
+        } else if (pending) {
+          // Mark the pending attempt as done
+          newAttempts.push({ ...pending, completedAt: now.toISOString() });
+          // Ensure all subsequent attempts exist (for old data created before this change)
+          const firstAttempt = existing.find(a => a.attemptNumber === 1);
+          const firstDate = firstAttempt?.completedAt ? new Date(firstAttempt.completedAt) : now;
+          for (let i = pending.attemptNumber + 1; i <= 5; i++) {
+            if (!existing.find(a => a.attemptNumber === i)) {
+              const d = new Date(firstDate); d.setDate(d.getDate() + DELAYS[i - 1]);
+              newAttempts.push({
+                id: `vat-${now.getTime()}-${Math.random().toString(36).slice(2)}-${word.id}-${wMode}-${i}`,
+                studentId: selectedStudentId, wordId: word.id, lessonId,
+                attemptNumber: i, mode: wMode,
+                scheduledAt: d.toISOString(), completedAt: undefined,
+                createdAt: now.toISOString(),
+              });
+            }
+          }
         }
-      } else if (!existing.length) {
-        newAttempts.push({ id: `vat-${Date.now()}-${word.id}-1`, studentId: selectedStudentId, wordId: word.id, lessonId, attemptNumber: 1, mode, scheduledAt: now.toISOString(), completedAt: now.toISOString(), createdAt: now.toISOString() });
-        const d = new Date(now); d.setDate(d.getDate() + SR_DELAYS[0]);
-        newAttempts.push({ id: `vat-${Date.now()+1}-${word.id}-2`, studentId: selectedStudentId, wordId: word.id, lessonId, attemptNumber: 2, mode, scheduledAt: d.toISOString(), completedAt: undefined, createdAt: now.toISOString() });
+        // If all 5 already completed → skip
       }
     }
     await saveVocabAttempts(newAttempts);
@@ -903,10 +926,9 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   if (loading) return <LoadingSpinner />;
 
-  // ── Challenge / wrong ─────────────────────────────────────────────────────
-  if (phase === 'active' || phase === 'wrong') {
+  // ── Challenge: active (I know / Not Sure) ────────────────────────────────
+  if (phase === 'active') {
     const word = shuffled[cardIndex];
-    const isWrong = phase === 'wrong';
     return (
       <div className="max-w-xl mx-auto p-6 space-y-5">
         <div className="flex items-center justify-between">
@@ -914,77 +936,56 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           <button onClick={() => setPhase('idle')} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
         </div>
         <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
+          <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center shadow-sm space-y-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">What is the {mode === 'arabic' ? 'Arabic' : 'transliteration'} for…</p>
-          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
-          {cardFeedback === 'revealed' && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
-              <p className="text-sm text-amber-600 font-semibold">Answer:</p>
-              <p className="text-xl font-bold text-amber-700 dark:text-amber-300" dir={mode === 'arabic' ? 'rtl' : 'ltr'}>
-                {mode === 'arabic' ? word.arabic : word.transliteration}
-              </p>
-            </div>
-          )}
-          {cardFeedback === 'wrong' && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
-              <p className="text-sm text-red-600 font-semibold">Incorrect — correct answer:</p>
-              <p className="text-xl font-bold text-red-700 dark:text-red-300" dir={mode === 'arabic' ? 'rtl' : 'ltr'}>
-                {mode === 'arabic' ? word.arabic : word.transliteration}
-              </p>
-            </div>
-          )}
-          {cardFeedback === 'correct' && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">✅ Correct!</p>
-            </div>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 text-center shadow-sm space-y-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Do you know the Arabic for…</p>
+          <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
+          {word.transliteration && (
+            <p className="text-sm text-slate-400 italic">{word.transliteration}</p>
           )}
         </div>
 
-        {!cardFeedback && !isWrong && (
-          <div className="space-y-3">
-            <input ref={inputRef} type="text" value={userInput}
-              onChange={e => setUserInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') submitCard(); }}
-              dir={mode === 'arabic' ? 'rtl' : 'ltr'}
-              placeholder={mode === 'arabic' ? 'اكتب بالعربية…' : 'Type transliteration…'}
-              className="w-full px-4 py-3 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white text-center" />
-            <div className="flex gap-3">
-              <button onClick={revealAnswer}
-                className="flex-1 py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
-                I'm not sure
-              </button>
-              <button onClick={submitCard} disabled={!userInput.trim()}
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors text-sm">
-                Check
-              </button>
-            </div>
-          </div>
-        )}
-        {cardFeedback === 'correct' && (
-          <button onClick={nextCard}
-            className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl transition-colors">
-            {cardIndex + 1 >= shuffled.length ? 'Finish 🎉' : 'Next Card →'}
+        <div className="grid grid-cols-2 gap-4">
+          <button onClick={handleNotSure}
+            className="py-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-lg">
+            😕 Not Sure
           </button>
-        )}
-        {isWrong && (
-          <div className="space-y-3">
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-center">
-              <p className="font-bold text-red-700 dark:text-red-300">❌ Let's start over!</p>
-              <p className="text-sm text-red-600 dark:text-red-400 mt-1">Get all words right in a row to complete the challenge!</p>
-            </div>
-            <button onClick={restartChallenge}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors">
-              🔄 Start Over
-            </button>
-            <button onClick={() => setPhase('idle')}
-              className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
-              Back to word list
-            </button>
+          <button onClick={handleKnow}
+            className="py-4 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-lg">
+            ✓ I Know!
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Challenge: wrong — show answer then restart ────────────────────────────
+  if (phase === 'wrong') {
+    const word = shuffled[cardIndex];
+    return (
+      <div className="max-w-xl mx-auto p-6 space-y-5">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center shadow-sm space-y-4">
+          <div className="text-4xl">😕</div>
+          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 space-y-1">
+            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
+            <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>
           </div>
-        )}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">❗ Get all words right in a row to complete the challenge!</p>
+          </div>
+        </div>
+        <button onClick={handleRestartAfterWrong}
+          className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-base">
+          🔄 Start Over
+        </button>
+        <button onClick={() => setPhase('idle')}
+          className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
+          Back to word list
+        </button>
       </div>
     );
   }
@@ -1159,31 +1160,23 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           {/* Challenge section — tutor only */}
           {!isAdmin && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-4">
-              <h3 className="font-bold text-slate-700 dark:text-slate-200">Flashcard Challenge</h3>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Recall mode</label>
-                  <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-gray-600">
-                    {(['arabic', 'transliteration'] as VocabMode[]).map(m => (
-                      <button key={m} onClick={() => setMode(m)}
-                        className={`flex-1 py-2 text-sm font-semibold transition-colors ${mode === m ? 'bg-amber-500 text-white' : 'bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
-                        {m === 'arabic' ? 'Arabic Script' : 'Transliteration'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Student selector only when no student pre-selected */}
-                {!preSelectedStudentId && students.length > 0 && (
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Track progress for</label>
-                    <select value={selectedStudentId} onChange={e => setStudentId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
-                      <option value="">No student (practice only)</option>
-                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                )}
+              <div>
+                <h3 className="font-bold text-slate-700 dark:text-slate-200">Flashcard Challenge</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Each card shows the English meaning — tap <strong>I Know</strong> to advance or <strong>Not Sure</strong> to see the Arabic and restart. Get all {words.length} cards right in a row to complete the round.
+                </p>
               </div>
+              {/* Student selector only when no student pre-selected */}
+              {!preSelectedStudentId && students.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Track progress for</label>
+                  <select value={selectedStudentId} onChange={e => setStudentId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <option value="">No student (practice only)</option>
+                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <button onClick={startChallenge}
                 className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors">
                 🎴 Start Flashcard Challenge ({words.length} words)

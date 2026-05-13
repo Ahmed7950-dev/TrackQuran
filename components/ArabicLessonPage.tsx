@@ -16,6 +16,9 @@ import {
   deleteArabicLesson as deleteLessonSvc,
   reorderArabicLessons,
   uploadArabicLessonPdf,
+  getHomeworkCountsByLesson,
+  getHomeworkCompletionsForStudent,
+  getVocabRoundsByLesson,
 } from '../services/arabicService';
 import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 
@@ -183,13 +186,25 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [editing,    setEditing]    = useState<ArabicLesson | null>(null);
   const [viewing,    setViewing]    = useState<ArabicLesson | null>(null);
 
+  // Per-lesson stats for student badges
+  const [hwCounts,      setHwCounts]      = useState<Record<string, number>>({});
+  const [hwDone,        setHwDone]        = useState<string[]>([]);      // lesson IDs done
+  const [vocabRounds,   setVocabRounds]   = useState<Record<string, number>>({});
+
   // Drag-reorder (admin)
   const dragIdx   = useRef<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
   useEffect(() => {
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
+    getHomeworkCountsByLesson().then(setHwCounts);
   }, []);
+
+  useEffect(() => {
+    if (!preSelectedStudentId) { setHwDone([]); setVocabRounds({}); return; }
+    getHomeworkCompletionsForStudent(preSelectedStudentId).then(setHwDone);
+    getVocabRoundsByLesson(preSelectedStudentId).then(setVocabRounds);
+  }, [preSelectedStudentId]);
 
   const handleDelete = async (l: ArabicLesson) => {
     if (!confirm(`Delete lesson "${l.title}"? This cannot be undone.`)) return;
@@ -270,6 +285,10 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
               index={idx}
               isAdmin={isAdmin}
               isDragOver={overIdx === idx}
+              hwQuestionCount={hwCounts[lesson.id] ?? 0}
+              homeworkDone={hwDone.includes(lesson.id)}
+              vocabRounds={vocabRounds[lesson.id] ?? 0}
+              showStudentStats={!!preSelectedStudentId}
               onView={() => setViewing(lesson)}
               onEdit={e => { e.stopPropagation(); setEditing(lesson); }}
               onDelete={e => { e.stopPropagation(); handleDelete(lesson); }}
@@ -321,13 +340,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 
 interface RowProps {
   lesson: ArabicLesson; index: number; isAdmin: boolean; isDragOver: boolean;
+  hwQuestionCount: number; homeworkDone: boolean; vocabRounds: number; showStudentStats: boolean;
   onView: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void; onDragEnd: () => void;
 }
 
 const ArabicLessonRow: React.FC<RowProps> = ({
-  lesson, index, isAdmin, isDragOver, onView, onEdit, onDelete,
+  lesson, index, isAdmin, isDragOver,
+  hwQuestionCount, homeworkDone, vocabRounds, showStudentStats,
+  onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) => (
   <div
@@ -355,6 +377,34 @@ const ArabicLessonRow: React.FC<RowProps> = ({
     <div className="flex-1 min-w-0">
       <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{lesson.title}</p>
       {lesson.description && <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{lesson.description}</p>}
+      {/* Student progress badges */}
+      {showStudentStats && (
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {/* Homework badge */}
+          {hwQuestionCount > 0 && (
+            homeworkDone ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-800">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+                Homework done
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-200 dark:border-amber-700">
+                📝 {hwQuestionCount} questions
+              </span>
+            )
+          )}
+          {/* Vocab rounds badge */}
+          {vocabRounds > 0 && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+              vocabRounds >= 5
+                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700'
+            }`}>
+              🎴 Flashcards: {vocabRounds}/5 rounds
+            </span>
+          )}
+        </div>
+      )}
     </div>
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
       className="w-4 h-4 text-slate-300 dark:text-gray-600 flex-shrink-0 group-hover:text-amber-500 transition-colors">

@@ -580,3 +580,55 @@ export async function removeVocabMistakes(studentId: string, wordIds: string[]):
     .in('word_id', wordIds);
   if (error) console.error('removeVocabMistakes:', error.message);
 }
+
+// ── Homework completions ──────────────────────────────────────────────────────
+// Table: arabic_homework_completions(id, student_id, lesson_id, completed_at)
+
+export async function getHomeworkCompletionsForStudent(studentId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('arabic_homework_completions')
+    .select('lesson_id')
+    .eq('student_id', studentId);
+  if (error) { console.error('getHomeworkCompletionsForStudent:', error.message); return []; }
+  return (data ?? []).map((r: any) => r.lesson_id);
+}
+
+export async function markHomeworkComplete(studentId: string, lessonId: string): Promise<void> {
+  const id = `hwc-${studentId}-${lessonId}`;
+  await supabase
+    .from('arabic_homework_completions')
+    .upsert({ id, student_id: studentId, lesson_id: lessonId, completed_at: new Date().toISOString() },
+             { onConflict: 'student_id,lesson_id' });
+}
+
+// ── Homework question counts per lesson ───────────────────────────────────────
+
+export async function getHomeworkCountsByLesson(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('arabic_homework_questions')
+    .select('id, lesson_id');
+  if (error) { console.error('getHomeworkCountsByLesson:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  (data ?? []).forEach((r: any) => {
+    counts[r.lesson_id] = (counts[r.lesson_id] ?? 0) + 1;
+  });
+  return counts;
+}
+
+// ── Vocab rounds completed per lesson for a student ───────────────────────────
+// Returns: { lessonId → number of spaced-rep rounds (attempt numbers) completed }
+
+export async function getVocabRoundsByLesson(studentId: string): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('arabic_vocab_attempts')
+    .select('lesson_id, attempt_number')
+    .eq('student_id', studentId)
+    .not('completed_at', 'is', null);
+  if (error) { console.error('getVocabRoundsByLesson:', error.message); return {}; }
+  const maxRound: Record<string, number> = {};
+  (data ?? []).forEach((r: any) => {
+    const cur = maxRound[r.lesson_id] ?? 0;
+    if (r.attempt_number > cur) maxRound[r.lesson_id] = r.attempt_number;
+  });
+  return maxRound;
+}

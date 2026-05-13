@@ -55,13 +55,27 @@ function levelColor(n: number): string {
 
 // ── Timezone helpers ─────────────────────────────────────────────────────────
 
-/** Returns the UTC offset of `tz` in whole minutes, e.g. Asia/Dubai → +240 */
+/** Teacher's local timezone — shown as the comparison reference in the availability grid */
+const TEACHER_TZ = 'Europe/Istanbul';
+
+/**
+ * Returns the UTC offset of `tz` in whole minutes, e.g. Asia/Dubai → +240.
+ * Uses Intl.DateTimeFormat.formatToParts for accuracy (avoids Date.parse locale issues).
+ */
 function getTzOffsetMinutes(tz: string): number {
   try {
-    const now = new Date();
-    const utcMs = Date.parse(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-    const tzMs  = Date.parse(now.toLocaleString('en-US', { timeZone: tz }));
-    return Math.round((tzMs - utcMs) / 60000);
+    const date  = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) => parseInt(parts.find(p => p.type === type)?.value ?? '0', 10);
+    let hour = get('hour');
+    if (hour === 24) hour = 0; // some implementations return 24 for midnight
+    const tzAsUtcMs = Date.UTC(get('year'), get('month') - 1, get('day'), hour, get('minute'), get('second'));
+    return Math.round((tzAsUtcMs - date.getTime()) / 60000);
   } catch {
     return 0;
   }
@@ -75,11 +89,12 @@ function formatHour(h: number): string {
   return `${disp}:00 ${ampm}`;
 }
 
-/** Given a local hour and the TZ offset in minutes, return the UTC equivalent label */
-function formatUtcEquiv(localHour: number, offsetMins: number): string {
-  const utcTotal = localHour * 60 - offsetMins;
-  const utcHour  = ((Math.floor(utcTotal / 60)) % 24 + 24) % 24;
-  return formatHour(utcHour) + ' UTC';
+/** Given a student's local hour and both timezone offsets, return the teacher's equivalent label */
+function formatTeacherEquiv(localHour: number, studentOffsetMins: number, teacherOffsetMins: number): string {
+  const utcMins     = localHour * 60 - studentOffsetMins;
+  const teacherMins = utcMins + teacherOffsetMins;
+  const teacherHour = ((Math.floor(teacherMins / 60)) % 24 + 24) % 24;
+  return formatHour(teacherHour) + ' (Istanbul)';
 }
 
 /** Format the UTC offset as a readable string, e.g. "+4" or "+5:30" */
@@ -201,7 +216,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
   const [purposes,    setPurposes]    = useState<string[]>(existing?.learningPurposes ?? []);
   const [topics,      setTopics]      = useState<string[]>(existing?.topicsToFocus    ?? []);
   const [nationality, setNationality] = useState(existing?.nationality ?? '');
-  const [timezone,    setTimezone]    = useState(existing?.timezone    ?? 'UTC');
+  const [timezone,    setTimezone]    = useState(existing?.timezone    ?? 'Europe/Istanbul');
   const [deadline,    setDeadline]    = useState(existing?.goalDeadline ?? '');
   const [grid,        setGrid]        = useState<Set<string>>(
     () => slotsToGrid(existing?.availability ?? [])
@@ -217,9 +232,11 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
   if (!isOpen) return null;
 
   // ── Timezone offset ─────────────────────────────────────────────────────
-  const tzOffsetMins  = getTzOffsetMinutes(timezone);
-  const tzOffsetLabel = formatOffsetLabel(tzOffsetMins);
-  const showUtcEquiv  = tzOffsetMins !== 0;
+  const tzOffsetMins      = getTzOffsetMinutes(timezone);
+  const teacherOffsetMins = getTzOffsetMinutes(TEACHER_TZ);
+  const tzOffsetLabel     = formatOffsetLabel(tzOffsetMins);
+  // Show teacher-time column whenever student TZ differs from Istanbul
+  const showTeacherEquiv  = timezone !== TEACHER_TZ;
 
   // ── Dialect toggle ──────────────────────────────────────────────────────
   const toggleDialect = (d: ArabicDialect) =>
@@ -454,7 +471,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
               <strong className="text-amber-600 dark:text-amber-400">{timezone}</strong>
               {' '}
               <span className="font-mono text-amber-500">({tzOffsetLabel})</span>.
-              {showUtcEquiv && <span className="text-slate-400 dark:text-slate-500"> Small text shows UTC equivalent.</span>}
+              {showTeacherEquiv && <span className="text-slate-400 dark:text-slate-500"> Small text shows Istanbul (teacher) time.</span>}
               {' '}Click or drag cells to mark availability (green).
             </p>
 
@@ -462,7 +479,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
               <table className="w-full text-xs border-collapse min-w-[480px]">
                 <thead>
                   <tr>
-                    <th className={`w-${showUtcEquiv ? '20' : '16'} bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 px-2 text-slate-500 dark:text-slate-400 font-semibold text-left`}>
+                    <th className={`${showTeacherEquiv ? 'w-20' : 'w-16'} bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 px-2 text-slate-500 dark:text-slate-400 font-semibold text-left`}>
                       Local
                     </th>
                     {DAY_SHORT.map((d, i) => (
@@ -475,9 +492,9 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                     <tr key={h}>
                       <td className="bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 px-2 py-1 whitespace-nowrap">
                         <div className="font-mono text-slate-600 dark:text-slate-300">{formatHour(h)}</div>
-                        {showUtcEquiv && (
+                        {showTeacherEquiv && (
                           <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono leading-tight">
-                            {formatUtcEquiv(h, tzOffsetMins)}
+                            {formatTeacherEquiv(h, tzOffsetMins, teacherOffsetMins)}
                           </div>
                         )}
                       </td>
