@@ -4,7 +4,7 @@
 // student's spaced-rep / wrong-word progress tab.
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArabicStudent, ArabicLesson, WeeklySlot, VocabAttempt, VocabMistakeDetail } from '../types';
 import {
   getArabicLessons,
@@ -110,96 +110,101 @@ interface MiniChallengeProps {
   onCancel: () => void;
 }
 
+function shuffleArr<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+type MiniPhase = 'active' | 'wrong' | 'done';
+
 const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onComplete, onCancel }) => {
+  const [phase, setPhase] = useState<MiniPhase>('active');
+  const [shuffled, setShuffled] = useState<VocabMistakeDetail[]>(() => shuffleArr(words));
   const [cardIndex, setCardIndex] = useState(0);
-  const [input, setInput] = useState('');
-  const [revealed, setRevealed] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [correctIds, setCorrectIds] = useState<string[]>([]);
-  const [wrongWords, setWrongWords] = useState<VocabMistakeDetail[]>([]);
-  const [done, setDone] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  const currentWord = words[cardIndex];
+  const currentWord = shuffled[cardIndex];
 
-  useEffect(() => {
-    if (!revealed) inputRef.current?.focus();
-  }, [cardIndex, revealed]);
+  function restart() {
+    setShuffled(shuffleArr(words));
+    setCardIndex(0);
+    setPhase('active');
+  }
 
-  function check() {
-    if (!input.trim()) return;
-    const correct = input.trim() === currentWord.arabic.trim();
-    setIsCorrect(correct);
-    setRevealed(true);
-    if (correct) {
-      setCorrectIds(prev => [...prev, currentWord.id]);
+  function handleKnow() {
+    if (cardIndex + 1 >= shuffled.length) {
+      setPhase('done');
     } else {
-      setWrongWords(prev => [...prev, currentWord]);
+      setCardIndex(i => i + 1);
     }
   }
 
-  function advance() {
-    setInput('');
-    setRevealed(false);
-    if (cardIndex + 1 >= words.length) {
-      setDone(true);
-    } else {
-      setCardIndex(prev => prev + 1);
-    }
+  function handleNotSure() {
+    setPhase('wrong');
   }
 
-  if (done) {
+  // ── Done: all words answered "I Know" in a row ──────────────────────────
+  if (phase === 'done') {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center space-y-6 max-w-lg mx-auto">
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl ${correctIds.length === words.length ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-          {correctIds.length === words.length ? '🎉' : '📝'}
-        </div>
-        <div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Practice Complete!</h3>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{lessonTitle}</p>
-        </div>
-        <div className="flex justify-center gap-8">
-          <div className="text-center">
-            <p className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">{correctIds.length}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Correct</p>
+      <div className="max-w-lg mx-auto space-y-5">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center space-y-5 shadow-sm">
+          <div className="text-6xl">🎉</div>
+          <div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">All correct!</h3>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{lessonTitle}</p>
           </div>
-          <div className="text-center">
-            <p className="text-3xl font-extrabold text-red-500 dark:text-red-400">{wrongWords.length}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Still wrong</p>
-          </div>
-        </div>
-        {wrongWords.length > 0 && (
-          <div className="text-left rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-            <p className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wide mb-2">Still needs practice:</p>
-            <div className="space-y-1">
-              {wrongWords.map(w => (
-                <div key={w.id} className="flex items-center gap-2 text-sm">
-                  <span className="font-bold text-slate-800 dark:text-slate-100 dir-rtl" dir="rtl">{w.arabic}</span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-600 dark:text-slate-300">{w.english}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          {correctIds.length > 0
-            ? `${correctIds.length} word${correctIds.length > 1 ? 's' : ''} will be removed from your wrong words list.`
-            : 'No words will be removed — keep practising!'}
-        </p>
-        <div className="flex gap-3 justify-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            You got all {words.length} word{words.length !== 1 ? 's' : ''} right in a row.
+            They will be removed from your wrong words list.
+          </p>
           <button
-            onClick={() => onComplete(correctIds)}
-            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-sm transition-colors">
-            Done
+            onClick={() => onComplete(words.map(w => w.id))}
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm transition-colors">
+            ✓ Done
           </button>
         </div>
       </div>
     );
   }
 
+  // ── Wrong: show Arabic answer, then restart ─────────────────────────────
+  if (phase === 'wrong') {
+    return (
+      <div className="max-w-lg mx-auto space-y-5">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center shadow-sm space-y-5">
+          <div className="text-4xl">😕</div>
+          <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-5 space-y-2">
+            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
+            <p className="text-4xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{currentWord.arabic}</p>
+            {currentWord.transliteration && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 italic">{currentWord.transliteration}</p>
+            )}
+          </div>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              ❗ Get all words right in a row to complete the challenge!
+            </p>
+          </div>
+        </div>
+        <button onClick={restart}
+          className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors">
+          🔄 Start Over
+        </button>
+        <button onClick={onCancel}
+          className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
+          Back to wrong words
+        </button>
+      </div>
+    );
+  }
+
+  // ── Active: show English, I Know / Not Sure buttons ─────────────────────
   return (
-    <div className="max-w-lg mx-auto space-y-4">
+    <div className="max-w-lg mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -212,64 +217,35 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
         </button>
       </div>
 
-      {/* Progress */}
+      {/* Progress bar */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
             className="h-full bg-amber-400 rounded-full transition-all duration-300"
-            style={{ width: `${((cardIndex) / words.length) * 100}%` }}
+            style={{ width: `${(cardIndex / shuffled.length) * 100}%` }}
           />
         </div>
-        <span className="text-xs text-slate-400 font-mono">{cardIndex + 1}/{words.length}</span>
+        <span className="text-xs text-slate-400 font-mono">{cardIndex + 1}/{shuffled.length}</span>
       </div>
 
       {/* Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center space-y-6 shadow-sm">
-        <div>
-          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1">Type the Arabic</p>
-          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
-          {currentWord.transliteration && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 italic">{currentWord.transliteration}</p>
-          )}
-        </div>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-12 px-8 text-center shadow-sm space-y-3">
+        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+          Do you know the Arabic for…
+        </p>
+        <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
+      </div>
 
-        {!revealed ? (
-          <div className="space-y-3">
-            <input
-              ref={inputRef}
-              dir="rtl"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && check()}
-              placeholder="اكتب هنا..."
-              className="w-full text-center text-xl px-4 py-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 placeholder-slate-300 dark:placeholder-gray-500 focus:outline-none focus:border-amber-400 dark:focus:border-amber-500 transition-colors font-arabic"
-            />
-            <button
-              onClick={check}
-              disabled={!input.trim()}
-              className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-semibold rounded-xl text-sm transition-colors">
-              Check
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className={`rounded-xl p-4 ${isCorrect ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
-              <p className={`text-sm font-semibold mb-1 ${isCorrect ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {isCorrect ? '✓ Correct!' : '✗ Not quite'}
-              </p>
-              {!isCorrect && (
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  Correct answer: <span className="font-bold text-lg" dir="rtl">{currentWord.arabic}</span>
-                </p>
-              )}
-            </div>
-            <button
-              onClick={advance}
-              className="w-full py-2.5 bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500 text-white font-semibold rounded-xl text-sm transition-colors">
-              {cardIndex + 1 >= words.length ? 'See Results →' : 'Next →'}
-            </button>
-          </div>
-        )}
+      {/* Buttons */}
+      <div className="grid grid-cols-2 gap-4">
+        <button onClick={handleNotSure}
+          className="py-5 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-lg">
+          😕 Not Sure
+        </button>
+        <button onClick={handleKnow}
+          className="py-5 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-lg">
+          ✓ I Know!
+        </button>
       </div>
     </div>
   );

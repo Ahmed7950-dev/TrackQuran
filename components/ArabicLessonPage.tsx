@@ -328,7 +328,18 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           students={students}
           teacherId={teacherId}
           preSelectedStudentId={preSelectedStudentId}
-          onClose={() => setViewing(null)}
+          onClose={async () => {
+            setViewing(null);
+            // Always refresh badge data from DB when closing a lesson
+            if (preSelectedStudentId) {
+              const [done, rounds] = await Promise.all([
+                getHomeworkCompletionsForStudent(preSelectedStudentId),
+                getVocabRoundsByLesson(preSelectedStudentId),
+              ]);
+              setHwDone(done);
+              setVocabRounds(rounds);
+            }
+          }}
           onStudentUpdated={onStudentUpdated}
           onHomeworkComplete={lessonId =>
             setHwDone(prev => prev.includes(lessonId) ? prev : [...prev, lessonId])
