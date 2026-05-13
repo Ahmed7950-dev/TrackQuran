@@ -36,6 +36,7 @@ interface ArabicStudentRow {
   availability: WeeklySlot[];
   goal_deadline: string | null;
   completed_lesson_ids: string[];
+  share_token: string | null;
   created_at: string;
 }
 
@@ -104,6 +105,7 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     availability:        r.availability,
     goalDeadline:        r.goal_deadline ?? undefined,
     completedLessonIds:  r.completed_lesson_ids,
+    shareToken:          r.share_token ?? undefined,
     createdAt:           r.created_at,
   };
 }
@@ -126,6 +128,7 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     availability:        s.availability,
     goal_deadline:       s.goalDeadline ?? null,
     completed_lesson_ids: s.completedLessonIds,
+    share_token:         s.shareToken   ?? null,
     created_at:          s.createdAt,
   };
 }
@@ -619,6 +622,31 @@ export async function getHomeworkCountsByLesson(): Promise<Record<string, number
     counts[r.lesson_id] = (counts[r.lesson_id] ?? 0) + 1;
   });
   return counts;
+}
+
+// ── Share-token helpers ────────────────────────────────────────────────────────
+
+/** Look up a student by their share token (no auth required). */
+export async function getStudentByShareToken(token: string): Promise<ArabicStudent | null> {
+  const { data, error } = await supabase
+    .from('arabic_students')
+    .select('*')
+    .eq('share_token', token)
+    .single();
+  if (error || !data) return null;
+  return rowToStudent(data as ArabicStudentRow);
+}
+
+/** Generate (or return existing) share token for a student, persist it, return the token. */
+export async function ensureShareToken(student: ArabicStudent): Promise<string> {
+  if (student.shareToken) return student.shareToken;
+  const token = crypto.randomUUID();
+  const { error } = await supabase
+    .from('arabic_students')
+    .update({ share_token: token })
+    .eq('id', student.id);
+  if (error) console.error('ensureShareToken:', error.message);
+  return token;
 }
 
 // ── Vocab rounds completed per lesson for a student ───────────────────────────

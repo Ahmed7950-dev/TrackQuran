@@ -228,6 +228,7 @@ export interface ArabicStudent {
   availability: WeeklySlot[];
   goalDeadline?: string;           // ISO date
   completedLessonIds: string[];    // arabic lesson ids
+  shareToken?: string;             // UUID; present once tutor has generated the link
   createdAt: string;
 }
 

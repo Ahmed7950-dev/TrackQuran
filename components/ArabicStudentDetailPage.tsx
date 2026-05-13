@@ -22,6 +22,8 @@ interface Props {
   onBack: () => void;
   onUpdateStudent: (s: ArabicStudent) => void;
   onDeleteStudent: (id: string) => void;
+  /** When true the page is shown to the student via a share link — hides delete & back-to-list */
+  studentMode?: boolean;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -614,7 +616,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
-  student, teacherId, onBack, onUpdateStudent, onDeleteStudent,
+  student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false,
 }) => {
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
@@ -641,21 +643,31 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     <div className="space-y-6">
       {/* ── Back + actions bar ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-          </svg>
-          <span className="font-semibold">All Students</span>
-        </button>
+        {/* Back button — hidden in student mode (no list to go back to) */}
+        {!studentMode && (
+          <button onClick={onBack} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            <span className="font-semibold">All Students</span>
+          </button>
+        )}
+        {studentMode && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-full">
+            <span className="text-amber-600 dark:text-amber-400 text-sm">🎓</span>
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Student Portal</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button onClick={() => setEditOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
             </svg>
-            Edit
+            Edit My Info
           </button>
-          {!showDelete ? (
+          {/* Delete — only shown to tutor, never to student */}
+          {!studentMode && (!showDelete ? (
             <button onClick={() => setShowDelete(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
@@ -671,7 +683,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
               <button onClick={() => setShowDelete(false)}
                 className="px-3 py-1.5 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Cancel</button>
             </div>
-          )}
+          ))}
         </div>
       </div>
 

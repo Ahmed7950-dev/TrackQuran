@@ -25,6 +25,7 @@ import TajweedPage from './components/TajweedPage';
 import SubjectSelectionPage from './components/SubjectSelectionPage';
 import ArabicDashboard from './components/ArabicDashboard';
 import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
+import ArabicStudentPortal from './components/ArabicStudentPortal';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -103,6 +104,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (sharedReportId) return <SharedReportPage reportId={sharedReportId} />;
+
+  // ── Arabic student portal — no auth required ─────────────────────────────────
+  const arabicShareToken = (() => {
+    const m = window.location.pathname.match(/^\/arabic\/s\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (arabicShareToken) return <ArabicStudentPortal token={arabicShareToken} />;
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
@@ -676,6 +684,7 @@ const App: React.FC = () => {
               students={arabicStudents}
               onAddStudent={handleAddArabicStudent}
               onSelectStudent={setSelectedArabicStudentId}
+              onUpdateStudent={handleUpdateArabicStudent}
             />
           )}
         </main>

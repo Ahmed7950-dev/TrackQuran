@@ -6,12 +6,14 @@
 import React, { useState } from 'react';
 import { ArabicStudent } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
+import { ensureShareToken } from '../services/arabicService';
 
 interface Props {
   teacherId: string;
   students: ArabicStudent[];
   onAddStudent:    (s: ArabicStudent) => void;
   onSelectStudent: (id: string) => void;
+  onUpdateStudent: (s: ArabicStudent) => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -24,9 +26,31 @@ function dialectLabel(d: string): string {
   return { msa: 'MSA', levantine: 'Levantine', quranic: 'Quranic' }[d] ?? d;
 }
 
-const ArabicDashboard: React.FC<Props> = ({ teacherId, students, onAddStudent, onSelectStudent }) => {
+const ArabicDashboard: React.FC<Props> = ({ teacherId, students, onAddStudent, onSelectStudent, onUpdateStudent }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleCopyLink(student: ArabicStudent, e: React.MouseEvent) {
+    e.stopPropagation(); // don't open the student page
+    setCopyingId(student.id);
+    try {
+      const token = await ensureShareToken(student);
+      // Persist token to state if freshly generated
+      if (!student.shareToken) {
+        onUpdateStudent({ ...student, shareToken: token });
+      }
+      const url = `${window.location.origin}/arabic/s/${token}`;
+      await navigator.clipboard.writeText(url);
+      setCopiedId(student.id);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch (err) {
+      console.error('copyLink:', err);
+    } finally {
+      setCopyingId(null);
+    }
+  }
 
   const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
@@ -91,7 +115,14 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, onAddStudent, o
       {filtered.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(s => (
-            <StudentCard key={s.id} student={s} onClick={() => onSelectStudent(s.id)} />
+            <StudentCard
+              key={s.id}
+              student={s}
+              onClick={() => onSelectStudent(s.id)}
+              onCopyLink={e => handleCopyLink(s, e)}
+              copying={copyingId === s.id}
+              copied={copiedId === s.id}
+            />
           ))}
         </div>
       )}
@@ -113,60 +144,99 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, onAddStudent, o
 
 // ── Student card ──────────────────────────────────────────────────────────────
 
-const StudentCard: React.FC<{ student: ArabicStudent; onClick: () => void }> = ({ student: s, onClick }) => {
+interface CardProps {
+  student: ArabicStudent;
+  onClick: () => void;
+  onCopyLink: (e: React.MouseEvent) => void;
+  copying: boolean;
+  copied: boolean;
+}
+
+const StudentCard: React.FC<CardProps> = ({ student: s, onClick, onCopyLink, copying, copied }) => {
   const pct = progressPercent(s);
 
   return (
-    <button
-      onClick={onClick}
-      className="group text-left bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-5 hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600 transition-all duration-200"
-    >
-      {/* Avatar + name */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 text-lg font-bold flex-shrink-0">
-          {s.name.charAt(0).toUpperCase()}
+    <div className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600 transition-all duration-200">
+      <button
+        onClick={onClick}
+        className="text-left w-full p-5"
+      >
+        {/* Avatar + name */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 text-lg font-bold flex-shrink-0">
+            {s.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{s.arabicLevel ? `Level ${s.arabicLevel} / 10` : 'No level set'}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{s.arabicLevel ? `Level ${s.arabicLevel} / 10` : 'No level set'}</p>
-        </div>
-      </div>
 
-      {/* Dialects */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {s.arabicDialects.map(d => (
-          <span key={d} className="px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">
-            {dialectLabel(d)}
-          </span>
-        ))}
-        {s.nationality && (
-          <span className="px-2 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-xs">
-            {s.nationality}
-          </span>
+        {/* Dialects */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {s.arabicDialects.map(d => (
+            <span key={d} className="px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">
+              {dialectLabel(d)}
+            </span>
+          ))}
+          {s.nationality && (
+            <span className="px-2 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-xs">
+              {s.nationality}
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div>
+          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span>Lesson progress</span>
+            <span className="font-semibold">{s.completedLessonIds.length} / 60</span>
+          </div>
+          <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-400 rounded-full transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Deadline */}
+        {s.goalDeadline && (
+          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+            Goal: {new Date(s.goalDeadline).toLocaleDateString()}
+          </p>
         )}
-      </div>
+      </button>
 
-      {/* Progress bar */}
-      <div>
-        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
-          <span>Lesson progress</span>
-          <span className="font-semibold">{s.completedLessonIds.length} / 60</span>
-        </div>
-        <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-amber-400 rounded-full transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+      {/* ── Share link button ── */}
+      <div className="px-5 pb-4">
+        <button
+          onClick={onCopyLink}
+          disabled={copying}
+          className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border transition-all ${
+            copied
+              ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+              : 'bg-slate-50 dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-700 dark:hover:text-amber-300'
+          }`}
+        >
+          {copying ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+          ) : copied ? (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+            </svg>
+          )}
+          {copying ? 'Generating…' : copied ? 'Link copied!' : 'Copy student link'}
+        </button>
       </div>
-
-      {/* Deadline */}
-      {s.goalDeadline && (
-        <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-          Goal: {new Date(s.goalDeadline).toLocaleDateString()}
-        </p>
-      )}
-    </button>
+    </div>
   );
 };
 
