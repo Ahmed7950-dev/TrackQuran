@@ -98,11 +98,12 @@ interface Props {
   preSelectedStudentId?: string;
   onClose: () => void;
   onStudentUpdated?: (s: ArabicStudent) => void;
+  onHomeworkComplete?: (lessonId: string) => void;
 }
 
 const ArabicLessonDetailPage: React.FC<Props> = ({
   lesson: initialLesson, students, teacherId,
-  preSelectedStudentId, onClose, onStudentUpdated,
+  preSelectedStudentId, onClose, onStudentUpdated, onHomeworkComplete,
 }) => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
@@ -189,7 +190,12 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         )}
         {activeTab === 'homework' && (
           <div className="h-full overflow-y-auto">
-            <HomeworkTab lessonId={lesson.id} isAdmin={isAdmin} studentId={preSelectedStudentId} />
+            <HomeworkTab
+              lessonId={lesson.id}
+              isAdmin={isAdmin}
+              studentId={preSelectedStudentId}
+              onHomeworkComplete={onHomeworkComplete}
+            />
           </div>
         )}
         {activeTab === 'vocabulary' && (
@@ -216,7 +222,12 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
 
 type PracticePhase = 'idle' | 'practising' | 'done';
 
-const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: string }> = ({ lessonId, isAdmin, studentId }) => {
+const HomeworkTab: React.FC<{
+  lessonId: string;
+  isAdmin: boolean;
+  studentId?: string;
+  onHomeworkComplete?: (lessonId: string) => void;
+}> = ({ lessonId, isAdmin, studentId, onHomeworkComplete }) => {
   const [questions, setQuestions]   = useState<HomeworkQuestion[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
@@ -257,7 +268,10 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
   const nextQuestion = () => {
     if (qIndex + 1 >= questions.length) {
       setPhase('done');
-      if (studentId) markHomeworkComplete(studentId, lessonId).catch(console.error);
+      if (studentId) {
+        markHomeworkComplete(studentId, lessonId).catch(console.error);
+        onHomeworkComplete?.(lessonId);
+      }
       return;
     }
     setQIndex(i => i + 1); setUserAnswer(''); setBlankAnswers({}); setFeedback(null);
@@ -277,23 +291,23 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
     const fbAnswers = q.options?.length ? q.options : [q.correctAnswer];
 
     return (
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <div className="max-w-4xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Question {qIndex + 1} of {questions.length}</span>
-          <button onClick={() => setPhase('idle')} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
+          <span className="text-base text-slate-500 dark:text-slate-400">Question {qIndex + 1} of {questions.length}</span>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
         </div>
-        <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(qIndex / questions.length) * 100}%` }} />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 shadow-sm space-y-4">
-          <span className="inline-block px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 shadow-sm space-y-6">
+          <span className="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-sm font-semibold">
             {QUESTION_TYPE_LABELS[q.type]}
           </span>
 
           {/* Question text */}
           {q.type !== 'fill_blank' && (
-            <p className="text-lg font-semibold text-slate-800 dark:text-slate-100"
+            <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100"
                dir={q.type === 'translate_to_english' ? 'rtl' : 'ltr'}>
               {q.question}
             </p>
@@ -301,10 +315,10 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
 
           {/* Answer input by type */}
           {(q.type === 'multiple_choice' || q.type === 'fill_blank_options') && q.options?.length ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {q.options.map((opt, i) => (
                 <button key={i} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                  className={`w-full text-left px-4 py-2.5 rounded-xl border-2 text-sm transition-colors ${
+                  className={`w-full text-left px-6 py-4 rounded-xl border-2 text-base transition-colors ${
                     userAnswer === opt
                       ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
                         : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
@@ -316,10 +330,10 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
               ))}
             </div>
           ) : q.type === 'true_false' ? (
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               {['True', 'False'].map(opt => (
                 <button key={opt} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                  className={`flex-1 py-2.5 rounded-xl border-2 font-semibold text-sm transition-colors ${
+                  className={`flex-1 py-4 rounded-xl border-2 font-semibold text-base transition-colors ${
                     userAnswer === opt
                       ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
                         : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
@@ -331,7 +345,7 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
             </div>
           ) : q.type === 'fill_blank' ? (
             // Multi-blank fill-in
-            <div className="flex flex-wrap items-center gap-1 text-base leading-loose">
+            <div className="flex flex-wrap items-center gap-2 text-xl leading-loose">
               {fbParts.map((part, i) => (
                 <React.Fragment key={i}>
                   {part && <span className="text-slate-800 dark:text-slate-100">{part}</span>}
@@ -342,7 +356,7 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
                       onChange={e => setBlankAnswers(prev => ({ ...prev, [i]: e.target.value }))}
                       onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
                       disabled={!!feedback}
-                      className={`w-28 px-2 py-0.5 border-b-2 text-center text-sm focus:outline-none transition-colors ${
+                      className={`w-36 px-3 py-1 border-b-2 text-center text-base focus:outline-none transition-colors ${
                         feedback === 'correct' ? 'border-emerald-500 text-emerald-700'
                           : feedback === 'wrong' ? 'border-red-500 text-red-700'
                           : 'border-amber-500 focus:border-amber-600'
@@ -359,19 +373,19 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
               disabled={!!feedback}
               dir={q.type === 'translate_to_arabic' ? 'rtl' : 'ltr'}
               placeholder="Type your answer…"
-              className="w-full px-4 py-2.5 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white"
+              className="w-full px-5 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-base focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white"
               autoFocus
             />
           )}
 
           {/* Feedback */}
           {feedback && (
-            <div className={`flex items-start gap-3 p-3 rounded-xl ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
-              <span className="text-xl">{feedback === 'correct' ? '✅' : '❌'}</span>
+            <div className={`flex items-start gap-4 p-4 rounded-xl ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
+              <span className="text-2xl">{feedback === 'correct' ? '✅' : '❌'}</span>
               <div>
-                <p className="font-semibold">{feedback === 'correct' ? 'Correct!' : 'Incorrect'}</p>
+                <p className="font-semibold text-lg">{feedback === 'correct' ? 'Correct!' : 'Incorrect'}</p>
                 {feedback === 'wrong' && (
-                  <p className="text-sm mt-0.5">
+                  <p className="text-base mt-0.5">
                     Correct answer: <span className="font-bold">
                       {q.type === 'fill_blank'
                         ? fbAnswers.join(' / ')
@@ -389,12 +403,12 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
                 disabled={q.type === 'fill_blank'
                   ? Object.keys(blankAnswers).length < (q.question.match(/___/g) ?? []).length
                   : !userAnswer}
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors">
+                className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors text-base">
                 Submit
               </button>
             ) : (
               <button onClick={nextQuestion}
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors">
+                className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
                 {qIndex + 1 >= questions.length ? 'See Results' : 'Next Question →'}
               </button>
             )}
@@ -408,18 +422,18 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
   if (practicePhase === 'done') {
     const pct = Math.round((score / questions.length) * 100);
     return (
-      <div className="max-w-md mx-auto p-8 text-center space-y-5">
-        <div className="text-6xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
-        <h2 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">Practice Complete</h2>
-        <p className="text-slate-500 dark:text-slate-400">
+      <div className="max-w-2xl mx-auto p-12 text-center space-y-6">
+        <div className="text-7xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
+        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">Practice Complete</h2>
+        <p className="text-lg text-slate-500 dark:text-slate-400">
           You got <span className="font-bold text-amber-600 dark:text-amber-400">{score} / {questions.length}</span> correct ({pct}%)
         </p>
         <button onClick={startPractice}
-          className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors">
+          className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
           Try Again
         </button>
         <button onClick={() => setPhase('idle')}
-          className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
+          className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
           Back to Questions
         </button>
       </div>
@@ -428,11 +442,11 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
 
   // ── Normal view ───────────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-8 space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Homework Questions</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Homework Questions</h2>
+          <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
             {questions.length} {questions.length === 1 ? 'exercise' : 'exercises'}
             {isAdmin ? ' · add or edit questions below' : ' · click Practice to test yourself'}
           </p>
@@ -440,13 +454,13 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
         <div className="flex gap-2">
           {questions.length > 0 && !isAdmin && (
             <button onClick={startPractice}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-sm">
+              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
               ▶ Start Practice
             </button>
           )}
           {isAdmin && (
             <button onClick={() => { setEditingQ(null); setShowForm(v => !v); }}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-sm">
+              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
               {showForm && !editingQ ? '✕ Cancel' : '+ Add Question'}
             </button>
           )}
@@ -479,19 +493,19 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
       {questions.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700 overflow-hidden">
           {questions.map((q, i) => (
-            <div key={q.id} className="flex items-start gap-4 p-4">
-              <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold mt-0.5">
+            <div key={q.id} className="flex items-start gap-5 p-6">
+              <span className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-sm font-bold mt-0.5">
                 {i + 1}
               </span>
-              <div className="flex-1 min-w-0 space-y-1">
-                <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-xs font-semibold">
+              <div className="flex-1 min-w-0 space-y-2">
+                <span className="inline-block px-2.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-sm font-semibold">
                   {QUESTION_TYPE_LABELS[q.type]}
                 </span>
-                <p className="text-sm text-slate-800 dark:text-slate-100" dir={q.type === 'translate_to_english' ? 'rtl' : 'ltr'}>
+                <p className="text-base text-slate-800 dark:text-slate-100" dir={q.type === 'translate_to_english' ? 'rtl' : 'ltr'}>
                   {q.question}
                 </p>
                 {isAdmin && (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm text-slate-400">
                     ✓ {q.type === 'fill_blank' && q.options?.length
                       ? 'Answers: ' + q.options.join(' / ')
                       : 'Answer: ' + q.correctAnswer}
@@ -520,7 +534,7 @@ const HomeworkTab: React.FC<{ lessonId: string; isAdmin: boolean; studentId?: st
       )}
       {questions.length > 0 && !isAdmin && (
         <button onClick={startPractice}
-          className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors">
+          className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
           ▶ Start Practice ({questions.length} questions)
         </button>
       )}
@@ -930,30 +944,27 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   if (phase === 'active') {
     const word = shuffled[cardIndex];
     return (
-      <div className="max-w-xl mx-auto p-6 space-y-5">
+      <div className="max-w-3xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Card {cardIndex + 1} / {shuffled.length}</span>
-          <button onClick={() => setPhase('idle')} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
+          <span className="text-base text-slate-500 dark:text-slate-400">Card {cardIndex + 1} / {shuffled.length}</span>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
         </div>
-        <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 text-center shadow-sm space-y-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Do you know the Arabic for…</p>
-          <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
-          {word.transliteration && (
-            <p className="text-sm text-slate-400 italic">{word.transliteration}</p>
-          )}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-16 px-12 text-center shadow-sm space-y-4">
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Do you know the Arabic for…</p>
+          <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-6">
           <button onClick={handleNotSure}
-            className="py-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-lg">
+            className="py-7 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-2xl">
             😕 Not Sure
           </button>
           <button onClick={handleKnow}
-            className="py-4 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-lg">
+            className="py-7 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-2xl">
             ✓ I Know!
           </button>
         </div>
@@ -965,25 +976,27 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   if (phase === 'wrong') {
     const word = shuffled[cardIndex];
     return (
-      <div className="max-w-xl mx-auto p-6 space-y-5">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center shadow-sm space-y-4">
-          <div className="text-4xl">😕</div>
-          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 space-y-1">
-            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
-            <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>
+      <div className="max-w-3xl mx-auto p-10 space-y-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-12 text-center shadow-sm space-y-6">
+          <div className="text-5xl">😕</div>
+          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 space-y-2">
+            <p className="text-sm font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
+            <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
+            {word.transliteration && (
+              <p className="text-base text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>
+            )}
           </div>
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">❗ Get all words right in a row to complete the challenge!</p>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
+            <p className="text-base font-semibold text-amber-700 dark:text-amber-300">❗ Get all words right in a row to complete the challenge!</p>
           </div>
         </div>
         <button onClick={handleRestartAfterWrong}
-          className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-base">
+          className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-xl">
           🔄 Start Over
         </button>
         <button onClick={() => setPhase('idle')}
-          className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
+          className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
           Back to word list
         </button>
       </div>
@@ -993,23 +1006,23 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   // ── Complete ──────────────────────────────────────────────────────────────
   if (phase === 'complete') {
     return (
-      <div className="max-w-xl mx-auto p-6 space-y-5">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center shadow-sm space-y-4">
-          <div className="text-6xl">🎉</div>
-          <h2 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">Challenge Complete!</h2>
-          <p className="text-slate-500 dark:text-slate-400">You got all {words.length} words correct in a row!</p>
+      <div className="max-w-3xl mx-auto p-10 space-y-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center shadow-sm space-y-5">
+          <div className="text-7xl">🎉</div>
+          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">Challenge Complete!</h2>
+          <p className="text-lg text-slate-500 dark:text-slate-400">You got all {words.length} words correct in a row!</p>
           {selectedStudentId && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+            <p className="text-base text-emerald-600 dark:text-emerald-400 font-semibold">
               {saving ? '⏳ Saving progress…' : '✅ Progress saved!'}
             </p>
           )}
         </div>
         {wrongWords.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-3">
-            <h3 className="font-bold text-slate-700 dark:text-slate-200">Words that need more practice</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">Words that need more practice</h3>
             <div className="divide-y divide-slate-100 dark:divide-gray-700">
               {wrongWords.map(w => (
-                <div key={w.id} className="py-2.5 grid grid-cols-3 gap-2 text-sm text-center">
+                <div key={w.id} className="py-3 grid grid-cols-3 gap-2 text-base text-center">
                   <span className="font-semibold text-slate-800 dark:text-slate-100">{w.english}</span>
                   <span dir="rtl">{w.arabic}</span>
                   <span className="text-slate-500 dark:text-slate-400">{w.transliteration}</span>
@@ -1018,13 +1031,13 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             </div>
           </div>
         )}
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           <button onClick={startChallenge}
-            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors">
+            className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
             Practice Again
           </button>
           <button onClick={() => setPhase('idle')}
-            className="flex-1 py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
+            className="flex-1 py-4 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
             Back to Words
           </button>
         </div>
@@ -1034,11 +1047,11 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   // ── Idle / word list ──────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-8 space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Vocabulary Trainer</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Vocabulary Trainer</h2>
+          <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
             {words.length} {words.length === 1 ? 'word' : 'words'}
             {isAdmin ? ' · add words individually or bulk-import' : ' · run the flashcard challenge to practise'}
           </p>
@@ -1082,17 +1095,17 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
         <>
           {/* Word table */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
-            <div className="grid grid-cols-4 bg-slate-50 dark:bg-gray-700/50 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-4 py-2 border-b border-slate-200 dark:border-gray-700 text-center">
+            <div className="grid grid-cols-4 bg-slate-50 dark:bg-gray-700/50 text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-5 py-3 border-b border-slate-200 dark:border-gray-700 text-center">
               <span className="text-left">#</span><span>Arabic</span><span>Transliteration</span><span>English</span>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-gray-700">
               {words.map((w, i) => (
-                <div key={w.id} className="grid grid-cols-4 items-center px-4 py-3 group text-center">
-                  <span className="text-xs text-slate-400 text-left">{i + 1}</span>
-                  <span className="text-base text-slate-800 dark:text-slate-100" dir="rtl">{w.arabic}</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-300">{w.transliteration}</span>
+                <div key={w.id} className="grid grid-cols-4 items-center px-5 py-4 group text-center">
+                  <span className="text-sm text-slate-400 text-left">{i + 1}</span>
+                  <span className="text-xl text-slate-800 dark:text-slate-100" dir="rtl">{w.arabic}</span>
+                  <span className="text-base text-slate-600 dark:text-slate-300">{w.transliteration}</span>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-sm text-slate-700 dark:text-slate-200">{w.english}</span>
+                    <span className="text-base text-slate-700 dark:text-slate-200">{w.english}</span>
                     {isAdmin && (
                       <button onClick={() => handleDeleteWord(w.id)}
                         className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 rounded transition-all">
@@ -1107,55 +1120,6 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             </div>
           </div>
 
-          {/* Spaced-rep progress — tutor only, when student selected */}
-          {!isAdmin && selectedStudentId && (
-            (() => {
-              const completed   = attempts.filter(a => a.completedAt).length;
-              const totalExpected = words.length * 10; // 5 attempts × 2 modes
-              const pct = totalExpected > 0 ? Math.round((completed / totalExpected) * 100) : 0;
-              const status: 'not_started' | 'in_progress' | 'complete' =
-                completed === 0 ? 'not_started' :
-                completed >= totalExpected ? 'complete' : 'in_progress';
-              return (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-200">Spaced-Repetition Progress</h3>
-                    {status === 'complete' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
-                        All sessions complete
-                      </span>
-                    )}
-                    {status === 'in_progress' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
-                        In progress
-                      </span>
-                    )}
-                    {status === 'not_started' && (
-                      <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-400 text-xs font-semibold rounded-full">Not started</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          status === 'complete'    ? 'bg-emerald-500' :
-                          status === 'in_progress' ? 'bg-amber-400'  : 'bg-slate-200 dark:bg-gray-600'
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500 flex-shrink-0">{pct}%</span>
-                  </div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {completed} / {totalExpected} spaced-repetition sessions completed
-                    &nbsp;({words.length} words × 2 modes × 5 rounds)
-                  </p>
-                </div>
-              );
-            })()
-          )}
 
           {/* Challenge section — tutor only */}
           {!isAdmin && (
@@ -1178,7 +1142,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                 </div>
               )}
               <button onClick={startChallenge}
-                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors">
+                className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
                 🎴 Start Flashcard Challenge ({words.length} words)
               </button>
             </div>

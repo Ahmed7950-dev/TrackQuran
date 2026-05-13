@@ -330,6 +330,9 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           preSelectedStudentId={preSelectedStudentId}
           onClose={() => setViewing(null)}
           onStudentUpdated={onStudentUpdated}
+          onHomeworkComplete={lessonId =>
+            setHwDone(prev => prev.includes(lessonId) ? prev : [...prev, lessonId])
+          }
         />
       )}
     </div>

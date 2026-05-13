@@ -343,19 +343,36 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   const lessonsWithVocab = lessons.filter(l => (wordCounts[l.id] ?? 0) > 0);
 
   // ── Spaced-rep timeline per lesson ───────────────────────────────────────
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  const TIMELINE_DELAYS = [1, 3, 7, 14]; // days after first attempt
+
+  function formatDate(d: Date): string {
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
+
+  function addDays(base: Date, days: number): Date {
+    const d = new Date(base);
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+
+  function isSameDay(a: Date, b: Date): boolean {
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+  }
+
+  const today = new Date();
 
   interface TimelineCol {
     attemptNumber: number;
-    scheduledDate: string | null;
+    scheduledDate: Date;
     completedAt: string | null;
+    isToday: boolean;
     isOverdue: boolean;
   }
 
   interface LessonTimeline {
-    firstDone: string;
+    firstDone: Date;
     cols: TimelineCol[];
     allComplete: boolean;
   }
@@ -367,22 +384,26 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
     // First done = earliest completedAt among attemptNumber===1
     const firstDoneList = lessonAttempts
       .filter(a => a.attemptNumber === 1 && a.completedAt)
-      .map(a => a.completedAt as string);
+      .map(a => a.completedAt as string)
+      .sort();
     if (firstDoneList.length === 0) return null;
-    const firstDone = firstDoneList.sort()[0];
-
-    const now = new Date();
+    const firstDone = new Date(firstDoneList[0]);
 
     // Attempts 2-5 represent the +1, +3, +7, +14 day checkpoints
-    const cols: TimelineCol[] = [2, 3, 4, 5].map(attemptNum => {
-      const attemptsForNum = lessonAttempts.filter(a => a.attemptNumber === attemptNum);
-      const completedEntry = attemptsForNum.find(a => a.completedAt);
-      const scheduledDate = attemptsForNum[0]?.scheduledDate ?? null;
-      const isOverdue = !completedEntry && !!scheduledDate && new Date(scheduledDate) < now;
+    // Dates are ALWAYS calculated from firstDone regardless of DB scheduledAt
+    const cols: TimelineCol[] = TIMELINE_DELAYS.map((days, i) => {
+      const attemptNum = i + 2; // 2,3,4,5
+      const scheduledDate = addDays(firstDone, days);
+      const completedEntry = lessonAttempts.find(
+        a => a.attemptNumber === attemptNum && a.completedAt
+      );
+      const todayFlag  = !completedEntry && isSameDay(scheduledDate, today);
+      const isOverdue  = !completedEntry && !todayFlag && scheduledDate < today;
       return {
         attemptNumber: attemptNum,
         scheduledDate,
         completedAt: completedEntry?.completedAt ?? null,
+        isToday: todayFlag,
         isOverdue,
       };
     });
@@ -390,6 +411,12 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
     const allComplete = cols.every(c => !!c.completedAt);
     return { firstDone, cols, allComplete };
   }
+
+  // Lessons that have an attempt due today (for the reminder banner)
+  const dueTodayLessons = lessonsWithVocab.filter(l => {
+    const t = getSpacedRepTimeline(l.id);
+    return t?.cols.some(c => c.isToday);
+  });
 
   // ── Wrong words grouped by lesson ────────────────────────────────────────
   const mistakesByLesson = mistakes.reduce<Record<string, VocabMistakeDetail[]>>((acc, m) => {
@@ -410,9 +437,23 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
           Spaced-Repetition Schedule
         </h2>
         <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-          Each lesson's flashcard sessions scheduled at +1, +3, +7 and +14 days from the first attempt.
-          <span className="ml-1 text-red-400">Red dates</span> are overdue.
+          Dates are calculated from the first flashcard session date (+1, +3, +7, +14 days).
+          <span className="ml-1 text-emerald-500 font-semibold">Green cells</span> = due today ·
+          <span className="ml-1 text-red-400 font-semibold">Red dates</span> = overdue.
         </p>
+
+        {/* Today reminder banner */}
+        {dueTodayLessons.length > 0 && (
+          <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+            <span className="text-xl flex-shrink-0">📅</span>
+            <div>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Flashcard session due today!</p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                {dueTodayLessons.map(l => l.title).join(' · ')}
+              </p>
+            </div>
+          </div>
+        )}
 
         {lessonsWithVocab.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center">
@@ -435,9 +476,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                 {lessonsWithVocab.map((lesson) => {
                   const timeline = getSpacedRepTimeline(lesson.id);
                   const allComplete = timeline?.allComplete ?? false;
-                  const rowBg = allComplete
-                    ? 'bg-emerald-50 dark:bg-emerald-900/20'
-                    : '';
+                  const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
                   return (
                     <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
                       {/* Lesson name */}
@@ -462,25 +501,36 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 
                       {/* +1 / +3 / +7 / +14 day columns */}
                       {timeline
-                        ? timeline.cols.map(col => (
-                          <td key={col.attemptNumber} className="px-3 py-3 text-center">
-                            {col.completedAt ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                                </svg>
-                                Done
-                              </span>
-                            ) : col.scheduledDate ? (
-                              <span className={`text-xs font-medium ${col.isOverdue ? 'text-red-500 dark:text-red-400 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
-                                {col.isOverdue && '⚠ '}
-                                {formatDate(col.scheduledDate)}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-600">—</span>
-                            )}
-                          </td>
-                        ))
+                        ? timeline.cols.map(col => {
+                            // Cell background: green if today, normal otherwise
+                            const cellBg = col.isToday
+                              ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                              : '';
+                            return (
+                              <td key={col.attemptNumber} className={`px-3 py-3 text-center ${cellBg}`}>
+                                {col.completedAt ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                                    </svg>
+                                    Done
+                                  </span>
+                                ) : col.isToday ? (
+                                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                    📅 {formatDate(col.scheduledDate)}
+                                  </span>
+                                ) : col.isOverdue ? (
+                                  <span className="text-xs font-semibold text-red-500 dark:text-red-400">
+                                    ⚠ {formatDate(col.scheduledDate)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                                    {formatDate(col.scheduledDate)}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })
                         : [2, 3, 4, 5].map(n => (
                           <td key={n} className="px-3 py-3 text-center">
                             <span className="text-slate-300 dark:text-slate-600">—</span>
