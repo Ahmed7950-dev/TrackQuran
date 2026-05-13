@@ -611,7 +611,7 @@ export async function markHomeworkComplete(studentId: string, lessonId: string):
 
 export async function getHomeworkCountsByLesson(): Promise<Record<string, number>> {
   const { data, error } = await supabase
-    .from('arabic_homework_questions')
+    .from('arabic_lesson_homework')
     .select('id, lesson_id');
   if (error) { console.error('getHomeworkCountsByLesson:', error.message); return {}; }
   const counts: Record<string, number> = {};
