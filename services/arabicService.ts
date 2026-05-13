@@ -595,10 +595,16 @@ export async function getHomeworkCompletionsForStudent(studentId: string): Promi
 
 export async function markHomeworkComplete(studentId: string, lessonId: string): Promise<void> {
   const id = `hwc-${studentId}-${lessonId}`;
-  await supabase
+  const { error } = await supabase
     .from('arabic_homework_completions')
-    .upsert({ id, student_id: studentId, lesson_id: lessonId, completed_at: new Date().toISOString() },
-             { onConflict: 'student_id,lesson_id' });
+    .upsert(
+      { id, student_id: studentId, lesson_id: lessonId, completed_at: new Date().toISOString() },
+      { onConflict: 'id' },
+    );
+  if (error) {
+    console.error('markHomeworkComplete failed:', error.message,
+      '\n→ Make sure the arabic_homework_completions table exists (run the SQL migration).');
+  }
 }
 
 // ── Homework question counts per lesson ───────────────────────────────────────

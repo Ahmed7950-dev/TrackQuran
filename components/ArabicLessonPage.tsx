@@ -330,14 +330,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           preSelectedStudentId={preSelectedStudentId}
           onClose={async () => {
             setViewing(null);
-            // Always refresh badge data from DB when closing a lesson
+            // Refresh badge data from DB — merge with current local state so that
+            // a lesson just completed (onHomeworkComplete already added it locally)
+            // is never erased by a DB reload that might lag behind.
             if (preSelectedStudentId) {
-              const [done, rounds] = await Promise.all([
+              const [dbDone, dbRounds] = await Promise.all([
                 getHomeworkCompletionsForStudent(preSelectedStudentId),
                 getVocabRoundsByLesson(preSelectedStudentId),
               ]);
-              setHwDone(done);
-              setVocabRounds(rounds);
+              setHwDone(prev => [...new Set([...prev, ...dbDone])]);
+              setVocabRounds(dbRounds);
             }
           }}
           onStudentUpdated={onStudentUpdated}
