@@ -644,17 +644,21 @@ const App: React.FC = () => {
               <Logo />
             </button>
             <span className="hidden sm:block text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full" style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</span>
-            <div className="flex-1" />
-            {/* Switch to Quran */}
-            <button
-              onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); }}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-gray-700 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-              </svg>
-              <span className="hidden sm:inline">Switch to Quran</span>
-            </button>
+            {/* Nav links — same as Quran section */}
+            <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
+              <button
+                onClick={() => setActiveTab(tab => tab === 'aboutUs' ? 'main' : 'aboutUs')}
+                className={`text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              >{t('header.aboutUs')}</button>
+              <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
+              <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
+              {/* Switch to Quran */}
+              <button
+                onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); setActiveTab('main'); }}
+                className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors"
+              >Switch to Quran</button>
+            </nav>
+            <div className="flex-1 md:hidden" />
             <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
               {currentTheme === 'dark' ? (
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
@@ -670,7 +674,9 @@ const App: React.FC = () => {
           </div>
         </header>
         <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
-          {selectedArabicStudent ? (
+          {activeTab === 'aboutUs' ? (
+            <AboutUsPage />
+          ) : selectedArabicStudent ? (
             <ArabicStudentDetailPage
               student={selectedArabicStudent}
               teacherId={currentUser.id}
@@ -683,7 +689,7 @@ const App: React.FC = () => {
               teacherId={currentUser.id}
               students={arabicStudents}
               onAddStudent={handleAddArabicStudent}
-              onSelectStudent={setSelectedArabicStudentId}
+              onSelectStudent={id => { setSelectedArabicStudentId(id); setActiveTab('main'); }}
               onUpdateStudent={handleUpdateArabicStudent}
             />
           )}
