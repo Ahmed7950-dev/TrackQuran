@@ -342,39 +342,181 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         setActiveModal(null);
     };
 
-    const Calendar = () => {
+    // ── Rich Progress Calendar ───────────────────────────────────────────────
+    type CalDayEntry = {
+        type: 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafsir';
+        label: string;
+        badgeCls: string;
+    };
+
+    const calEntriesMap = useMemo(() => {
+        const map = new Map<string, CalDayEntry[]>();
+        const add = (dateStr: string, entry: CalDayEntry) => {
+            if (!map.has(dateStr)) map.set(dateStr, []);
+            map.get(dateStr)!.push(entry);
+        };
+        const fmtRange = (ss: number, sa: number, es: number, ea: number) => {
+            const sn = quranMetadata.find(s => s.number === ss)?.transliteratedName ?? `S${ss}`;
+            if (ss === es) return `${sn} ${sa}–${ea}`;
+            const en = quranMetadata.find(s => s.number === es)?.transliteratedName ?? `S${es}`;
+            return `${sn} ${sa} – ${en} ${ea}`;
+        };
+        student.recitationAchievements.forEach(a => {
+            add(new Date(a.date).toDateString(), {
+                type: a.isRevision ? 'reading-revision' : 'reading',
+                label: fmtRange(a.startSurah, a.startAyah, a.endSurah, a.endAyah),
+                badgeCls: a.isRevision
+                    ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300'
+                    : 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300',
+            });
+        });
+        student.memorizationAchievements.forEach(a => {
+            add(new Date(a.date).toDateString(), {
+                type: a.isRevision ? 'hifz-revision' : 'hifz',
+                label: fmtRange(a.startSurah, a.startAyah, a.endSurah, a.endAyah),
+                badgeCls: a.isRevision
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                    : 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+            });
+        });
+        student.tafsirReviews.forEach(a => {
+            const ss = a.startSurah ?? a.surah;
+            const sa = a.startAyah ?? 1;
+            const es = a.endSurah ?? a.surah;
+            const ea = a.endAyah ?? (quranMetadata.find(s => s.number === es)?.numberOfAyahs ?? 1);
+            add(new Date(a.date).toDateString(), {
+                type: 'tafsir',
+                label: fmtRange(ss, sa, es, ea),
+                badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+            });
+        });
+        return map;
+    }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata]);
+
+    const calAttendanceMap = useMemo(
+        () => new Map(student.attendance.map(a => [new Date(a.date).toDateString(), a.status])),
+        [student.attendance]
+    );
+
+    const ProgressCalendar = () => {
         const month = calendarDate.getMonth();
-        const year = calendarDate.getFullYear();
-        const firstDay = (new Date(year, month, 1).getDay() + (language === 'ar' ? 1 : 0)) % 7;
+        const year  = calendarDate.getFullYear();
+        const firstDay   = new Date(year, month, 1).getDay(); // 0 = Sun
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        // Fix: Replaced 'a.useMemo' with 'useMemo'.
-        const attendanceMap = useMemo(() => new Map(student.attendance.map(a => [new Date(a.date).toDateString(), a.status])), [student.attendance]);
-        const days = Array.from({ length: firstDay }, (_, i) => <div key={`empty-${i}`} className="h-8 w-8"></div>);
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(year, month, day);
-            const dateString = date.toDateString();
-            const status = attendanceMap.get(dateString);
-            const isToday = dateString === new Date().toDateString();
-            let bgColor = 'bg-slate-50 dark:bg-gray-700/50';
-            if (status === AttendanceStatus.Present) bgColor = 'bg-green-400 text-white';
-            if (status === AttendanceStatus.Absent) bgColor = 'bg-red-400 text-white';
-            if (status === AttendanceStatus.Rescheduled) bgColor = 'bg-orange-400 text-white';
-            days.push(<div key={day} className={`h-8 w-8 flex items-center justify-center text-xs rounded-full ${bgColor} ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500' : ''}`}>{day}</div>);
+
+        const TYPE_ICONS: Record<CalDayEntry['type'], string> = {
+            'reading': '📖',
+            'reading-revision': '🔄',
+            'hifz': '🧠',
+            'hifz-revision': '↩️',
+            'tafsir': '📚',
+        };
+
+        const cells: React.ReactNode[] = [];
+        for (let i = 0; i < firstDay; i++) {
+            cells.push(<div key={`e-${i}`} className="min-h-[90px]" />);
         }
-        const dayNames = language === 'ar' ? ['أ', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date   = new Date(year, month, day);
+            const ds     = date.toDateString();
+            const status  = calAttendanceMap.get(ds);
+            const entries = calEntriesMap.get(ds) ?? [];
+            const isToday = ds === new Date().toDateString();
+            const hasProgress = entries.length > 0;
+
+            // header strip colour
+            let headerCls = 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
+            let borderCls = 'border-slate-200 dark:border-gray-600';
+            if (status === AttendanceStatus.Absent) {
+                headerCls = 'bg-red-400 text-white'; borderCls = 'border-red-300 dark:border-red-700';
+            } else if (status === AttendanceStatus.Rescheduled) {
+                headerCls = 'bg-orange-400 text-white'; borderCls = 'border-orange-300 dark:border-orange-600';
+            } else if (status === AttendanceStatus.Present || hasProgress) {
+                headerCls = 'bg-emerald-400 text-white'; borderCls = 'border-emerald-300 dark:border-emerald-700';
+            }
+
+            cells.push(
+                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[90px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
+                    {/* Day number strip */}
+                    <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
+                        <span className="text-xs font-bold leading-none">{day}</span>
+                    </div>
+                    {/* Entry badges */}
+                    {entries.length > 0 && (
+                        <div className="flex flex-col gap-0.5 p-1 flex-1 overflow-hidden">
+                            {entries.map((e, i) => (
+                                <span key={i} className={`flex items-start gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded leading-tight ${e.badgeCls}`} style={{ wordBreak: 'break-word' }}>
+                                    <span className="flex-shrink-0">{TYPE_ICONS[e.type]}</span>
+                                    <span className="min-w-0 break-words">{e.label}</span>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const dayNames = language === 'ar'
+            ? ['أحد', 'إثن', 'ثلث', 'أرب', 'خمس', 'جمع', 'سبت']
+            : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
         return (
-             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                <div className="flex justify-between items-center mb-3">
-                    <button onClick={() => setCalendarDate(new Date(year, month - 1))} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-gray-700">&lt;</button>
-                    <h4 className="font-semibold text-slate-700 dark:text-slate-200">{calendarDate.toLocaleString(language, { month: 'long', year: 'numeric' })}</h4>
-                    <button onClick={() => setCalendarDate(new Date(year, month + 1))} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-gray-700">&gt;</button>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
+                {/* Title + nav */}
+                <div className="flex items-center justify-between mb-4">
+                    <button onClick={() => setCalendarDate(new Date(year, month - 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
+                        ‹
+                    </button>
+                    <div className="text-center">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+                            {calendarDate.toLocaleString(language === 'ar' ? 'ar' : 'en', { month: 'long', year: 'numeric' })}
+                        </h3>
+                        {/* Status legend */}
+                        <div className="flex items-center justify-center gap-3 mt-1.5">
+                            {[
+                                { cls: 'bg-emerald-400', label: 'Progress / Present' },
+                                { cls: 'bg-red-400',     label: 'Absent' },
+                                { cls: 'bg-orange-400',  label: 'Rescheduled' },
+                            ].map(l => (
+                                <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                    <span className={`w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0 ${l.cls}`} />
+                                    {l.label}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <button onClick={() => setCalendarDate(new Date(year, month + 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
+                        ›
+                    </button>
                 </div>
-                <div className="mx-auto w-max">
-                  <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 dark:text-slate-400 mb-2">{dayNames.map(d => <div key={d} className="h-8 w-8 flex items-center justify-center font-bold">{d}</div>)}</div>
-                  <div className="grid grid-cols-7 gap-1 text-center">{days}</div>
+
+                {/* Day-name header row */}
+                <div className="grid grid-cols-7 gap-1 mb-1">
+                    {dayNames.map(d => (
+                        <div key={d} className="text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>
+                    ))}
                 </div>
-             </div>
+
+                {/* Days grid */}
+                <div className="grid grid-cols-7 gap-1">{cells}</div>
+
+                {/* Badge type legend */}
+                <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                    {[
+                        { icon: '📖', label: 'Reading',          cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
+                        { icon: '🔄', label: 'Reading Revision',  cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300' },
+                        { icon: '🧠', label: 'Hifz',              cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
+                        { icon: '↩️', label: 'Hifz Revision',    cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' },
+                        { icon: '📚', label: 'Tafsir',            cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+                    ].map(l => (
+                        <span key={l.label} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${l.cls}`}>
+                            {l.icon} {l.label}
+                        </span>
+                    ))}
+                </div>
+            </div>
         );
     };
     
@@ -491,6 +633,9 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 </div>
             </div>
 
+            {/* ── Progress Calendar (full-width) ── */}
+            <ProgressCalendar />
+
             <div className="flex justify-end"><select value={timePeriod} onChange={e => setTimePeriod(e.target.value as TimePeriod)} className="bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2">
                 {Object.keys(TimePeriod).map(key => (
                     <option key={key} value={TimePeriod[key as keyof typeof TimePeriod]}>
@@ -569,8 +714,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 }
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
+            <div className="space-y-6">
+                <div>
                     {/* Completed Tajweed Lessons */}
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                         <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
@@ -663,7 +808,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         )}
                     </div>
                 </div>
-                <div className="space-y-6"><Calendar /></div>
             </div>
 
             <AddRecitationAchievementModal isOpen={activeModal === 'recitation'} onClose={() => setActiveModal(null)} onAddAchievement={handleAddAchievement} quranMetadata={quranMetadata} />
