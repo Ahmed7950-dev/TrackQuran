@@ -765,16 +765,16 @@ const TajweedLessonViewer: React.FC<Props> = ({
                 <div key={tbl.id} className="absolute wb-object"
                   style={{ left: tbl.x, top: tbl.y, zIndex: isSel ? 20 : 10, pointerEvents: isDrawTool ? 'none' : 'auto' }}
                   onClick={e => { e.stopPropagation(); setSelectedId(tbl.id); }}>
-                  {/* Table controls (visible when selected) */}
+                  {/* Table controls — absolutely positioned ABOVE the table so they don't shift the drag handle */}
                   {isSel && (
-                    <div className="flex items-center gap-1 mb-1 flex-wrap">
+                    <div className="absolute flex items-center gap-1 flex-wrap" style={{ bottom: '100%', left: 0, marginBottom: 4, zIndex: 30 }}>
                       {([['+ Row','addRow'],['+ Col','addCol'],['− Row','delRow'],['− Col','delCol']] as [string, 'addRow'|'addCol'|'delRow'|'delCol'][]).map(([label, op]) => (
                         <button key={op} onClick={e => { e.stopPropagation(); mutateTable(tbl.id, op); }}
-                          className={`px-1.5 py-0.5 text-[10px] font-semibold rounded ${op.startsWith('−') || op.startsWith('d') ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'} border`}>
+                          className={`px-1.5 py-0.5 text-[10px] font-semibold rounded ${op.startsWith('−') || op.startsWith('d') ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'} border shadow-sm whitespace-nowrap`}>
                           {label}
                         </button>
                       ))}
-                      <span className="text-[10px] text-gray-500 ml-1">{tbl.rows.length}×{nCols}</span>
+                      <span className="text-[10px] text-gray-500 bg-white/80 px-1 rounded">{tbl.rows.length}×{nCols}</span>
                     </div>
                   )}
                   {/* Drag handle (header row) */}

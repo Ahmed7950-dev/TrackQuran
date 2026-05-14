@@ -558,7 +558,7 @@ const HomeworkTab: React.FC<{
                 <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${QUESTION_TYPE_LABELS[q.type]}</div>
                 <p style="font-size:15px;font-weight:600;color:#1e293b;margin:0 0 8px 0">${i + 1}. ${q.question}</p>
                 ${q.options?.length ? q.options.map((o,j) => `<p style="margin:3px 0;font-size:13px;color:#475569">${String.fromCharCode(65+j)}. ${o}</p>`).join('') : ''}
-                <p style="margin-top:8px;font-size:12px;color:#94a3b8">Answer: <span style="color:#1e293b;font-weight:600">${q.correctAnswer}</span></p>
+                <div style="margin-top:12px;height:32px;border-bottom:1px solid #cbd5e1;"></div>
               </div>`).join('');
             win.document.write(`<!DOCTYPE html><html><head><title>Homework — ${lessonId}</title>
               <style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:20px}h1{font-size:22px;margin-bottom:24px}@media print{button{display:none}}</style></head>
