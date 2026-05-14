@@ -356,10 +356,16 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             map.get(dateStr)!.push(entry);
         };
         const fmtRange = (ss: number, sa: number, es: number, ea: number) => {
-            const sn = quranMetadata.find(s => s.number === ss)?.transliteratedName ?? `S${ss}`;
-            if (ss === es) return `${sn} ${sa}–${ea}`;
-            const en = quranMetadata.find(s => s.number === es)?.transliteratedName ?? `S${es}`;
-            return `${sn} ${sa} – ${en} ${ea}`;
+            const startMeta = quranMetadata.find(s => s.number === ss);
+            const endMeta   = quranMetadata.find(s => s.number === es);
+            const sn = startMeta?.transliteratedName ?? `S${ss}`;
+            const en = endMeta?.transliteratedName   ?? `S${es}`;
+            // Multi-surah range → just "First – Last" (no verse numbers)
+            if (ss !== es) return `${sn} – ${en}`;
+            // Single surah, all verses → just the surah name
+            if (sa === 1 && ea === (startMeta?.numberOfAyahs ?? ea)) return sn;
+            // Single surah, partial → "SurahName ayah–ayah"
+            return `${sn} ${sa}–${ea}`;
         };
         student.recitationAchievements.forEach(a => {
             add(new Date(a.date).toDateString(), {
