@@ -350,52 +350,96 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     };
 
     const calEntriesMap = useMemo(() => {
-        const map = new Map<string, CalDayEntry[]>();
-        const add = (dateStr: string, entry: CalDayEntry) => {
-            if (!map.has(dateStr)) map.set(dateStr, []);
-            map.get(dateStr)!.push(entry);
+        type RawSeg = { startSurah: number; startAyah: number; endSurah: number; endAyah: number };
+        // day → type → list of raw segments (one per logged achievement)
+        const raw = new Map<string, Map<CalDayEntry['type'], RawSeg[]>>();
+
+        const addRaw = (dateStr: string, type: CalDayEntry['type'], seg: RawSeg) => {
+            if (!raw.has(dateStr)) raw.set(dateStr, new Map());
+            const dm = raw.get(dateStr)!;
+            if (!dm.has(type)) dm.set(type, []);
+            dm.get(type)!.push(seg);
         };
-        const fmtRange = (ss: number, sa: number, es: number, ea: number) => {
-            const startMeta = quranMetadata.find(s => s.number === ss);
-            const endMeta   = quranMetadata.find(s => s.number === es);
-            const sn = startMeta?.transliteratedName ?? `S${ss}`;
-            const en = endMeta?.transliteratedName   ?? `S${es}`;
-            // Multi-surah range → just "First – Last" (no verse numbers)
-            if (ss !== es) return `${sn} – ${en}`;
-            // Single surah, all verses → just the surah name
-            if (sa === 1 && ea === (startMeta?.numberOfAyahs ?? ea)) return sn;
-            // Single surah, partial → "SurahName ayah–ayah"
-            return `${sn} ${sa}–${ea}`;
-        };
-        student.recitationAchievements.forEach(a => {
-            add(new Date(a.date).toDateString(), {
-                type: a.isRevision ? 'reading-revision' : 'reading',
-                label: fmtRange(a.startSurah, a.startAyah, a.endSurah, a.endAyah),
-                badgeCls: a.isRevision
-                    ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300'
-                    : 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300',
-            });
-        });
-        student.memorizationAchievements.forEach(a => {
-            add(new Date(a.date).toDateString(), {
-                type: a.isRevision ? 'hifz-revision' : 'hifz',
-                label: fmtRange(a.startSurah, a.startAyah, a.endSurah, a.endAyah),
-                badgeCls: a.isRevision
-                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                    : 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
-            });
-        });
+
+        student.recitationAchievements.forEach(a =>
+            addRaw(new Date(a.date).toDateString(),
+                a.isRevision ? 'reading-revision' : 'reading',
+                { startSurah: a.startSurah, startAyah: a.startAyah, endSurah: a.endSurah, endAyah: a.endAyah })
+        );
+        student.memorizationAchievements.forEach(a =>
+            addRaw(new Date(a.date).toDateString(),
+                a.isRevision ? 'hifz-revision' : 'hifz',
+                { startSurah: a.startSurah, startAyah: a.startAyah, endSurah: a.endSurah, endAyah: a.endAyah })
+        );
         student.tafsirReviews.forEach(a => {
             const ss = a.startSurah ?? a.surah;
             const sa = a.startAyah ?? 1;
             const es = a.endSurah ?? a.surah;
             const ea = a.endAyah ?? (quranMetadata.find(s => s.number === es)?.numberOfAyahs ?? 1);
-            add(new Date(a.date).toDateString(), {
-                type: 'tafsir',
-                label: fmtRange(ss, sa, es, ea),
-                badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
-            });
+            addRaw(new Date(a.date).toDateString(), 'tafsir',
+                { startSurah: ss, startAyah: sa, endSurah: es, endAyah: ea });
         });
+
+        // Format a merged segment into a readable label
+        const fmtRange = (ss: number, sa: number, es: number, ea: number): string => {
+            const startMeta = quranMetadata.find(s => s.number === ss);
+            const endMeta   = quranMetadata.find(s => s.number === es);
+            const sn = startMeta?.transliteratedName ?? `S${ss}`;
+            const en = endMeta?.transliteratedName   ?? `S${es}`;
+            if (ss !== es) return `${sn} – ${en}`;                          // multi-surah range
+            if (sa === 1 && ea === (startMeta?.numberOfAyahs ?? ea)) return sn; // full surah
+            return `${sn} ${sa}–${ea}`;                                      // partial surah
+        };
+
+        const BADGE_CLS: Record<CalDayEntry['type'], string> = {
+            'reading':          'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300',
+            'reading-revision': 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300',
+            'hifz':             'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+            'hifz-revision':    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300',
+            'tafsir':           'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+        };
+        const TYPE_ORDER: CalDayEntry['type'][] = ['reading', 'reading-revision', 'hifz', 'hifz-revision', 'tafsir'];
+
+        const map = new Map<string, CalDayEntry[]>();
+
+        raw.forEach((dayMap, dateStr) => {
+            const entries: CalDayEntry[] = [];
+            TYPE_ORDER.forEach(type => {
+                const segs = dayMap.get(type);
+                if (!segs?.length) return;
+
+                // Sort by startSurah, then startAyah
+                segs.sort((a, b) => a.startSurah !== b.startSurah
+                    ? a.startSurah - b.startSurah
+                    : a.startAyah - b.startAyah);
+
+                // Merge consecutive / adjacent segments into one range
+                const merged: RawSeg[] = [];
+                for (const seg of segs) {
+                    if (!merged.length) { merged.push({ ...seg }); continue; }
+                    const last = merged[merged.length - 1];
+                    // Adjacent = last ends at surah N and next starts at surah N+1,
+                    // OR both in the same surah with touching ayah numbers
+                    const adjacent =
+                        last.endSurah + 1 === seg.startSurah ||
+                        (last.endSurah === seg.startSurah && last.endAyah >= seg.startAyah - 1);
+                    if (adjacent) {
+                        last.endSurah = seg.endSurah;
+                        last.endAyah  = seg.endAyah;
+                    } else {
+                        merged.push({ ...seg });
+                    }
+                }
+
+                merged.forEach(m => entries.push({
+                    type,
+                    label: fmtRange(m.startSurah, m.startAyah, m.endSurah, m.endAyah),
+                    badgeCls: BADGE_CLS[type],
+                }));
+            });
+            if (entries.length) map.set(dateStr, entries);
+        });
+
         return map;
     }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata]);
 
