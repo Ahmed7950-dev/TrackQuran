@@ -54,6 +54,7 @@ const StudentViewOnlyPage: React.FC<StudentViewOnlyPageProps> = ({ student, stud
     const [chartView, setChartView] = useState<'reading' | 'memorization'>('reading');
     const [quranBarView, setQuranBarView] = useState<'reading' | 'memorization'>('reading');
     const [milestoneView, setMilestoneView] = useState<'reading' | 'memorization'>('reading');
+    const [calendarDate, setCalendarDate] = useState(new Date());
 
     const { t, language } = useI18n();
 
@@ -217,6 +218,186 @@ const StudentViewOnlyPage: React.FC<StudentViewOnlyPageProps> = ({ student, stud
     );
 
 
+    // ── Progress Calendar ────────────────────────────────────────────────────
+    type CalDayEntry = {
+        type: 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafsir';
+        label: string;
+        badgeCls: string;
+    };
+
+    const calEntriesMap = useMemo(() => {
+        type RawSeg = { startSurah: number; startAyah: number; endSurah: number; endAyah: number };
+        const raw = new Map<string, Map<CalDayEntry['type'], RawSeg[]>>();
+        const addRaw = (dateStr: string, type: CalDayEntry['type'], seg: RawSeg) => {
+            if (!raw.has(dateStr)) raw.set(dateStr, new Map());
+            const dm = raw.get(dateStr)!;
+            if (!dm.has(type)) dm.set(type, []);
+            dm.get(type)!.push(seg);
+        };
+        student.recitationAchievements.forEach(a =>
+            addRaw(new Date(a.date).toDateString(), a.isRevision ? 'reading-revision' : 'reading',
+                { startSurah: a.startSurah, startAyah: a.startAyah, endSurah: a.endSurah, endAyah: a.endAyah })
+        );
+        student.memorizationAchievements.forEach(a =>
+            addRaw(new Date(a.date).toDateString(), a.isRevision ? 'hifz-revision' : 'hifz',
+                { startSurah: a.startSurah, startAyah: a.startAyah, endSurah: a.endSurah, endAyah: a.endAyah })
+        );
+        student.tafsirReviews.forEach(a => {
+            const ss = a.startSurah ?? a.surah; const sa = a.startAyah ?? 1;
+            const es = a.endSurah ?? a.surah;
+            const ea = a.endAyah ?? (quranMetadata.find(s => s.number === es)?.numberOfAyahs ?? 1);
+            addRaw(new Date(a.date).toDateString(), 'tafsir',
+                { startSurah: ss, startAyah: sa, endSurah: es, endAyah: ea });
+        });
+        const fmtRange = (ss: number, sa: number, es: number, ea: number): string => {
+            const startMeta = quranMetadata.find(s => s.number === ss);
+            const endMeta   = quranMetadata.find(s => s.number === es);
+            const sn = startMeta?.transliteratedName ?? `S${ss}`;
+            const en = endMeta?.transliteratedName   ?? `S${es}`;
+            if (ss !== es) return `${sn} – ${en}`;
+            if (sa === 1 && ea === (startMeta?.numberOfAyahs ?? ea)) return sn;
+            return `${sn} ${sa}–${ea}`;
+        };
+        const BADGE_CLS: Record<CalDayEntry['type'], string> = {
+            'reading':          'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300',
+            'reading-revision': 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300',
+            'hifz':             'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+            'hifz-revision':    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300',
+            'tafsir':           'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+        };
+        const TYPE_ORDER: CalDayEntry['type'][] = ['reading', 'reading-revision', 'hifz', 'hifz-revision', 'tafsir'];
+        const map = new Map<string, CalDayEntry[]>();
+        raw.forEach((dayMap, dateStr) => {
+            const entries: CalDayEntry[] = [];
+            TYPE_ORDER.forEach(type => {
+                const segs = dayMap.get(type);
+                if (!segs?.length) return;
+                segs.sort((a, b) => a.startSurah !== b.startSurah ? a.startSurah - b.startSurah : a.startAyah - b.startAyah);
+                const merged: RawSeg[] = [];
+                for (const seg of segs) {
+                    if (!merged.length) { merged.push({ ...seg }); continue; }
+                    const last = merged[merged.length - 1];
+                    const adjacent = last.endSurah + 1 === seg.startSurah ||
+                        (last.endSurah === seg.startSurah && last.endAyah >= seg.startAyah - 1);
+                    if (adjacent) { last.endSurah = seg.endSurah; last.endAyah = seg.endAyah; }
+                    else merged.push({ ...seg });
+                }
+                merged.forEach(m => entries.push({ type, label: fmtRange(m.startSurah, m.startAyah, m.endSurah, m.endAyah), badgeCls: BADGE_CLS[type] }));
+            });
+            if (entries.length) map.set(dateStr, entries);
+        });
+        return map;
+    }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata]);
+
+    const calAttendanceMap = useMemo(
+        () => new Map(student.attendance.map(a => [new Date(a.date).toDateString(), a.status])),
+        [student.attendance]
+    );
+
+    const ProgressCalendar = () => {
+        const month = calendarDate.getMonth();
+        const year  = calendarDate.getFullYear();
+        const firstDay    = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const TYPE_ICONS: Record<CalDayEntry['type'], string> = {
+            'reading': '📖', 'reading-revision': '🔄', 'hifz': '🧠', 'hifz-revision': '↩️', 'tafsir': '📚',
+        };
+        const cells: React.ReactNode[] = [];
+        for (let i = 0; i < firstDay; i++) cells.push(<div key={`e-${i}`} className="min-h-[90px]" />);
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date   = new Date(year, month, day);
+            const ds     = date.toDateString();
+            const status  = calAttendanceMap.get(ds);
+            const entries = calEntriesMap.get(ds) ?? [];
+            const isToday = ds === new Date().toDateString();
+            const hasProgress = entries.length > 0;
+            let headerCls = 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
+            let borderCls = 'border-slate-200 dark:border-gray-600';
+            if (status === AttendanceStatus.Absent) {
+                headerCls = 'bg-red-400 text-white'; borderCls = 'border-red-300 dark:border-red-700';
+            } else if (status === AttendanceStatus.Rescheduled) {
+                headerCls = 'bg-orange-400 text-white'; borderCls = 'border-orange-300 dark:border-orange-600';
+            } else if (status === AttendanceStatus.Present || hasProgress) {
+                headerCls = 'bg-emerald-400 text-white'; borderCls = 'border-emerald-300 dark:border-emerald-700';
+            }
+            cells.push(
+                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[90px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
+                    <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
+                        <span className="text-xs font-bold leading-none">{day}</span>
+                    </div>
+                    {status === AttendanceStatus.Absent && entries.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center p-1">
+                            <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide">Absent</span>
+                        </div>
+                    )}
+                    {status === AttendanceStatus.Rescheduled && entries.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center p-1">
+                            <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide">Rescheduled</span>
+                        </div>
+                    )}
+                    {entries.length > 0 && (
+                        <div className="flex flex-col gap-0.5 p-1 flex-1 overflow-hidden">
+                            {status === AttendanceStatus.Absent && (
+                                <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1">Absent</span>
+                            )}
+                            {status === AttendanceStatus.Rescheduled && (
+                                <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1">Rescheduled</span>
+                            )}
+                            {entries.map((e, i) => (
+                                <span key={i} className={`flex items-start gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded leading-tight ${e.badgeCls}`} style={{ wordBreak: 'break-word' }}>
+                                    <span className="flex-shrink-0">{TYPE_ICONS[e.type]}</span>
+                                    <span className="min-w-0 break-words">{e.label}</span>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        const dayNames = language === 'ar'
+            ? ['أحد', 'إثن', 'ثلث', 'أرب', 'خمس', 'جمع', 'سبت']
+            : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <button onClick={() => setCalendarDate(new Date(year, month - 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">‹</button>
+                    <div className="text-center">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+                            {calendarDate.toLocaleString(language === 'ar' ? 'ar' : 'en', { month: 'long', year: 'numeric' })}
+                        </h3>
+                        <div className="flex items-center justify-center gap-3 mt-1.5">
+                            {[{ cls: 'bg-emerald-400', label: 'Progress / Present' }, { cls: 'bg-red-400', label: 'Absent' }, { cls: 'bg-orange-400', label: 'Rescheduled' }].map(l => (
+                                <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                    <span className={`w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0 ${l.cls}`} />{l.label}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <button onClick={() => setCalendarDate(new Date(year, month + 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">›</button>
+                </div>
+                <div className="grid grid-cols-7 gap-1 mb-1">
+                    {dayNames.map(d => <div key={d} className="text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-1">{cells}</div>
+                <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                    {[
+                        { icon: '📖', label: 'Reading',          cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
+                        { icon: '🔄', label: 'Reading Revision',  cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300' },
+                        { icon: '🧠', label: 'Hifz',              cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
+                        { icon: '↩️', label: 'Hifz Revision',    cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' },
+                        { icon: '📚', label: 'Tafsir',            cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+                    ].map(l => (
+                        <span key={l.label} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${l.cls}`}>
+                            {l.icon} {l.label}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('studentView.pageTitle', { name: student.name })}</h2>
@@ -240,6 +421,9 @@ const StudentViewOnlyPage: React.FC<StudentViewOnlyPageProps> = ({ student, stud
 
             {view === 'progress' ? (
                 <div className="space-y-6">
+                    {/* ── Progress Calendar ── */}
+                    <ProgressCalendar />
+
                     <div className="flex justify-end"><select value={timePeriod} onChange={e => setTimePeriod(e.target.value as TimePeriod)} className="bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2">
                         {Object.keys(TimePeriod).map(key => (
                             <option key={key} value={TimePeriod[key as keyof typeof TimePeriod]}>
@@ -247,7 +431,7 @@ const StudentViewOnlyPage: React.FC<StudentViewOnlyPageProps> = ({ student, stud
                             </option>
                         ))}
                     </select></div>
-                    
+
                     <div className="space-y-6">
                         <div className="p-4 bg-slate-100 dark:bg-gray-800/50 rounded-lg">
                             <h3 className="font-bold text-lg text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.attendanceTitle')}</h3>
