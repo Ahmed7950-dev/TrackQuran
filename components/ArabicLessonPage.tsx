@@ -407,59 +407,21 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         })}
       </div>
 
-      {/* ── Level header: Show Plan + progress bar ── */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 p-4">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div>
-            <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
-              Level {activeLevel} — {activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'}
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{levelTotal} lessons added · {LESSONS_PER_LEVEL} lessons per level</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowPlan(activeLevel)}
+      {/* ── Level header: Show Plan button only ── */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+            Level {activeLevel} — {activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{levelTotal} lessons added · {LESSONS_PER_LEVEL} per level</p>
+        </div>
+        <button onClick={() => setShowPlan(activeLevel)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
               </svg>
               Show Plan
-            </button>
-          </div>
-        </div>
-
-        {/* Per-level progress bar with milestones */}
-        {preSelectedStudentId && (
-          <div>
-            <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
-              <span className="font-semibold">Level {activeLevel} Progress</span>
-              <span>{levelCompleted} / {LESSONS_PER_LEVEL} lessons ({Math.min(100, levelPct)}%)</span>
-            </div>
-            {/* Bar with milestone markers */}
-            <div className="relative h-3 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-visible mb-1">
-              <div className="h-full bg-amber-400 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, levelPct)}%` }} />
-              {/* Milestone at 50% (lesson 10) */}
-              <div className="absolute top-0 bottom-0 w-0.5 bg-amber-600/50 dark:bg-amber-400/50" style={{ left: '50%' }} />
-              {/* Milestone at 100% (lesson 20) */}
-              <div className="absolute top-0 bottom-0 w-0.5 bg-amber-600/50 dark:bg-amber-400/50" style={{ left: '100%' }} />
-            </div>
-            {/* Milestone labels */}
-            <div className="relative h-4">
-              {milestone1 && (
-                <span className="absolute text-[9px] text-amber-700 dark:text-amber-400 font-semibold transform -translate-x-1/2 truncate max-w-[120px]"
-                  style={{ left: '50%' }} title={milestone1.title}>
-                  ▲ {milestone1.title.length > 14 ? milestone1.title.slice(0, 14) + '…' : milestone1.title}
-                </span>
-              )}
-              {milestone2 && (
-                <span className="absolute text-[9px] text-amber-700 dark:text-amber-400 font-semibold transform -translate-x-full truncate max-w-[120px]"
-                  style={{ left: '100%' }} title={milestone2.title}>
-                  ▲ {milestone2.title.length > 14 ? milestone2.title.slice(0, 14) + '…' : milestone2.title}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+        </button>
       </div>
 
       {/* Lesson list */}

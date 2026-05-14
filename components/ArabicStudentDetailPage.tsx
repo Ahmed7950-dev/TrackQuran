@@ -699,11 +699,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
               {student.arabicDialects.map(d => (
                 <span key={d} className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">{dialectLabel(d)}</span>
               ))}
-              {student.arabicLevel && (
-                <span className="px-2.5 py-0.5 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 rounded-full text-xs font-semibold border border-slate-200 dark:border-gray-700">
-                  Level {student.arabicLevel} / 10
-                </span>
-              )}
             </div>
           </div>
 
@@ -717,61 +712,91 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Per-level progress — show current level bar + badges for all levels */}
+        {/* Milestone station progress track */}
         <div className="mt-5">
           {(() => {
             const completedSet = new Set(student.completedLessonIds);
             const levelCounts = ([1, 2, 3] as const).map(lvl => {
               const lvlIds = lessons.filter(l => l.level === lvl).map(l => l.id);
               const done = lvlIds.filter(id => completedSet.has(id)).length;
-              return { lvl, done, pct: Math.min(100, Math.round((done / 20) * 100)) };
+              return { lvl, done };
             });
             const currentLevel = levelCounts.find(lc => lc.done < 20)?.lvl ?? 3;
-            const cur = levelCounts.find(lc => lc.lvl === currentLevel)!;
+            const cur          = levelCounts.find(lc => lc.lvl === currentLevel)!;
+            const lvlLessons   = lessons
+              .filter(l => l.level === currentLevel)
+              .sort((a, b) => a.orderIndex - b.orderIndex);
+            const firstIncompleteIdx = lvlLessons.findIndex(l => !completedSet.has(l.id));
 
             return (
               <>
-                {/* Level overview badges */}
-                <div className="flex items-center gap-2 mb-3">
-                  {levelCounts.map(({ lvl, done, pct: p }) => {
+                {/* Level overview row */}
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {levelCounts.map(({ lvl, done }) => {
                     const isComplete = done >= 20;
                     const isCurr    = lvl === currentLevel;
                     return (
-                      <span key={lvl} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border transition-colors ${
+                      <span key={lvl} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
                         isComplete
                           ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
                           : isCurr
                           ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200'
-                          : 'bg-slate-100 dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400'
+                          : 'bg-slate-100 dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-400 dark:text-slate-500'
                       }`}>
-                        {isComplete ? '✓' : isCurr ? '▶' : '○'} Level {lvl}
-                        <span className="font-normal opacity-70">{p}%</span>
+                        {isComplete ? '✓' : isCurr ? '▶' : '○'} Lvl {lvl}
                       </span>
                     );
                   })}
                   <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 font-semibold">
-                    {completedCount} / 60 total
+                    {cur.done} / {Math.min(lvlLessons.length, 20)} · {completedCount} / 60 total
                   </span>
                 </div>
 
-                {/* Current level progress bar */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <span className="font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />
-                      Level {cur.lvl} progress
-                    </span>
-                    <span className="font-bold text-amber-700 dark:text-amber-300">
-                      {cur.done} / 20 lessons ({cur.pct}%)
-                    </span>
+                {/* Station track */}
+                {lvlLessons.length === 0 ? (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+                    No lessons added to Level {currentLevel} yet.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto -mx-1 px-1 pb-1">
+                    <div className="flex items-start" style={{ minWidth: 'max-content' }}>
+                      {lvlLessons.map((lesson, idx) => {
+                        const isDone    = completedSet.has(lesson.id);
+                        const isCurrent = !isDone && idx === firstIncompleteIdx;
+                        const isLast    = idx === lvlLessons.length - 1;
+                        return (
+                          <div key={lesson.id} className="flex items-start">
+                            {/* Station */}
+                            <div className="flex flex-col items-center" style={{ width: 68 }}>
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 shadow-sm ${
+                                isDone
+                                  ? 'bg-emerald-400 dark:bg-emerald-500 text-white'
+                                  : isCurrent
+                                  ? 'bg-amber-400 text-white ring-2 ring-amber-300 dark:ring-amber-500'
+                                  : 'bg-slate-200 dark:bg-gray-600 text-slate-400 dark:text-slate-300'
+                              }`}>
+                                {isDone ? '✓' : idx + 1}
+                              </div>
+                              <p className={`mt-1 text-center leading-tight px-0.5 ${
+                                isDone    ? 'text-emerald-600 dark:text-emerald-400' :
+                                isCurrent ? 'text-amber-700 dark:text-amber-300 font-semibold' :
+                                            'text-slate-400 dark:text-slate-500'
+                              }`} style={{ fontSize: 9, width: 68, wordBreak: 'break-word' }}>
+                                {lesson.title}
+                              </p>
+                            </div>
+                            {/* Connector */}
+                            {!isLast && (
+                              <div className={`flex-shrink-0 mt-3 ${
+                                isDone ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-slate-200 dark:bg-gray-600'
+                              }`} style={{ height: 2, width: 12 }} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="h-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-400 rounded-full transition-all duration-500"
-                      style={{ width: `${cur.pct}%` }}
-                    />
-                  </div>
-                </div>
+                )}
               </>
             );
           })()}
