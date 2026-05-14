@@ -49,6 +49,8 @@ interface ArabicLessonRow {
   level: number;
   pdf_url: string | null;
   video_url: string | null;
+  teacher_note: string | null;
+  grammar_summary: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -137,16 +139,18 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
 
 function rowToLesson(r: ArabicLessonRow): ArabicLesson {
   return {
-    id:          r.id,
-    title:       r.title,
-    description: r.description ?? undefined,
-    orderIndex:  r.order_index,
-    level:       (r.level as 1|2|3) ?? 1,
-    pdfUrl:      r.pdf_url     ?? undefined,
-    videoUrl:    r.video_url   ?? undefined,
-    createdBy:   r.created_by  ?? undefined,
-    createdAt:   r.created_at,
-    updatedAt:   r.updated_at,
+    id:             r.id,
+    title:          r.title,
+    description:    r.description     ?? undefined,
+    orderIndex:     r.order_index,
+    level:          (r.level as 1|2|3) ?? 1,
+    pdfUrl:         r.pdf_url         ?? undefined,
+    videoUrl:       r.video_url       ?? undefined,
+    teacherNote:    r.teacher_note    ?? undefined,
+    grammarSummary: r.grammar_summary ?? undefined,
+    createdBy:      r.created_by      ?? undefined,
+    createdAt:      r.created_at,
+    updatedAt:      r.updated_at,
   };
 }
 
@@ -244,16 +248,18 @@ export async function createArabicLesson(input: {
   const maxOrder = (existing?.[0] as any)?.order_index ?? 0;
 
   const row: ArabicLessonRow = {
-    id:          `al-${Date.now()}`,
-    title:       input.title,
-    description: input.description ?? null,
-    order_index: maxOrder + 1,
-    level:       input.level ?? 1,
-    pdf_url:     input.pdfUrl    ?? null,
-    video_url:   null,
-    created_by:  input.createdBy ?? null,
-    created_at:  new Date().toISOString(),
-    updated_at:  new Date().toISOString(),
+    id:              `al-${Date.now()}`,
+    title:           input.title,
+    description:     input.description ?? null,
+    order_index:     maxOrder + 1,
+    level:           input.level ?? 1,
+    pdf_url:         input.pdfUrl    ?? null,
+    video_url:       null,
+    teacher_note:    null,
+    grammar_summary: null,
+    created_by:      input.createdBy ?? null,
+    created_at:      new Date().toISOString(),
+    updated_at:      new Date().toISOString(),
   };
 
   const { data, error } = await supabase
@@ -284,6 +290,21 @@ export async function updateArabicLesson(
     .update(update)
     .eq('id', id);
   if (error) { console.error('updateArabicLesson:', error.message); return false; }
+  return true;
+}
+
+/** Save teacher's note or grammar summary for a lesson. */
+export async function saveLessonNote(
+  lessonId: string,
+  field: 'teacherNote' | 'grammarSummary',
+  value: string,
+): Promise<boolean> {
+  const col = field === 'teacherNote' ? 'teacher_note' : 'grammar_summary';
+  const { error } = await supabase
+    .from('arabic_lessons')
+    .update({ [col]: value || null, updated_at: new Date().toISOString() })
+    .eq('id', lessonId);
+  if (error) { console.error('saveLessonNote:', error.message); return false; }
   return true;
 }
 

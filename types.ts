@@ -240,6 +240,8 @@ export interface ArabicLesson {
   level: 1 | 2 | 3;   // Which course level this lesson belongs to (default 1)
   pdfUrl?: string;
   videoUrl?: string;   // YouTube URL for the dialogue video section
+  teacherNote?: string;     // Private notes / lesson plan from the teacher
+  grammarSummary?: string;  // Grammar rules / summary for the lesson
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

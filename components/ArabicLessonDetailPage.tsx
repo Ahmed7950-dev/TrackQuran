@@ -23,6 +23,7 @@ import {
   setArabicLessonCompletion,
   markHomeworkComplete,
   getWhiteboardData, saveWhiteboardData, uploadNoteImage,
+  saveLessonNote,
 } from '../services/arabicService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 const SR_DELAYS = [1, 3, 7, 14];
 
-type Tab = 'lesson' | 'homework' | 'vocabulary' | 'video';
+type Tab = 'lesson' | 'homework' | 'vocabulary' | 'video' | 'teacher_note' | 'grammar';
 
 const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
   multiple_choice:      'Multiple Choice',
@@ -112,11 +113,43 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   const [activeTab, setActiveTab] = useState<Tab>(initialLesson.pdfUrl ? 'lesson' : 'homework');
   const [canvasVocabWords, setCanvasVocabWords] = useState<VocabWordBasic[]>([]);
 
+  // ── Teacher's note & grammar summary ───────────────────────────────────────
+  const [teacherNote,    setTeacherNote]    = useState(initialLesson.teacherNote    ?? '');
+  const [grammarSummary, setGrammarSummary] = useState(initialLesson.grammarSummary ?? '');
+  const [noteSaveStatus,    setNoteSaveStatus]    = useState<'saved' | 'saving' | null>(null);
+  const [grammarSaveStatus, setGrammarSaveStatus] = useState<'saved' | 'saving' | null>(null);
+  const noteTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const grammarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleNoteChange = (val: string) => {
+    setTeacherNote(val);
+    setNoteSaveStatus(null);
+    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+    noteTimerRef.current = setTimeout(async () => {
+      setNoteSaveStatus('saving');
+      await saveLessonNote(lesson.id, 'teacherNote', val);
+      setNoteSaveStatus('saved');
+    }, 1200);
+  };
+
+  const handleGrammarChange = (val: string) => {
+    setGrammarSummary(val);
+    setGrammarSaveStatus(null);
+    if (grammarTimerRef.current) clearTimeout(grammarTimerRef.current);
+    grammarTimerRef.current = setTimeout(async () => {
+      setGrammarSaveStatus('saving');
+      await saveLessonNote(lesson.id, 'grammarSummary', val);
+      setGrammarSaveStatus('saved');
+    }, 1200);
+  };
+
   const tabs: { id: Tab; icon: string; label: string }[] = [
-    { id: 'lesson',     icon: '📖', label: 'Lesson PDF'     },
-    { id: 'homework',   icon: '📝', label: 'Homework'       },
-    { id: 'vocabulary', icon: '🔤', label: 'Vocabulary'     },
-    { id: 'video',      icon: '🎬', label: 'Dialogue Video' },
+    { id: 'lesson',       icon: '📖', label: 'Lesson PDF'      },
+    { id: 'homework',     icon: '📝', label: 'Homework'        },
+    { id: 'vocabulary',   icon: '🔤', label: 'Vocabulary'      },
+    { id: 'video',        icon: '🎬', label: 'Dialogue Video'  },
+    { id: 'teacher_note', icon: '🗒️', label: "Teacher's Note"  },
+    { id: 'grammar',      icon: '📐', label: 'Grammar Summary' },
   ];
 
   // Whiteboard is shared per student — authorId = student being viewed, or teacher if no student context
@@ -227,10 +260,95 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
             <VideoTab lesson={lesson} isAdmin={isAdmin} onLessonUpdated={setLesson} />
           </div>
         )}
+
+        {/* ── Teacher's Note tab ── */}
+        {activeTab === 'teacher_note' && (
+          <div className="h-full overflow-y-auto p-6">
+            <NoteTab
+              label="Teacher's Note"
+              icon="🗒️"
+              description="Write lesson plans, teaching tips, or any private notes about this lesson."
+              value={teacherNote}
+              saveStatus={noteSaveStatus}
+              onChange={handleNoteChange}
+            />
+          </div>
+        )}
+
+        {/* ── Grammar Summary tab ── */}
+        {activeTab === 'grammar' && (
+          <div className="h-full overflow-y-auto p-6">
+            <NoteTab
+              label="Grammar Summary"
+              icon="📐"
+              description="Summarise the grammar rules, patterns, or structures covered in this lesson."
+              value={grammarSummary}
+              saveStatus={grammarSaveStatus}
+              onChange={handleGrammarChange}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════
+// NOTE TAB  (shared by Teacher's Note & Grammar Summary)
+// ═══════════════════════════════════════════════════════
+
+const NoteTab: React.FC<{
+  label: string;
+  icon: string;
+  description: string;
+  value: string;
+  saveStatus: 'saved' | 'saving' | null;
+  onChange: (val: string) => void;
+}> = ({ label, icon, description, value, saveStatus, onChange }) => (
+  <div className="max-w-3xl mx-auto space-y-4">
+    {/* Header */}
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <span>{icon}</span>{label}
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+      </div>
+      {/* Auto-save indicator */}
+      <div className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold mt-1">
+        {saveStatus === 'saving' && (
+          <>
+            <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+            <span className="text-amber-600 dark:text-amber-400">Saving…</span>
+          </>
+        )}
+        {saveStatus === 'saved' && (
+          <>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500">
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+            </svg>
+            <span className="text-emerald-600 dark:text-emerald-400">Saved</span>
+          </>
+        )}
+      </div>
+    </div>
+
+    {/* Text area */}
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={`Write your ${label.toLowerCase()} here…`}
+      className="w-full min-h-[420px] p-4 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-500 resize-y leading-relaxed placeholder-slate-300 dark:placeholder-slate-600"
+      dir="auto"
+    />
+
+    {!value && (
+      <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+        Start typing — changes are saved automatically.
+      </p>
+    )}
+  </div>
+);
 
 // ═══════════════════════════════════════════════════════
 // HOMEWORK TAB
