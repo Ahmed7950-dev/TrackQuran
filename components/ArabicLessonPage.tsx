@@ -216,38 +216,60 @@ const LevelPlanModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-gray-700">
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Level {level} — Course Plan</h3>
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-                <button onClick={() => fileRef.current?.click()} disabled={uploading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
-                  {uploading ? '⏳ Uploading…' : '📷 Upload Plan Image'}
-                </button>
-              </>
-            )}
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-        </div>
-        {err && <p className="px-6 py-2 text-sm text-red-600 bg-red-50 dark:bg-red-900/20">{err}</p>}
-        <div className="p-6">
-          {imageUrl ? (
-            <img src={imageUrl} alt={`Level ${level} plan`} className="w-full rounded-xl border border-slate-200 dark:border-gray-700 object-contain max-h-[70vh]" />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500 gap-3">
-              <span className="text-5xl">🗺</span>
-              <p className="font-semibold">No plan image uploaded yet</p>
-              {isAdmin && <p className="text-sm">Click "Upload Plan Image" to add one</p>}
-            </div>
+    <div className="fixed inset-0 z-50 bg-black flex flex-col" onClick={onClose}>
+
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/70 backdrop-blur-sm flex-shrink-0" onClick={e => e.stopPropagation()}>
+        <h3 className="font-bold text-white text-base tracking-wide">Level {level} — Course Plan</h3>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+              <button onClick={() => fileRef.current?.click()} disabled={uploading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+                {uploading ? '⏳ Uploading…' : '📷 Upload Plan Image'}
+              </button>
+            </>
           )}
+          <button onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-lg transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+            Close
+          </button>
         </div>
       </div>
+
+      {err && (
+        <p className="px-6 py-2 text-sm text-red-300 bg-red-900/40 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {err}
+        </p>
+      )}
+
+      {/* ── Full-screen image area ── */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden" onClick={onClose}>
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={`Level ${level} plan`}
+            onClick={e => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain select-none"
+            draggable={false}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-3 text-white/50" onClick={e => e.stopPropagation()}>
+            <span className="text-7xl">🗺</span>
+            <p className="font-semibold text-lg">No plan image uploaded yet</p>
+            {isAdmin && <p className="text-sm">Click "Upload Plan Image" above to add one</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Hint */}
+      <p className="text-center text-white/30 text-xs py-2 flex-shrink-0 select-none">
+        Click anywhere outside the image to close
+      </p>
     </div>
   );
 };
