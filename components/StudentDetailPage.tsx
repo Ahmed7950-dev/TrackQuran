@@ -491,9 +491,26 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
                         <span className="text-xs font-bold leading-none">{day}</span>
                     </div>
+                    {/* Absent / Rescheduled label */}
+                    {status === AttendanceStatus.Absent && entries.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center p-1">
+                            <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide">Absent</span>
+                        </div>
+                    )}
+                    {status === AttendanceStatus.Rescheduled && entries.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center p-1">
+                            <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide">Rescheduled</span>
+                        </div>
+                    )}
                     {/* Entry badges */}
                     {entries.length > 0 && (
                         <div className="flex flex-col gap-0.5 p-1 flex-1 overflow-hidden">
+                            {status === AttendanceStatus.Absent && (
+                                <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1">Absent</span>
+                            )}
+                            {status === AttendanceStatus.Rescheduled && (
+                                <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1">Rescheduled</span>
+                            )}
                             {entries.map((e, i) => (
                                 <span key={i} className={`flex items-start gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded leading-tight ${e.badgeCls}`} style={{ wordBreak: 'break-word' }}>
                                     <span className="flex-shrink-0">{TYPE_ICONS[e.type]}</span>
