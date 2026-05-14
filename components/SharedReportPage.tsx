@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
 import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
+import AboutUsPage from './AboutUsPage';
 import type { Student, AttendanceRecord } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1111,12 +1112,32 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'mistakes' | 'progress'>('mistakes');
+  const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
   const [quranicFont, setQuranicFont] = useState<string>(() =>
     localStorage.getItem('quranicFont') || 'Hafs'
   );
+  const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark' || saved === 'reading') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
   const channelRef = useRef<any>(null);
+
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    root.removeAttribute('data-theme');
+    if (theme === 'dark') root.classList.add('dark');
+    else if (theme === 'reading') root.setAttribute('data-theme', 'reading');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(t => t === 'light' ? 'reading' : t === 'reading' ? 'dark' : 'light');
+  };
 
   // Persist font choice
   useEffect(() => {
@@ -1233,29 +1254,79 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const hasProgress = !!studentProgress;
 
   return (
-    <div className="min-h-screen bg-slate-100" dir="rtl">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40" dir="ltr">
-        <div className="container mx-auto px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-4">
-          <Logo />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate">
-              {activeTab === 'mistakes' ? 'Mistakes Review' : 'My Progress'}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 truncate">{student_name}</p>
+    <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir="rtl">
+      {/* ── Header ── */}
+      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+
+          {/* Logo — clicking goes back to content */}
+          <button onClick={() => setPortalTab('content')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0" aria-label="Go to portal">
+            <Logo />
+          </button>
+
+          {/* Student Portal badge */}
+          <span className="hidden sm:block text-xs font-bold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-3 py-1 rounded-full flex-shrink-0 border border-teal-200 dark:border-teal-800">
+            🎓 Student Portal
+          </span>
+
+          {/* Desktop nav links */}
+          <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
+            <button
+              onClick={() => setPortalTab(t => t === 'about' ? 'content' : 'about')}
+              className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400'}`}
+            >
+              About Us
+            </button>
+            <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400 transition-colors">
+              Contact Us
+            </a>
+            <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
+              Support Us
+            </a>
+          </nav>
+
+          <div className="flex-1 md:hidden" />
+
+          {/* Student name badge */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
+            <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[100px] sm:max-w-none">
+              {student_name}
+            </span>
           </div>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+          >
+            {theme === 'dark' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+              </svg>
+            ) : theme === 'reading' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25c0 5.385 4.365 9.75 9.75 9.75 2.572 0 4.921-.994 6.697-2.648Z" />
+              </svg>
+            )}
+          </button>
 
           {/* Quranic font selector */}
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setIsFontMenuOpen(o => !o)}
-              className="sr-font-btn p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              className="sr-font-btn p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
               aria-label="Select Quranic font"
             >
               <span style={{ fontFamily: 'Amiri Regular', fontSize: '1.25rem' }}>ع</span>
             </button>
             {isFontMenuOpen && (
-              <div className="sr-font-menu absolute end-0 mt-2 w-52 sm:w-64 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+              <div className="sr-font-menu absolute end-0 mt-2 w-52 sm:w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                 <div className="py-1">
                   <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">Quranic Font</div>
                   {QURANIC_FONTS.map(f => (
@@ -1264,8 +1335,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                       onClick={() => { setQuranicFont(f.name); setIsFontMenuOpen(false); }}
                       className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between ${
                         quranicFont === f.name
-                          ? 'bg-teal-50 text-teal-700 font-medium'
-                          : 'text-slate-700 hover:bg-slate-100'
+                          ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300 font-medium'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'
                       }`}
                     >
                       <span style={{ fontFamily: f.name }}>{f.displayName}</span>
@@ -1281,84 +1352,100 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             )}
           </div>
 
-          <div className="text-xs text-slate-400 text-right flex-shrink-0 hidden sm:block">
-            <p>Updated</p>
-            <p>{new Date(generatedAt).toLocaleDateString()}</p>
+          {/* Mobile nav links */}
+          <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setPortalTab(t => t === 'about' ? 'content' : 'about')}
+              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 transition-colors"
+            >
+              About
+            </button>
+            <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
+              Support
+            </a>
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="border-t border-slate-100" dir="ltr">
-          <div className="container mx-auto px-3 sm:px-4 flex">
-            <button
-              onClick={() => setActiveTab('mistakes')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'mistakes'
-                  ? 'border-teal-600 text-teal-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-              </svg>
-              Mistakes Review
-            </button>
-            <button
-              onClick={() => setActiveTab('progress')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'progress'
-                  ? 'border-teal-600 text-teal-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              } ${!hasProgress ? 'opacity-40 cursor-not-allowed' : ''}`}
-              disabled={!hasProgress}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-              </svg>
-              My Progress
-              {!hasProgress && <span className="text-xs">(share once to unlock)</span>}
-            </button>
+        {/* Tab bar — hidden when About Us is open */}
+        {portalTab === 'content' && (
+          <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
+            <div className="container mx-auto px-3 sm:px-4 flex">
+              <button
+                onClick={() => setActiveTab('mistakes')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'mistakes'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+                Mistakes Review
+              </button>
+              <button
+                onClick={() => setActiveTab('progress')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'progress'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                } ${!hasProgress ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!hasProgress}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                </svg>
+                My Progress
+                {!hasProgress && <span className="text-xs ml-1 opacity-70">(share once to unlock)</span>}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
-      <main className="w-full px-3 sm:px-6 py-6" dir="ltr">
-        {activeTab === 'mistakes' && (
-          <MistakesTab
-            report={report}
-            reportId={reportId}
-            quranicFont={quranicFont}
-            handleVersePlay={handleVersePlay}
-            versePlays={versePlays}
-          />
-        )}
-        {activeTab === 'progress' && hasProgress && (() => {
-          const sp = studentProgress!;
-          const fakeStudent: Student = {
-            id: 'shared-report',
-            name: student_name,
-            dob: sp.dob,
-            recitationAchievements: sp.recitationAchievements,
-            memorizationAchievements: sp.memorizationAchievements,
-            attendance: sp.attendance as AttendanceRecord[],
-            masteredTajweedRules: sp.masteredTajweedRules,
-            tafsirReviews: sp.tafsirReviews,
-            tafsirMemorizationReviews: sp.tafsirMemorizationReviews,
-            mistakes: {},
-          };
-          return (
-            <StudentDetailPage
-              student={fakeStudent}
-              students={[fakeStudent]}
-              quranMetadata={QURAN_METADATA}
-              readOnly
-            />
-          );
-        })()}
+      <main className="container mx-auto flex-grow px-3 sm:px-6 lg:px-8 py-6" dir="ltr">
+        {portalTab === 'about' ? (
+          <AboutUsPage />
+        ) : (
+          <>
+            {activeTab === 'mistakes' && (
+              <MistakesTab
+                report={report}
+                reportId={reportId}
+                quranicFont={quranicFont}
+                handleVersePlay={handleVersePlay}
+                versePlays={versePlays}
+              />
+            )}
+            {activeTab === 'progress' && hasProgress && (() => {
+              const sp = studentProgress!;
+              const fakeStudent: Student = {
+                id: 'shared-report',
+                name: student_name,
+                dob: sp.dob,
+                recitationAchievements: sp.recitationAchievements,
+                memorizationAchievements: sp.memorizationAchievements,
+                attendance: sp.attendance as AttendanceRecord[],
+                masteredTajweedRules: sp.masteredTajweedRules,
+                tafsirReviews: sp.tafsirReviews,
+                tafsirMemorizationReviews: sp.tafsirMemorizationReviews,
+                mistakes: {},
+              };
+              return (
+                <StudentDetailPage
+                  student={fakeStudent}
+                  students={[fakeStudent]}
+                  quranMetadata={QURAN_METADATA}
+                  readOnly
+                />
+              );
+            })()}
 
-        <footer className="text-center text-xs text-slate-400 py-8">
-          <p>Generated by Lisan &amp; Quran · {new Date(generatedAt).toLocaleString()}</p>
-        </footer>
+            <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">
+              <p>Generated by Lisan &amp; Quran · {new Date(generatedAt).toLocaleString()}</p>
+            </footer>
+          </>
+        )}
       </main>
     </div>
   );
