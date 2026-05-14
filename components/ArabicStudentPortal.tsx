@@ -24,6 +24,11 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
   const [portalTab, setPortalTab] = useState<'lessons' | 'about'>('lessons');
 
   useEffect(() => {
+    document.title = 'LisanQuran Student Portal';
+    return () => { document.title = 'LisanQuran'; };
+  }, []);
+
+  useEffect(() => {
     getStudentByShareToken(token).then(s => setStudent(s ?? null));
   }, [token]);
 
