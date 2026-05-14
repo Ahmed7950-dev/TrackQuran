@@ -776,7 +776,7 @@ export async function uploadLevelPlanImage(level: 1|2|3, file: File): Promise<st
 export async function saveLevelPlan(level: 1|2|3, planImageUrl: string): Promise<boolean> {
   const { error } = await supabase
     .from('arabic_level_plans')
-    .upsert({ level, plan_image_url: planImageUrl, updated_at: new Date().toISOString() }, { onConflict: 'level' });
+    .upsert({ level, plan_image_url: planImageUrl }, { onConflict: 'level' });
   if (error) { console.error('saveLevelPlan:', error.message); return false; }
   return true;
 }
