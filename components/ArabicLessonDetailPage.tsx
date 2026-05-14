@@ -101,11 +101,13 @@ interface Props {
   onClose: () => void;
   onStudentUpdated?: (s: ArabicStudent) => void;
   onHomeworkComplete?: (lessonId: string) => void;
+  studentMode?: boolean;
 }
 
 const ArabicLessonDetailPage: React.FC<Props> = ({
   lesson: initialLesson, students, teacherId,
   preSelectedStudentId, onClose, onStudentUpdated, onHomeworkComplete,
+  studentMode = false,
 }) => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
@@ -116,20 +118,86 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   // ── Teacher's note & grammar summary ───────────────────────────────────────
   const [teacherNote,    setTeacherNote]    = useState(initialLesson.teacherNote    ?? '');
   const [grammarSummary, setGrammarSummary] = useState(initialLesson.grammarSummary ?? '');
-  const [noteSaveStatus,    setNoteSaveStatus]    = useState<'saved' | 'saving' | null>(null);
   const [grammarSaveStatus, setGrammarSaveStatus] = useState<'saved' | 'saving' | null>(null);
-  const noteTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const grammarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noteWindowRef   = useRef<Window | null>(null);
 
-  const handleNoteChange = (val: string) => {
-    setTeacherNote(val);
-    setNoteSaveStatus(null);
-    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
-    noteTimerRef.current = setTimeout(async () => {
-      setNoteSaveStatus('saving');
-      await saveLessonNote(lesson.id, 'teacherNote', val);
-      setNoteSaveStatus('saved');
-    }, 1200);
+  // Listen for postMessage from the teacher-note popup window and auto-save
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== 'teacher_note' || e.data?.lessonId !== lesson.id) return;
+      const val = e.data.value as string;
+      setTeacherNote(val);
+      saveLessonNote(lesson.id, 'teacherNote', val);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [lesson.id]);
+
+  // Open / focus the teacher-note popup window
+  const openTeacherNoteWindow = () => {
+    // If already open, just focus it
+    if (noteWindowRef.current && !noteWindowRef.current.closed) {
+      noteWindowRef.current.focus();
+      return;
+    }
+    const win = window.open(
+      '', `teacher_note_${lesson.id}`,
+      'width=860,height=700,resizable=yes,scrollbars=yes',
+    );
+    if (!win) return;
+    noteWindowRef.current = win;
+    const escaped = (teacherNote ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&/g, '&amp;');
+    const lessonIdStr = lesson.id;
+    win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teacher's Note — ${lesson.title}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#fafafa;display:flex;flex-direction:column;height:100vh;padding:20px;gap:12px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+    h1{font-size:17px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px}
+    .sub{font-size:12px;color:#64748b;margin-top:2px}
+    .status{font-size:12px;font-weight:600;color:#94a3b8;flex-shrink:0}
+    .status.saving{color:#f59e0b}
+    .status.saved{color:#22c55e}
+    textarea{flex:1;width:100%;padding:16px;font-size:14px;line-height:1.7;
+             border:1px solid #e2e8f0;border-radius:10px;resize:none;
+             background:#fff;outline:none;color:#1e293b}
+    textarea:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.15)}
+    .hint{font-size:11px;color:#94a3b8;flex-shrink:0}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🗒️ Teacher's Note</h1>
+      <div class="sub">${lesson.title}</div>
+    </div>
+    <span class="status" id="st">Auto-saves as you type</span>
+  </header>
+  <textarea id="ta" placeholder="Write your lesson notes, teaching tips, or anything private here…">${escaped}</textarea>
+  <div class="hint">This window is separate from your lesson page — safe to write notes while screen-sharing the lesson tab.</div>
+  <script>
+    var ta=document.getElementById('ta'),st=document.getElementById('st'),timer;
+    ta.addEventListener('input',function(){
+      clearTimeout(timer);
+      st.className='status saving';st.textContent='Saving…';
+      timer=setTimeout(function(){
+        if(window.opener&&!window.opener.closed){
+          window.opener.postMessage({type:'teacher_note',lessonId:'${lessonIdStr}',value:ta.value},'*');
+          st.className='status saved';st.textContent='✓ Saved';
+        }
+      },1200);
+    });
+    // Move cursor to end
+    ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
+  </script>
+</body>
+</html>`);
+    win.document.close();
   };
 
   const handleGrammarChange = (val: string) => {
@@ -143,12 +211,13 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
     }, 1200);
   };
 
-  const tabs: { id: Tab; icon: string; label: string }[] = [
+  // Tabs — Teacher's Note hidden in student mode; grammar always shown
+  const tabs: { id: Tab; icon: string; label: string; popup?: boolean }[] = [
     { id: 'lesson',       icon: '📖', label: 'Lesson PDF'      },
     { id: 'homework',     icon: '📝', label: 'Homework'        },
     { id: 'vocabulary',   icon: '🔤', label: 'Vocabulary'      },
     { id: 'video',        icon: '🎬', label: 'Dialogue Video'  },
-    { id: 'teacher_note', icon: '🗒️', label: "Teacher's Note"  },
+    ...(!studentMode ? [{ id: 'teacher_note' as Tab, icon: '🗒️', label: "Teacher's Note", popup: true }] : []),
     { id: 'grammar',      icon: '📐', label: 'Grammar Summary' },
   ];
 
@@ -202,13 +271,22 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
       {/* Tabs */}
       <div className="flex border-b border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 overflow-x-auto">
         {tabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+          <button key={tab.id}
+            onClick={() => tab.popup ? openTeacherNoteWindow() : setActiveTab(tab.id)}
+            title={tab.popup ? 'Opens in a separate private window' : undefined}
             className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
-              activeTab === tab.id
+              tab.popup
+                ? 'border-transparent text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300'
+                : activeTab === tab.id
                 ? 'border-amber-500 text-amber-600 dark:text-amber-400'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}>
             <span>{tab.icon}</span>{tab.label}
+            {tab.popup && (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3 opacity-60">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            )}
           </button>
         ))}
       </div>
@@ -261,30 +339,19 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
           </div>
         )}
 
-        {/* ── Teacher's Note tab ── */}
-        {activeTab === 'teacher_note' && (
-          <div className="h-full overflow-y-auto p-6">
-            <NoteTab
-              label="Teacher's Note"
-              icon="🗒️"
-              description="Write lesson plans, teaching tips, or any private notes about this lesson."
-              value={teacherNote}
-              saveStatus={noteSaveStatus}
-              onChange={handleNoteChange}
-            />
-          </div>
-        )}
-
         {/* ── Grammar Summary tab ── */}
         {activeTab === 'grammar' && (
           <div className="h-full overflow-y-auto p-6">
             <NoteTab
               label="Grammar Summary"
               icon="📐"
-              description="Summarise the grammar rules, patterns, or structures covered in this lesson."
+              description={studentMode
+                ? 'Grammar rules and structures covered in this lesson.'
+                : 'Summarise the grammar rules, patterns, or structures covered in this lesson.'}
               value={grammarSummary}
               saveStatus={grammarSaveStatus}
               onChange={handleGrammarChange}
+              readOnly={studentMode}
             />
           </div>
         )}
@@ -304,7 +371,8 @@ const NoteTab: React.FC<{
   value: string;
   saveStatus: 'saved' | 'saving' | null;
   onChange: (val: string) => void;
-}> = ({ label, icon, description, value, saveStatus, onChange }) => (
+  readOnly?: boolean;
+}> = ({ label, icon, description, value, saveStatus, onChange, readOnly = false }) => (
   <div className="max-w-3xl mx-auto space-y-4">
     {/* Header */}
     <div className="flex items-start justify-between gap-4">
@@ -314,38 +382,56 @@ const NoteTab: React.FC<{
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{description}</p>
       </div>
-      {/* Auto-save indicator */}
-      <div className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold mt-1">
-        {saveStatus === 'saving' && (
-          <>
-            <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
-            <span className="text-amber-600 dark:text-amber-400">Saving…</span>
-          </>
-        )}
-        {saveStatus === 'saved' && (
-          <>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500">
-              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-            </svg>
-            <span className="text-emerald-600 dark:text-emerald-400">Saved</span>
-          </>
-        )}
-      </div>
+      {/* Auto-save indicator — only when editable */}
+      {!readOnly && (
+        <div className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold mt-1">
+          {saveStatus === 'saving' && (
+            <>
+              <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+              <span className="text-amber-600 dark:text-amber-400">Saving…</span>
+            </>
+          )}
+          {saveStatus === 'saved' && (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500">
+                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+              </svg>
+              <span className="text-emerald-600 dark:text-emerald-400">Saved</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
 
-    {/* Text area */}
-    <textarea
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={`Write your ${label.toLowerCase()} here…`}
-      className="w-full min-h-[420px] p-4 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-500 resize-y leading-relaxed placeholder-slate-300 dark:placeholder-slate-600"
-      dir="auto"
-    />
-
-    {!value && (
-      <p className="text-xs text-slate-400 dark:text-slate-500 italic">
-        Start typing — changes are saved automatically.
-      </p>
+    {/* Read-only view for students */}
+    {readOnly ? (
+      value ? (
+        <div
+          dir="auto"
+          className="w-full min-h-[420px] p-4 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm leading-relaxed whitespace-pre-wrap">
+          {value}
+        </div>
+      ) : (
+        <div className="w-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-gray-800 border border-dashed border-slate-200 dark:border-gray-700 rounded-xl">
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">No grammar summary added yet.</p>
+        </div>
+      )
+    ) : (
+      /* Editable textarea for tutor */
+      <>
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={`Write your ${label.toLowerCase()} here…`}
+          className="w-full min-h-[420px] p-4 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-500 resize-y leading-relaxed placeholder-slate-300 dark:placeholder-slate-600"
+          dir="auto"
+        />
+        {!value && (
+          <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+            Start typing — changes are saved automatically.
+          </p>
+        )}
+      </>
     )}
   </div>
 );

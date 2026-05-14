@@ -259,9 +259,10 @@ interface Props {
   teacherId: string;
   preSelectedStudentId?: string;
   onStudentUpdated?: (s: ArabicStudent) => void;
+  studentMode?: boolean;
 }
 
-const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated }) => {
+const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false }) => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -503,6 +504,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           students={students}
           teacherId={teacherId}
           preSelectedStudentId={preSelectedStudentId}
+          studentMode={studentMode}
           onClose={async () => {
             setViewing(null);
             if (preSelectedStudentId) {

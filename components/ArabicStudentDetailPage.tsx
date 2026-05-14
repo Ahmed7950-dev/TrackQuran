@@ -824,6 +824,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           teacherId={teacherId}
           preSelectedStudentId={student.id}
           onStudentUpdated={onUpdateStudent}
+          studentMode={studentMode}
         />
       )}
 
