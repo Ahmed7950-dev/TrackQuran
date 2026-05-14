@@ -10,6 +10,7 @@
 import { supabase } from '../lib/supabase';
 import {
   ArabicStudent, ArabicLesson, ArabicDialect, WeeklySlot,
+  ArabicLevelPlan,
   HomeworkQuestion, HomeworkQuestionType,
   VocabWord, VocabMode, VocabAttempt, VocabMistakeDetail,
 } from '../types';
@@ -45,6 +46,7 @@ interface ArabicLessonRow {
   title: string;
   description: string | null;
   order_index: number;
+  level: number;
   pdf_url: string | null;
   video_url: string | null;
   created_by: string | null;
@@ -139,6 +141,7 @@ function rowToLesson(r: ArabicLessonRow): ArabicLesson {
     title:       r.title,
     description: r.description ?? undefined,
     orderIndex:  r.order_index,
+    level:       (r.level as 1|2|3) ?? 1,
     pdfUrl:      r.pdf_url     ?? undefined,
     videoUrl:    r.video_url   ?? undefined,
     createdBy:   r.created_by  ?? undefined,
@@ -228,6 +231,7 @@ export async function getArabicLessons(): Promise<ArabicLesson[]> {
 export async function createArabicLesson(input: {
   title: string;
   description?: string;
+  level?: 1 | 2 | 3;
   pdfUrl?: string;
   createdBy?: string;
 }): Promise<ArabicLesson | null> {
@@ -244,6 +248,7 @@ export async function createArabicLesson(input: {
     title:       input.title,
     description: input.description ?? null,
     order_index: maxOrder + 1,
+    level:       input.level ?? 1,
     pdf_url:     input.pdfUrl    ?? null,
     video_url:   null,
     created_by:  input.createdBy ?? null,
@@ -262,7 +267,7 @@ export async function createArabicLesson(input: {
 
 export async function updateArabicLesson(
   id: string,
-  patch: Partial<Pick<ArabicLesson, 'title' | 'description' | 'pdfUrl' | 'orderIndex' | 'videoUrl'>>,
+  patch: Partial<Pick<ArabicLesson, 'title' | 'description' | 'pdfUrl' | 'orderIndex' | 'videoUrl' | 'level'>>,
 ): Promise<boolean> {
   const update: Partial<ArabicLessonRow> & { updated_at: string } = {
     updated_at: new Date().toISOString(),
@@ -272,6 +277,7 @@ export async function updateArabicLesson(
   if (patch.pdfUrl      !== undefined) update.pdf_url     = patch.pdfUrl ?? null;
   if (patch.orderIndex  !== undefined) update.order_index = patch.orderIndex;
   if (patch.videoUrl    !== undefined) update.video_url   = patch.videoUrl ?? null;
+  if (patch.level       !== undefined) update.level       = patch.level;
 
   const { error } = await supabase
     .from('arabic_lessons')
@@ -718,4 +724,38 @@ export async function uploadNoteImage(lessonId: string, authorId: string, file: 
   if (error) { console.error('uploadNoteImage:', error.message); return null; }
   const { data } = supabase.storage.from(PDF_BUCKET).getPublicUrl(path);
   return data.publicUrl;
+}
+
+// ── Level plans (plan image per Level 1/2/3) ─────────────────────────────────
+// Table: arabic_level_plans(level INT PRIMARY KEY, plan_image_url TEXT, updated_at)
+
+export async function getLevelPlans(): Promise<ArabicLevelPlan[]> {
+  const { data, error } = await supabase
+    .from('arabic_level_plans')
+    .select('level, plan_image_url');
+  if (error) { console.error('getLevelPlans:', error.message); return []; }
+  return (data ?? []).map((r: any) => ({
+    level: r.level as 1|2|3,
+    planImageUrl: r.plan_image_url ?? undefined,
+  }));
+}
+
+export async function uploadLevelPlanImage(level: 1|2|3, file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const path = `arabic-level-plans/level-${level}.${ext}`;
+  // Remove old file first (ignore error if not exists)
+  await supabase.storage.from(PDF_BUCKET).remove([path]);
+  const { error } = await supabase.storage.from(PDF_BUCKET).upload(path, file, { upsert: true });
+  if (error) { console.error('uploadLevelPlanImage:', error.message); return null; }
+  const { data } = supabase.storage.from(PDF_BUCKET).getPublicUrl(path);
+  // Cache-bust with timestamp
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
+export async function saveLevelPlan(level: 1|2|3, planImageUrl: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('arabic_level_plans')
+    .upsert({ level, plan_image_url: planImageUrl, updated_at: new Date().toISOString() }, { onConflict: 'level' });
+  if (error) { console.error('saveLevelPlan:', error.message); return false; }
+  return true;
 }

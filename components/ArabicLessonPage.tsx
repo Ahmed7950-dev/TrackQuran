@@ -1,13 +1,13 @@
 // components/ArabicLessonPage.tsx
 // ---------------------------------------------------------------------------
-// Arabic lessons library — mirrors TajweedPage structure.
-// • Admins can upload / edit / delete / reorder lessons.
-// • Tutors see the list and click to open the PDF viewer.
-// • A student can be selected to mark lessons as done.
+// Arabic lessons library — grouped into 3 levels of 20 lessons each.
+// • Admins can upload / edit / delete / reorder lessons and upload level plan images.
+// • Tutors/students see 3 level tabs; completed lessons are highlighted green.
+// • "Show Plan" button reveals the level overview image.
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArabicLesson, ArabicStudent } from '../types';
+import { ArabicLesson, ArabicStudent, ArabicLevelPlan } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import {
   getArabicLessons,
@@ -19,16 +19,14 @@ import {
   getHomeworkCountsByLesson,
   getHomeworkCompletionsForStudent,
   getVocabRoundsByLesson,
+  getLevelPlans,
+  uploadLevelPlanImage,
+  saveLevelPlan,
 } from '../services/arabicService';
 import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 
-interface Props {
-  students: ArabicStudent[];
-  teacherId: string;
-  /** If set, the viewer opens directly pre-selected to this student. */
-  preSelectedStudentId?: string;
-  onStudentUpdated?: (s: ArabicStudent) => void;
-}
+const LESSONS_PER_LEVEL = 20;
+const LEVELS = [1, 2, 3] as const;
 
 // ── Create / Edit modal ──────────────────────────────────────────────────────
 
@@ -39,14 +37,16 @@ interface ModalProps {
   onCreated?: (l: ArabicLesson) => void;
   onUpdated?: (l: ArabicLesson) => void;
   createdBy?: string;
+  defaultLevel?: 1 | 2 | 3;
 }
 
 const CreateArabicLessonModal: React.FC<ModalProps> = ({
-  isOpen, existing, onClose, onCreated, onUpdated, createdBy,
+  isOpen, existing, onClose, onCreated, onUpdated, createdBy, defaultLevel = 1,
 }) => {
   const isEdit = !!existing;
   const [title,  setTitle]  = useState(existing?.title       ?? '');
   const [desc,   setDesc]   = useState(existing?.description ?? '');
+  const [level,  setLevel]  = useState<1|2|3>(existing?.level ?? defaultLevel);
   const [file,   setFile]   = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [err,    setErr]    = useState('');
@@ -79,13 +79,13 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
     }
 
     if (isEdit && existing) {
-      const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl });
+      const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl, level });
       setSaving(false);
       if (!ok) { setErr('Failed to save changes.'); return; }
-      onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl });
+      onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl, level });
       handleClose();
     } else {
-      const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, pdfUrl, createdBy });
+      const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, level, pdfUrl, createdBy });
       setSaving(false);
       if (!lesson) { setErr('Failed to create lesson. Please try again.'); return; }
       onCreated?.(lesson);
@@ -122,6 +122,22 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
             </label>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} disabled={saving} rows={2}
               placeholder="Short summary…" className={inp} />
+          </div>
+          {/* Level selector */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Level</label>
+            <div className="flex gap-2">
+              {LEVELS.map(l => (
+                <button key={l} type="button" onClick={() => setLevel(l)} disabled={saving}
+                  className={`flex-1 py-2 rounded-lg border-2 text-sm font-semibold transition-colors ${
+                    level === l
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                      : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-amber-300'
+                  }`}>
+                  Level {l}
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -174,7 +190,76 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
   );
 };
 
+// ── Level Plan Image Modal ────────────────────────────────────────────────────
+
+const LevelPlanModal: React.FC<{
+  level: 1|2|3;
+  imageUrl?: string;
+  isAdmin: boolean;
+  onClose: () => void;
+  onUploaded: (url: string) => void;
+}> = ({ level, imageUrl, isAdmin, onClose, onUploaded }) => {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setErr('Please select an image file.'); return; }
+    setUploading(true); setErr('');
+    const url = await uploadLevelPlanImage(level, f);
+    if (!url) { setErr('Upload failed. Check Storage permissions.'); setUploading(false); return; }
+    await saveLevelPlan(level, url);
+    setUploading(false);
+    onUploaded(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-gray-700">
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Level {level} — Course Plan</h3>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+                <button onClick={() => fileRef.current?.click()} disabled={uploading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+                  {uploading ? '⏳ Uploading…' : '📷 Upload Plan Image'}
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        {err && <p className="px-6 py-2 text-sm text-red-600 bg-red-50 dark:bg-red-900/20">{err}</p>}
+        <div className="p-6">
+          {imageUrl ? (
+            <img src={imageUrl} alt={`Level ${level} plan`} className="w-full rounded-xl border border-slate-200 dark:border-gray-700 object-contain max-h-[70vh]" />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500 gap-3">
+              <span className="text-5xl">🗺</span>
+              <p className="font-semibold">No plan image uploaded yet</p>
+              {isAdmin && <p className="text-sm">Click "Upload Plan Image" to add one</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Main component ────────────────────────────────────────────────────────────
+
+interface Props {
+  students: ArabicStudent[];
+  teacherId: string;
+  preSelectedStudentId?: string;
+  onStudentUpdated?: (s: ArabicStudent) => void;
+}
 
 const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated }) => {
   const { currentUser } = useAuth();
@@ -182,22 +267,39 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 
   const [lessons,    setLessons]    = useState<ArabicLesson[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [activeLevel, setActiveLevel] = useState<1|2|3>(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing,    setEditing]    = useState<ArabicLesson | null>(null);
   const [viewing,    setViewing]    = useState<ArabicLesson | null>(null);
 
+  // Level plans
+  const [levelPlans, setLevelPlans] = useState<Record<number, string>>({});
+  const [showPlan,   setShowPlan]   = useState<1|2|3|null>(null);
+
   // Per-lesson stats for student badges
-  const [hwCounts,      setHwCounts]      = useState<Record<string, number>>({});
-  const [hwDone,        setHwDone]        = useState<string[]>([]);      // lesson IDs done
-  const [vocabRounds,   setVocabRounds]   = useState<Record<string, number>>({});
+  const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
+  const [hwDone,      setHwDone]      = useState<string[]>([]);
+  const [vocabRounds, setVocabRounds] = useState<Record<string, number>>({});
 
   // Drag-reorder (admin)
   const dragIdx   = useRef<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
+  // Completed lesson IDs for the pre-selected student
+  const completedSet = new Set(
+    preSelectedStudentId
+      ? (students.find(s => s.id === preSelectedStudentId)?.completedLessonIds ?? [])
+      : []
+  );
+
   useEffect(() => {
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
     getHomeworkCountsByLesson().then(setHwCounts);
+    getLevelPlans().then(plans => {
+      const map: Record<number, string> = {};
+      plans.forEach(p => { if (p.planImageUrl) map[p.level] = p.planImageUrl; });
+      setLevelPlans(map);
+    });
   }, []);
 
   useEffect(() => {
@@ -220,15 +322,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     const from = dragIdx.current;
     dragIdx.current = null; setOverIdx(null);
     if (from === null || from === dropIdx) return;
-    const reordered = [...lessons];
+    const levelLessons = lessons.filter(l => l.level === activeLevel);
+    const reordered = [...levelLessons];
     const [moved] = reordered.splice(from, 1);
     reordered.splice(dropIdx, 0, moved);
-    // Update UI immediately, then persist to Supabase
-    setLessons(reordered.map((l, i) => ({ ...l, orderIndex: i + 1 })));
-    await reorderArabicLessons(reordered);
+    const otherLessons = lessons.filter(l => l.level !== activeLevel);
+    const allReordered = [...otherLessons, ...reordered].map((l, i) => ({ ...l, orderIndex: i + 1 }));
+    setLessons(allReordered);
+    await reorderArabicLessons(allReordered);
   };
-  const handleDragEnd   = () => { dragIdx.current = null; setOverIdx(null); };
-
+  const handleDragEnd = () => { dragIdx.current = null; setOverIdx(null); };
 
   if (loading) {
     return (
@@ -241,8 +344,22 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     );
   }
 
+  // Lessons for the current level
+  const levelLessons = lessons
+    .filter(l => (l.level ?? 1) === activeLevel)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+
+  // Per-level progress for the pre-selected student
+  const levelCompleted = levelLessons.filter(l => completedSet.has(l.id)).length;
+  const levelTotal = levelLessons.length;
+  const levelPct = levelTotal > 0 ? Math.round((levelCompleted / LESSONS_PER_LEVEL) * 100) : 0;
+
+  // Milestones: lesson titles at position 10 and 20 within this level
+  const milestone1 = levelLessons[9];  // 10th lesson
+  const milestone2 = levelLessons[19]; // 20th lesson
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -250,7 +367,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {isAdmin
               ? 'Upload and manage Arabic PDF lessons. Drag rows to reorder.'
-              : `${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'} — click any lesson to open it.`}
+              : `${lessons.length} total lessons — choose a level to begin.`}
           </p>
         </div>
         {isAdmin && (
@@ -264,40 +381,122 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         )}
       </div>
 
-      {/* Empty state */}
-      {lessons.length === 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-12 text-center">
-          <div className="text-6xl mb-3">📄</div>
-          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-1">No Arabic lessons yet</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isAdmin ? 'Click "Upload Lesson" to add your first Arabic PDF.' : 'Lessons will appear here once an admin uploads them.'}
-          </p>
+      {/* ── Level tabs ── */}
+      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto">
+        {LEVELS.map(lvl => {
+          const lvlLessons = lessons.filter(l => (l.level ?? 1) === lvl);
+          const lvlDone = lvlLessons.filter(l => completedSet.has(l.id)).length;
+          return (
+            <button key={lvl} onClick={() => setActiveLevel(lvl)}
+              className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
+                activeLevel === lvl
+                  ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}>
+              Level {lvl}
+              {preSelectedStudentId && lvlLessons.length > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  lvlDone === lvlLessons.length ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                  : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400'
+                }`}>
+                  {lvlDone}/{Math.min(LESSONS_PER_LEVEL, lvlLessons.length)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Level header: Show Plan + progress bar ── */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+              Level {activeLevel} — {activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{levelTotal} lessons added · {LESSONS_PER_LEVEL} lessons per level</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowPlan(activeLevel)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+              </svg>
+              Show Plan
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Per-level progress bar with milestones */}
+        {preSelectedStudentId && (
+          <div>
+            <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
+              <span className="font-semibold">Level {activeLevel} Progress</span>
+              <span>{levelCompleted} / {LESSONS_PER_LEVEL} lessons ({Math.min(100, levelPct)}%)</span>
+            </div>
+            {/* Bar with milestone markers */}
+            <div className="relative h-3 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-visible mb-1">
+              <div className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, levelPct)}%` }} />
+              {/* Milestone at 50% (lesson 10) */}
+              <div className="absolute top-0 bottom-0 w-0.5 bg-amber-600/50 dark:bg-amber-400/50" style={{ left: '50%' }} />
+              {/* Milestone at 100% (lesson 20) */}
+              <div className="absolute top-0 bottom-0 w-0.5 bg-amber-600/50 dark:bg-amber-400/50" style={{ left: '100%' }} />
+            </div>
+            {/* Milestone labels */}
+            <div className="relative h-4">
+              {milestone1 && (
+                <span className="absolute text-[9px] text-amber-700 dark:text-amber-400 font-semibold transform -translate-x-1/2 truncate max-w-[120px]"
+                  style={{ left: '50%' }} title={milestone1.title}>
+                  ▲ {milestone1.title.length > 14 ? milestone1.title.slice(0, 14) + '…' : milestone1.title}
+                </span>
+              )}
+              {milestone2 && (
+                <span className="absolute text-[9px] text-amber-700 dark:text-amber-400 font-semibold transform -translate-x-full truncate max-w-[120px]"
+                  style={{ left: '100%' }} title={milestone2.title}>
+                  ▲ {milestone2.title.length > 14 ? milestone2.title.slice(0, 14) + '…' : milestone2.title}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Lesson list */}
-      {lessons.length > 0 && (
+      {levelLessons.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-12 text-center">
+          <div className="text-5xl mb-3">📄</div>
+          <h3 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1">No lessons in Level {activeLevel} yet</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {isAdmin ? 'Click "Upload Lesson" and set Level to add one.' : 'Lessons will appear here once an admin adds them.'}
+          </p>
+        </div>
+      ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-gray-700">
-          {lessons.map((lesson, idx) => (
-            <ArabicLessonRow
-              key={lesson.id}
-              lesson={lesson}
-              index={idx}
-              isAdmin={isAdmin}
-              isDragOver={overIdx === idx}
-              hwQuestionCount={hwCounts[lesson.id] ?? 0}
-              homeworkDone={hwDone.includes(lesson.id)}
-              vocabRounds={vocabRounds[lesson.id] ?? 0}
-              showStudentStats={!!preSelectedStudentId}
-              onView={() => setViewing(lesson)}
-              onEdit={e => { e.stopPropagation(); setEditing(lesson); }}
-              onDelete={e => { e.stopPropagation(); handleDelete(lesson); }}
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={e => handleDragOver(e, idx)}
-              onDrop={e => handleDrop(e, idx)}
-              onDragEnd={handleDragEnd}
-            />
-          ))}
+          {levelLessons.map((lesson, idx) => {
+            const isCompleted = completedSet.has(lesson.id);
+            return (
+              <ArabicLessonRow
+                key={lesson.id}
+                lesson={lesson}
+                index={idx}
+                isAdmin={isAdmin}
+                isDragOver={overIdx === idx}
+                isCompleted={isCompleted}
+                hwQuestionCount={hwCounts[lesson.id] ?? 0}
+                homeworkDone={hwDone.includes(lesson.id)}
+                vocabRounds={vocabRounds[lesson.id] ?? 0}
+                showStudentStats={!!preSelectedStudentId}
+                onView={() => setViewing(lesson)}
+                onEdit={e => { e.stopPropagation(); setEditing(lesson); }}
+                onDelete={e => { e.stopPropagation(); handleDelete(lesson); }}
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={e => handleDragOver(e, idx)}
+                onDrop={e => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -305,6 +504,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       {isAdmin && (
         <CreateArabicLessonModal
           isOpen={createOpen}
+          defaultLevel={activeLevel}
           onClose={() => setCreateOpen(false)}
           createdBy={currentUser?.id}
           onCreated={lesson => { setLessons(prev => [...prev, lesson]); setCreateOpen(false); }}
@@ -321,7 +521,20 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         />
       )}
 
-      {/* Lesson detail page — full-screen overlay with PDF / Homework / Vocabulary / Video tabs */}
+      {/* Level plan modal */}
+      {showPlan && (
+        <LevelPlanModal
+          level={showPlan}
+          imageUrl={levelPlans[showPlan]}
+          isAdmin={isAdmin}
+          onClose={() => setShowPlan(null)}
+          onUploaded={url => {
+            setLevelPlans(prev => ({ ...prev, [showPlan]: url }));
+          }}
+        />
+      )}
+
+      {/* Lesson detail page */}
       {viewing && (
         <ArabicLessonDetailPage
           lesson={viewing}
@@ -330,9 +543,6 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           preSelectedStudentId={preSelectedStudentId}
           onClose={async () => {
             setViewing(null);
-            // Refresh badge data from DB — merge with current local state so that
-            // a lesson just completed (onHomeworkComplete already added it locally)
-            // is never erased by a DB reload that might lag behind.
             if (preSelectedStudentId) {
               const [dbDone, dbRounds] = await Promise.all([
                 getHomeworkCompletionsForStudent(preSelectedStudentId),
@@ -356,6 +566,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 
 interface RowProps {
   lesson: ArabicLesson; index: number; isAdmin: boolean; isDragOver: boolean;
+  isCompleted: boolean;
   hwQuestionCount: number; homeworkDone: boolean; vocabRounds: number; showStudentStats: boolean;
   onView: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void;
@@ -364,6 +575,7 @@ interface RowProps {
 
 const ArabicLessonRow: React.FC<RowProps> = ({
   lesson, index, isAdmin, isDragOver,
+  isCompleted,
   hwQuestionCount, homeworkDone, vocabRounds, showStudentStats,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -373,7 +585,12 @@ const ArabicLessonRow: React.FC<RowProps> = ({
     onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
     onClick={onView}
     className={`group flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors
-      ${isDragOver ? 'bg-amber-50 dark:bg-amber-900/20 border-t-2 border-amber-400' : 'hover:bg-slate-50 dark:hover:bg-gray-700/50'}`}
+      ${isDragOver
+        ? 'bg-amber-50 dark:bg-amber-900/20 border-t-2 border-amber-400'
+        : isCompleted
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+          : 'hover:bg-slate-50 dark:hover:bg-gray-700/50'
+      }`}
   >
     {isAdmin && (
       <div className="flex-shrink-0 text-slate-300 dark:text-gray-600 hover:text-slate-500 cursor-grab active:cursor-grabbing" onClick={e => e.stopPropagation()}>
@@ -382,21 +599,29 @@ const ArabicLessonRow: React.FC<RowProps> = ({
         </svg>
       </div>
     )}
-    <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold">
-      {index + 1}
-    </span>
-    <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-700">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-amber-600 dark:text-amber-400">
+    {/* Number / checkmark */}
+    {isCompleted ? (
+      <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-emerald-400 dark:bg-emerald-600 text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+        </svg>
+      </span>
+    ) : (
+      <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold">
+        {index + 1}
+      </span>
+    )}
+    <div className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg ${isCompleted ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-slate-100 dark:bg-gray-700'}`}>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5 ${isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
       </svg>
     </div>
     <div className="flex-1 min-w-0">
-      <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{lesson.title}</p>
+      <p className={`font-semibold truncate ${isCompleted ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-800 dark:text-slate-100'}`}>{lesson.title}</p>
       {lesson.description && <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{lesson.description}</p>}
       {/* Student progress badges */}
       {showStudentStats && (
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          {/* Homework badge */}
           {hwQuestionCount > 0 && (
             homeworkDone ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-800">
@@ -409,7 +634,6 @@ const ArabicLessonRow: React.FC<RowProps> = ({
               </span>
             )
           )}
-          {/* Vocab rounds badge */}
           {vocabRounds > 0 && (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border ${
               vocabRounds >= 5
@@ -423,7 +647,7 @@ const ArabicLessonRow: React.FC<RowProps> = ({
       )}
     </div>
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-      className="w-4 h-4 text-slate-300 dark:text-gray-600 flex-shrink-0 group-hover:text-amber-500 transition-colors">
+      className={`w-4 h-4 flex-shrink-0 transition-colors ${isCompleted ? 'text-emerald-400 group-hover:text-emerald-500' : 'text-slate-300 dark:text-gray-600 group-hover:text-amber-500'}`}>
       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
     </svg>
     {isAdmin && (

@@ -717,15 +717,50 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-5">
-          <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-1.5">
-            <span>Lesson progress</span>
-            <span className="font-bold">{completedCount} / 60 lessons complete ({pct}%)</span>
-          </div>
-          <div className="h-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-hidden">
-            <div className="h-full bg-amber-400 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-          </div>
+        {/* Per-level progress bars */}
+        <div className="mt-5 space-y-2.5">
+          {(() => {
+            // Determine current level = first level with fewer than 20 lessons done
+            const completedSet = new Set(student.completedLessonIds);
+            const levelCounts = ([1, 2, 3] as const).map(lvl => {
+              const lvlIds = lessons.filter(l => l.level === lvl).map(l => l.id);
+              const done = lvlIds.filter(id => completedSet.has(id)).length;
+              return { lvl, done };
+            });
+            const currentLevel = levelCounts.find(lc => lc.done < 20)?.lvl ?? 3;
+
+            return ([1, 2, 3] as const).map(lvl => {
+              const lvlIds = lessons.filter(l => l.level === lvl).map(l => l.id);
+              const done = lvlIds.filter(id => completedSet.has(id)).length;
+              const pctLvl = Math.min(100, Math.round((done / 20) * 100));
+              const isCurrent = currentLevel === lvl;
+              const isComplete = done >= 20;
+              return (
+                <div key={lvl}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className={`font-semibold flex items-center gap-1.5 ${isCurrent ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />}
+                      Level {lvl}
+                      {isCurrent && <span className="text-amber-500 dark:text-amber-400 font-bold ml-0.5">— current</span>}
+                      {isComplete && <span className="text-emerald-500 dark:text-emerald-400 font-bold ml-0.5">✓ complete</span>}
+                    </span>
+                    <span className={`font-semibold ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {done} / 20
+                    </span>
+                  </div>
+                  <div className="h-2 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-emerald-400' : isCurrent ? 'bg-amber-400' : 'bg-amber-200 dark:bg-amber-700'}`}
+                      style={{ width: `${pctLvl}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            });
+          })()}
+          <p className="text-xs text-slate-400 dark:text-slate-500 text-right pt-0.5">
+            {completedCount} / 60 lessons total ({pct}%)
+          </p>
         </div>
       </div>
 

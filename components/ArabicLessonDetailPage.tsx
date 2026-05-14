@@ -11,7 +11,7 @@ import {
 } from '../types';
 // VocabMode kept in types import for saveSpacedRep (both modes saved)
 import { useAuth } from '../context/AuthProvider';
-import TajweedLessonViewer from './TajweedLessonViewer';
+import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
   updateHomeworkQuestion as updateHWQ,
@@ -110,6 +110,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   const isAdmin = currentUser?.role === 'admin';
   const [lesson, setLesson] = useState(initialLesson);
   const [activeTab, setActiveTab] = useState<Tab>(initialLesson.pdfUrl ? 'lesson' : 'homework');
+  const [canvasVocabWords, setCanvasVocabWords] = useState<VocabWordBasic[]>([]);
 
   const tabs: { id: Tab; icon: string; label: string }[] = [
     { id: 'lesson',     icon: '📖', label: 'Lesson PDF'     },
@@ -120,6 +121,13 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
 
   // Whiteboard is shared per student — authorId = student being viewed, or teacher if no student context
   const wbAuthorId = preSelectedStudentId ?? teacherId;
+
+  // Load vocab words for canvas import whenever the lesson changes
+  useEffect(() => {
+    getVocabWords(lesson.id).then(ws =>
+      setCanvasVocabWords(ws.map(w => ({ arabic: w.arabic, transliteration: w.transliteration, english: w.english })))
+    );
+  }, [lesson.id]);
 
   const tajweedLesson: TajweedLesson = {
     id: lesson.id, title: lesson.title, description: lesson.description,
@@ -187,6 +195,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               onSaveWhiteboard={async (data) => { await saveWhiteboardData(lesson.id, wbAuthorId, data); }}
               onLoadWhiteboard={async () => getWhiteboardData(lesson.id, wbAuthorId)}
               onUploadImage={async (file) => uploadNoteImage(lesson.id, wbAuthorId, file)}
+              vocabWords={canvasVocabWords}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 dark:text-slate-400">
@@ -540,9 +549,28 @@ const HomeworkTab: React.FC<{
         </div>
       )}
       {questions.length > 0 && !isAdmin && (
-        <button onClick={startPractice}
-          className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
-          ▶ Start Practice ({questions.length} questions)
+        <button
+          onClick={() => {
+            const win = window.open('', '_blank');
+            if (!win) return;
+            const rows = questions.map((q, i) => `
+              <div style="margin-bottom:20px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;page-break-inside:avoid">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${QUESTION_TYPE_LABELS[q.type]}</div>
+                <p style="font-size:15px;font-weight:600;color:#1e293b;margin:0 0 8px 0">${i + 1}. ${q.question}</p>
+                ${q.options?.length ? q.options.map((o,j) => `<p style="margin:3px 0;font-size:13px;color:#475569">${String.fromCharCode(65+j)}. ${o}</p>`).join('') : ''}
+                <p style="margin-top:8px;font-size:12px;color:#94a3b8">Answer: <span style="color:#1e293b;font-weight:600">${q.correctAnswer}</span></p>
+              </div>`).join('');
+            win.document.write(`<!DOCTYPE html><html><head><title>Homework — ${lessonId}</title>
+              <style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:20px}h1{font-size:22px;margin-bottom:24px}@media print{button{display:none}}</style></head>
+              <body><button onclick="window.print()" style="margin-bottom:24px;padding:8px 20px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">🖨 Print / Save as PDF</button>
+              <h1>📝 Homework Questions</h1>${rows}</body></html>`);
+            win.document.close();
+          }}
+          className="w-full py-4 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-colors text-base flex items-center justify-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Export Homework to PDF
         </button>
       )}
     </div>

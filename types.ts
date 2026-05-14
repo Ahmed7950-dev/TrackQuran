@@ -237,11 +237,17 @@ export interface ArabicLesson {
   title: string;
   description?: string;
   orderIndex: number;
+  level: 1 | 2 | 3;   // Which course level this lesson belongs to (default 1)
   pdfUrl?: string;
   videoUrl?: string;   // YouTube URL for the dialogue video section
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ArabicLevelPlan {
+  level: 1 | 2 | 3;
+  planImageUrl?: string;
 }
 
 // ── Homework (exercises per lesson) ──────────────────────────────────────────
