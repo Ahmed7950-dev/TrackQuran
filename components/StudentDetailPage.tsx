@@ -17,13 +17,16 @@ import ModernToggle from './ModernToggle';
 interface StudentDetailPageProps {
     student: Student;
     students: Student[];
-    onUpdateStudent: (student: Student) => void;
-    onDeleteStudent: (studentId: string) => void;
-    onStartSession: (studentId: string) => void;
     quranMetadata: SurahMetadata[];
-    tajweedRules: string[];
-    onUpdateTajweedRules: (rules: string[]) => void;
-    onReviewMistakes: () => void;
+    // action props — optional when readOnly
+    onUpdateStudent?: (student: Student) => void;
+    onDeleteStudent?: (studentId: string) => void;
+    onStartSession?: (studentId: string) => void;
+    tajweedRules?: string[];
+    onUpdateTajweedRules?: (rules: string[]) => void;
+    onReviewMistakes?: () => void;
+    /** When true: hides all action buttons, modals, and the Add Achievement bar */
+    readOnly?: boolean;
 }
 
 // Fix: Moved helper function outside component to resolve TypeScript generic inference issues.
@@ -53,7 +56,7 @@ const StatCard: React.FC<{ title: string; value: string | number; subtext?: stri
     </div>
 );
 
-const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, onUpdateStudent, onDeleteStudent, onStartSession, quranMetadata, onReviewMistakes }) => {
+const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, readOnly = false }) => {
     // Fix: Replaced 'a.useState' with 'useState'.
     const [timePeriod, setTimePeriod] = useState<TimePeriod>(TimePeriod.AllTime);
     // Fix: Replaced 'a.useState' with 'useState'.
@@ -645,19 +648,21 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
     return (
         <div className="space-y-6">
-            <StudentHeader 
-                student={student} 
-                onOpenModal={setActiveModal}
-                onStartSession={() => onStartSession(student.id)}
-                readingPagesToNext={readingPagesToNext}
-                readingNextStudentName={readingNextStudentName}
-                hifdhPagesToNext={hifdhPagesToNext}
-                hifdhNextStudentName={hifdhNextStudentName}
-                onReviewMistakes={onReviewMistakes}
-            />
+            {!readOnly && (
+                <StudentHeader
+                    student={student}
+                    onOpenModal={setActiveModal}
+                    onStartSession={() => onStartSession?.(student.id)}
+                    readingPagesToNext={readingPagesToNext}
+                    readingNextStudentName={readingNextStudentName}
+                    hifdhPagesToNext={hifdhPagesToNext}
+                    hifdhNextStudentName={hifdhNextStudentName}
+                    onReviewMistakes={onReviewMistakes ?? (() => {})}
+                />
+            )}
 
             {/* ── Add New Achievement — compact tab strip ── */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            {!readOnly && <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
                 <div className="px-4 pt-4 pb-1 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -698,7 +703,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         {t('studentDetail.attendance')}
                     </button>
                 </div>
-            </div>
+            </div>}
 
             {/* ── Progress Calendar (full-width) ── */}
             <ProgressCalendar />
@@ -877,16 +882,18 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 </div>
             </div>
 
-            <AddRecitationAchievementModal isOpen={activeModal === 'recitation'} onClose={() => setActiveModal(null)} onAddAchievement={handleAddAchievement} quranMetadata={quranMetadata} />
-            <AddTafsirAchievementModal
-                isOpen={activeModal === 'tafsir'}
-                onClose={() => setActiveModal(null)}
-                onAddTafsirReviews={handleAddTafsirReviews}
-                quranMetadata={quranMetadata}
-             />
-            <AddAttendanceModal isOpen={activeModal === 'attendance'} onClose={() => setActiveModal(null)} onAddAttendance={handleAddAttendance} />
-            <EditStudentDataModal isOpen={activeModal === 'edit'} onClose={() => setActiveModal(null)} student={student} onUpdateStudent={onUpdateStudent} onDeleteStudent={onDeleteStudent} quranMetadata={quranMetadata} />
-            <ExportReportModal isOpen={activeModal === 'export'} onClose={() => setActiveModal(null)} student={student} students={students} quranMetadata={quranMetadata} />
+            {!readOnly && <>
+                <AddRecitationAchievementModal isOpen={activeModal === 'recitation'} onClose={() => setActiveModal(null)} onAddAchievement={handleAddAchievement} quranMetadata={quranMetadata} />
+                <AddTafsirAchievementModal
+                    isOpen={activeModal === 'tafsir'}
+                    onClose={() => setActiveModal(null)}
+                    onAddTafsirReviews={handleAddTafsirReviews}
+                    quranMetadata={quranMetadata}
+                />
+                <AddAttendanceModal isOpen={activeModal === 'attendance'} onClose={() => setActiveModal(null)} onAddAttendance={handleAddAttendance} />
+                <EditStudentDataModal isOpen={activeModal === 'edit'} onClose={() => setActiveModal(null)} student={student} onUpdateStudent={onUpdateStudent!} onDeleteStudent={onDeleteStudent!} quranMetadata={quranMetadata} />
+                <ExportReportModal isOpen={activeModal === 'export'} onClose={() => setActiveModal(null)} student={student} students={students} quranMetadata={quranMetadata} />
+            </>}
         </div>
     );
 };
