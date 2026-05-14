@@ -553,13 +553,34 @@ const HomeworkTab: React.FC<{
           onClick={() => {
             const win = window.open('', '_blank');
             if (!win) return;
-            const rows = questions.map((q, i) => `
+            const rows = questions.map((q, i) => {
+              // Build the choices/word-bank HTML per question type — never reveal answers
+              let choicesHtml = '';
+              if (q.type === 'multiple_choice' && q.options?.length) {
+                // A / B / C / D options — student circles one
+                choicesHtml = q.options.map((o, j) =>
+                  `<p style="margin:4px 0;font-size:13px;color:#475569">&#9675; ${String.fromCharCode(65+j)}. ${o}</p>`
+                ).join('');
+              } else if (q.type === 'fill_blank_options' && q.options?.length) {
+                // Word bank — show all words shuffled, student writes into blanks
+                const shuffled = [...q.options].sort(() => Math.random() - 0.5);
+                choicesHtml = `<p style="margin:8px 0 3px;font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Word bank:</p>`
+                  + `<p style="font-size:13px;color:#475569;line-height:1.8">${shuffled.map(w => `<span style="display:inline-block;border:1px solid #cbd5e1;border-radius:4px;padding:1px 8px;margin:2px 4px 2px 0">${w}</span>`).join('')}</p>`;
+              } else if (q.type === 'true_false') {
+                // True / False radio circles
+                choicesHtml = `<p style="margin:6px 0;font-size:13px;color:#475569">&#9675; True &nbsp;&nbsp;&nbsp; &#9675; False</p>`;
+              }
+              // fill_blank → blanks already in question text as ___; no options to show
+              // translate_to_arabic / translate_to_english → open answer line only
+
+              return `
               <div style="margin-bottom:20px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;page-break-inside:avoid">
                 <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${QUESTION_TYPE_LABELS[q.type]}</div>
                 <p style="font-size:15px;font-weight:600;color:#1e293b;margin:0 0 8px 0">${i + 1}. ${q.question}</p>
-                ${q.options?.length ? q.options.map((o,j) => `<p style="margin:3px 0;font-size:13px;color:#475569">${String.fromCharCode(65+j)}. ${o}</p>`).join('') : ''}
+                ${choicesHtml}
                 <div style="margin-top:12px;height:32px;border-bottom:1px solid #cbd5e1;"></div>
-              </div>`).join('');
+              </div>`;
+            }).join('');
             win.document.write(`<!DOCTYPE html><html><head><title>Homework — ${lessonId}</title>
               <style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:20px}h1{font-size:22px;margin-bottom:24px}@media print{button{display:none}}</style></head>
               <body><button onclick="window.print()" style="margin-bottom:24px;padding:8px 20px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">🖨 Print / Save as PDF</button>
