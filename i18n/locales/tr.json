@@ -1,4 +1,8 @@
 {
+    "common": {
+        "back": "Geri",
+        "quranicFont": "Kur'an Yazı Tipi"
+    },
     "header": {
         "title": "LISAN & QURAN",
         "tagline": "Quran öğretmenleri için",
@@ -10,7 +14,8 @@
         "lettersTrainer": "Harf Eğitimi",
         "arabicPractice": "Arapça Pratik",
         "alphabetTrainer": "Alfabe",
-        "tajweed": "Tecvid"
+        "tajweed": "Tecvid",
+        "switchToQuran": "Kur'an'a Geç"
     },
     "footer": {
         "madeWithLove": "Ahmed Yousif tarafından sevgiyle yapıldı",
@@ -92,7 +97,16 @@
         "reviewsCount": "{{count}} tekrar",
         "avgQuality": "Ort: {{quality}}/10",
         "noReviews": "Bu dönem için henüz tekrar yok.",
-        "notEnoughData": "İlerleme grafiği için yeterli veri yok. En az iki başarı gereklidir."
+        "notEnoughData": "İlerleme grafiği için yeterli veri yok. En az iki başarı gereklidir.",
+        "progressPresent": "İlerleme / Mevcut",
+        "completedTajweedLessons": "Tamamlanan Tecvid Dersleri",
+        "noTajweedLessonsCompleted": "Henüz tamamlanan tecvid dersi yok.",
+        "surahProgress": "Sure İlerlemesi",
+        "noProgressLogged": "Henüz ilerleme kaydedilmedi.",
+        "surahCol": "Sure",
+        "readingCol": "Tilavet",
+        "hifzCol": "Hıfz",
+        "tafseerCol": "Tefsir"
     },
     "login": {
         "title": "LISAN & QURAN'a Hoş Geldiniz",
@@ -138,7 +152,8 @@
         "exportFailed": "Yedek dışa aktarılamadı.",
         "importConfirm": "Yedek içe aktarmak bu cihazdaki TÜM mevcut verilerin ÜZERİNE YAZACAK. Devam edilsin mi?",
         "importSuccess": "Yedek başarıyla geri yüklendi ({count} kayıt). Uygulama yeniden başlatılacak.",
-        "importFailed": "Yedek içe aktarılamadı. Lütfen dosyanın geçerli bir LISAN & QURAN yedeği olduğundan emin olun."
+        "importFailed": "Yedek içe aktarılamadı. Lütfen dosyanın geçerli bir LISAN & QURAN yedeği olduğundan emin olun.",
+        "contactSupport": "Destekle İletişim"
     },
     "modals": {
         "addStudent": {

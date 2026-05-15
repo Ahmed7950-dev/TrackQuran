@@ -1,4 +1,8 @@
 {
+    "common": {
+        "back": "رجوع",
+        "quranicFont": "خط قرآني"
+    },
     "header": {
         "title": "LISAN & QURAN",
         "tagline": "لمعلمي القرآن",
@@ -10,7 +14,8 @@
         "lettersTrainer": "مدرب الحروف",
         "arabicPractice": "تدريب العربية",
         "alphabetTrainer": "الأبجدية",
-        "tajweed": "التجويد"
+        "tajweed": "التجويد",
+        "switchToQuran": "التبديل إلى القرآن"
     },
     "footer": {
         "madeWithLove": "صنع بحب بواسطة أحمد يوسف",
@@ -92,7 +97,16 @@
         "reviewsCount": "{{count}} مراجعات",
         "avgQuality": "المتوسط: {{quality}}/١٠",
         "noReviews": "لا توجد مراجعات لهذه الفترة.",
-        "notEnoughData": "لا توجد بيانات كافية لعرض مخطط التقدم. يلزم وجود إنجازين على الأقل."
+        "notEnoughData": "لا توجد بيانات كافية لعرض مخطط التقدم. يلزم وجود إنجازين على الأقل.",
+        "progressPresent": "التقدم / الحضور",
+        "completedTajweedLessons": "دروس التجويد المكتملة",
+        "noTajweedLessonsCompleted": "لم تكتمل أي دروس تجويد بعد.",
+        "surahProgress": "تقدم السور",
+        "noProgressLogged": "لم يتم تسجيل أي تقدم بعد.",
+        "surahCol": "السورة",
+        "readingCol": "تلاوة",
+        "hifzCol": "حفظ",
+        "tafseerCol": "تفسير"
     },
     "login": {
         "title": "أهلاً بك في LISAN & QURAN",
@@ -138,7 +152,8 @@
         "exportFailed": "فشل تصدير النسخة الاحتياطية.",
         "importConfirm": "سيؤدي استيراد النسخة الاحتياطية إلى استبدال جميع البيانات الحالية على هذا الجهاز. هل تريد المتابعة؟",
         "importSuccess": "تمت استعادة النسخة الاحتياطية بنجاح ({count} عنصرًا). سيتم إعادة تحميل التطبيق.",
-        "importFailed": "فشل استيراد النسخة الاحتياطية. تأكد من أن الملف نسخة احتياطية صالحة لـ LISAN & QURAN."
+        "importFailed": "فشل استيراد النسخة الاحتياطية. تأكد من أن الملف نسخة احتياطية صالحة لـ LISAN & QURAN.",
+        "contactSupport": "تواصل مع الدعم"
     },
     "modals": {
         "addStudent": {

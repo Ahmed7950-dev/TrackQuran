@@ -1,4 +1,8 @@
 {
+    "common": {
+        "back": "Back",
+        "quranicFont": "Quranic Font"
+    },
     "header": {
         "title": "LISAN & QURAN",
         "tagline": "for Quran teachers",
@@ -10,7 +14,8 @@
         "lettersTrainer": "Letters Trainer",
         "arabicPractice": "Arabic Practice",
         "alphabetTrainer": "Alphabet",
-        "tajweed": "Tajweed"
+        "tajweed": "Tajweed",
+        "switchToQuran": "Switch to Quran"
     },
     "footer": {
         "madeWithLove": "Made with love by Ahmed Yousif",
@@ -92,7 +97,16 @@
         "reviewsCount": "{{count}} review(s)",
         "avgQuality": "Avg: {{quality}}/10",
         "noReviews": "No reviews yet for this period.",
-        "notEnoughData": "Not enough data to display a progress chart. At least two achievements are needed."
+        "notEnoughData": "Not enough data to display a progress chart. At least two achievements are needed.",
+        "progressPresent": "Progress / Present",
+        "completedTajweedLessons": "Completed Tajweed Lessons",
+        "noTajweedLessonsCompleted": "No tajweed lessons completed yet.",
+        "surahProgress": "Surah Progress",
+        "noProgressLogged": "No progress logged yet.",
+        "surahCol": "Surah",
+        "readingCol": "Reading",
+        "hifzCol": "Hifz",
+        "tafseerCol": "Tafseer"
     },
     "login": {
         "title": "Welcome to LISAN & QURAN",
@@ -138,7 +152,8 @@
         "exportFailed": "Failed to export backup.",
         "importConfirm": "Importing a backup will REPLACE all existing data on this device. Continue?",
         "importSuccess": "Backup restored successfully ({count} entries). The app will reload.",
-        "importFailed": "Failed to import backup. Please make sure the file is a valid LISAN & QURAN backup."
+        "importFailed": "Failed to import backup. Please make sure the file is a valid LISAN & QURAN backup.",
+        "contactSupport": "Contact Support"
     },
     "modals": {
         "addStudent": {

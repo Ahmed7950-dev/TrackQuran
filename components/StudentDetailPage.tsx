@@ -497,22 +497,22 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     {/* Absent / Rescheduled label */}
                     {status === AttendanceStatus.Absent && entries.length === 0 && (
                         <div className="flex-1 flex items-center justify-center p-1">
-                            <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide">Absent</span>
+                            <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide">{t('studentDetail.absent')}</span>
                         </div>
                     )}
                     {status === AttendanceStatus.Rescheduled && entries.length === 0 && (
                         <div className="flex-1 flex items-center justify-center p-1">
-                            <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide">Rescheduled</span>
+                            <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide">{t('studentDetail.rescheduled')}</span>
                         </div>
                     )}
                     {/* Entry badges */}
                     {entries.length > 0 && (
                         <div className="flex flex-wrap gap-0.5 p-1 content-start overflow-hidden">
                             {status === AttendanceStatus.Absent && (
-                                <span className="text-[8px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1 py-0.5 w-full">Absent</span>
+                                <span className="text-[8px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1 py-0.5 w-full">{t('studentDetail.absent')}</span>
                             )}
                             {status === AttendanceStatus.Rescheduled && (
-                                <span className="text-[8px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1 py-0.5 w-full">Rescheduled</span>
+                                <span className="text-[8px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1 py-0.5 w-full">{t('studentDetail.rescheduled')}</span>
                             )}
                             {entries.map((e, i) => (
                                 <span key={i} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight whitespace-nowrap ${e.badgeCls}`}>
@@ -528,6 +528,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
         const dayNames = language === 'ar'
             ? ['أحد', 'إثن', 'ثلث', 'أرب', 'خمس', 'جمع', 'سبت']
+            : language === 'tr'
+            ? ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt']
             : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
         return (
@@ -540,14 +542,14 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     </button>
                     <div className="text-center">
                         <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
-                            {calendarDate.toLocaleString(language === 'ar' ? 'ar' : 'en', { month: 'long', year: 'numeric' })}
+                            {calendarDate.toLocaleString(language === 'ar' ? 'ar' : language === 'tr' ? 'tr' : 'en', { month: 'long', year: 'numeric' })}
                         </h3>
                         {/* Status legend */}
                         <div className="flex items-center justify-center gap-3 mt-1.5">
                             {[
-                                { cls: 'bg-emerald-400', label: 'Progress / Present' },
-                                { cls: 'bg-red-400',     label: 'Absent' },
-                                { cls: 'bg-orange-400',  label: 'Rescheduled' },
+                                { cls: 'bg-emerald-400', label: t('studentDetail.progressPresent') },
+                                { cls: 'bg-red-400',     label: t('studentDetail.absent') },
+                                { cls: 'bg-orange-400',  label: t('studentDetail.rescheduled') },
                             ].map(l => (
                                 <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
                                     <span className={`w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0 ${l.cls}`} />
@@ -791,7 +793,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     {/* Completed Tajweed Lessons */}
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                         <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
-                            <span>🎓</span> Completed Tajweed Lessons
+                            <span>🎓</span> {t('studentDetail.completedTajweedLessons')}
                             <span className="text-xs font-normal text-slate-400 dark:text-slate-500 ml-1">({tajweedCompletions.length})</span>
                         </h3>
                         {tajweedCompletions.length > 0 ? (
@@ -811,23 +813,23 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                 ))}
                             </ul>
                         ) : (
-                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">No tajweed lessons completed yet.</p>
+                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">{t('studentDetail.noTajweedLessonsCompleted')}</p>
                         )}
                     </div>
                     {/* ── Surah progress table ── */}
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                        <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3">Surah Progress</h3>
+                        <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3">{t('studentDetail.surahProgress')}</h3>
                         {surahProgressTable.length === 0 ? (
-                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">No progress logged yet.</p>
+                            <p className="text-slate-500 dark:text-slate-400 italic text-sm">{t('studentDetail.noProgressLogged')}</p>
                         ) : (
                             <div className="overflow-x-auto max-h-72 overflow-y-auto">
                                 <table className="w-full text-sm">
                                     <thead className="sticky top-0 bg-white dark:bg-gray-800">
                                         <tr className="border-b border-slate-200 dark:border-gray-700">
-                                            <th className="text-left py-2 pr-4 font-semibold text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">Surah</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-teal-600 dark:text-teal-400 text-xs uppercase tracking-wide">📖 Reading</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-sky-600 dark:text-sky-400 text-xs uppercase tracking-wide">🧠 Hifz</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wide">📚 Tafseer</th>
+                                            <th className="text-left py-2 pr-4 font-semibold text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">{t('studentDetail.surahCol')}</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-teal-600 dark:text-teal-400 text-xs uppercase tracking-wide">📖 {t('studentDetail.readingCol')}</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-sky-600 dark:text-sky-400 text-xs uppercase tracking-wide">🧠 {t('studentDetail.hifzCol')}</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wide">📚 {t('studentDetail.tafseerCol')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-700/60">
