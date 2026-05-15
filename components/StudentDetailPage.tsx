@@ -467,7 +467,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
         const cells: React.ReactNode[] = [];
         for (let i = 0; i < firstDay; i++) {
-            cells.push(<div key={`e-${i}`} className="min-h-[90px]" />);
+            cells.push(<div key={`e-${i}`} className="min-h-[100px]" />);
         }
         for (let day = 1; day <= daysInMonth; day++) {
             const date   = new Date(year, month, day);
@@ -489,7 +489,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             }
 
             cells.push(
-                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[90px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
+                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[100px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
                     {/* Day number strip */}
                     <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
                         <span className="text-xs font-bold leading-none">{day}</span>
@@ -507,17 +507,17 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     )}
                     {/* Entry badges */}
                     {entries.length > 0 && (
-                        <div className="flex flex-col gap-0.5 p-1 flex-1 overflow-hidden">
+                        <div className="flex flex-wrap gap-0.5 p-1 content-start overflow-hidden">
                             {status === AttendanceStatus.Absent && (
-                                <span className="text-[9px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1">Absent</span>
+                                <span className="text-[8px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1 py-0.5 w-full">Absent</span>
                             )}
                             {status === AttendanceStatus.Rescheduled && (
-                                <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1">Rescheduled</span>
+                                <span className="text-[8px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1 py-0.5 w-full">Rescheduled</span>
                             )}
                             {entries.map((e, i) => (
-                                <span key={i} className={`flex items-start gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded leading-tight ${e.badgeCls}`} style={{ wordBreak: 'break-word' }}>
-                                    <span className="flex-shrink-0">{TYPE_ICONS[e.type]}</span>
-                                    <span className="min-w-0 break-words">{e.label}</span>
+                                <span key={i} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight whitespace-nowrap ${e.badgeCls}`}>
+                                    <span>{TYPE_ICONS[e.type]}</span>
+                                    <span>{e.label}</span>
                                 </span>
                             ))}
                         </div>
