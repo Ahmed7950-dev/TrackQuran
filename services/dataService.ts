@@ -341,10 +341,10 @@ export const getStudentReportId = async (teacherId: string, studentId: string): 
   return data?.id ?? null;
 };
 
-export const getSharedReport = async (id: string): Promise<{ student_name: string; report_data: SharedReportData } | null> => {
+export const getSharedReport = async (id: string): Promise<{ student_name: string; student_id: string; report_data: SharedReportData } | null> => {
   const { data, error } = await supabase
     .from('shared_reports')
-    .select('student_name, report_data')
+    .select('student_name, student_id, report_data')
     .eq('id', id)
     .single();
   if (error) { console.error('getSharedReport:', error.message); return null; }

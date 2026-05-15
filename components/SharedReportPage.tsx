@@ -5,6 +5,7 @@ import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
 import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
 import AboutUsPage from './AboutUsPage';
+import VocabularyPracticePage from './VocabularyPracticePage';
 import type { Student, AttendanceRecord } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1108,11 +1109,11 @@ const ProgressTab: React.FC<{
 // ── main page ─────────────────────────────────────────────────────────────────
 
 const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
-  const [report, setReport] = useState<{ student_name: string; report_data: SharedReportData } | null>(null);
+  const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'mistakes' | 'progress'>('mistakes');
-  const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
+  const [portalTab, setPortalTab] = useState<'content' | 'about' | 'vocabulary'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
   const [quranicFont, setQuranicFont] = useState<string>(() =>
     localStorage.getItem('quranicFont') || 'Hafs'
@@ -1277,6 +1278,12 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             >
               About Us
             </button>
+            <button
+              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'content' : 'vocabulary')}
+              className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400'}`}
+            >
+              📚 Vocabulary
+            </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400 transition-colors">
               Contact Us
             </a>
@@ -1404,7 +1411,11 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       </header>
 
       <main className="container mx-auto flex-grow px-3 sm:px-6 lg:px-8 py-6" dir="ltr">
-        {portalTab === 'about' ? (
+        {portalTab === 'vocabulary' ? (
+          report?.student_id ? (
+            <VocabularyPracticePage studentId={report.student_id} />
+          ) : null
+        ) : portalTab === 'about' ? (
           <AboutUsPage />
         ) : (
           <>

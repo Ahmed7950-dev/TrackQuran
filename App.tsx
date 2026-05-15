@@ -23,6 +23,7 @@ import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
 import TajweedPage from './components/TajweedPage';
 import SubjectSelectionPage from './components/SubjectSelectionPage';
+import VocabularyPracticePage from './components/VocabularyPracticePage';
 import ArabicDashboard from './components/ArabicDashboard';
 import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
 import ArabicStudentPortal from './components/ArabicStudentPortal';
@@ -159,7 +160,7 @@ const App: React.FC = () => {
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportBackup = () => {
@@ -739,6 +740,10 @@ const App: React.FC = () => {
                     onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); }}
                     className={`text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
                 >{t('header.tajweed')}</button>
+                <button
+                    onClick={() => setActiveTab(t => t === 'vocabulary' ? 'main' : 'vocabulary')}
+                    className={`text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                >📚 Vocabulary</button>
                 {/* Switch to Arabic */}
                 <button
                     onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); }}
@@ -854,7 +859,17 @@ const App: React.FC = () => {
         </div>
       </header>
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
-        {activeTab === 'lettersTrainer' ? (
+        {activeTab === 'vocabulary' ? (
+          selectedStudent ? (
+            <VocabularyPracticePage studentId={selectedStudent.id} />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="text-4xl mb-4">📚</p>
+              <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">Vocabulary Practice</p>
+              <p className="text-slate-500 dark:text-slate-400">Select a student from the dashboard to view their vocabulary lists.</p>
+            </div>
+          )
+        ) : activeTab === 'lettersTrainer' ? (
           <LettersTrainerPage />
         ) : activeTab === 'alphabetTrainer' ? (
           <AlphabetTrainerPage />

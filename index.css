@@ -28,3 +28,24 @@ code {
 .horizontal-scrollbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+
+/* ── Reading mode for Vocabulary Practice Page ── */
+[data-theme="reading"] .vocab-reading-mode {
+  background-color: #f5f0e8;
+  color: #1a1208;
+}
+[data-theme="reading"] .vocab-reading-mode .vocab-card {
+  background-color: #ede7d9;
+  border-color: #c8bfae;
+}
+[data-theme="reading"] .vocab-reading-mode .vocab-input {
+  background-color: #f5f0e8;
+  border-color: #c8bfae;
+  color: #1a1208;
+}
+[data-theme="reading"] .vocab-reading-mode .vocab-table-row:hover td {
+  background-color: #ede7d9;
+}
+[data-theme="reading"] .vocab-reading-mode .vocab-muted {
+  color: #7a6e5e;
+}
