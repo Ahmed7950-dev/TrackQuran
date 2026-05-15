@@ -17,11 +17,17 @@ const Footer: React.FC = () => {
                         >
                             EN
                         </button>
-                        <button 
+                        <button
                             onClick={() => setLanguage('ar')}
                             className={`px-3 py-1 text-xs rounded-md font-semibold transition-colors ${language === 'ar' ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-500 shadow' : 'text-slate-600 dark:text-slate-300'}`}
                         >
                             AR
+                        </button>
+                        <button
+                            onClick={() => setLanguage('tr')}
+                            className={`px-3 py-1 text-xs rounded-md font-semibold transition-colors ${language === 'tr' ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-500 shadow' : 'text-slate-600 dark:text-slate-300'}`}
+                        >
+                            TR
                         </button>
                     </div>
                 </div>

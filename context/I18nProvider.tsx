@@ -1,8 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import enTranslations from '../i18n/locales/en.json';
 import arTranslations from '../i18n/locales/ar.json';
+import trTranslations from '../i18n/locales/tr.json';
 
-type Language = 'en' | 'ar';
+type Language = 'en' | 'ar' | 'tr';
 // Using a more generic type for translations loaded from JSON
 type TranslationMap = { [key: string]: string | TranslationMap };
 type Translations = { [key in Language]?: TranslationMap };
@@ -19,12 +20,15 @@ const I18nContext = createContext<I18nContextType | undefined>(undefined);
 const getInitialLanguage = (): Language => {
     if (typeof window !== 'undefined') {
         const storedLang = localStorage.getItem('language');
-        if (storedLang === 'en' || storedLang === 'ar') {
+        if (storedLang === 'en' || storedLang === 'ar' || storedLang === 'tr') {
             return storedLang;
         }
         const browserLang = navigator.language.split('-')[0];
         if (browserLang === 'ar') {
             return 'ar';
+        }
+        if (browserLang === 'tr') {
+            return 'tr';
         }
     }
     return 'en';
@@ -35,6 +39,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const translations: Translations = {
         en: enTranslations as TranslationMap,
         ar: arTranslations as TranslationMap,
+        tr: trTranslations as TranslationMap,
     };
     const isLoading = false;
 
