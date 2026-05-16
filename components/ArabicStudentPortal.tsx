@@ -90,18 +90,19 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             >
               About Us
             </button>
-            <button
-              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
-              className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              Vocabulary
-            </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">
               Contact Us
             </a>
             <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
               Support Us
             </a>
+            <span className="w-px h-5 bg-slate-200 dark:bg-gray-600" />
+            <button
+              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
+              className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+            >
+              Vocabulary
+            </button>
           </nav>
 
           <div className="flex-1 md:hidden" />
@@ -122,15 +123,16 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             >
               About
             </button>
+            <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
+              Support
+            </a>
+            <span className="w-px h-4 bg-slate-200 dark:bg-gray-600" />
             <button
               onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
               className={`text-xs font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
               Vocabulary
             </button>
-            <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
-              Support
-            </a>
           </div>
         </div>
       </header>
