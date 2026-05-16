@@ -11,6 +11,7 @@ export interface VocabWord {
   id: string;
   text: string;
   translation: string;
+  transliteration: string;
   clicks: number; // 0=normal, 1=practice more, 2=practice most
   category: string;
 }

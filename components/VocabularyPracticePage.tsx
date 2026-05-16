@@ -160,7 +160,10 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
 
-  // ─── helpers ───────────────────────────────────────────────────────────────
+  // ─── computed allCats (needed by handlers below) ───────────────────────────
+  const allCats = [...CATEGORIES, ...customCats];
+
+  // ─── list helpers ──────────────────────────────────────────────────────────
 
   const loadList = (list: VocabList) => {
     setActiveListId(list.id);
@@ -187,12 +190,14 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setShowSaveModal(true);
   };
 
+  // Fix: create an id when none exists so saving always works
   const handleSave = async () => {
     const name = saveModalInput.trim();
     if (!name) return;
-    if (!activeListId) return;
+    const id = activeListId ?? crypto.randomUUID();
     setListName(name);
-    await saveVocabularyList({ id: activeListId, student_id: studentId, name, words, phrases });
+    if (!activeListId) setActiveListId(id);
+    await saveVocabularyList({ id, student_id: studentId, name, words, phrases });
     const refreshed = await getVocabularyLists(studentId);
     setLists(refreshed);
     setShowSaveModal(false);
@@ -224,9 +229,9 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     const tokens = wordInput.trim().split(/[\s\n]+/).filter(Boolean);
     if (!tokens.length) return;
     const newWords: VocabWord[] = tokens.map(t => ({
-      id: crypto.randomUUID(), text: t, translation: '', clicks: 0, category: selectedCat,
+      id: crypto.randomUUID(), text: t, translation: '', transliteration: '', clicks: 0, category: selectedCat,
     }));
-    setWords(prev => { const next = [...prev, ...newWords]; return next; });
+    setWords(prev => [...prev, ...newWords]);
     setWordInput('');
     setIsDirty(true);
   };
@@ -241,8 +246,20 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setIsDirty(true);
   };
 
-  const updateWordCategory = (id: string, cat: string) => {
-    setWords(prev => prev.map(w => w.id === id ? { ...w, category: cat } : w));
+  const updateWordTransliteration = (id: string, val: string) => {
+    setWords(prev => prev.map(w => w.id === id ? { ...w, transliteration: val } : w));
+    setIsDirty(true);
+  };
+
+  // Clicking a category badge in the table row cycles to the next category
+  const cycleWordCategory = (id: string) => {
+    const cats = [...CATEGORIES, ...customCats];
+    setWords(prev => prev.map(w => {
+      if (w.id !== id) return w;
+      const idx = cats.indexOf(w.category);
+      const next = cats[(idx + 1) % cats.length];
+      return { ...w, category: next };
+    }));
     setIsDirty(true);
   };
 
@@ -250,8 +267,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setWords(prev => prev.filter(w => w.id !== id));
     setIsDirty(true);
   };
-
-  const allCats = [...CATEGORIES, ...customCats];
 
   const addCustomCat = () => {
     const c = newCatInput.trim().toLowerCase();
@@ -382,12 +397,18 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
   let displayedWords = words;
   if (wordCatFilter !== 'all') displayedWords = displayedWords.filter(w => w.category === wordCatFilter);
-  if (wordSearch) displayedWords = displayedWords.filter(w => w.text.includes(wordSearch) || w.translation.toLowerCase().includes(wordSearch.toLowerCase()));
+  if (wordSearch) displayedWords = displayedWords.filter(w =>
+    w.text.includes(wordSearch) ||
+    w.translation.toLowerCase().includes(wordSearch.toLowerCase()) ||
+    (w.transliteration ?? '').toLowerCase().includes(wordSearch.toLowerCase())
+  );
   if (wordSort === 'az') displayedWords = [...displayedWords].sort((a, b) => a.text.localeCompare(b.text, 'ar'));
   else if (wordSort === 'priority') displayedWords = [...displayedWords].sort((a, b) => b.clicks - a.clicks);
 
   let displayedPhrases = phrases;
-  if (phraseSearch) displayedPhrases = displayedPhrases.filter(p => p.text.includes(phraseSearch) || p.translation.toLowerCase().includes(phraseSearch.toLowerCase()));
+  if (phraseSearch) displayedPhrases = displayedPhrases.filter(p =>
+    p.text.includes(phraseSearch) || p.translation.toLowerCase().includes(phraseSearch.toLowerCase())
+  );
   if (phraseFilter === 'red') displayedPhrases = displayedPhrases.filter(p => p.clicks === 2);
   else if (phraseFilter === 'yellow') displayedPhrases = displayedPhrases.filter(p => p.clicks === 1);
   else if (phraseFilter === 'any') displayedPhrases = displayedPhrases.filter(p => p.clicks > 0);
@@ -410,6 +431,14 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     }
     return '';
   };
+
+  // ─── shared pill badge style ───────────────────────────────────────────────
+  const pillBadge = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+      active
+        ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm'
+        : 'border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-600 dark:hover:text-orange-400 bg-white dark:bg-gray-800'
+    }`;
 
   // ─── render ───────────────────────────────────────────────────────────────
 
@@ -499,7 +528,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              {/* Phrase text with selectable chars */}
               <div
                 className="text-right select-none p-4 bg-slate-50 dark:bg-gray-700/60 rounded-2xl leading-loose border border-slate-100 dark:border-gray-600"
                 style={{ fontFamily: 'Amiri, serif', fontSize: '1.75rem', direction: 'rtl' }}
@@ -517,8 +545,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                   </span>
                 ))}
               </div>
-
-              {/* Note input row */}
               <div className="space-y-2">
                 <input
                   value={gsNoteInput}
@@ -543,8 +569,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                   </button>
                 </div>
               </div>
-
-              {/* Existing notes */}
               {grammarPhrase.grammarNotes.length > 0 && (
                 <div className="space-y-2 pt-1">
                   <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Annotations</p>
@@ -614,7 +638,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 >
                   {list.name}
                 </button>
-                {/* Delete × dot — appears on hover */}
                 <button
                   onClick={e => { e.stopPropagation(); handleDeleteList(list); }}
                   className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white transition-all duration-150 opacity-0 group-hover/chip:opacity-100 ${
@@ -628,8 +651,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 </button>
               </div>
             ))}
-
-            {/* New list chip */}
             <button
               onClick={newList}
               className="rounded-full px-3 py-1 text-xs font-semibold border border-dashed border-slate-300 dark:border-gray-500 text-slate-400 dark:text-slate-500 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-500 dark:hover:text-orange-400 transition-colors"
@@ -646,27 +667,18 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
             </svg>
-            {listName ? `Save` : 'Save list'}
+            {listName ? 'Save' : 'Save list'}
           </button>
 
           {/* Timer */}
           <div className="flex items-center gap-1.5 flex-shrink-0 border-l border-slate-200 dark:border-gray-600 pl-3">
-            <span
-              className={`font-mono text-sm font-bold tabular-nums w-11 text-right transition-colors ${
-                timerSecondsLeft < 60 && timerRunning
-                  ? 'text-red-500'
-                  : timerRunning
-                  ? 'text-teal-600 dark:text-orange-400'
-                  : 'text-slate-600 dark:text-slate-300'
-              }`}
-            >
+            <span className={`font-mono text-sm font-bold tabular-nums w-11 text-right transition-colors ${
+              timerSecondsLeft < 60 && timerRunning ? 'text-red-500' : timerRunning ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
+            }`}>
               {fmt(timerSecondsLeft)}
             </span>
             <input
-              type="number"
-              min={1}
-              max={120}
-              value={timerMinutes}
+              type="number" min={1} max={120} value={timerMinutes}
               onChange={e => {
                 const v = Math.max(1, Math.min(120, Number(e.target.value)));
                 setTimerMinutes(v);
@@ -678,9 +690,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
             <button
               onClick={timerToggle}
               className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                timerRunning
-                  ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 hover:bg-orange-200'
-                  : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 hover:bg-teal-200'
+                timerRunning ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 hover:bg-orange-200' : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 hover:bg-teal-200'
               }`}
               title={timerRunning ? 'Pause' : 'Start'}
             >
@@ -694,11 +704,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 </svg>
               )}
             </button>
-            <button
-              onClick={timerReset}
-              title="Reset timer"
-              className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
-            >
+            <button onClick={timerReset} title="Reset timer" className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
               </svg>
@@ -736,6 +742,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
       {/* ═══════════════ WORDS TAB ═══════════════ */}
       {tab === 'words' && (
         <div className="space-y-3">
+
           {/* Add card */}
           <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
             <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Add words</p>
@@ -750,43 +757,41 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 style={{ fontFamily: 'Amiri, serif', fontSize: '1.25rem' }}
                 className="vocab-input flex-1 min-w-0 px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 resize-none placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
               />
-              <div className="flex flex-col gap-2 flex-shrink-0">
-                <select
-                  value={selectedCat}
-                  onChange={e => setSelectedCat(e.target.value)}
-                  className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-                >
-                  {allCats.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-                </select>
-                <button
-                  onClick={addWords}
-                  className="px-4 py-2 bg-teal-600 dark:bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
-                >
-                  Add
-                </button>
-              </div>
+              <button
+                onClick={addWords}
+                className="px-4 py-2 bg-teal-600 dark:bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors flex-shrink-0"
+              >
+                Add
+              </button>
             </div>
-            {/* Custom category row */}
-            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-gray-700">
+
+            {/* Category pill selector — replaces the old <select> */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-slate-100 dark:border-gray-700">
+              <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 mr-0.5">Type:</span>
+              {allCats.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setSelectedCat(c)}
+                  className={pillBadge(selectedCat === c)}
+                >
+                  {c.charAt(0).toUpperCase() + c.slice(1)}
+                </button>
+              ))}
+              {/* Inline custom category input */}
               <input
                 value={newCatInput}
                 onChange={e => setNewCatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addCustomCat()}
-                placeholder="Add custom category…"
-                className="vocab-input flex-1 px-3 py-1.5 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
+                placeholder="+ custom…"
+                className="vocab-input w-24 px-2.5 py-1 text-xs border border-dashed border-slate-300 dark:border-gray-500 rounded-full bg-transparent text-slate-500 dark:text-slate-400 focus:outline-none focus:border-teal-400 dark:focus:border-orange-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
               />
-              <button
-                onClick={addCustomCat}
-                className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 border border-slate-200 dark:border-gray-600 transition font-medium"
-              >
-                + Add
-              </button>
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[160px]">
+          {/* Filters card */}
+          <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-3 space-y-2.5">
+            {/* Search */}
+            <div className="relative">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
               </svg>
@@ -794,26 +799,33 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 value={wordSearch}
                 onChange={e => setWordSearch(e.target.value)}
                 placeholder="Search words…"
-                className="vocab-input w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+                className="vocab-input w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
               />
             </div>
-            <select
-              value={wordCatFilter}
-              onChange={e => setWordCatFilter(e.target.value)}
-              className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            >
-              <option value="all">All categories</option>
-              {allCats.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-            </select>
-            <select
-              value={wordSort}
-              onChange={e => setWordSort(e.target.value)}
-              className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            >
-              <option value="default">Default order</option>
-              <option value="az">A → Z</option>
-              <option value="priority">Priority first</option>
-            </select>
+
+            {/* Category filter pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 mr-0.5">Filter:</span>
+              {['all', ...allCats].map(c => (
+                <button key={c} onClick={() => setWordCatFilter(c)} className={pillBadge(wordCatFilter === c)}>
+                  {c === 'all' ? 'All' : c.charAt(0).toUpperCase() + c.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Sort pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0 mr-0.5">Sort:</span>
+              {[
+                { value: 'default', label: 'Default' },
+                { value: 'az', label: 'A → Z' },
+                { value: 'priority', label: 'Priority' },
+              ].map(s => (
+                <button key={s.value} onClick={() => setWordSort(s.value)} className={pillBadge(wordSort === s.value)}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Words table */}
@@ -824,31 +836,35 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
           ) : (
             <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
               {/* Legend */}
-              <div className="flex items-center gap-4 px-4 py-2.5 border-b border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50">
-                <span className="text-xs text-slate-400 dark:text-slate-500">Priority — click to cycle:</span>
+              <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50">
+                <span className="text-xs text-slate-400 dark:text-slate-500">Priority — click badge to cycle:</span>
                 {[0, 1, 2].map(c => (
                   <span key={c} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${clickBadge(c)}`}>
                     {clickLabel(c)}
                   </span>
                 ))}
+                <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">· Category — click to cycle</span>
               </div>
+
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-gray-700">
-                    <th className="w-16 px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Pri.</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-right">Word</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Translation</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden sm:table-cell">Category</th>
+                    <th className="w-14 px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Pri.</th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-right">Word</th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Translation</th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden md:table-cell">Transliteration</th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden sm:table-cell">Category</th>
                     <th className="w-8 px-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-gray-700/60">
-                  {displayedWords.map(word => (
+                  {displayedWords.map((word, wi) => (
                     <tr
                       key={word.id}
                       className={`group/row transition-colors hover:bg-slate-50 dark:hover:bg-gray-700/40 ${clickColor(word.clicks)}`}
                     >
-                      <td className="px-4 py-3">
+                      {/* Priority badge */}
+                      <td className="px-3 py-2.5">
                         <button
                           onClick={() => cycleWordClicks(word.id)}
                           className={`text-xs px-2 py-0.5 rounded-full font-bold cursor-pointer transition-all hover:scale-105 ${clickBadge(word.clicks)}`}
@@ -857,7 +873,9 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                           {clickLabel(word.clicks)}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right">
+
+                      {/* Arabic word */}
+                      <td className="px-3 py-2.5 text-right">
                         <span
                           className="text-slate-800 dark:text-slate-100"
                           style={{ fontFamily: 'Amiri, serif', fontSize: '1.35rem' }}
@@ -866,24 +884,55 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                           {word.text}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* Translation — Enter moves to transliteration */}
+                      <td className="px-3 py-2.5">
                         <input
+                          id={`translation-${word.id}`}
                           value={word.translation}
                           onChange={e => updateWordTranslation(word.id, e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              document.getElementById(`transliteration-${word.id}`)?.focus();
+                            }
+                          }}
                           placeholder="Translation…"
                           className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-200 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none transition placeholder:text-slate-300 dark:placeholder:text-slate-600"
                         />
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <select
-                          value={word.category}
-                          onChange={e => updateWordCategory(word.id, e.target.value)}
-                          className="vocab-input text-xs px-2 py-1 border border-slate-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                        >
-                          {allCats.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-                        </select>
+
+                      {/* Transliteration — Enter moves to next word's translation */}
+                      <td className="px-3 py-2.5 hidden md:table-cell">
+                        <input
+                          id={`transliteration-${word.id}`}
+                          value={word.transliteration ?? ''}
+                          onChange={e => updateWordTransliteration(word.id, e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const next = displayedWords[wi + 1];
+                              if (next) document.getElementById(`translation-${next.id}`)?.focus();
+                            }
+                          }}
+                          placeholder="e.g. kitāb…"
+                          className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-200 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-500 dark:text-slate-400 focus:outline-none transition placeholder:text-slate-300 dark:placeholder:text-slate-600 italic"
+                        />
                       </td>
-                      <td className="px-2 py-3">
+
+                      {/* Category — click badge to cycle */}
+                      <td className="px-3 py-2.5 hidden sm:table-cell">
+                        <button
+                          onClick={() => cycleWordCategory(word.id)}
+                          title="Click to change category"
+                          className="text-xs px-2.5 py-0.5 rounded-full font-semibold capitalize transition-all hover:scale-105 bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-teal-100 dark:hover:bg-teal-900/40 hover:text-teal-700 dark:hover:text-teal-300"
+                        >
+                          {word.category}
+                        </button>
+                      </td>
+
+                      {/* Delete */}
+                      <td className="px-2 py-2.5">
                         <button
                           onClick={() => removeWord(word.id)}
                           className="w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover/row:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
@@ -897,6 +946,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                   ))}
                 </tbody>
               </table>
+
               <div className="px-4 py-2.5 border-t border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50">
                 <span className="text-xs text-slate-400 dark:text-slate-500">
                   {displayedWords.length} word{displayedWords.length !== 1 ? 's' : ''}
@@ -953,11 +1003,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
               <button
                 key={f}
                 onClick={() => setPhraseFilter(f)}
-                className={`px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
-                  phraseFilter === f
-                    ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm'
-                    : 'bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-teal-300 dark:hover:border-orange-500 hover:text-teal-600 dark:hover:text-orange-400'
-                }`}
+                className={pillBadge(phraseFilter === f)}
               >
                 {f === 'all' ? 'All' : f === 'any' ? 'Has priority' : f === 'yellow' ? '×2 priority' : '×3 priority'}
               </button>
@@ -986,7 +1032,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                     }`}
                   >
                     <div className="flex items-start gap-3 p-4">
-                      {/* Priority badge (left) */}
                       <button
                         onClick={() => cyclePhraseClicks(phrase.id)}
                         className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 mt-2 cursor-pointer hover:scale-105 transition-all ${clickBadge(phrase.clicks)}`}
@@ -994,8 +1039,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                       >
                         {clickLabel(phrase.clicks)}
                       </button>
-
-                      {/* Main content */}
                       <div className="flex-1 min-w-0 space-y-1.5">
                         <p
                           className="text-right leading-relaxed text-slate-800 dark:text-slate-100"
@@ -1010,8 +1053,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                           className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-200 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-600 dark:text-slate-300 focus:outline-none transition placeholder:text-slate-300 dark:placeholder:text-slate-600"
                         />
                       </div>
-
-                      {/* Actions (right) */}
                       <div className="flex flex-col gap-1.5 flex-shrink-0 items-end">
                         <button
                           onClick={() => openGrammar(realIdx)}
@@ -1033,8 +1074,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                         </button>
                       </div>
                     </div>
-
-                    {/* Grammar note chips */}
                     {hasNotes && (
                       <div className="px-4 pb-3 flex flex-wrap gap-1">
                         {phrase.grammarNotes.map(note => (
@@ -1072,11 +1111,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
               <button
                 key={m}
                 onClick={() => setPracticeMode(m)}
-                className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all ${
-                  practiceMode === m
-                    ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm'
-                    : 'border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-600 dark:hover:text-orange-400'
-                }`}
+                className={pillBadge(practiceMode === m)}
               >
                 {m.charAt(0).toUpperCase() + m.slice(1)}
               </button>
