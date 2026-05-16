@@ -13,6 +13,7 @@ import { ArabicStudent } from '../types';
 import { getStudentByShareToken, saveArabicStudent } from '../services/arabicService';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
+import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
 
 interface Props {
@@ -21,7 +22,7 @@ interface Props {
 
 const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
-  const [portalTab, setPortalTab] = useState<'lessons' | 'about'>('lessons');
+  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
 
   useEffect(() => {
     document.title = 'LisanQuran Student Portal';
@@ -89,6 +90,12 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             >
               About Us
             </button>
+            <button
+              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
+              className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+            >
+              Vocabulary
+            </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">
               Contact Us
             </a>
@@ -111,9 +118,15 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           <div className="flex md:hidden items-center gap-3 flex-shrink-0">
             <button
               onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
-              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500 transition-colors"
+              className={`text-xs font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
               About
+            </button>
+            <button
+              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
+              className={`text-xs font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+            >
+              Vocabulary
             </button>
             <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
               Support
@@ -126,6 +139,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
         {portalTab === 'about' ? (
           <AboutUsPage />
+        ) : portalTab === 'vocabulary' ? (
+          <VocabularyPracticePage studentId={student.id} />
         ) : (
           <ArabicStudentDetailPage
             student={student}
