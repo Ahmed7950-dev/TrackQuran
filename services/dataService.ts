@@ -45,7 +45,6 @@ const studentToRow = (teacherId: string, s: Student) => ({
   teacher_id:                  teacherId,
   name:                        s.name,
   dob:                         s.dob,
-  age_category:                s.ageCategory ?? null,
   recitation_achievements:     s.recitationAchievements,
   memorization_achievements:   s.memorizationAchievements,
   attendance:                  s.attendance,
@@ -66,10 +65,13 @@ export const getStudents = async (teacherId: string): Promise<Student[]> => {
 };
 
 export const saveStudent = async (teacherId: string, student: Student): Promise<void> => {
+  const row = studentToRow(teacherId, student);
   const { error } = await supabase
     .from('students')
-    .upsert(studentToRow(teacherId, student), { onConflict: 'id' });
-  if (error) console.error('saveStudent:', error.message);
+    .upsert(row, { onConflict: 'id' });
+  if (error) {
+    console.error('saveStudent failed:', error.message, '| row id:', row.id);
+  }
 };
 
 export const deleteStudent = async (studentId: string): Promise<void> => {
