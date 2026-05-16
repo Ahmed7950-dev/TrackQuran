@@ -3,7 +3,6 @@ import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
-import { recordVocabListAttempt } from '../services/arabicService';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +65,8 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   const [listName, setListName] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(true);
+  // SRS attempt timestamps for the currently active list (max 5)
+  const [currentSrsAttempts, setCurrentSrsAttempts] = useState<string[]>([]);
 
   // ── ui ────────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<'words' | 'phrases' | 'practice'>('words');
@@ -128,6 +129,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
         setWords(first.words ?? []);
         setPhrases(first.phrases ?? []);
         setListName(first.name);
+        setCurrentSrsAttempts(first.srs_attempts ?? []);
       }
       setLoading(false);
     });
@@ -139,11 +141,11 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     if (!isDirty || !activeListId || !listName) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveVocabularyList({ id: activeListId, student_id: studentId, name: listName, words, phrases });
+      saveVocabularyList({ id: activeListId, student_id: studentId, name: listName, words, phrases, srs_attempts: currentSrsAttempts });
       setIsDirty(false);
     }, 500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [isDirty, activeListId, listName, words, phrases, studentId]);
+  }, [isDirty, activeListId, listName, words, phrases, studentId, currentSrsAttempts]);
 
   // ─── timer tick ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -165,22 +167,6 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
 
-  // ─── record SRS attempt when practice session is won ──────────────────────
-  useEffect(() => {
-    const won = practiceIdx >= practiceTotal && practiceTotal > 0;
-    if (!won || practiceAttemptRecordedRef.current || !activeListId) return;
-    practiceAttemptRecordedRef.current = true;
-    const NEXT_DAYS = [0, 1, 3, 7, 14]; // index 0 unused; index n = days after attempt n
-    recordVocabListAttempt(studentId, activeListId).then(num => {
-      if (num >= 5) {
-        showToast('All 5 sessions complete! 🎉');
-      } else {
-        const d = NEXT_DAYS[num];
-        showToast(`Session ${num} recorded — next review in ${d} day${d !== 1 ? 's' : ''}`);
-      }
-    });
-  }, [practiceIdx, practiceTotal, activeListId, studentId, showToast]);
-
   // ─── computed allCats (needed by handlers below) ───────────────────────────
   const allCats = [...CATEGORIES, ...customCats];
 
@@ -191,6 +177,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setWords(list.words ?? []);
     setPhrases(list.phrases ?? []);
     setListName(list.name);
+    setCurrentSrsAttempts(list.srs_attempts ?? []);
     setIsDirty(false);
     setTab('words');
   };
@@ -201,6 +188,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setWords([]);
     setPhrases([]);
     setListName('');
+    setCurrentSrsAttempts([]);
     setIsDirty(false);
     setTab('words');
     showToast('New list started — save it when ready');
@@ -218,7 +206,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     const id = activeListId ?? crypto.randomUUID();
     setListName(name);
     if (!activeListId) setActiveListId(id);
-    await saveVocabularyList({ id, student_id: studentId, name, words, phrases });
+    await saveVocabularyList({ id, student_id: studentId, name, words, phrases, srs_attempts: currentSrsAttempts });
     const refreshed = await getVocabularyLists(studentId);
     setLists(refreshed);
     setShowSaveModal(false);
@@ -398,8 +386,41 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   };
 
   const handleCorrect = () => {
-    setPracticeIdx(i => i + 1);
-    setShowingArabic(showArabicFirst); // respect session-wide preference
+    const newIdx = practiceIdx + 1;
+    setPracticeIdx(newIdx);
+    setShowingArabic(showArabicFirst);
+
+    // Record SRS attempt when the final card is answered correctly
+    const justWon = newIdx >= practiceTotal && practiceTotal > 0;
+    if (justWon && !practiceAttemptRecordedRef.current && activeListId) {
+      practiceAttemptRecordedRef.current = true;
+
+      if (currentSrsAttempts.length >= 5) {
+        showToast('All 5 sessions complete! 🎉');
+        return;
+      }
+
+      const newAttempts = [...currentSrsAttempts, new Date().toISOString()];
+      const sessionNum = newAttempts.length; // 1-based session number
+      const NEXT_DAYS = [0, 1, 3, 7, 14];   // days until next session (index = sessionNum)
+
+      // Save synchronously in the background — update local state immediately
+      setCurrentSrsAttempts(newAttempts);
+      setLists(prev => prev.map(l =>
+        l.id === activeListId ? { ...l, srs_attempts: newAttempts } : l
+      ));
+      saveVocabularyList({
+        id: activeListId, student_id: studentId, name: listName,
+        words, phrases, srs_attempts: newAttempts,
+      }).catch(err => console.error('SRS save error:', err));
+
+      if (sessionNum >= 5) {
+        showToast('All 5 sessions complete! 🎉');
+      } else {
+        const d = NEXT_DAYS[sessionNum];
+        showToast(`Session ${sessionNum} recorded — next review in ${d} day${d !== 1 ? 's' : ''}`);
+      }
+    }
   };
 
   // ─── timer controls ────────────────────────────────────────────────────────

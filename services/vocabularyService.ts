@@ -30,6 +30,8 @@ export interface VocabList {
   name: string;
   words: VocabWord[];
   phrases: VocabPhrase[];
+  /** ISO date strings for each completed practice session, up to 5 (spaced-rep schedule) */
+  srs_attempts?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -47,7 +49,11 @@ export const getVocabularyLists = async (studentId: string): Promise<VocabList[]
 export const saveVocabularyList = async (list: Omit<VocabList, 'created_at' | 'updated_at'>): Promise<void> => {
   const { error } = await supabase
     .from('vocabulary_lists')
-    .upsert({ ...list, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    .upsert({
+      ...list,
+      srs_attempts: list.srs_attempts ?? [],
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
   if (error) console.error('saveVocabularyList:', error.message);
 };
 

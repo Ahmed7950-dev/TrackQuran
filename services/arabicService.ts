@@ -519,33 +519,6 @@ export async function setArabicLessonCompletion(
   if (updateError) console.error('setArabicLessonCompletion update:', updateError.message);
 }
 
-// ── Vocab list spaced-rep (custom vocabulary lists) ───────────────────────────
-// Uses the vocabulary list ID as the `lessonId` in arabic_vocab_attempts.
-// Records one attempt per completed practice session and returns the attempt #.
-
-export async function recordVocabListAttempt(studentId: string, listId: string): Promise<number> {
-  const existing = await getVocabAttempts(studentId, listId);
-  const completedNums = existing
-    .filter(a => !!a.completedAt)
-    .map(a => a.attemptNumber);
-  const maxCompleted = completedNums.length > 0 ? Math.max(...completedNums) : 0;
-  const nextNum = maxCompleted + 1;
-  if (nextNum > 5) return 5; // SRS schedule already complete
-  const now = new Date().toISOString();
-  await saveVocabAttempts([{
-    id: crypto.randomUUID(),
-    studentId,
-    wordId: listId,   // no individual word — use listId as a marker
-    lessonId: listId,
-    attemptNumber: nextNum,
-    mode: 'arabic',
-    scheduledAt: now,
-    completedAt: now,
-    createdAt: now,
-  }]);
-  return nextNum;
-}
-
 // ── All vocab attempts for a student (cross-lesson) ──────────────────────────
 
 export async function getAllVocabAttemptsForStudent(studentId: string): Promise<VocabAttempt[]> {

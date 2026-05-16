@@ -325,11 +325,27 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   const lessonsWithVocab = lessons.filter(l => (wordCounts[l.id] ?? 0) > 0);
 
   // ── Custom vocab lists that have at least one completed SRS attempt ────────
-  // (practice sessions in VocabularyPracticePage write to arabic_vocab_attempts
-  //  using the list UUID as the lessonId)
+  // srs_attempts is a JSON array of ISO date strings stored directly on the list row
   const listsWithAttempts = vocabLists.filter(list =>
-    attempts.some(a => a.lessonId === list.id && !!a.completedAt)
+    (list.srs_attempts ?? []).length > 0
   );
+
+  // Build a LessonTimeline from a vocab list's srs_attempts array
+  function getListTimeline(list: VocabList): LessonTimeline | null {
+    const srs = list.srs_attempts ?? [];
+    if (srs.length === 0) return null;
+    const firstDone = new Date(srs[0]);
+    const cols: TimelineCol[] = TIMELINE_DELAYS.map((days, i) => {
+      const attemptNum = i + 2; // slots 2,3,4,5
+      const scheduledDate = addDays(firstDone, days);
+      const completedAt = srs[i + 1] ?? null; // srs[1]=2nd session, srs[2]=3rd, …
+      const todayFlag = !completedAt && isSameDay(scheduledDate, today);
+      const isOverdue  = !completedAt && !todayFlag && scheduledDate < today;
+      return { attemptNumber: attemptNum, scheduledDate, completedAt, isToday: todayFlag, isOverdue };
+    });
+    const allComplete = cols.every(c => !!c.completedAt);
+    return { firstDone, cols, allComplete };
+  }
 
   // ── Spaced-rep timeline per lesson ───────────────────────────────────────
   const TIMELINE_DELAYS = [1, 3, 7, 14]; // days after first attempt
@@ -407,7 +423,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
     return t?.cols.some(c => c.isToday);
   });
   const dueTodayLists = listsWithAttempts.filter(list => {
-    const t = getSpacedRepTimeline(list.id);
+    const t = getListTimeline(list);
     return t?.cols.some(c => c.isToday);
   });
 
@@ -546,7 +562,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 
                 {/* ── Custom vocab list rows ── */}
                 {listsWithAttempts.map((list) => {
-                  const timeline = getSpacedRepTimeline(list.id);
+                  const timeline = getListTimeline(list);
                   const allComplete = timeline?.allComplete ?? false;
                   const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
                   return (
