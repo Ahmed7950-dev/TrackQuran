@@ -22,6 +22,8 @@ interface Props {
 }
 
 const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
+  const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
+
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
   const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
@@ -86,6 +88,20 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
         {/* ── Top bar: logo + student badge ── */}
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+          {/* Back to family button — only shown when opened from a family link */}
+          {backUrl && (
+            <a
+              href={backUrl}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 transition-colors text-sm font-semibold flex-shrink-0"
+              aria-label="Back to family page"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+              </svg>
+              <span className="hidden sm:inline">Family</span>
+            </a>
+          )}
+
           {/* Logo — clicking it goes back to lessons */}
           <button onClick={() => setPortalTab('lessons')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0" aria-label="Go to lessons">
             <Logo />

@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
-import { getSharedReport } from '../services/dataService';
+import { getSharedReport, getPageOfAyah } from '../services/dataService';
 import { getStudentByShareToken } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
 import Logo from './Logo';
@@ -38,15 +38,28 @@ async function loadQuranStats(reportId: string): Promise<QuranStats> {
   const report = await getSharedReport(reportId);
   if (!report) throw new Error('Report not found');
   const sp = report.report_data.studentProgress;
-  const pagesRecited = (sp?.recitationAchievements ?? []).reduce((s, a) => s + (a.pagesCompleted ?? 0), 0);
-  const pagesMemorized = (sp?.memorizationAchievements ?? []).reduce((s, a) => s + (a.pagesCompleted ?? 0), 0);
+
+  // Build unique-page Sets (same logic as SharedReportPage) to avoid double-counting
+  const recitedPagesSet = new Set<number>();
+  for (const a of (sp?.recitationAchievements ?? [])) {
+    const s = getPageOfAyah(a.startSurah, a.startAyah);
+    const e = getPageOfAyah(a.endSurah, a.endAyah);
+    if (s > 0 && e > 0) for (let i = s; i <= e; i++) recitedPagesSet.add(i);
+  }
+  const memorizedPagesSet = new Set<number>();
+  for (const a of (sp?.memorizationAchievements ?? [])) {
+    const s = getPageOfAyah(a.startSurah, a.startAyah);
+    const e = getPageOfAyah(a.endSurah, a.endAyah);
+    if (s > 0 && e > 0) for (let i = s; i <= e; i++) memorizedPagesSet.add(i);
+  }
+
   const mistakeCount = Object.keys(report.report_data.mistakes ?? {}).length;
   const allDates = [
     ...(sp?.recitationAchievements ?? []).map(a => a.date),
     ...(sp?.memorizationAchievements ?? []).map(a => a.date),
   ].sort().reverse();
   const lastDate = allDates[0] ? new Date(allDates[0]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
-  return { pagesRecited, pagesMemorized, mistakeCount, lastDate };
+  return { pagesRecited: recitedPagesSet.size, pagesMemorized: memorizedPagesSet.size, mistakeCount, lastDate };
 }
 
 async function loadArabicStats(shareToken: string): Promise<ArabicStats> {
@@ -107,7 +120,7 @@ const ArabicCardStats: React.FC<{ stats: ArabicStats }> = ({ stats }) => (
   </div>
 );
 
-const MemberCard: React.FC<{ member: FamilyMember }> = ({ member }) => {
+const MemberCard: React.FC<{ member: FamilyMember; linkId: string }> = ({ member, linkId }) => {
   const [stats, setStats] = useState<MemberStats>({ type: 'loading' });
 
   useEffect(() => {
@@ -124,9 +137,10 @@ const MemberCard: React.FC<{ member: FamilyMember }> = ({ member }) => {
     }
   }, [member]);
 
+  const backPath = encodeURIComponent(`/family/${linkId}`);
   const viewUrl = member.type === 'quran'
-    ? `${window.location.origin}/report/${member.report_id}`
-    : `${window.location.origin}/arabic/s/${member.share_token}`;
+    ? `${window.location.origin}/report/${member.report_id}?from=${backPath}`
+    : `${window.location.origin}/arabic/s/${member.share_token}?from=${backPath}`;
 
   const typeLabel = member.type === 'quran' ? 'Quran' : 'Arabic';
   const typeBg = member.type === 'quran'
@@ -253,7 +267,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {familyLink.members.map(member => (
-              <MemberCard key={member.id} member={member} />
+              <MemberCard key={member.id} member={member} linkId={linkId} />
             ))}
           </div>
         )}
