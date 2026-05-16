@@ -281,7 +281,7 @@ const App: React.FC = () => {
 
   const handleAddStudent = (student: Omit<Student, 'id' | 'mistakes'>) => {
     const newStudent: Student = {
-      id: `student-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: student.name,
       dob: student.dob || undefined,
       ageCategory: student.ageCategory,
