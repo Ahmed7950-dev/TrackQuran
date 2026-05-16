@@ -70,7 +70,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
+        {/* ── Top bar: logo + student badge ── */}
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
           {/* Logo — clicking it goes back to lessons */}
           <button onClick={() => setPortalTab('lessons')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0" aria-label="Go to lessons">
             <Logo />
@@ -82,7 +83,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             العربية
           </span>
 
-          {/* Nav links */}
+          {/* Desktop nav — centred, only shows md+ */}
           <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
             <button
               onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
@@ -105,36 +106,47 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             </button>
           </nav>
 
-          <div className="flex-1 md:hidden" />
+          <div className="flex-1" />
 
           {/* Student badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
             <span className="text-emerald-600 dark:text-emerald-400 text-sm">🎓</span>
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 max-w-[100px] truncate">
               {student.name}
             </span>
           </div>
+        </div>
 
-          {/* Mobile nav links */}
-          <div className="flex md:hidden items-center gap-3 flex-shrink-0">
+        {/* ── Mobile nav bar — full-width scrollable row, hidden on md+ ── */}
+        <nav className="md:hidden border-t border-slate-100 dark:border-gray-700 overflow-x-auto">
+          <div className="flex items-center gap-1 px-4 py-2 min-w-max">
             <button
-              onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
-              className={`text-xs font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              onClick={() => setPortalTab('lessons')}
+              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              About
+              Lessons
             </button>
-            <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
-              Support
-            </a>
-            <span className="w-px h-4 bg-slate-200 dark:bg-gray-600" />
             <button
-              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
-              className={`text-xs font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              onClick={() => setPortalTab('about')}
+              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'about' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+            >
+              About Us
+            </button>
+            <a href="#" className="flex-shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500 px-3 py-1.5 rounded-full transition-colors">
+              Contact Us
+            </a>
+            <a href="#" className="flex-shrink-0 text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-3 py-1.5 rounded-full">
+              Support Us
+            </a>
+            <span className="flex-shrink-0 w-px h-4 bg-slate-200 dark:bg-gray-600 mx-1" />
+            <button
+              onClick={() => setPortalTab('vocabulary')}
+              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'vocabulary' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
               Vocabulary
             </button>
           </div>
-        </div>
+        </nav>
       </header>
 
       {/* ── Main content ── */}

@@ -706,10 +706,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const lessonsPerWeek = lpw(student);
   const wl             = weeksLeft(student.goalDeadline);
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress'; label: string }> = [
-    { key: 'lessons', label: `Lessons (${lessons.length})` },
-    { key: 'progress', label: "Student's Progress" },
-    { key: 'profile', label: 'Student Profile' },
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress'; label: string; mobileLabel: string }> = [
+    { key: 'lessons', label: `Lessons (${lessons.length})`, mobileLabel: `Lessons (${lessons.length})` },
+    { key: 'progress', label: "Student's Progress", mobileLabel: 'Progress' },
+    { key: 'profile', label: 'Student Profile', mobileLabel: 'Profile' },
   ];
 
   return (
@@ -877,15 +877,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       </div>
 
       {/* ── Section tabs ── */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto">
+      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
         {TABS.map(tab => (
           <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-            className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
+            className={`flex-shrink-0 px-3 sm:px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
               activeSection === tab.key
                 ? 'border-amber-500 text-amber-600 dark:text-amber-400'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}>
-            {tab.label}
+            <span className="sm:hidden">{tab.mobileLabel}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
       </div>
