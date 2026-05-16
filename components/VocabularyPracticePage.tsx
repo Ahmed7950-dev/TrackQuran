@@ -415,77 +415,101 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-slate-400">
-        <svg className="animate-spin w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24">
+      <div className="flex items-center justify-center py-24 text-slate-400 dark:text-slate-500 gap-2">
+        <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
-        Loading vocabulary…
+        <span className="text-sm">Loading vocabulary…</span>
       </div>
     );
   }
 
   return (
-    <div className="vocab-reading-mode">
+    <div className="vocab-reading-mode max-w-4xl mx-auto space-y-3">
 
-      {/* ── Alarm overlay ── */}
+      {/* ═══════════════ OVERLAYS ═══════════════ */}
+
+      {/* Alarm */}
       {showAlarm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setShowAlarm(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 text-center max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-5xl mb-4">⏰</p>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Time's up!</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-6">Your study session is complete.</p>
-            <button onClick={() => setShowAlarm(false)} className="px-6 py-2 bg-teal-600 text-white rounded-xl font-semibold hover:bg-teal-700 transition">OK</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAlarm(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-10 text-center max-w-xs w-full" onClick={e => e.stopPropagation()}>
+            <div className="text-5xl mb-4">⏰</div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">Time's up!</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Great study session. Take a break!</p>
+            <button
+              onClick={() => { setShowAlarm(false); timerReset(); }}
+              className="px-8 py-2.5 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold text-sm hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── Save modal ── */}
+      {/* Save modal */}
       {showSaveModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowSaveModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">Save List</h3>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSaveModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">
+              {listName ? 'Rename list' : 'Save list'}
+            </h3>
             <input
               value={saveModalInput}
               onChange={e => setSaveModalInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSave()}
-              placeholder="List name…"
+              placeholder="e.g. Chapter 3 vocabulary"
               autoFocus
-              className="vocab-input w-full px-4 py-2 border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 mb-4"
+              className="vocab-input w-full px-4 py-2.5 border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 text-sm mb-4 transition"
             />
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowSaveModal(false)} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-xl transition">Cancel</button>
-              <button onClick={handleSave} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-xl font-semibold hover:bg-teal-700 transition">Save</button>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-5 py-2 text-sm bg-teal-600 dark:bg-orange-500 text-white rounded-xl font-semibold hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Grammar modal ── */}
+      {/* Grammar modal */}
       {grammarPhraseIdx !== null && grammarPhrase && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={closeGrammar}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-gray-700">
-              <h3 className="font-bold text-slate-800 dark:text-slate-100">Grammar Study</h3>
-              <button onClick={closeGrammar} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeGrammar}>
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+              <div>
+                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Grammar Study</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Click and drag to select characters</p>
+              </div>
+              <button
+                onClick={closeGrammar}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600 transition"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="p-4 space-y-4">
-              {/* Phrase chars */}
-              <p className="text-xs text-slate-500 dark:text-slate-400">Click and drag to select characters, then add a note.</p>
+            <div className="p-5 space-y-4">
+              {/* Phrase text with selectable chars */}
               <div
-                className="text-right select-none p-3 bg-slate-50 dark:bg-gray-700 rounded-xl leading-loose"
-                style={{ fontFamily: 'Amiri, serif', fontSize: '1.6rem', direction: 'rtl' }}
+                className="text-right select-none p-4 bg-slate-50 dark:bg-gray-700/60 rounded-2xl leading-loose border border-slate-100 dark:border-gray-600"
+                style={{ fontFamily: 'Amiri, serif', fontSize: '1.75rem', direction: 'rtl' }}
                 onMouseLeave={() => setIsDragging(false)}
                 onMouseUp={handleCharMouseUp}
               >
                 {grammarPhrase.text.split('').map((ch, i) => (
                   <span
                     key={i}
-                    className={`cursor-pointer rounded px-0.5 transition-colors ${getCharColor(i)}`}
+                    className={`cursor-pointer rounded-sm px-px transition-colors ${getCharColor(i)}`}
                     onMouseDown={() => handleCharMouseDown(i)}
                     onMouseEnter={() => handleCharMouseEnter(i)}
                   >
@@ -494,26 +518,26 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                 ))}
               </div>
 
-              {/* Add note controls */}
+              {/* Note input row */}
               <div className="space-y-2">
                 <input
                   value={gsNoteInput}
                   onChange={e => setGsNoteInput(e.target.value)}
-                  placeholder="Note text (optional)…"
-                  className="vocab-input w-full px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="Add a grammar note (optional)…"
+                  className="vocab-input w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={() => addGrammarNote(false)}
                     disabled={gsSelection.length === 0}
-                    className="flex-1 px-3 py-2 text-sm bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-xl font-semibold hover:bg-red-200 dark:hover:bg-red-900/60 disabled:opacity-40 transition"
+                    className="flex-1 py-2 text-sm font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-700 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
                     Add note
                   </button>
                   <button
                     onClick={() => addGrammarNote(true)}
                     disabled={gsSelection.length === 0}
-                    className="flex-1 px-3 py-2 text-sm bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-xl font-semibold hover:bg-amber-200 dark:hover:bg-amber-900/60 disabled:opacity-40 transition"
+                    className="flex-1 py-2 text-sm font-semibold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
                     ? Needs study
                   </button>
@@ -522,19 +546,34 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
               {/* Existing notes */}
               {grammarPhrase.grammarNotes.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notes</p>
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Annotations</p>
                   {grammarPhrase.grammarNotes.map(note => (
-                    <div key={note.id} className={`flex items-start gap-2 p-2 rounded-xl text-sm ${note.needsStudy ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
+                    <div
+                      key={note.id}
+                      className={`flex items-start gap-3 p-3 rounded-xl border text-sm ${
+                        note.needsStudy
+                          ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                          : 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800'
+                      }`}
+                    >
+                      <span
+                        className={`font-semibold flex-shrink-0 ${note.needsStudy ? 'text-amber-700 dark:text-amber-300' : 'text-rose-700 dark:text-rose-300'}`}
+                        style={{ fontFamily: 'Amiri, serif', fontSize: '1.1rem', direction: 'rtl' }}
+                      >
+                        {note.indices.map(i => grammarPhrase.text[i]).join('')}
+                      </span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium" style={{ fontFamily: 'Amiri, serif', direction: 'rtl' }}>
-                          {note.indices.map(i => grammarPhrase.text[i]).join('')}
-                        </p>
-                        {note.note && <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{note.note}</p>}
-                        {note.needsStudy && <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Needs study</span>}
+                        {note.note && <p className="text-slate-700 dark:text-slate-200">{note.note}</p>}
+                        {note.needsStudy && (
+                          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Needs study</span>
+                        )}
                       </div>
-                      <button onClick={() => deleteGrammarNote(grammarPhraseIdx, note.id)} className="text-slate-400 hover:text-red-500 flex-shrink-0 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                      <button
+                        onClick={() => deleteGrammarNote(grammarPhraseIdx, note.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition flex-shrink-0"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
                       </button>
@@ -547,152 +586,221 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
         </div>
       )}
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-5 py-2.5 rounded-full shadow-lg pointer-events-none">
+      {/* Toast */}
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 ${toast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+        <div className="bg-gray-900 dark:bg-gray-700 text-white text-sm px-5 py-2.5 rounded-full shadow-xl whitespace-nowrap">
           {toast}
         </div>
-      )}
+      </div>
 
-      {/* ── Lists bar ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-3 mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mr-1">Lists:</span>
-        {lists.map(list => (
-          <div key={list.id} className="flex items-center gap-1 group">
+      {/* ═══════════════ TOP CONTROLS ═══════════════ */}
+      <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-4 py-3">
+        <div className="flex items-center gap-2 flex-wrap">
+
+          {/* List badges */}
+          <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+            {lists.length === 0 && (
+              <span className="text-xs text-slate-400 dark:text-slate-500 italic">No lists yet — create one</span>
+            )}
+            {lists.map(list => (
+              <div key={list.id} className="relative group/chip">
+                <button
+                  onClick={() => loadList(list)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150 ${
+                    activeListId === list.id
+                      ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm pr-6'
+                      : 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-600 dark:hover:text-orange-400'
+                  }`}
+                >
+                  {list.name}
+                </button>
+                {/* Delete × dot — appears on hover */}
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteList(list); }}
+                  className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white transition-all duration-150 opacity-0 group-hover/chip:opacity-100 ${
+                    activeListId === list.id ? 'bg-teal-800 dark:bg-orange-700' : 'bg-slate-400 dark:bg-gray-500 hover:bg-red-500 dark:hover:bg-red-500'
+                  }`}
+                  title={`Delete "${list.name}"`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-2.5 h-2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {/* New list chip */}
             <button
-              onClick={() => loadList(list)}
-              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
-                activeListId === list.id
-                  ? 'bg-teal-600 dark:bg-orange-600 text-white'
-                  : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-gray-600'
+              onClick={newList}
+              className="rounded-full px-3 py-1 text-xs font-semibold border border-dashed border-slate-300 dark:border-gray-500 text-slate-400 dark:text-slate-500 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-500 dark:hover:text-orange-400 transition-colors"
+            >
+              + New
+            </button>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={openSaveModal}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full bg-teal-600 dark:bg-orange-500 text-white hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors shadow-sm flex-shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+            </svg>
+            {listName ? `Save` : 'Save list'}
+          </button>
+
+          {/* Timer */}
+          <div className="flex items-center gap-1.5 flex-shrink-0 border-l border-slate-200 dark:border-gray-600 pl-3">
+            <span
+              className={`font-mono text-sm font-bold tabular-nums w-11 text-right transition-colors ${
+                timerSecondsLeft < 60 && timerRunning
+                  ? 'text-red-500'
+                  : timerRunning
+                  ? 'text-teal-600 dark:text-orange-400'
+                  : 'text-slate-600 dark:text-slate-300'
               }`}
             >
-              {list.name}
+              {fmt(timerSecondsLeft)}
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={timerMinutes}
+              onChange={e => {
+                const v = Math.max(1, Math.min(120, Number(e.target.value)));
+                setTimerMinutes(v);
+                if (!timerRunning) setTimerSecondsLeft(v * 60);
+              }}
+              className="vocab-input w-10 text-center text-xs py-1 border border-slate-200 dark:border-gray-600 rounded-lg bg-slate-50 dark:bg-gray-700 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              title="Minutes"
+            />
+            <button
+              onClick={timerToggle}
+              className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                timerRunning
+                  ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 hover:bg-orange-200'
+                  : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 hover:bg-teal-200'
+              }`}
+              title={timerRunning ? 'Pause' : 'Start'}
+            >
+              {timerRunning ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-3.5 h-3.5">
+                  <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-3.5 h-3.5">
+                  <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
+                </svg>
+              )}
             </button>
             <button
-              onClick={() => handleDeleteList(list)}
-              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-opacity"
-              title="Delete list"
+              onClick={timerReset}
+              title="Reset timer"
+              className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
               </svg>
             </button>
           </div>
-        ))}
-        <button
-          onClick={newList}
-          className="px-3 py-1.5 text-sm rounded-lg font-medium bg-slate-100 dark:bg-gray-700 text-teal-600 dark:text-orange-400 hover:bg-teal-50 dark:hover:bg-gray-600 border border-dashed border-teal-300 dark:border-orange-700 transition-colors"
-        >
-          + New list
-        </button>
-
-        {/* Timer — pushed to the right */}
-        <div className="ml-auto flex items-center gap-2">
-          <span className={`font-mono text-sm font-bold ${timerSecondsLeft === 0 ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
-            {fmt(timerSecondsLeft)}
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={120}
-            value={timerMinutes}
-            onChange={e => { const v = Math.max(1, Math.min(120, Number(e.target.value))); setTimerMinutes(v); if (!timerRunning) setTimerSecondsLeft(v * 60); }}
-            className="vocab-input w-12 text-center text-xs border border-slate-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500 py-1"
-            title="Minutes"
-          />
-          <button onClick={timerToggle} className={`px-2.5 py-1 text-xs rounded-lg font-semibold transition ${timerRunning ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300'}`}>
-            {timerRunning ? 'Pause' : 'Start'}
-          </button>
-          <button onClick={timerReset} className="px-2.5 py-1 text-xs rounded-lg font-semibold bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600 transition">
-            Reset
-          </button>
         </div>
       </div>
 
-      {/* ── Tab bar ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 mb-3 flex items-center">
-        {(['words', 'phrases', 'practice'] as const).map(t => (
+      {/* ═══════════════ TAB BAR ═══════════════ */}
+      <div className="flex bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+        {(['words', 'phrases', 'practice'] as const).map((t, i) => (
           <button
             key={t}
             onClick={() => t === 'practice' ? startPractice() : setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-semibold transition-colors capitalize ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${
+              i > 0 ? 'border-l border-slate-100 dark:border-gray-700' : ''
+            } ${
               tab === t
-                ? 'text-teal-600 dark:text-orange-400 border-b-2 border-teal-600 dark:border-orange-400'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                ? 'bg-teal-600 dark:bg-orange-600 text-white'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
-            {t === 'words' ? `Words (${words.length})` : t === 'phrases' ? `Phrases (${phrases.length})` : 'Practice'}
+            <span className="capitalize">{t}</span>
+            {t !== 'practice' && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                tab === t ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400'
+              }`}>
+                {t === 'words' ? words.length : phrases.length}
+              </span>
+            )}
           </button>
         ))}
-        <div className="px-3 flex-shrink-0">
-          <button
-            onClick={openSaveModal}
-            className="px-4 py-1.5 text-sm bg-teal-600 dark:bg-orange-600 text-white font-semibold rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition"
-          >
-            {listName ? `Save "${listName}"` : 'Save'}
-          </button>
-        </div>
       </div>
 
-      {/* ── WORDS TAB ── */}
+      {/* ═══════════════ WORDS TAB ═══════════════ */}
       {tab === 'words' && (
         <div className="space-y-3">
-          {/* Add words */}
-          <div className="vocab-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Add Arabic Words</h3>
-            <div className="flex gap-2 flex-wrap">
+          {/* Add card */}
+          <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Add words</p>
+            <div className="flex gap-2 items-start">
               <textarea
                 value={wordInput}
                 onChange={e => setWordInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addWords(); } }}
-                placeholder="Type Arabic words (space or newline separated)…"
+                placeholder="أضف كلمة أو عدة كلمات…"
                 rows={2}
                 dir="rtl"
-                style={{ fontFamily: 'Amiri, serif' }}
-                className="vocab-input flex-1 min-w-0 px-3 py-2 text-xl border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                style={{ fontFamily: 'Amiri, serif', fontSize: '1.25rem' }}
+                className="vocab-input flex-1 min-w-0 px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 resize-none placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
               />
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 flex-shrink-0">
                 <select
                   value={selectedCat}
                   onChange={e => setSelectedCat(e.target.value)}
-                  className="vocab-input px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
                 >
                   {allCats.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
                 </select>
                 <button
                   onClick={addWords}
-                  className="px-4 py-2 bg-teal-600 dark:bg-orange-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-700 transition"
+                  className="px-4 py-2 bg-teal-600 dark:bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
                 >
                   Add
                 </button>
               </div>
             </div>
-            {/* Custom category */}
-            <div className="flex gap-2 mt-3">
+            {/* Custom category row */}
+            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-gray-700">
               <input
                 value={newCatInput}
                 onChange={e => setNewCatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addCustomCat()}
-                placeholder="New category name…"
-                className="vocab-input flex-1 px-3 py-1.5 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="Add custom category…"
+                className="vocab-input flex-1 px-3 py-1.5 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
               />
-              <button onClick={addCustomCat} className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition">+ Category</button>
+              <button
+                onClick={addCustomCat}
+                className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 border border-slate-200 dark:border-gray-600 transition font-medium"
+              >
+                + Add
+              </button>
             </div>
           </div>
 
-          {/* Search / filter / sort */}
+          {/* Filters */}
           <div className="flex flex-wrap gap-2">
-            <input
-              value={wordSearch}
-              onChange={e => setWordSearch(e.target.value)}
-              placeholder="Search words…"
-              className="vocab-input flex-1 min-w-[140px] px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
+            <div className="relative flex-1 min-w-[160px]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                value={wordSearch}
+                onChange={e => setWordSearch(e.target.value)}
+                placeholder="Search words…"
+                className="vocab-input w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+            </div>
             <select
               value={wordCatFilter}
               onChange={e => setWordCatFilter(e.target.value)}
-              className="vocab-input px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
             >
               <option value="all">All categories</option>
               {allCats.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
@@ -700,7 +808,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
             <select
               value={wordSort}
               onChange={e => setWordSort(e.target.value)}
-              className="vocab-input px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="vocab-input px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
             >
               <option value="default">Default order</option>
               <option value="az">A → Z</option>
@@ -710,36 +818,51 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
           {/* Words table */}
           {displayedWords.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 dark:text-slate-500">
-              <p className="text-3xl mb-2">📝</p>
-              <p className="text-sm">No words yet. Add some above!</p>
+            <div className="text-center py-16 text-slate-400 dark:text-slate-500">
+              <p className="text-sm">{words.length === 0 ? 'No words yet — add some above.' : 'No words match this filter.'}</p>
             </div>
           ) : (
-            <div className="vocab-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+              {/* Legend */}
+              <div className="flex items-center gap-4 px-4 py-2.5 border-b border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50">
+                <span className="text-xs text-slate-400 dark:text-slate-500">Priority — click to cycle:</span>
+                {[0, 1, 2].map(c => (
+                  <span key={c} className={`text-xs px-2 py-0.5 rounded-full font-semibold ${clickBadge(c)}`}>
+                    {clickLabel(c)}
+                  </span>
+                ))}
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-gray-700">
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Priority</th>
-                    <th className="text-right px-4 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Word</th>
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Translation</th>
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide hidden sm:table-cell">Category</th>
-                    <th className="px-2 py-2" />
+                    <th className="w-16 px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Pri.</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-right">Word</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Translation</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden sm:table-cell">Category</th>
+                    <th className="w-8 px-2" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-gray-700">
+                <tbody className="divide-y divide-slate-50 dark:divide-gray-700/60">
                   {displayedWords.map(word => (
-                    <tr key={word.id} className={`vocab-table-row transition-colors hover:bg-slate-50 dark:hover:bg-gray-750 ${clickColor(word.clicks)}`}>
+                    <tr
+                      key={word.id}
+                      className={`group/row transition-colors hover:bg-slate-50 dark:hover:bg-gray-700/40 ${clickColor(word.clicks)}`}
+                    >
                       <td className="px-4 py-3">
                         <button
                           onClick={() => cycleWordClicks(word.id)}
-                          className={`text-xs px-2 py-0.5 rounded-full font-bold cursor-pointer transition ${clickBadge(word.clicks)}`}
+                          className={`text-xs px-2 py-0.5 rounded-full font-bold cursor-pointer transition-all hover:scale-105 ${clickBadge(word.clicks)}`}
                           title="Click to cycle priority"
                         >
                           {clickLabel(word.clicks)}
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span style={{ fontFamily: 'Amiri, serif', fontSize: '1.3rem' }} className="text-slate-800 dark:text-slate-100" dir="rtl">
+                        <span
+                          className="text-slate-800 dark:text-slate-100"
+                          style={{ fontFamily: 'Amiri, serif', fontSize: '1.35rem' }}
+                          dir="rtl"
+                        >
                           {word.text}
                         </span>
                       </td>
@@ -748,7 +871,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                           value={word.translation}
                           onChange={e => updateWordTranslation(word.id, e.target.value)}
                           placeholder="Translation…"
-                          className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-300 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none transition"
+                          className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-200 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none transition placeholder:text-slate-300 dark:placeholder:text-slate-600"
                         />
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
@@ -761,8 +884,11 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                         </select>
                       </td>
                       <td className="px-2 py-3">
-                        <button onClick={() => removeWord(word.id)} className="text-slate-300 hover:text-red-400 transition">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <button
+                          onClick={() => removeWord(word.id)}
+                          className="w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover/row:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                           </svg>
                         </button>
@@ -771,111 +897,159 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
                   ))}
                 </tbody>
               </table>
+              <div className="px-4 py-2.5 border-t border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50">
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {displayedWords.length} word{displayedWords.length !== 1 ? 's' : ''}
+                  {words.length !== displayedWords.length ? ` shown of ${words.length}` : ''}
+                  {' · '}
+                  {words.reduce((s, w) => s + w.clicks + 1, 0)} rep{words.reduce((s, w) => s + w.clicks + 1, 0) !== 1 ? 's' : ''} in practice
+                </span>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── PHRASES TAB ── */}
+      {/* ═══════════════ PHRASES TAB ═══════════════ */}
       {tab === 'phrases' && (
         <div className="space-y-3">
-          {/* Add phrases */}
-          <div className="vocab-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Add Arabic Phrases</h3>
-            <div className="flex gap-2">
+          {/* Add card */}
+          <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Add phrases</p>
+            <div className="flex gap-2 items-start">
               <textarea
                 value={phraseInput}
                 onChange={e => setPhraseInput(e.target.value)}
-                placeholder="One phrase per line…"
+                placeholder="أضف جملة… (سطر جديد = عبارة جديدة)"
                 rows={3}
                 dir="rtl"
-                style={{ fontFamily: 'Amiri, serif' }}
-                className="vocab-input flex-1 px-3 py-2 text-xl border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                style={{ fontFamily: 'Amiri, serif', fontSize: '1.25rem' }}
+                className="vocab-input flex-1 px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-xl bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none placeholder:text-slate-300 dark:placeholder:text-slate-600 transition"
               />
               <button
                 onClick={addPhrases}
-                className="self-end px-4 py-2 bg-teal-600 dark:bg-orange-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-700 transition"
+                className="self-end px-4 py-2 bg-teal-600 dark:bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors flex-shrink-0"
               >
                 Add
               </button>
             </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Each line becomes a separate phrase.</p>
           </div>
 
-          {/* Search / filter */}
+          {/* Filters */}
           <div className="flex flex-wrap gap-2">
-            <input
-              value={phraseSearch}
-              onChange={e => setPhraseSearch(e.target.value)}
-              placeholder="Search phrases…"
-              className="vocab-input flex-1 min-w-[140px] px-3 py-2 text-sm border border-slate-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
+            <div className="relative flex-1 min-w-[160px]">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                value={phraseSearch}
+                onChange={e => setPhraseSearch(e.target.value)}
+                placeholder="Search phrases…"
+                className="vocab-input w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+            </div>
             {(['all', 'any', 'yellow', 'red'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setPhraseFilter(f)}
-                className={`px-3 py-2 text-xs font-semibold rounded-xl transition ${phraseFilter === f ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-teal-400 dark:hover:border-orange-400'}`}
+                className={`px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                  phraseFilter === f
+                    ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-teal-300 dark:hover:border-orange-500 hover:text-teal-600 dark:hover:text-orange-400'
+                }`}
               >
-                {f === 'all' ? 'All' : f === 'any' ? 'Priority' : f === 'yellow' ? 'Practice more' : 'Practice most'}
+                {f === 'all' ? 'All' : f === 'any' ? 'Has priority' : f === 'yellow' ? '×2 priority' : '×3 priority'}
               </button>
             ))}
           </div>
 
-          {/* Phrases list */}
+          {/* Phrases */}
           {displayedPhrases.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 dark:text-slate-500">
-              <p className="text-3xl mb-2">💬</p>
-              <p className="text-sm">No phrases yet. Add some above!</p>
+            <div className="text-center py-16 text-slate-400 dark:text-slate-500">
+              <p className="text-sm">{phrases.length === 0 ? 'No phrases yet — add some above.' : 'No phrases match this filter.'}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {displayedPhrases.map((phrase, idx) => {
+              {displayedPhrases.map(phrase => {
                 const realIdx = phrases.indexOf(phrase);
+                const hasNotes = phrase.grammarNotes.length > 0;
                 return (
-                  <div key={phrase.id} className={`vocab-card bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-3 ${clickColor(phrase.clicks)}`}>
-                    <div className="flex items-start gap-2">
+                  <div
+                    key={phrase.id}
+                    className={`bg-white dark:bg-gray-800 border rounded-2xl overflow-hidden transition-colors ${
+                      phrase.clicks === 2
+                        ? 'border-red-200 dark:border-red-800/60'
+                        : phrase.clicks === 1
+                        ? 'border-yellow-200 dark:border-yellow-700/60'
+                        : 'border-slate-200 dark:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 p-4">
+                      {/* Priority badge (left) */}
                       <button
                         onClick={() => cyclePhraseClicks(phrase.id)}
-                        className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 mt-1 transition ${clickBadge(phrase.clicks)}`}
+                        className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 mt-2 cursor-pointer hover:scale-105 transition-all ${clickBadge(phrase.clicks)}`}
                         title="Click to cycle priority"
                       >
                         {clickLabel(phrase.clicks)}
                       </button>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-right mb-1" style={{ fontFamily: 'Amiri, serif', fontSize: '1.4rem', direction: 'rtl' }}>
+
+                      {/* Main content */}
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <p
+                          className="text-right leading-relaxed text-slate-800 dark:text-slate-100"
+                          style={{ fontFamily: 'Amiri, serif', fontSize: '1.45rem', direction: 'rtl' }}
+                        >
                           {phrase.text}
                         </p>
                         <input
                           value={phrase.translation}
                           onChange={e => updatePhraseTranslation(phrase.id, e.target.value)}
                           placeholder="Translation…"
-                          className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-300 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none transition"
+                          className="vocab-input w-full px-2 py-1 text-sm border border-transparent hover:border-slate-200 dark:hover:border-gray-600 focus:border-teal-400 dark:focus:border-teal-500 rounded-lg bg-transparent focus:bg-white dark:focus:bg-gray-700 text-slate-600 dark:text-slate-300 focus:outline-none transition placeholder:text-slate-300 dark:placeholder:text-slate-600"
                         />
                       </div>
-                      <div className="flex flex-col gap-1 flex-shrink-0">
+
+                      {/* Actions (right) */}
+                      <div className="flex flex-col gap-1.5 flex-shrink-0 items-end">
                         <button
                           onClick={() => openGrammar(realIdx)}
-                          className="text-xs px-2 py-1 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/60 font-semibold transition"
-                          title="Open grammar study"
+                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                            hasNotes
+                              ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200'
+                              : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:text-indigo-600 dark:hover:text-indigo-300'
+                          }`}
                         >
-                          Grammar
+                          {hasNotes ? `✎ ${phrase.grammarNotes.length}` : '✎ Study'}
                         </button>
-                        <button onClick={() => removePhrase(phrase.id)} className="text-slate-300 hover:text-red-400 transition text-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mx-auto">
+                        <button
+                          onClick={() => removePhrase(phrase.id)}
+                          className="w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                           </svg>
                         </button>
                       </div>
                     </div>
-                    {/* Grammar note previews */}
-                    {phrase.grammarNotes.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
+
+                    {/* Grammar note chips */}
+                    {hasNotes && (
+                      <div className="px-4 pb-3 flex flex-wrap gap-1">
                         {phrase.grammarNotes.map(note => (
                           <span
                             key={note.id}
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${note.needsStudy ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}
+                            className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                              note.needsStudy
+                                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                                : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300'
+                            }`}
                           >
-                            {phrase.text.split('').filter((_, i) => note.indices.includes(i)).join('')}
-                            {note.note ? `: ${note.note}` : ''}
+                            <span style={{ fontFamily: 'Amiri, serif' }}>
+                              {phrase.text.split('').filter((_, i) => note.indices.includes(i)).join('')}
+                            </span>
+                            {note.note && <span className="opacity-70">: {note.note}</span>}
                           </span>
                         ))}
                       </div>
@@ -888,93 +1062,123 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
         </div>
       )}
 
-      {/* ── PRACTICE TAB ── */}
+      {/* ═══════════════ PRACTICE TAB ═══════════════ */}
       {tab === 'practice' && (
         <div className="space-y-4">
-          {/* Mode selector */}
-          <div className="flex gap-2 items-center">
-            <span className="text-sm text-slate-500 dark:text-slate-400">Practice:</span>
+          {/* Mode pills */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mode:</span>
             {(['words', 'phrases'] as const).map(m => (
               <button
                 key={m}
-                onClick={() => { setPracticeMode(m); }}
-                className={`px-4 py-2 text-sm font-semibold rounded-xl transition capitalize ${practiceMode === m ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-teal-400 dark:hover:border-orange-400'}`}
+                onClick={() => setPracticeMode(m)}
+                className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all ${
+                  practiceMode === m
+                    ? 'bg-teal-600 dark:bg-orange-500 text-white shadow-sm'
+                    : 'border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-teal-400 dark:hover:border-orange-400 hover:text-teal-600 dark:hover:text-orange-400'
+                }`}
               >
-                {m}
+                {m.charAt(0).toUpperCase() + m.slice(1)}
               </button>
             ))}
             <button
               onClick={startPractice}
-              className="ml-auto px-4 py-2 text-sm font-semibold bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition"
+              className="ml-auto flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition"
             >
-              Shuffle
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              Reshuffle
             </button>
           </div>
 
           {practiceWon ? (
-            /* ── Win screen ── */
-            <div className="vocab-card bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-10 text-center">
-              <p className="text-6xl mb-4">🎉</p>
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Well done!</h2>
-              <p className="text-slate-500 dark:text-slate-400 mb-6">You went through all {practiceTotal} cards.</p>
-              <button onClick={startPractice} className="px-6 py-2.5 bg-teal-600 dark:bg-orange-600 text-white rounded-xl font-semibold hover:bg-teal-700 dark:hover:bg-orange-700 transition">Practice again</button>
+            <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl p-12 text-center">
+              <div className="text-5xl mb-4">✦</div>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">أحسنت!</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">You completed all {practiceTotal} cards.</p>
+              <button
+                onClick={startPractice}
+                className="px-8 py-3 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
+              >
+                Practice again
+              </button>
             </div>
           ) : practiceQueue.length === 0 ? (
-            <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-              <p className="text-4xl mb-3">📚</p>
-              <p className="text-sm">Add some {practiceMode} with translations to start practicing.</p>
-              <button onClick={startPractice} className="mt-4 px-6 py-2.5 bg-teal-600 dark:bg-orange-600 text-white rounded-xl font-semibold hover:bg-teal-700 dark:hover:bg-orange-700 transition text-sm">Start</button>
+            <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl p-12 text-center">
+              <div className="text-4xl mb-4 text-slate-300 dark:text-slate-600">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="w-14 h-14 mx-auto">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 3.741-1.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
+                </svg>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+                Add {practiceMode} with translations, then start practicing.
+              </p>
+              <button
+                onClick={startPractice}
+                className="px-6 py-2.5 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold text-sm hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
+              >
+                Start
+              </button>
             </div>
           ) : currentCard ? (
             <div className="space-y-4">
-              {/* Progress bar */}
+              {/* Progress */}
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-teal-500 dark:bg-orange-500 rounded-full transition-all duration-300"
+                    className="h-full bg-teal-500 dark:bg-orange-500 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${(practiceIdx / practiceTotal) * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-mono text-slate-500 dark:text-slate-400 flex-shrink-0">{practiceIdx}/{practiceTotal}</span>
+                <span className="text-xs font-mono text-slate-400 dark:text-slate-500 tabular-nums flex-shrink-0">
+                  {practiceIdx} / {practiceTotal}
+                </span>
               </div>
 
-              {/* Card */}
+              {/* Flashcard */}
               <div
-                className="vocab-card bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-8 text-center cursor-pointer select-none min-h-[220px] flex flex-col items-center justify-center"
+                className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl p-8 sm:p-12 flex flex-col items-center justify-center min-h-[260px] cursor-pointer select-none group/card hover:border-teal-300 dark:hover:border-orange-500 transition-colors"
                 onClick={() => setShowingArabic(a => !a)}
-                title="Click to flip"
               >
                 {showingArabic ? (
-                  <p style={{ fontFamily: 'Amiri, serif', fontSize: '2.5rem', direction: 'rtl', lineHeight: 1.5 }} className="text-slate-800 dark:text-slate-100">
+                  <p
+                    className="text-slate-800 dark:text-slate-100 text-center leading-loose"
+                    style={{ fontFamily: 'Amiri, serif', fontSize: 'clamp(2rem, 5vw, 3rem)', direction: 'rtl' }}
+                  >
                     {currentCard.text}
                   </p>
                 ) : (
-                  <p className="text-xl text-slate-700 dark:text-slate-200 font-medium">{currentCard.translation || '(no translation)'}</p>
+                  <p className="text-xl sm:text-2xl text-slate-700 dark:text-slate-200 font-medium text-center">
+                    {currentCard.translation || '(no translation)'}
+                  </p>
                 )}
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">{showingArabic ? 'Click to see translation' : 'Click to see Arabic'}</p>
+                <p className="text-xs text-slate-300 dark:text-slate-600 mt-6 group-hover/card:text-slate-400 dark:group-hover/card:text-slate-500 transition-colors">
+                  {showingArabic ? 'tap to reveal translation' : 'tap to show Arabic'}
+                </p>
               </div>
 
-              {/* Toggle & buttons */}
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={() => setShowingArabic(a => !a)}
-                  className="px-4 py-2 text-sm bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 font-semibold transition"
-                >
-                  {showingArabic ? 'Show translation' : 'Show Arabic'}
-                </button>
-              </div>
+              {/* Controls */}
               <div className="flex gap-3">
                 <button
                   onClick={handleWrong}
-                  className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold text-lg rounded-xl transition shadow"
+                  className="flex-1 py-3.5 rounded-2xl font-bold text-base bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                 >
-                  ✗ Wrong
+                  ✗  Wrong
                 </button>
                 <button
                   onClick={handleCorrect}
-                  className="flex-1 py-3 bg-teal-500 dark:bg-orange-500 hover:bg-teal-600 dark:hover:bg-orange-600 text-white font-bold text-lg rounded-xl transition shadow"
+                  className="flex-1 py-3.5 rounded-2xl font-bold text-base bg-teal-600 dark:bg-orange-500 text-white hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors shadow-sm"
                 >
-                  ✓ Correct
+                  ✓  Correct
+                </button>
+              </div>
+              <div className="text-center">
+                <button
+                  onClick={() => setShowingArabic(a => !a)}
+                  className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors underline underline-offset-2"
+                >
+                  {showingArabic ? 'Show translation' : 'Show Arabic'}
                 </button>
               </div>
             </div>

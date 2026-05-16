@@ -656,7 +656,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setActiveTab(tab => tab === 'vocabulary' ? 'main' : 'vocabulary')}
                 className={`text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-              >📚 Vocabulary</button>
+              >Vocabulary</button>
               {/* Switch to Quran */}
               <button
                 onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); setActiveTab('main'); }}

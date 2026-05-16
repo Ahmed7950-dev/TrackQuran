@@ -1282,7 +1282,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               onClick={() => setPortalTab(t => t === 'vocabulary' ? 'content' : 'vocabulary')}
               className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400'}`}
             >
-              📚 Vocabulary
+              Vocabulary
             </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400 transition-colors">
               Contact Us
