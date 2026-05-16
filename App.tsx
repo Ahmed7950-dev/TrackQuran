@@ -218,7 +218,6 @@ const App: React.FC = () => {
       return;
     }
     const teacherId = currentUser.id;
-    console.log('[App] useEffect fired — loading students for', teacherId);
     getStudents(teacherId).then(setStudents);
     getTajweedRules(teacherId).then(setTajweedRules);
     // Fetch arabic students then compute total vocab counts (lesson words + custom list words)

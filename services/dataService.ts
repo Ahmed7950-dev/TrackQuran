@@ -45,6 +45,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   teacher_id:                  teacherId,
   name:                        s.name,
   ...(s.dob ? { dob: s.dob } : {}),   // omit entirely when absent — avoids NOT NULL violation
+  age_category:                s.ageCategory ?? null,
   recitation_achievements:     s.recitationAchievements,
   memorization_achievements:   s.memorizationAchievements,
   attendance:                  s.attendance,
@@ -60,22 +61,17 @@ export const getStudents = async (teacherId: string): Promise<Student[]> => {
     .select('*')
     .eq('teacher_id', teacherId)
     .order('created_at', { ascending: true });
-  if (error) { console.error('getStudents error:', error.message); return []; }
-  console.log('[getStudents] loaded', (data ?? []).length, 'students for teacher', teacherId);
+  if (error) { console.error('getStudents:', error.message); return []; }
   return (data ?? []).map(rowToStudent);
 };
 
 export const saveStudent = async (teacherId: string, student: Student): Promise<void> => {
   const row = studentToRow(teacherId, student);
-  console.log('[saveStudent] attempting upsert — id:', row.id, 'name:', row.name, 'dob:', row.dob ?? '(none)');
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('students')
-    .upsert(row, { onConflict: 'id' })
-    .select('id');
+    .upsert(row, { onConflict: 'id' });
   if (error) {
-    console.error('[saveStudent] FAILED:', error.message, '| row:', row);
-  } else {
-    console.log('[saveStudent] OK — returned rows:', data);
+    console.error('saveStudent failed:', error.message, '| id:', row.id);
   }
 };
 
