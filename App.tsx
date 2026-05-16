@@ -28,6 +28,8 @@ import VocabularyPracticePage from './components/VocabularyPracticePage';
 import ArabicDashboard from './components/ArabicDashboard';
 import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
 import ArabicStudentPortal from './components/ArabicStudentPortal';
+import FamilyLinkPage from './components/FamilyLinkPage';
+import FamilyLinkModal from './components/FamilyLinkModal';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -114,6 +116,13 @@ const App: React.FC = () => {
   })();
   if (arabicShareToken) return <ArabicStudentPortal token={arabicShareToken} />;
 
+  // ── Family progress link — no auth required ───────────────────────────────
+  const familyLinkId = (() => {
+    const m = window.location.pathname.match(/^\/family\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (familyLinkId) return <FamilyLinkPage linkId={familyLinkId} />;
+
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -157,6 +166,7 @@ const App: React.FC = () => {
     if (currentUser?.role === 'teacher') await deleteArabicStudent(currentUser.id, studentId);
   };
 
+  const [isFamilyLinkModalOpen,    setIsFamilyLinkModalOpen]    = useState(false);
   const [isAddStudentModalOpen,    setIsAddStudentModalOpen]    = useState(false);
   const [isUserMenuOpen,           setIsUserMenuOpen]           = useState(false);
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
@@ -723,10 +733,19 @@ const App: React.FC = () => {
               onAddStudent={handleAddArabicStudent}
               onSelectStudent={id => { setSelectedArabicStudentId(id); setActiveTab('main'); }}
               onUpdateStudent={handleUpdateArabicStudent}
+              onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
             />
           )}
         </main>
         <div className="no-print"><Footer /></div>
+        <FamilyLinkModal
+          isOpen={isFamilyLinkModalOpen}
+          onClose={() => setIsFamilyLinkModalOpen(false)}
+          teacherId={currentUser.id}
+          quranStudents={students}
+          arabicStudents={arabicStudents}
+          onUpdateArabicStudent={handleUpdateArabicStudent}
+        />
       </div>
     );
   }
@@ -934,6 +953,7 @@ const App: React.FC = () => {
             students={students}
             onSelectStudent={(id) => { setSelectedStudentId(id); setCurrentStudentView('details'); }}
             quranMetadata={QURAN_METADATA}
+            onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
           />
         )}
       </main>
@@ -948,6 +968,15 @@ const App: React.FC = () => {
         currentUser={currentUser}
         isOpen={isContactSupportOpen}
         onClose={() => setIsContactSupportOpen(false)}
+      />
+
+      <FamilyLinkModal
+        isOpen={isFamilyLinkModalOpen}
+        onClose={() => setIsFamilyLinkModalOpen(false)}
+        teacherId={currentUser.id}
+        quranStudents={students}
+        arabicStudents={arabicStudents}
+        onUpdateArabicStudent={handleUpdateArabicStudent}
       />
 
       <div className="no-print">

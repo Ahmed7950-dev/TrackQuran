@@ -15,6 +15,7 @@ interface Props {
   onAddStudent:    (s: ArabicStudent) => void;
   onSelectStudent: (id: string) => void;
   onUpdateStudent: (s: ArabicStudent) => void;
+  onFamilyLinks?:  () => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ function dialectLabel(d: string): string {
   return { msa: 'MSA', levantine: 'Levantine', quranic: 'Quranic' }[d] ?? d;
 }
 
-const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {}, onAddStudent, onSelectStudent, onUpdateStudent }) => {
+const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {}, onAddStudent, onSelectStudent, onUpdateStudent, onFamilyLinks }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [copyingId, setCopyingId] = useState<string | null>(null);
@@ -70,15 +71,26 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
             {students.length} {students.length === 1 ? 'student' : 'students'} · click any card to view their lessons
           </p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg shadow-sm transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add Student
-        </button>
+        <div className="flex items-center gap-2">
+          {onFamilyLinks && (
+            <button
+              onClick={onFamilyLinks}
+              className="flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm transition-colors"
+            >
+              <span className="text-base">👨‍👩‍👧‍👦</span>
+              Family Links
+            </button>
+          )}
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg shadow-sm transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Student
+          </button>
+        </div>
       </div>
 
       {/* ── Search ── */}

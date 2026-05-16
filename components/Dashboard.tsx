@@ -245,9 +245,10 @@ interface DashboardProps {
   students: Student[];
   onSelectStudent: (studentId: string) => void;
   quranMetadata: SurahMetadata[];
+  onFamilyLinks?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks }) => {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
@@ -344,8 +345,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           </div>
         </div>
 
-        {/* Right side: Honor Board and Search */}
+        {/* Right side: Family Links, Honor Board and Search */}
         <div className="flex w-full md:w-auto items-center gap-4">
+          {onFamilyLinks && (
+            <button
+              onClick={onFamilyLinks}
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm transition-colors"
+            >
+              <span className="text-base">👨‍👩‍👧‍👦</span>
+              <span className="hidden sm:inline">Family Links</span>
+            </button>
+          )}
           <button
               onClick={() => setIsHonorBoardOpen(true)}
               className="flex-shrink-0 px-4 py-2.5 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-500 font-semibold rounded-lg shadow-sm hover:bg-yellow-200 dark:hover:bg-yellow-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-all flex items-center justify-center gap-2"
