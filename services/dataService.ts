@@ -44,7 +44,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   id:                          s.id,
   teacher_id:                  teacherId,
   name:                        s.name,
-  ...(s.dob ? { dob: s.dob } : {}),   // omit entirely when absent — avoids NOT NULL violation
+  dob:                         s.dob ?? null,  // explicit null overrides any column DEFAULT
   age_category:                s.ageCategory ?? null,
   recitation_achievements:     s.recitationAchievements,
   memorization_achievements:   s.memorizationAchievements,
