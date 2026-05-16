@@ -13,6 +13,7 @@ import {
   getVocabMistakesForStudent,
   removeVocabMistakes,
 } from '../services/arabicService';
+import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 
@@ -265,6 +266,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   const [attempts, setAttempts] = useState<VocabAttempt[]>([]);
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
   const [mistakes, setMistakes] = useState<VocabMistakeDetail[]>([]);
+  const [vocabLists, setVocabLists] = useState<VocabList[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Mini challenge state
@@ -274,14 +276,16 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [att, wc, mis] = await Promise.all([
+      const [att, wc, mis, vls] = await Promise.all([
         getAllVocabAttemptsForStudent(student.id),
         getVocabWordCountsByLesson(),
         getVocabMistakesForStudent(student.id),
+        getVocabularyLists(student.id),
       ]);
       setAttempts(att);
       setWordCounts(wc);
       setMistakes(mis);
+      setVocabLists(vls);
       setLoading(false);
     })();
   }, [student.id]);
@@ -319,6 +323,13 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 
   // ── Lessons with vocabulary ───────────────────────────────────────────────
   const lessonsWithVocab = lessons.filter(l => (wordCounts[l.id] ?? 0) > 0);
+
+  // ── Custom vocab lists that have at least one completed SRS attempt ────────
+  // (practice sessions in VocabularyPracticePage write to arabic_vocab_attempts
+  //  using the list UUID as the lessonId)
+  const listsWithAttempts = vocabLists.filter(list =>
+    attempts.some(a => a.lessonId === list.id && !!a.completedAt)
+  );
 
   // ── Spaced-rep timeline per lesson ───────────────────────────────────────
   const TIMELINE_DELAYS = [1, 3, 7, 14]; // days after first attempt
@@ -390,9 +401,13 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
     return { firstDone, cols, allComplete };
   }
 
-  // Lessons that have an attempt due today (for the reminder banner)
+  // Items due today (for the reminder banner) — lessons + custom vocab lists
   const dueTodayLessons = lessonsWithVocab.filter(l => {
     const t = getSpacedRepTimeline(l.id);
+    return t?.cols.some(c => c.isToday);
+  });
+  const dueTodayLists = listsWithAttempts.filter(list => {
+    const t = getSpacedRepTimeline(list.id);
     return t?.cols.some(c => c.isToday);
   });
 
@@ -404,6 +419,44 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   }, {});
 
   const lessonLookup = Object.fromEntries(lessons.map(l => [l.id, l]));
+
+  // ── Shared helper: render the 4 SRS timeline cells for a row ─────────────
+  function SRSCols(timeline: LessonTimeline | null) {
+    if (!timeline) {
+      return [2, 3, 4, 5].map(n => (
+        <td key={n} className="px-3 py-3 text-center">
+          <span className="text-slate-300 dark:text-slate-600">—</span>
+        </td>
+      ));
+    }
+    return timeline.cols.map(col => {
+      const cellBg = col.isToday ? 'bg-emerald-100 dark:bg-emerald-900/40' : '';
+      return (
+        <td key={col.attemptNumber} className={`px-3 py-3 text-center ${cellBg}`}>
+          {col.completedAt ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+              </svg>
+              Done
+            </span>
+          ) : col.isToday ? (
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+              📅 {formatDate(col.scheduledDate)}
+            </span>
+          ) : col.isOverdue ? (
+            <span className="text-xs font-semibold text-red-500 dark:text-red-400">
+              ⚠ {formatDate(col.scheduledDate)}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {formatDate(col.scheduledDate)}
+            </span>
+          )}
+        </td>
+      );
+    });
+  }
 
   return (
     <div className="space-y-8">
@@ -421,28 +474,31 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
         </p>
 
         {/* Today reminder banner */}
-        {dueTodayLessons.length > 0 && (
+        {(dueTodayLessons.length > 0 || dueTodayLists.length > 0) && (
           <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
             <span className="text-xl flex-shrink-0">📅</span>
             <div>
               <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Flashcard session due today!</p>
               <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-                {dueTodayLessons.map(l => l.title).join(' · ')}
+                {[
+                  ...dueTodayLessons.map(l => l.title),
+                  ...dueTodayLists.map(l => `📋 ${l.name}`),
+                ].join(' · ')}
               </p>
             </div>
           </div>
         )}
 
-        {lessonsWithVocab.length === 0 ? (
+        {lessonsWithVocab.length === 0 && listsWithAttempts.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center">
-            <p className="text-slate-400 dark:text-slate-500 text-sm">No lessons with vocabulary yet.</p>
+            <p className="text-slate-400 dark:text-slate-500 text-sm">No vocabulary tracked yet. Complete a flashcard session to start the schedule.</p>
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-gray-700">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Lesson</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Lesson / List</th>
                   <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">First Done</th>
                   <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+1 day</th>
                   <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+3 days</th>
@@ -451,13 +507,13 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                 </tr>
               </thead>
               <tbody>
+                {/* ── Lesson rows ── */}
                 {lessonsWithVocab.map((lesson) => {
                   const timeline = getSpacedRepTimeline(lesson.id);
                   const allComplete = timeline?.allComplete ?? false;
                   const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
                   return (
                     <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
-                      {/* Lesson name */}
                       <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {allComplete && (
@@ -468,53 +524,54 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                           {lesson.title}
                         </div>
                       </td>
-
-                      {/* First Done */}
                       <td className="px-3 py-3 text-center">
                         {timeline
                           ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
                           : <span className="text-slate-300 dark:text-slate-600">—</span>
                         }
                       </td>
+                      {SRSCols(timeline)}
+                    </tr>
+                  );
+                })}
 
-                      {/* +1 / +3 / +7 / +14 day columns */}
-                      {timeline
-                        ? timeline.cols.map(col => {
-                            // Cell background: green if today, normal otherwise
-                            const cellBg = col.isToday
-                              ? 'bg-emerald-100 dark:bg-emerald-900/40'
-                              : '';
-                            return (
-                              <td key={col.attemptNumber} className={`px-3 py-3 text-center ${cellBg}`}>
-                                {col.completedAt ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                                    </svg>
-                                    Done
-                                  </span>
-                                ) : col.isToday ? (
-                                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                                    📅 {formatDate(col.scheduledDate)}
-                                  </span>
-                                ) : col.isOverdue ? (
-                                  <span className="text-xs font-semibold text-red-500 dark:text-red-400">
-                                    ⚠ {formatDate(col.scheduledDate)}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-slate-400 dark:text-slate-500">
-                                    {formatDate(col.scheduledDate)}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })
-                        : [2, 3, 4, 5].map(n => (
-                          <td key={n} className="px-3 py-3 text-center">
-                            <span className="text-slate-300 dark:text-slate-600">—</span>
-                          </td>
-                        ))
-                      }
+                {/* ── Separator row when both sections are present ── */}
+                {lessonsWithVocab.length > 0 && listsWithAttempts.length > 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-2 bg-slate-50 dark:bg-gray-700/50 border-y border-slate-100 dark:border-gray-700">
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Custom Vocabulary Lists</span>
+                    </td>
+                  </tr>
+                )}
+
+                {/* ── Custom vocab list rows ── */}
+                {listsWithAttempts.map((list) => {
+                  const timeline = getSpacedRepTimeline(list.id);
+                  const allComplete = timeline?.allComplete ?? false;
+                  const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
+                  return (
+                    <tr key={list.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
+                      <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {allComplete && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
+                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {/* Teal badge to distinguish vocab lists from lessons */}
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex-shrink-0">
+                            LIST
+                          </span>
+                          {list.name}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {timeline
+                          ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
+                          : <span className="text-slate-300 dark:text-slate-600">—</span>
+                        }
+                      </td>
+                      {SRSCols(timeline)}
                     </tr>
                   );
                 })}

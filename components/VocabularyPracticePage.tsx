@@ -3,6 +3,7 @@ import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
+import { recordVocabListAttempt } from '../services/arabicService';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,10 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   const [practiceIdx, setPracticeIdx] = useState(0);
   const [practiceTotal, setPracticeTotal] = useState(0);
   const [showingArabic, setShowingArabic] = useState(true);
+  // showArabicFirst = session-wide preference; all cards start with this side
+  const [showArabicFirst, setShowArabicFirst] = useState(true);
+  // ref to avoid recording the SRS attempt more than once per session win
+  const practiceAttemptRecordedRef = useRef(false);
 
   // ── grammar modal ─────────────────────────────────────────────────────────
   const [grammarPhraseIdx, setGrammarPhraseIdx] = useState<number | null>(null);
@@ -159,6 +164,22 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
+
+  // ─── record SRS attempt when practice session is won ──────────────────────
+  useEffect(() => {
+    const won = practiceIdx >= practiceTotal && practiceTotal > 0;
+    if (!won || practiceAttemptRecordedRef.current || !activeListId) return;
+    practiceAttemptRecordedRef.current = true;
+    const NEXT_DAYS = [0, 1, 3, 7, 14]; // index 0 unused; index n = days after attempt n
+    recordVocabListAttempt(studentId, activeListId).then(num => {
+      if (num >= 5) {
+        showToast('All 5 sessions complete! 🎉');
+      } else {
+        const d = NEXT_DAYS[num];
+        showToast(`Session ${num} recorded — next review in ${d} day${d !== 1 ? 's' : ''}`);
+      }
+    });
+  }, [practiceIdx, practiceTotal, activeListId, studentId, showToast]);
 
   // ─── computed allCats (needed by handlers below) ───────────────────────────
   const allCats = [...CATEGORIES, ...customCats];
@@ -361,9 +382,10 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setPracticeQueue(q);
     setPracticeTotal(q.length);
     setPracticeIdx(0);
-    setShowingArabic(true);
+    setShowingArabic(showArabicFirst);
+    practiceAttemptRecordedRef.current = false; // allow recording for this new session
     setTab('practice');
-  }, [practiceMode, words, phrases, showToast]);
+  }, [practiceMode, words, phrases, showToast, showArabicFirst]);
 
   const handleWrong = () => {
     const source = practiceMode === 'words' ? words : phrases;
@@ -377,7 +399,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
   const handleCorrect = () => {
     setPracticeIdx(i => i + 1);
-    setShowingArabic(true);
+    setShowingArabic(showArabicFirst); // respect session-wide preference
   };
 
   // ─── timer controls ────────────────────────────────────────────────────────
@@ -1210,10 +1232,15 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
               </div>
               <div className="text-center">
                 <button
-                  onClick={() => setShowingArabic(a => !a)}
+                  onClick={() => {
+                    // Flip current card AND set session-wide preference
+                    const next = !showingArabic;
+                    setShowingArabic(next);
+                    setShowArabicFirst(next);
+                  }}
                   className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors underline underline-offset-2"
                 >
-                  {showingArabic ? 'Show translation' : 'Show Arabic'}
+                  {showingArabic ? 'Show translation first for all cards' : 'Show Arabic first for all cards'}
                 </button>
               </div>
             </div>
