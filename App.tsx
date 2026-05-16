@@ -5,7 +5,8 @@ import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup } from './services/dataService';
-import { getArabicStudents, saveArabicStudent, deleteArabicStudent } from './services/arabicService';
+import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson } from './services/arabicService';
+import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
 import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
 import { useI18n } from './context/I18nProvider';
 import Footer from './components/Footer';
@@ -137,6 +138,7 @@ const App: React.FC = () => {
   // ── Arabic students ───────────────────────────────────────────────────────
   const [arabicStudents, setArabicStudents] = useState<ArabicStudent[]>([]);
   const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(null);
+  const [arabicVocabCounts, setArabicVocabCounts] = useState<Record<string, number>>({});
 
   const handleAddArabicStudent = async (student: ArabicStudent) => {
     setArabicStudents(prev => {
@@ -208,7 +210,20 @@ const App: React.FC = () => {
     const teacherId = currentUser.id;
     getStudents(teacherId).then(setStudents);
     getTajweedRules(teacherId).then(setTajweedRules);
-    getArabicStudents(teacherId).then(setArabicStudents);
+    // Fetch arabic students then compute total vocab counts (lesson words + custom list words)
+    Promise.all([
+      getArabicStudents(teacherId),
+      getVocabWordCountsByLesson(),
+    ]).then(async ([students, lessonWordCounts]) => {
+      setArabicStudents(students);
+      const customCounts = await getCustomVocabWordCountsForStudents(students.map(s => s.id));
+      const totals: Record<string, number> = {};
+      for (const s of students) {
+        const lessonWords = s.completedLessonIds.reduce((sum, lid) => sum + (lessonWordCounts[lid] ?? 0), 0);
+        totals[s.id] = lessonWords + (customCounts[s.id] ?? 0);
+      }
+      setArabicVocabCounts(totals);
+    });
   }, [currentUser]);
   
   // Initialize progress from recitation achievements
@@ -703,6 +718,7 @@ const App: React.FC = () => {
             <ArabicDashboard
               teacherId={currentUser.id}
               students={arabicStudents}
+              vocabCounts={arabicVocabCounts}
               onAddStudent={handleAddArabicStudent}
               onSelectStudent={id => { setSelectedArabicStudentId(id); setActiveTab('main'); }}
               onUpdateStudent={handleUpdateArabicStudent}

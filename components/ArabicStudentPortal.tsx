@@ -10,7 +10,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { ArabicStudent } from '../types';
-import { getStudentByShareToken, saveArabicStudent } from '../services/arabicService';
+import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
+import { getCustomVocabWordCount } from '../services/vocabularyService';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
@@ -23,6 +24,7 @@ interface Props {
 const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
   const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
+  const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
 
   useEffect(() => {
     document.title = 'LisanQuran Student Portal';
@@ -30,7 +32,19 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
   }, []);
 
   useEffect(() => {
-    getStudentByShareToken(token).then(s => setStudent(s ?? null));
+    getStudentByShareToken(token).then(async s => {
+      setStudent(s ?? null);
+      if (s) {
+        const [lessonWordCounts, customCount] = await Promise.all([
+          getVocabWordCountsByLesson(),
+          getCustomVocabWordCount(s.id),
+        ]);
+        const lessonWords = s.completedLessonIds.reduce(
+          (sum, lid) => sum + (lessonWordCounts[lid] ?? 0), 0
+        );
+        setTotalVocabCount(lessonWords + customCount);
+      }
+    });
   }, [token]);
 
   // ── Loading ──────────────────────────────────────────────────────────────────
@@ -114,6 +128,17 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 max-w-[100px] truncate">
               {student.name}
             </span>
+            {totalVocabCount > 0 && (
+              <>
+                <span className="w-px h-3.5 bg-emerald-200 dark:bg-emerald-700" />
+                <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                  </svg>
+                  {totalVocabCount.toLocaleString()} words
+                </span>
+              </>
+            )}
           </div>
         </div>
 

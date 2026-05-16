@@ -61,3 +61,26 @@ export const deleteVocabularyList = async (listId: string): Promise<void> => {
   const { error } = await supabase.from('vocabulary_lists').delete().eq('id', listId);
   if (error) console.error('deleteVocabularyList:', error.message);
 };
+
+/** Returns total custom-vocab word count keyed by student_id, for a batch of students. */
+export const getCustomVocabWordCountsForStudents = async (
+  studentIds: string[]
+): Promise<Record<string, number>> => {
+  if (studentIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('vocabulary_lists')
+    .select('student_id, words')
+    .in('student_id', studentIds);
+  if (error) { console.error('getCustomVocabWordCountsForStudents:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.student_id] = (counts[row.student_id] ?? 0) + ((row.words as any[])?.length ?? 0);
+  }
+  return counts;
+};
+
+/** Returns total custom-vocab word count for a single student. */
+export const getCustomVocabWordCount = async (studentId: string): Promise<number> => {
+  const counts = await getCustomVocabWordCountsForStudents([studentId]);
+  return counts[studentId] ?? 0;
+};
