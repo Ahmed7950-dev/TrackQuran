@@ -1363,9 +1363,15 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           <div className="flex md:hidden items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setPortalTab(t => t === 'about' ? 'content' : 'about')}
-              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 transition-colors"
+              className={`text-xs font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400'}`}
             >
               About
+            </button>
+            <button
+              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'content' : 'vocabulary')}
+              className={`text-xs font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400'}`}
+            >
+              Vocabulary
             </button>
             <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
               Support
