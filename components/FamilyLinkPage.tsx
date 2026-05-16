@@ -169,8 +169,6 @@ const MemberCard: React.FC<{ member: FamilyMember }> = ({ member }) => {
       {/* View full progress button */}
       <a
         href={viewUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className={`mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors ${
           member.type === 'quran'
             ? 'bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600'
@@ -179,7 +177,7 @@ const MemberCard: React.FC<{ member: FamilyMember }> = ({ member }) => {
       >
         View {member.name}'s Full Progress
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
       </a>
     </div>
