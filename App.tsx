@@ -713,6 +713,7 @@ const App: React.FC = () => {
               onBack={() => setSelectedArabicStudentId(null)}
               onUpdateStudent={handleUpdateArabicStudent}
               onDeleteStudent={handleDeleteArabicStudent}
+              vocabCount={arabicVocabCounts[selectedArabicStudent.id] ?? 0}
             />
           ) : (
             <ArabicDashboard

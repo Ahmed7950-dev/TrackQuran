@@ -149,6 +149,7 @@ export enum SortCriteria {
   HighestPoints = 'Recitation Score',
   MostMemorized = 'Most memorized (pages)',
   MostAttendance = 'Most lessons attended',
+  FewestMistakes = 'Fewest mistakes/page',
   Name = 'Sort by name',
   Age = 'Sort by age',
 }

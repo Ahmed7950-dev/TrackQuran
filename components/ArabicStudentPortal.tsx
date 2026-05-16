@@ -188,6 +188,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             onUpdateStudent={handleUpdate}
             onDeleteStudent={() => {/* blocked in student mode */}}
             studentMode
+            vocabCount={totalVocabCount}
           />
         )}
       </main>

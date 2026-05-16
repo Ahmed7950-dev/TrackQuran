@@ -25,6 +25,8 @@ interface Props {
   onDeleteStudent: (id: string) => void;
   /** When true the page is shown to the student via a share link — hides delete & back-to-list */
   studentMode?: boolean;
+  /** Total vocabulary words learned (lesson words + custom list words) */
+  vocabCount?: number;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -689,7 +691,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
-  student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false,
+  student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false, vocabCount = 0,
 }) => {
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
@@ -772,6 +774,14 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
               {student.arabicDialects.map(d => (
                 <span key={d} className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">{dialectLabel(d)}</span>
               ))}
+              {vocabCount > 0 && (
+                <span className="flex items-center gap-1 px-2.5 py-0.5 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-full text-xs font-semibold">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                  </svg>
+                  {vocabCount.toLocaleString()} words learned
+                </span>
+              )}
             </div>
           </div>
 

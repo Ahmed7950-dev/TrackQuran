@@ -72,7 +72,7 @@ const BirthdayBanner: React.FC<{ dob: string, name: string }> = ({ dob, name }) 
 };
 
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetadata: SurahMetadata[] }> = ({ student, onSelect, quranMetadata }) => {
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate' }> = ({ student, onSelect, quranMetadata, viewMode }) => {
     const { t, language } = useI18n();
 
     const { isInactive, daysSinceLastActivity } = useMemo(() => {
@@ -104,6 +104,18 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetad
     // Calculate score
     const score = calculateScore(student);
 
+    // Mistake rate calculations (for mistakesRate view mode)
+    const recitedPagesForMistakes = getRecitedPagesSet(student);
+    const validMistakeEntries = Object.entries(student.mistakes || {}).filter(([key]) => {
+      const [surah, ayah] = key.split(':').map(Number);
+      if (isNaN(surah) || isNaN(ayah)) return false;
+      return recitedPagesForMistakes.has(getPageOfAyah(surah, ayah));
+    });
+    const readingMistakesCount = validMistakeEntries.filter(([, m]) => !m.errorType || m.errorType === 'reading').length;
+    const tajweedMistakesCount = validMistakeEntries.filter(([, m]) => m.errorType === 'tajweed').length;
+    const mistakePages = recitedPagesForMistakes.size;
+    const readingRate = mistakePages > 0 ? readingMistakesCount / mistakePages : 0;
+    const tajweedRate = mistakePages > 0 ? tajweedMistakesCount / mistakePages : 0;
 
     // Get milestone badges
     const achievedReadingMilestones = useMemo(() => {
@@ -148,7 +160,13 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetad
                     <div className="flex-grow">
                         <div className="flex items-baseline gap-2 flex-wrap">
                             <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
-                            <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
+                            {viewMode === 'points' ? (
+                              <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
+                            ) : (
+                              <span className="text-xs font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                {(readingRate + tajweedRate).toFixed(2)} err/pg
+                              </span>
+                            )}
                         </div>
                         {getAge(student.dob) !== null
                           ? <p className="text-sm text-slate-600 dark:text-slate-400">{t('studentCard.yearsOld', { age: getAge(student.dob) })}</p>
@@ -171,17 +189,40 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void, quranMetad
             {/* Content Section */}
             <div className="px-4 py-2">
                 {/* Main Stats */}
-                <div className="flex justify-around items-center text-center">
+                {viewMode === 'points' ? (
+                  <div className="flex justify-around items-center text-center">
                     <div className="flex items-baseline gap-1.5">
                         <p className={`text-xl font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-teal-600 dark:text-orange-400'}`}>{totalPagesRead}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.pagesRead')}</p>
                     </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div> {/* Separator */}
+                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
                     <div className="flex items-baseline gap-1.5">
                         <p className={`text-xl font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-sky-600 dark:text-sky-400'}`}>{totalPagesMemorized}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.hifdhPages')}</p>
                     </div>
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-around items-center text-center">
+                    <div className="text-center">
+                      <p className={`text-xl font-bold ${readingRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : readingRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                        {readingRate.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">reading<br/>mistakes/pg</p>
+                    </div>
+                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
+                    <div className="text-center">
+                      <p className={`text-xl font-bold ${tajweedRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : tajweedRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                        {tajweedRate.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">tajweed<br/>mistakes/pg</p>
+                    </div>
+                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
+                    <div className="text-center">
+                      <p className="text-xl font-bold text-slate-600 dark:text-slate-300">{totalPagesRead}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.pagesRead')}</p>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Last Achievement */}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
@@ -208,6 +249,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata }) => {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
+  const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const { t } = useI18n();
@@ -229,6 +271,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           return a.name.localeCompare(b.name);
         case SortCriteria.Age:
           return (getAge(a.dob) ?? 0) - (getAge(b.dob) ?? 0);
+        case SortCriteria.FewestMistakes: {
+          const getMistakeRate = (s: Student) => {
+            const rp = getRecitedPagesSet(s);
+            const valid = Object.entries(s.mistakes || {}).filter(([key]) => {
+              const [su, ay] = key.split(':').map(Number);
+              return !isNaN(su) && !isNaN(ay) && rp.has(getPageOfAyah(su, ay));
+            });
+            return rp.size > 0 ? valid.length / rp.size : 0;
+          };
+          return getMistakeRate(a) - getMistakeRate(b);
+        }
         default:
           return 0;
       }
@@ -257,13 +310,29 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     <div>
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
         {/* Left side: Sorting */}
-        <div className="w-full md:w-auto">
+        <div className="w-full md:w-auto flex flex-col gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 bg-white dark:bg-gray-800 p-1 rounded-lg shadow-sm w-fit">
+            <button
+              onClick={() => { setViewMode('points'); setSortCriteria(SortCriteria.HighestPoints); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md font-semibold transition-colors ${viewMode === 'points' ? 'bg-teal-600 dark:bg-orange-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-gray-700'}`}
+            >
+              🏆 Points
+            </button>
+            <button
+              onClick={() => { setViewMode('mistakesRate'); setSortCriteria(SortCriteria.FewestMistakes); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md font-semibold transition-colors ${viewMode === 'mistakesRate' ? 'bg-rose-500 dark:bg-rose-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-gray-700'}`}
+            >
+              📊 Mistakes Rate
+            </button>
+          </div>
+          {/* Sort buttons */}
           <div className="bg-white dark:bg-gray-800 p-1 rounded-lg shadow-sm flex items-center gap-1 flex-wrap">
               <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 px-2 flex-shrink-0">{t('dashboard.sortBy')}</span>
               {Object.keys(SortCriteria).map(key => {
                   const criteriaValue = SortCriteria[key as keyof typeof SortCriteria];
                   return (
-                      <button 
+                      <button
                           key={key}
                           onClick={() => setSortCriteria(criteriaValue)}
                           className={`px-3 py-1.5 text-sm rounded-md transition-colors ${sortCriteria === criteriaValue ? 'bg-teal-600 dark:bg-orange-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-gray-700'}`}
@@ -308,19 +377,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>
