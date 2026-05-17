@@ -9,7 +9,7 @@
 
 import { supabase } from '../lib/supabase';
 import {
-  ArabicStudent, ArabicLesson, ArabicDialect, WeeklySlot,
+  ArabicStudent, ArabicLesson, ArabicDialect, ArabicCourseDialect, WeeklySlot,
   ArabicLevelPlan,
   HomeworkQuestion, HomeworkQuestionType,
   VocabWord, VocabMode, VocabAttempt, VocabMistakeDetail,
@@ -47,6 +47,7 @@ interface ArabicLessonRow {
   description: string | null;
   order_index: number;
   level: number;
+  dialect: string;          // 'levantine' | 'msa' — default 'levantine' for legacy rows
   pdf_url: string | null;
   video_url: string | null;
   teacher_note: string | null;
@@ -144,6 +145,7 @@ function rowToLesson(r: ArabicLessonRow): ArabicLesson {
     description:    r.description     ?? undefined,
     orderIndex:     r.order_index,
     level:          (r.level as 1|2|3) ?? 1,
+    dialect:        (r.dialect as ArabicCourseDialect) ?? 'levantine',
     pdfUrl:         r.pdf_url         ?? undefined,
     videoUrl:       r.video_url       ?? undefined,
     teacherNote:    r.teacher_note    ?? undefined,
@@ -236,6 +238,7 @@ export async function createArabicLesson(input: {
   title: string;
   description?: string;
   level?: 1 | 2 | 3;
+  dialect?: ArabicCourseDialect;
   pdfUrl?: string;
   createdBy?: string;
 }): Promise<ArabicLesson | null> {
@@ -252,8 +255,9 @@ export async function createArabicLesson(input: {
     title:           input.title,
     description:     input.description ?? null,
     order_index:     maxOrder + 1,
-    level:           input.level ?? 1,
-    pdf_url:         input.pdfUrl    ?? null,
+    level:           input.level   ?? 1,
+    dialect:         input.dialect ?? 'levantine',
+    pdf_url:         input.pdfUrl  ?? null,
     video_url:       null,
     teacher_note:    null,
     grammar_summary: null,
@@ -273,7 +277,7 @@ export async function createArabicLesson(input: {
 
 export async function updateArabicLesson(
   id: string,
-  patch: Partial<Pick<ArabicLesson, 'title' | 'description' | 'pdfUrl' | 'orderIndex' | 'videoUrl' | 'level'>>,
+  patch: Partial<Pick<ArabicLesson, 'title' | 'description' | 'pdfUrl' | 'orderIndex' | 'videoUrl' | 'level' | 'dialect'>>,
 ): Promise<boolean> {
   const update: Partial<ArabicLessonRow> & { updated_at: string } = {
     updated_at: new Date().toISOString(),
@@ -284,6 +288,7 @@ export async function updateArabicLesson(
   if (patch.orderIndex  !== undefined) update.order_index = patch.orderIndex;
   if (patch.videoUrl    !== undefined) update.video_url   = patch.videoUrl ?? null;
   if (patch.level       !== undefined) update.level       = patch.level;
+  if (patch.dialect     !== undefined) update.dialect     = patch.dialect;
 
   const { error } = await supabase
     .from('arabic_lessons')

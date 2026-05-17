@@ -212,6 +212,9 @@ export interface WeeklySlot {
 
 export type ArabicDialect = 'msa' | 'levantine' | 'quranic';
 
+/** Which course (lesson library) a lesson belongs to */
+export type ArabicCourseDialect = 'levantine' | 'msa';
+
 export interface ArabicStudent {
   id: string;
   teacherId: string;
@@ -238,7 +241,8 @@ export interface ArabicLesson {
   title: string;
   description?: string;
   orderIndex: number;
-  level: 1 | 2 | 3;   // Which course level this lesson belongs to (default 1)
+  level: 1 | 2 | 3;               // Which course level this lesson belongs to (default 1)
+  dialect: ArabicCourseDialect;   // Which course (levantine | msa) this lesson belongs to
   pdfUrl?: string;
   videoUrl?: string;   // YouTube URL for the dialogue video section
   teacherNote?: string;     // Private notes / lesson plan from the teacher

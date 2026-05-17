@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useState } from 'react';
-import { ArabicStudent, ArabicLesson, WeeklySlot, VocabAttempt, VocabMistakeDetail } from '../types';
+import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail } from '../types';
 import {
   getArabicLessons,
   getAllVocabAttemptsForStudent,
@@ -718,8 +718,17 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const lessonsPerWeek = lpw(student);
   const wl             = weeksLeft(student.goalDeadline);
 
+  // Dialect filter for this student — only levantine/msa courses apply
+  const studentDialectFilter = student.arabicDialects.filter(
+    (d): d is ArabicCourseDialect => d === 'levantine' || d === 'msa'
+  );
+  // Count only lessons that match the student's dialect(s) for the tab badge
+  const studentLessonCount = studentDialectFilter.length > 0
+    ? lessons.filter(l => studentDialectFilter.includes(l.dialect ?? 'levantine')).length
+    : lessons.length;
+
   const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar'; label: string; mobileLabel: string }> = [
-    { key: 'lessons',  label: `Lessons (${lessons.length})`,  mobileLabel: `Lessons (${lessons.length})` },
+    { key: 'lessons',  label: `Lessons (${studentLessonCount})`,  mobileLabel: `Lessons (${studentLessonCount})` },
     { key: 'progress', label: "Student's Progress",           mobileLabel: 'Progress' },
     { key: 'profile',  label: 'Student Profile',              mobileLabel: 'Profile' },
     ...(studentMode ? [{ key: 'calendar' as const, label: "Tutor's Availability", mobileLabel: 'Availability' }] : []),
@@ -920,6 +929,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           preSelectedStudentId={student.id}
           onStudentUpdated={onUpdateStudent}
           studentMode={studentMode}
+          dialectFilter={studentDialectFilter}
         />
       )}
 

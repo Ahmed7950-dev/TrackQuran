@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArabicLesson, ArabicStudent, ArabicLevelPlan } from '../types';
+import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import {
   getArabicLessons,
@@ -38,23 +38,30 @@ interface ModalProps {
   onUpdated?: (l: ArabicLesson) => void;
   createdBy?: string;
   defaultLevel?: 1 | 2 | 3;
+  defaultDialect?: ArabicCourseDialect;
 }
 
+const COURSE_LABELS: Record<ArabicCourseDialect, string> = {
+  levantine: 'Levantine Arabic',
+  msa:       'Modern Standard Arabic',
+};
+
 const CreateArabicLessonModal: React.FC<ModalProps> = ({
-  isOpen, existing, onClose, onCreated, onUpdated, createdBy, defaultLevel = 1,
+  isOpen, existing, onClose, onCreated, onUpdated, createdBy, defaultLevel = 1, defaultDialect = 'levantine',
 }) => {
   const isEdit = !!existing;
-  const [title,  setTitle]  = useState(existing?.title       ?? '');
-  const [desc,   setDesc]   = useState(existing?.description ?? '');
-  const [level,  setLevel]  = useState<1|2|3>(existing?.level ?? defaultLevel);
-  const [file,   setFile]   = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState('');
+  const [title,   setTitle]   = useState(existing?.title       ?? '');
+  const [desc,    setDesc]    = useState(existing?.description ?? '');
+  const [level,   setLevel]   = useState<1|2|3>(existing?.level ?? defaultLevel);
+  const [dialect, setDialect] = useState<ArabicCourseDialect>(existing?.dialect ?? defaultDialect);
+  const [file,    setFile]    = useState<File | null>(null);
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  const reset = () => { setTitle(''); setDesc(''); setFile(null); setSaving(false); setErr(''); };
+  const reset = () => { setTitle(''); setDesc(''); setFile(null); setSaving(false); setErr(''); setDialect(defaultDialect); };
   const handleClose = () => { reset(); onClose(); };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,13 +86,13 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
     }
 
     if (isEdit && existing) {
-      const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl, level });
+      const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl, level, dialect });
       setSaving(false);
       if (!ok) { setErr('Failed to save changes.'); return; }
-      onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl, level });
+      onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl, level, dialect });
       handleClose();
     } else {
-      const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, level, pdfUrl, createdBy });
+      const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, level, dialect, pdfUrl, createdBy });
       setSaving(false);
       if (!lesson) { setErr('Failed to create lesson. Please try again.'); return; }
       onCreated?.(lesson);
@@ -122,6 +129,22 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
             </label>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} disabled={saving} rows={2}
               placeholder="Short summary…" className={inp} />
+          </div>
+          {/* Course Type selector */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Course</label>
+            <div className="flex gap-2">
+              {(['levantine', 'msa'] as ArabicCourseDialect[]).map(d => (
+                <button key={d} type="button" onClick={() => setDialect(d)} disabled={saving}
+                  className={`flex-1 py-2 rounded-lg border-2 text-sm font-semibold transition-colors ${
+                    dialect === d
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                      : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-amber-300'
+                  }`}>
+                  {COURSE_LABELS[d]}
+                </button>
+              ))}
+            </div>
           </div>
           {/* Level selector */}
           <div>
@@ -282,15 +305,22 @@ interface Props {
   preSelectedStudentId?: string;
   onStudentUpdated?: (s: ArabicStudent) => void;
   studentMode?: boolean;
+  /** Limit which course dialects are shown (for student view). Empty = show all. */
+  dialectFilter?: ArabicCourseDialect[];
 }
 
-const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false }) => {
+const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter }) => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
-  const [lessons,    setLessons]    = useState<ArabicLesson[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [activeLevel, setActiveLevel] = useState<1|2|3>(1);
+  // Which dialects to show: admin sees both; student sees their selected ones (or all if unfiltered)
+  const availableDialects: ArabicCourseDialect[] =
+    dialectFilter && dialectFilter.length > 0 ? dialectFilter : ['levantine', 'msa'];
+
+  const [lessons,       setLessons]       = useState<ArabicLesson[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [activeDialect, setActiveDialect] = useState<ArabicCourseDialect>(availableDialects[0]);
+  const [activeLevel,   setActiveLevel]   = useState<1|2|3>(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing,    setEditing]    = useState<ArabicLesson | null>(null);
   const [viewing,    setViewing]    = useState<ArabicLesson | null>(null);
@@ -367,8 +397,9 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     );
   }
 
-  // Lessons for the current level
-  const levelLessons = lessons
+  // Lessons for the current dialect + level
+  const dialectLessons = lessons.filter(l => (l.dialect ?? 'levantine') === activeDialect);
+  const levelLessons = dialectLessons
     .filter(l => (l.level ?? 1) === activeLevel)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 
@@ -390,7 +421,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {isAdmin
               ? 'Upload and manage Arabic PDF lessons. Drag rows to reorder.'
-              : `${lessons.length} total lessons — choose a level to begin.`}
+              : `${dialectLessons.length} lessons — choose a level to begin.`}
           </p>
         </div>
         {isAdmin && (
@@ -404,10 +435,29 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         )}
       </div>
 
+      {/* ── Course (dialect) tabs ── */}
+      {(isAdmin || availableDialects.length > 1) && (
+        <div className="flex gap-1 bg-slate-100 dark:bg-gray-700/50 p-1 rounded-xl w-fit">
+          {availableDialects.map(d => (
+            <button
+              key={d}
+              onClick={() => { setActiveDialect(d); setActiveLevel(1); }}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${
+                activeDialect === d
+                  ? 'bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-300 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              {COURSE_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Level tabs ── */}
       <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto">
         {LEVELS.map(lvl => {
-          const lvlLessons = lessons.filter(l => (l.level ?? 1) === lvl);
+          const lvlLessons = dialectLessons.filter(l => (l.level ?? 1) === lvl);
           const lvlDone = lvlLessons.filter(l => completedSet.has(l.id)).length;
           return (
             <button key={lvl} onClick={() => setActiveLevel(lvl)}
@@ -434,7 +484,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
-            Level {activeLevel} — {activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'}
+            {COURSE_LABELS[activeDialect]} — Level {activeLevel} ({activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'})
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{levelTotal} lessons added · {LESSONS_PER_LEVEL} per level</p>
         </div>
@@ -490,6 +540,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         <CreateArabicLessonModal
           isOpen={createOpen}
           defaultLevel={activeLevel}
+          defaultDialect={activeDialect}
           onClose={() => setCreateOpen(false)}
           createdBy={currentUser?.id}
           onCreated={lesson => { setLessons(prev => [...prev, lesson]); setCreateOpen(false); }}
@@ -501,6 +552,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         <CreateArabicLessonModal
           isOpen={!!editing}
           existing={editing}
+          defaultDialect={activeDialect}
           onClose={() => setEditing(null)}
           onUpdated={updated => { setLessons(prev => prev.map(l => l.id === updated.id ? updated : l)); setEditing(null); }}
         />
