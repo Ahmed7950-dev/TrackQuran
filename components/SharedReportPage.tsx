@@ -6,6 +6,8 @@ import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import type { Student, AttendanceRecord } from '../types';
+import CalendarPage from './CalendarPage';
+import { getStoredToken } from '../services/googleCalendarService';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1113,7 +1115,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress'>('mistakes');
+  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar'>('mistakes');
+  const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
   const [quranicFont, setQuranicFont] = useState<string>(() =>
@@ -1414,6 +1417,19 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 My Progress
                 {!hasProgress && <span className="text-xs ml-1 opacity-70">(share once to unlock)</span>}
               </button>
+              <button
+                onClick={() => setActiveTab('calendar')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'calendar'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                </svg>
+                Tutor's Availability
+              </button>
             </div>
           </div>
         )}
@@ -1424,6 +1440,13 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           <AboutUsPage />
         ) : (
           <>
+            {activeTab === 'calendar' && (
+              <CalendarPage
+                gcalToken={gcalToken}
+                onTokenChange={setGcalToken}
+                isStudentView={true}
+              />
+            )}
             {activeTab === 'mistakes' && (
               <MistakesTab
                 report={report}
