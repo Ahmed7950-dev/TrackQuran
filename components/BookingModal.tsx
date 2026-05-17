@@ -17,17 +17,24 @@ import {
 
 const ISTANBUL_TZ = 'Europe/Istanbul';
 
-/** Convert Istanbul hour to student's local time string HH:MM */
-function istanbulHourToLocal(hour: number, studentTZ: string): string {
-  const now    = new Date();
-  const utcH   = ((hour - 3) % 24 + 24) % 24;
-  const utcDate = new Date(Date.UTC(
+/** Convert Istanbul hour+minute to student's local time string HH:MM */
+function istanbulTimeToLocal(hour: number, minute: number, studentTZ: string): string {
+  const now      = new Date();
+  const totalMin = hour * 60 + minute - 3 * 60; // subtract Istanbul offset (UTC+3)
+  const utcH     = Math.floor(((totalMin % (24 * 60)) + 24 * 60) % (24 * 60) / 60);
+  const utcM     = ((totalMin % 60) + 60) % 60;
+  const utcDate  = new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-    utcH, 0, 0,
+    utcH, utcM, 0,
   ));
   return utcDate.toLocaleTimeString([], {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: studentTZ,
   });
+}
+
+/** Format Istanbul HH:MM string from hour + minute */
+function fmtIstanbul(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function istanbulDateString(date: Date): string {
@@ -47,6 +54,8 @@ interface BookingModalProps {
   dayIdx:       number;
   /** Istanbul hour (0-23) that was clicked */
   hour:         number;
+  /** 0 or 30 — which half of the hour was clicked */
+  minute:       0 | 30;
   teacherId:    string;
   studentId:    string;
   studentName:  string;
@@ -66,6 +75,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
   day,
   dayIdx,
   hour,
+  minute,
   teacherId,
   studentId,
   studentName,
@@ -82,11 +92,19 @@ const BookingModal: React.FC<BookingModalProps> = ({
   const [error,        setError]        = useState<string | null>(null);
 
   const resolvedTZ  = studentTZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const istanbulStr = `${String(hour).padStart(2, '0')}:00`;
-  const localStr    = istanbulHourToLocal(hour, resolvedTZ);
-  const endIstanbul = `${String(hour + Math.floor(duration / 60)).padStart(2, '0')}:${String(duration % 60).padStart(2, '0')}`;
-  const dateStr     = istanbulDateString(day);
-  const weekdayName = WEEKDAY_NAMES[dayIdx] ?? '';
+
+  // Calculate end time (hour + minute + duration)
+  const startTotalMin = hour * 60 + minute;
+  const endTotalMin   = startTotalMin + duration;
+  const endHour       = Math.floor(endTotalMin / 60);
+  const endMin        = endTotalMin % 60;
+
+  const istanbulStr    = fmtIstanbul(hour, minute);
+  const endIstanbul    = fmtIstanbul(endHour, endMin);
+  const localStr       = istanbulTimeToLocal(hour, minute, resolvedTZ);
+  const localEndStr    = istanbulTimeToLocal(endHour, endMin, resolvedTZ);
+  const dateStr        = istanbulDateString(day);
+  const weekdayName    = WEEKDAY_NAMES[dayIdx] ?? '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +119,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
         whatsapp,
         dayOfWeek:       dayIdx,
         hour,
+        minute,
         durationMinutes: duration,
         bookingType,
         specificDate:    bookingType === 'single' ? dateStr : undefined,
@@ -153,7 +172,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             <div className="flex items-center gap-3 text-xs">
               <span className="flex items-center gap-1 text-amber-700 dark:text-amber-300 font-medium">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                Your time: {localStr}–{istanbulHourToLocal(hour + Math.floor(duration / 60), resolvedTZ)}
+                Your time: {localStr}–{localEndStr}
               </span>
               <span className="flex items-center gap-1 text-teal-700 dark:text-teal-300 font-medium">
                 <span className="w-2 h-2 rounded-full bg-teal-500 inline-block" />
@@ -216,7 +235,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             </div>
             {bookingType === 'weekly' && (
               <p className="mt-2 text-xs text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded-lg">
-                Repeats every <strong>{weekdayName}</strong> at <strong>{istanbulStr}</strong> (tutor time) once confirmed.
+                Repeats every <strong>{weekdayName}</strong> at <strong>{istanbulStr}</strong> tutor time once confirmed.
               </p>
             )}
           </div>

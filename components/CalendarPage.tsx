@@ -254,7 +254,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   /** IDs of just-declined bookings (student view) — shown briefly in red */
   const [declinedIds,   setDeclinedIds]   = useState<Set<string>>(new Set());
   /** Slot the student clicked — triggers BookingModal */
-  const [bookingSlot,   setBookingSlot]   = useState<{ day: Date; dayIdx: number; hour: number } | null>(null);
+  const [bookingSlot,   setBookingSlot]   = useState<{ day: Date; dayIdx: number; hour: number; minute: 0 | 30 } | null>(null);
   /** Booking ID being actioned by the tutor (confirm / decline) */
   const [actioningId,   setActioningId]   = useState<string | null>(null);
 
@@ -447,16 +447,15 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   /*  Student slot click                                                */
   /* ---------------------------------------------------------------- */
 
-  const handleSlotClick = (dayIdx: number, day: Date, hour: number) => {
+  const handleSlotClick = (dayIdx: number, day: Date, hour: number, minute: 0 | 30) => {
     if (!isStudentView || !studentId || !teacherId || !studentName) return;
     if (isSlotInPast(day, hour)) return;
-    const dateStr   = istanbulDateString(day);
-    const allMine   = myBookings;
+    const dateStr = istanbulDateString(day);
     // Don't allow clicking a slot already taken by another confirmed booking
-    if (isHourTaken([...myBookings, ...otherBookings], dayIdx, hour, dateStr, studentId)) return;
+    if (isHourTaken([...myBookings, ...otherBookings], dayIdx, hour, minute, dateStr, studentId)) return;
     // Don't allow duplicate booking for the student themselves
-    if (studentAlreadyBooked(allMine.filter(b => b.status !== 'declined'), dayIdx, hour, dateStr)) return;
-    setBookingSlot({ day, dayIdx, hour });
+    if (studentAlreadyBooked(myBookings.filter(b => b.status !== 'declined'), dayIdx, hour, minute, dateStr)) return;
+    setBookingSlot({ day, dayIdx, hour, minute });
   };
 
   /* ---------------------------------------------------------------- */
@@ -720,33 +719,45 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 className={`relative border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''}`}
                 style={{ height: `${HOUR_HEIGHT_PX * 25}px` }}
               >
-                {/* Availability / working-hour background — clickable in student view */}
+                {/* Availability / working-hour background — split into two 30-min clickable halves */}
                 {HOURS.slice(0, 24).map(h => {
                   const isAvail = availSet.has(`${dayIdx}-${h}`);
                   if (!isAvail) return null;
-
-                  const canBook = isStudentView && bookingEnabled && studentId && studentName && !isSlotInPast(day, h);
-                  const dateStr = istanbulDateString(day);
-                  const taken   = canBook && isHourTaken(
-                    [...myBookings, ...otherBookings], dayIdx, h, dateStr, studentId,
-                  );
-                  const alreadyMine = canBook && studentAlreadyBooked(
-                    myBookings.filter(b => b.status !== 'declined'), dayIdx, h, dateStr,
-                  );
-                  const clickable = canBook && !taken && !alreadyMine;
+                  const dateStr   = istanbulDateString(day);
+                  const halfH     = HOUR_HEIGHT_PX / 2; // 32px per 30-min slot
 
                   return (
-                    <div
-                      key={`avail-${h}`}
-                      style={{ top: `${h * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}
-                      className={`absolute w-full bg-teal-100/60 dark:bg-teal-900/25 ${
-                        clickable
-                          ? 'cursor-pointer hover:bg-teal-200/70 dark:hover:bg-teal-800/40 transition-colors'
-                          : 'pointer-events-none'
-                      }`}
-                      onClick={clickable ? () => handleSlotClick(dayIdx, day, h) : undefined}
-                      title={clickable ? `Book ${String(h).padStart(2,'0')}:00` : undefined}
-                    />
+                    <React.Fragment key={`avail-${h}`}>
+                      {([0, 30] as const).map(m => {
+                        const canBook     = isStudentView && bookingEnabled && !!studentId && !!studentName && !isSlotInPast(day, h);
+                        const taken       = canBook && isHourTaken([...myBookings, ...otherBookings], dayIdx, h, m, dateStr, studentId!);
+                        const alreadyMine = canBook && studentAlreadyBooked(myBookings.filter(b => b.status !== 'declined'), dayIdx, h, m, dateStr);
+                        const clickable   = canBook && !taken && !alreadyMine;
+                        const topPx       = h * HOUR_HEIGHT_PX + (m === 30 ? halfH : 0);
+
+                        return (
+                          <div
+                            key={`avail-${h}-${m}`}
+                            style={{ top: `${topPx}px`, height: `${halfH}px` }}
+                            className={`absolute w-full bg-teal-100/60 dark:bg-teal-900/25 ${
+                              clickable
+                                ? 'cursor-pointer hover:bg-teal-200/80 dark:hover:bg-teal-800/50 transition-colors group'
+                                : 'pointer-events-none'
+                            } ${m === 30 ? 'border-t border-teal-200/50 dark:border-teal-700/30' : ''}`}
+                            onClick={clickable ? () => handleSlotClick(dayIdx, day, h, m) : undefined}
+                            title={clickable ? `Book ${String(h).padStart(2,'0')}:${m === 0 ? '00' : '30'}` : undefined}
+                          >
+                            {clickable && (
+                              <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="text-[8px] font-bold text-teal-700 dark:text-teal-300 bg-teal-100 dark:bg-teal-900/60 px-1 rounded">
+                                  {String(h).padStart(2,'0')}:{m === 0 ? '00' : '30'}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
 
@@ -777,7 +788,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   // Hide declined bookings that have faded out (not in declinedIds)
                   if (isStudentView && b.status === 'declined' && !isDeclined) return null;
 
-                  const topPx     = b.hour * HOUR_HEIGHT_PX;
+                  const topPx     = b.hour * HOUR_HEIGHT_PX + (b.minute / 60) * HOUR_HEIGHT_PX;
                   const heightPx  = (b.durationMinutes / 60) * HOUR_HEIGHT_PX;
 
                   if (isStudentView) {
@@ -791,9 +802,10 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                         <p className={`text-[10px] font-bold leading-tight truncate ${style.text}`}>
                           {style.label}
                         </p>
-                        {b.durationMinutes >= 50 && (
+                        {b.durationMinutes >= 25 && heightPx >= 30 && (
                           <p className={`text-[9px] leading-tight ${style.text} opacity-75`}>
-                            {String(b.hour).padStart(2,'0')}:00–{String(b.hour).padStart(2,'0')}:50
+                            {String(b.hour).padStart(2,'0')}:{String(b.minute).padStart(2,'0')}
+                            –{(() => { const e = b.hour * 60 + b.minute + b.durationMinutes; return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`; })()}
                           </p>
                         )}
                       </div>
@@ -813,7 +825,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                         {b.studentName}
                       </p>
                       <p className={`text-[9px] leading-tight ${text} opacity-80`}>
-                        {b.durationMinutes}min · {b.bookingType === 'weekly' ? '🔁 Weekly' : '✓ Single'}
+                        {String(b.hour).padStart(2,'0')}:{String(b.minute).padStart(2,'0')} · {b.durationMinutes}min · {b.bookingType === 'weekly' ? '🔁' : '✓'}
                       </p>
                       {b.status === 'pending' && (
                         <div className="flex gap-1 mt-1 flex-wrap">
@@ -923,6 +935,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           day={bookingSlot.day}
           dayIdx={bookingSlot.dayIdx}
           hour={bookingSlot.hour}
+          minute={bookingSlot.minute}
           teacherId={teacherId}
           studentId={studentId}
           studentName={studentName}

@@ -28,6 +28,8 @@ export interface LessonBooking {
   dayOfWeek:       number;
   /** 0-23, Istanbul hour */
   hour:            number;
+  /** 0 or 30 — start minute within the hour */
+  minute:          0 | 30;
   durationMinutes: 25 | 50;
   bookingType:     BookingType;
   /** ISO date YYYY-MM-DD in Istanbul tz — required when bookingType === 'single' */
@@ -51,6 +53,7 @@ interface BookingRow {
   whatsapp:         string | null;
   day_of_week:      number;
   hour:             number;
+  minute:           number;
   duration_minutes: number;
   booking_type:     string;
   specific_date:    string | null;
@@ -70,6 +73,7 @@ function rowToBooking(r: BookingRow): LessonBooking {
     whatsapp:        r.whatsapp    ?? undefined,
     dayOfWeek:       r.day_of_week,
     hour:            r.hour,
+    minute:          (r.minute === 30 ? 30 : 0) as 0 | 30,
     durationMinutes: r.duration_minutes as 25 | 50,
     bookingType:     r.booking_type  as BookingType,
     specificDate:    r.specific_date ?? undefined,
@@ -166,6 +170,7 @@ export interface CreateBookingInput {
   whatsapp?:       string;
   dayOfWeek:       number;
   hour:            number;
+  minute:          0 | 30;
   durationMinutes: 25 | 50;
   bookingType:     BookingType;
   specificDate?:   string;
@@ -183,6 +188,7 @@ export async function createLessonBooking(input: CreateBookingInput): Promise<Le
       whatsapp:         input.whatsapp       ?? null,
       day_of_week:      input.dayOfWeek,
       hour:             input.hour,
+      minute:           input.minute,
       duration_minutes: input.durationMinutes,
       booking_type:     input.bookingType,
       specific_date:    input.specificDate   ?? null,
@@ -212,43 +218,64 @@ export async function updateBookingStatus(
 
 // ── Slot-conflict helpers ─────────────────────────────────────────────────────
 
+/** Convert hour+minute to total minutes from midnight */
+function toMins(hour: number, minute: number): number {
+  return hour * 60 + minute;
+}
+
 /**
- * Returns true if an Istanbul-hour slot is already occupied by a *confirmed*
- * booking belonging to a different student.
+ * Returns true if the proposed slot (hour, minute) overlaps with an existing
+ * confirmed booking by a different student.
  *
- * For weekly bookings the conflict check is dayOfWeek + hour.
- * For single  bookings the conflict check is specificDate  + hour.
+ * Overlap: existing booking's time range intersects the proposed slot range
+ * (we assume minimum 25-min duration for the proposed slot to check overlap).
  */
 export function isHourTaken(
   bookings:    LessonBooking[],
   dayOfWeek:   number,
   hour:        number,
-  dateStr:     string,   // Istanbul date string for the target day
+  minute:      0 | 30,
+  dateStr:     string,
   myStudentId: string,
 ): boolean {
+  const slotStart = toMins(hour, minute);
+  const slotEnd   = slotStart + 25; // minimum duration for overlap check
   return bookings.some(b => {
-    if (b.status      !== 'confirmed') return false;
-    if (b.studentId   === myStudentId) return false;
-    if (b.hour        !== hour)        return false;
-    if (b.bookingType === 'weekly')    return b.dayOfWeek === dayOfWeek;
-    return b.specificDate === dateStr;
+    if (b.status    !== 'confirmed') return false;
+    if (b.studentId === myStudentId) return false;
+    // Check same day
+    const sameDay = b.bookingType === 'weekly'
+      ? b.dayOfWeek === dayOfWeek
+      : b.specificDate === dateStr;
+    if (!sameDay) return false;
+    // Check time overlap
+    const bStart = toMins(b.hour, b.minute);
+    const bEnd   = bStart + b.durationMinutes;
+    return bStart < slotEnd && bEnd > slotStart;
   });
 }
 
 /**
- * Returns true if the student already has a booking (any status) at the
- * given slot — prevents duplicate requests.
+ * Returns true if the student already has a booking (any non-declined status)
+ * that overlaps the proposed slot — prevents duplicate requests.
  */
 export function studentAlreadyBooked(
   myBookings: LessonBooking[],
   dayOfWeek:  number,
   hour:       number,
+  minute:     0 | 30,
   dateStr:    string,
 ): boolean {
+  const slotStart = toMins(hour, minute);
+  const slotEnd   = slotStart + 25;
   return myBookings.some(b => {
-    if (b.hour !== hour) return false;
-    if (b.bookingType === 'weekly') return b.dayOfWeek === dayOfWeek;
-    return b.specificDate === dateStr;
+    const sameDay = b.bookingType === 'weekly'
+      ? b.dayOfWeek === dayOfWeek
+      : b.specificDate === dateStr;
+    if (!sameDay) return false;
+    const bStart = toMins(b.hour, b.minute);
+    const bEnd   = bStart + b.durationMinutes;
+    return bStart < slotEnd && bEnd > slotStart;
   });
 }
 
