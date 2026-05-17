@@ -103,8 +103,27 @@ export function connectGoogleCalendar(
 /*  Calendar API fetch                                                  */
 /* ------------------------------------------------------------------ */
 
-export async function fetchGCalEvents(
+/** Fetch all calendar IDs the user has access to */
+async function fetchCalendarIds(token: string): Promise<string[]> {
+  const res = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    if (res.status === 401) {
+      disconnectGoogleCalendar();
+      throw new Error('Token expired — please reconnect Google Calendar.');
+    }
+    throw new Error(`GCal API error ${res.status}`);
+  }
+  const data = await res.json() as { items?: { id: string }[] };
+  return (data.items ?? []).map(c => c.id);
+}
+
+/** Fetch events from a single calendar */
+async function fetchEventsFromCalendar(
   token: string,
+  calendarId: string,
   timeMin: Date,
   timeMax: Date,
 ): Promise<GCalEvent[]> {
@@ -117,20 +136,40 @@ export async function fetchGCalEvents(
   });
 
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      disconnectGoogleCalendar();
-      throw new Error('Token expired — please reconnect Google Calendar.');
-    }
-    throw new Error(`GCal API error ${res.status}`);
-  }
-
+  if (!res.ok) return []; // skip calendars we can't read
   const data = await res.json() as { items?: GCalEvent[] };
   return data.items ?? [];
+}
+
+/** Fetch events from ALL user calendars and merge them */
+export async function fetchGCalEvents(
+  token: string,
+  timeMin: Date,
+  timeMax: Date,
+): Promise<GCalEvent[]> {
+  const calendarIds = await fetchCalendarIds(token);
+
+  const results = await Promise.all(
+    calendarIds.map(id => fetchEventsFromCalendar(token, id, timeMin, timeMax))
+  );
+
+  // Flatten and deduplicate by event id
+  const seen = new Set<string>();
+  const allEvents: GCalEvent[] = [];
+  for (const events of results) {
+    for (const ev of events) {
+      if (!seen.has(ev.id)) {
+        seen.add(ev.id);
+        allEvents.push(ev);
+      }
+    }
+  }
+
+  return allEvents;
 }
 
 /* ------------------------------------------------------------------ */
