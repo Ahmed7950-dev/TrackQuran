@@ -246,9 +246,10 @@ interface DashboardProps {
   onSelectStudent: (studentId: string) => void;
   quranMetadata: SurahMetadata[];
   onFamilyLinks?: () => void;
+  onAddStudent: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent }) => {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
@@ -309,77 +310,102 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
-        {/* Left side: Sorting */}
-        <div className="w-full md:w-auto flex flex-col gap-2">
-          {/* View mode toggle */}
-          <div className="flex items-center gap-1 bg-white dark:bg-gray-800 p-1 rounded-lg shadow-sm w-fit">
+      <div className="flex flex-col gap-3 mb-6">
+        {/* ── Unified sort bar ── */}
+        <div className="flex items-center gap-1.5 flex-wrap bg-white dark:bg-gray-800 px-4 py-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-gray-700">
+          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">{t('dashboard.sortBy')}</span>
+
+          {/* Points — also switches card display to score */}
+          <button
+            onClick={() => { setViewMode('points'); setSortCriteria(SortCriteria.HighestPoints); }}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              sortCriteria === SortCriteria.HighestPoints
+                ? 'bg-teal-600 dark:bg-teal-500 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700 dark:hover:text-teal-300'
+            }`}
+          >🏆 {t('sortCriteria.HighestPoints')}</button>
+
+          {/* Mistakes Rate — also switches card display to mistake rate */}
+          <button
+            onClick={() => { setViewMode('mistakesRate'); setSortCriteria(SortCriteria.FewestMistakes); }}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              sortCriteria === SortCriteria.FewestMistakes
+                ? 'bg-rose-500 dark:bg-rose-500 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 dark:hover:text-rose-400'
+            }`}
+          >📊 {t('sortCriteria.FewestMistakes')}</button>
+
+          <div className="h-4 w-px bg-slate-200 dark:bg-gray-600 mx-0.5" />
+
+          {/* Other sort criteria */}
+          {([
+            { criteria: SortCriteria.MostMemorized,  label: t('sortCriteria.MostMemorized'),  icon: '📖' },
+            { criteria: SortCriteria.MostAttendance, label: t('sortCriteria.MostAttendance'), icon: '📅' },
+            { criteria: SortCriteria.Name,           label: t('sortCriteria.Name'),           icon: '🔤' },
+            { criteria: SortCriteria.Age,            label: t('sortCriteria.Age'),            icon: '🎂' },
+          ] as const).map(({ criteria, label, icon }) => (
             <button
-              onClick={() => { setViewMode('points'); setSortCriteria(SortCriteria.HighestPoints); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md font-semibold transition-colors ${viewMode === 'points' ? 'bg-teal-600 dark:bg-orange-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-gray-700'}`}
-            >
-              🏆 Points
-            </button>
-            <button
-              onClick={() => { setViewMode('mistakesRate'); setSortCriteria(SortCriteria.FewestMistakes); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md font-semibold transition-colors ${viewMode === 'mistakesRate' ? 'bg-rose-500 dark:bg-rose-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-gray-700'}`}
-            >
-              📊 Mistakes Rate
-            </button>
-          </div>
-          {/* Sort buttons */}
-          <div className="bg-white dark:bg-gray-800 p-1 rounded-lg shadow-sm flex items-center gap-1 flex-wrap">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 px-2 flex-shrink-0">{t('dashboard.sortBy')}</span>
-              {Object.keys(SortCriteria).map(key => {
-                  const criteriaValue = SortCriteria[key as keyof typeof SortCriteria];
-                  return (
-                      <button
-                          key={key}
-                          onClick={() => setSortCriteria(criteriaValue)}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${sortCriteria === criteriaValue ? 'bg-teal-600 dark:bg-orange-600 text-white shadow' : 'text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-gray-700'}`}
-                      >
-                          {t(`sortCriteria.${key}`)}
-                      </button>
-                  )
-              })}
-          </div>
+              key={criteria}
+              onClick={() => setSortCriteria(criteria)}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                sortCriteria === criteria
+                  ? 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600'
+              }`}
+            >{icon} {label}</button>
+          ))}
         </div>
 
-        {/* Right side: Family Links, Honor Board and Search */}
-        <div className="flex w-full md:w-auto items-center gap-4">
+        {/* ── Right side: family links · search · add student · honor board ── */}
+        <div className="flex w-full items-center gap-2 flex-wrap">
           {onFamilyLinks && (
             <button
               onClick={onFamilyLinks}
-              className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm transition-colors"
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm transition-colors text-sm"
             >
-              <span className="text-base">👨‍👩‍👧‍👦</span>
+              <span>👨‍👩‍👧‍👦</span>
               <span className="hidden sm:inline">Family Links</span>
             </button>
           )}
-          <button
-              onClick={() => setIsHonorBoardOpen(true)}
-              className="flex-shrink-0 px-4 py-2.5 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-500 font-semibold rounded-lg shadow-sm hover:bg-yellow-200 dark:hover:bg-yellow-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-all flex items-center justify-center gap-2"
-          >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9a9.75 9.75 0 0 1 9 0Z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12.75 12.75A3.75 3.75 0 0 0 16.5 9.75v-2.625L12 3.75l-4.5 3.375v2.625a3.75 3.75 0 0 0 3.75 3Z" />
+
+          {/* Search */}
+          <div className="relative flex-grow min-w-[140px]">
+            <div className="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
+              <svg className="w-4 h-4 text-slate-500 dark:text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
               </svg>
-              <span>{t('dashboard.honorBoard')}</span>
-          </button>
-          <div className="relative flex-grow">
-              <div className="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
-                  <svg className="w-4 h-4 text-slate-500 dark:text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
-                  </svg>
-              </div>
-              <input 
-                  type="text" 
-                  className="block w-full p-2.5 ps-10 text-sm text-slate-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 transition-colors" 
-                  placeholder={t('header.searchPlaceholder')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            </div>
+            <input
+              type="text"
+              className="block w-full p-2.5 ps-10 text-sm text-slate-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-orange-500 dark:focus:border-orange-500 transition-colors"
+              placeholder={t('header.searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
+
+          {/* Add Student — between search and honor board */}
+          <button
+            onClick={onAddStudent}
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span className="hidden sm:inline">{t('dashboard.addStudent')}</span>
+          </button>
+
+          {/* Honor Board */}
+          <button
+            onClick={() => setIsHonorBoardOpen(true)}
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-yellow-100 dark:bg-yellow-900/50 hover:bg-yellow-200 dark:hover:bg-yellow-900 text-yellow-700 dark:text-yellow-500 font-semibold rounded-lg shadow-sm transition-colors text-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9a9.75 9.75 0 0 1 9 0Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12.75 12.75A3.75 3.75 0 0 0 16.5 9.75v-2.625L12 3.75l-4.5 3.375v2.625a3.75 3.75 0 0 0 3.75 3Z" />
+            </svg>
+            <span>{t('dashboard.honorBoard')}</span>
+          </button>
         </div>
       </div>
 

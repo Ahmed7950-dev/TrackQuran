@@ -171,6 +171,7 @@ const App: React.FC = () => {
   const [isUserMenuOpen,           setIsUserMenuOpen]           = useState(false);
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
+  const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
   const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -272,6 +273,18 @@ const App: React.FC = () => {
       document.removeEventListener('click', handleClickOutside, true);
     };
   }, [isFontMenuOpen]);
+
+  useEffect(() => {
+    if (!isToolsMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (!target.closest('.tools-menu-btn') && !target.closest('.tools-menu-dropdown')) {
+        setIsToolsMenuOpen(false);
+      }
+    };
+    const tid = setTimeout(() => document.addEventListener('click', handler, true), 0);
+    return () => { clearTimeout(tid); document.removeEventListener('click', handler, true); };
+  }, [isToolsMenuOpen]);
 
   const handleSaveTajweedRules = (updatedRules: string[]) => {
     if (currentUser?.role !== 'teacher') return;
@@ -778,14 +791,35 @@ const App: React.FC = () => {
                 >{t('header.aboutUs')}</button>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                 <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
-                <button
-                    onClick={() => setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer')}
-                    className={`text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >{t('header.lettersTrainer')}</button>
-                <button
-                    onClick={() => setActiveTab(t => t === 'alphabetTrainer' ? 'main' : 'alphabetTrainer')}
-                    className={`text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >{t('header.alphabetTrainer')}</button>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
+                {/* Tools dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsToolsMenuOpen(o => !o)}
+                    className={`tools-menu-btn flex items-center gap-1 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' || activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                  >
+                    🛠️ Tools
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${isToolsMenuOpen ? 'rotate-180' : ''}`}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                  {isToolsMenuOpen && (
+                    <div className="tools-menu-dropdown absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 z-50 py-1 overflow-hidden">
+                      <button
+                        onClick={() => { setActiveTab('lettersTrainer'); setIsToolsMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'lettersTrainer' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                      >
+                        <span>🔡</span> {t('header.lettersTrainer')}
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('alphabetTrainer'); setIsToolsMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'alphabetTrainer' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                      >
+                        <span>🔤</span> {t('header.alphabetTrainer')}
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                     onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); }}
                     className={`text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -808,17 +842,6 @@ const App: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                         </svg>
                         <span className="hidden sm:inline">{t('common.back')}</span>
-                    </button>
-                )}
-                {!isDetailedView && (
-                    <button
-                        onClick={() => setIsAddStudentModalOpen(true)}
-                        className="px-4 py-2.5 bg-teal-600 dark:bg-orange-600 text-white font-semibold rounded-lg shadow-sm hover:bg-teal-700 dark:hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-orange-500 transition-all flex items-center justify-center gap-2"
-                        >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                        <span className="hidden sm:inline">{t('dashboard.addStudent')}</span>
                     </button>
                 )}
                 <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
@@ -954,6 +977,7 @@ const App: React.FC = () => {
             onSelectStudent={(id) => { setSelectedStudentId(id); setCurrentStudentView('details'); }}
             quranMetadata={QURAN_METADATA}
             onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
+            onAddStudent={() => setIsAddStudentModalOpen(true)}
           />
         )}
       </main>
