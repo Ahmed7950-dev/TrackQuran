@@ -133,7 +133,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           </span>
 
           {/* Desktop nav — centred, only shows md+ */}
-          <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
+          <nav className="flex-1 hidden md:flex justify-center items-center gap-4">
             <button
               onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
               className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -154,8 +154,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
               Vocabulary
             </button>
           </nav>
-
-          <div className="flex-1" />
 
           <NotificationCenter teacherId={student.teacherId} recipient="student" studentId={student.shareToken ?? ''} />
 
