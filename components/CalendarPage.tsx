@@ -12,6 +12,7 @@ import {
   getTeacherBookings,
   getStudentBookings,
   updateBookingStatus,
+  cancelBooking,
   isHourTaken,
   studentAlreadyBooked,
   istanbulDateString,
@@ -257,6 +258,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [bookingSlot,   setBookingSlot]   = useState<{ day: Date; dayIdx: number; hour: number; minute: 0 | 30 } | null>(null);
   /** Booking ID being actioned by the tutor (confirm / decline) */
   const [actioningId,   setActioningId]   = useState<string | null>(null);
+  /** Booking ID awaiting inline cancel confirmation */
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
 
   // Use profile timezone if provided, otherwise fall back to browser timezone
   const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -434,12 +437,35 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const handleTutorAction = async (bookingId: string, status: 'confirmed' | 'declined') => {
     setActioningId(bookingId);
     try {
-      await updateBookingStatus(bookingId, status);
+      const booking = myBookings.find(b => b.id === bookingId);
+      await updateBookingStatus(bookingId, status, booking);
       await loadBookings();
     } catch (e) {
       console.error('Failed to update booking status:', e);
     } finally {
       setActioningId(null);
+    }
+  };
+
+  const handleTutorCancel = async (b: LessonBooking) => {
+    try {
+      await cancelBooking(b, 'tutor');
+      await loadBookings();
+    } catch (e) {
+      console.error('Failed to cancel booking:', e);
+    } finally {
+      setCancelConfirmId(null);
+    }
+  };
+
+  const handleStudentCancel = async (b: LessonBooking) => {
+    try {
+      await cancelBooking(b, 'student');
+      setMyBookings(prev => prev.filter(x => x.id !== b.id));
+    } catch (e) {
+      console.error('Failed to cancel booking:', e);
+    } finally {
+      setCancelConfirmId(null);
     }
   };
 
@@ -805,6 +831,10 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
                   if (isStudentView) {
                     const style = bookingBlockStyle(b, isMyBooking, isDeclined);
+                    const canCancel = isMyBooking && !isDeclined &&
+                      (b.status === 'confirmed' || b.status === 'pending') &&
+                      heightPx >= 40;
+                    const isCancelConfirming = cancelConfirmId === b.id;
                     return (
                       <div
                         key={b.id}
@@ -819,6 +849,27 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                             {startLabel}–{endLabel}
                           </p>
                         )}
+                        {canCancel && !isCancelConfirming && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setCancelConfirmId(b.id); }}
+                            className={`mt-0.5 text-[8px] font-semibold leading-tight px-1 py-px rounded ${style.text} opacity-70 hover:opacity-100 underline`}
+                          >
+                            × Cancel
+                          </button>
+                        )}
+                        {canCancel && isCancelConfirming && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className={`text-[8px] ${style.text}`}>Cancel?</span>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleStudentCancel(b); }}
+                              className="text-[8px] font-bold px-1 py-px rounded bg-red-500 text-white leading-tight"
+                            >Yes</button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setCancelConfirmId(null); }}
+                              className="text-[8px] font-bold px-1 py-px rounded bg-slate-400 text-white leading-tight"
+                            >No</button>
+                          </div>
+                        )}
                       </div>
                     );
                   }
@@ -826,6 +877,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   // ── Tutor view ──
                   const { bg, text } = tutorBlockStyle(b);
                   const isActioning  = actioningId === b.id;
+                  const isTutorCancelConfirming = cancelConfirmId === b.id;
                   return (
                     <div
                       key={b.id}
@@ -836,7 +888,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       <p className={`text-[10px] font-bold leading-tight truncate ${text}`}>
                         {b.studentName} <span className="font-normal opacity-80">{startLabel} {b.durationMinutes}min</span>
                       </p>
-                      {/* Action buttons — only when there's enough room OR always show them compactly */}
+                      {/* Action buttons — pending: confirm/decline; confirmed: cancel */}
                       {b.status === 'pending' && (
                         <div className={`flex gap-1 ${isCompact ? 'mt-0' : 'mt-0.5'} flex-wrap`}>
                           <button
@@ -866,6 +918,27 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                               </svg>
                             </a>
                           )}
+                        </div>
+                      )}
+                      {b.status === 'confirmed' && !isTutorCancelConfirming && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setCancelConfirmId(b.id); }}
+                          className={`mt-0.5 text-[8px] font-semibold leading-tight px-1 py-px rounded ${text} opacity-70 hover:opacity-100 underline`}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {b.status === 'confirmed' && isTutorCancelConfirming && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`text-[8px] ${text}`}>Cancel?</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleTutorCancel(b); }}
+                            className="text-[8px] font-bold px-1 py-px rounded bg-red-600 text-white leading-tight"
+                          >Yes</button>
+                          <button
+                            onClick={e => { e.stopPropagation(); setCancelConfirmId(null); }}
+                            className="text-[8px] font-bold px-1 py-px rounded bg-slate-500 text-white leading-tight"
+                          >No</button>
                         </div>
                       )}
                       {!isCompact && b.studentNote && b.status === 'pending' && (
@@ -916,13 +989,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                     <div
                       key={ev.id}
                       title={`${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 cursor-default ${colourClass} opacity-90 hover:opacity-100 transition-opacity`}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 cursor-default ${colourClass} opacity-75 hover:opacity-90 transition-opacity border-l-2 border-dashed border-white/50`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
-                      <p className="text-[10px] font-bold text-white leading-tight truncate">{ev.summary}</p>
+                      <p className="text-[10px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
                       <p className="text-[9px] text-white/80 leading-tight">
                         {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
                       </p>
+                      <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
                     </div>
                   );
                 })}
@@ -952,6 +1026,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           whatsapp={studentWhatsApp}
           portalType={portalType}
           studentTZ={studentTimezone}
+          otherBookings={otherBookings}
+          availabilitySlots={availabilitySlots}
           onClose={() => setBookingSlot(null)}
           onBooked={booking => {
             setMyBookings(prev => [booking, ...prev]);

@@ -9,6 +9,7 @@ import type { Student, AttendanceRecord } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
+import NotificationCenter from './NotificationCenter';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1309,6 +1310,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           </nav>
 
           <div className="flex-1 md:hidden" />
+
+          <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
 
           {/* Student name badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">

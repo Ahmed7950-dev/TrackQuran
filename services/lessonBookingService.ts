@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { createNotification, formatBookingTime } from './notificationService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -198,7 +199,18 @@ export async function createLessonBooking(input: CreateBookingInput): Promise<Le
     .select()
     .single();
   if (error) throw error;
-  return rowToBooking(data as BookingRow);
+  const result = rowToBooking(data as BookingRow);
+  // Best-effort notification to the tutor
+  await createNotification({
+    teacherId: input.teacherId,
+    studentId: input.studentId,
+    recipient: 'tutor',
+    bookingId: result.id,
+    type:      'booking_requested',
+    title:     'New Lesson Request',
+    body:      `${input.studentName} requested a ${input.durationMinutes}min ${input.bookingType} lesson ${formatBookingTime(result)}`,
+  });
+  return result;
 }
 
 // ── Status update ─────────────────────────────────────────────────────────────
@@ -206,6 +218,7 @@ export async function createLessonBooking(input: CreateBookingInput): Promise<Le
 export async function updateBookingStatus(
   bookingId: string,
   status: 'confirmed' | 'declined' | 'cancelled',
+  booking?: LessonBooking,
 ): Promise<void> {
   const update: Record<string, unknown> = { status };
   if (status === 'confirmed') update.confirmed_at = new Date().toISOString();
@@ -214,6 +227,64 @@ export async function updateBookingStatus(
     .update(update)
     .eq('id', bookingId);
   if (error) throw error;
+  // Best-effort notifications to the student
+  if (booking) {
+    if (status === 'confirmed') {
+      await createNotification({
+        teacherId: booking.teacherId,
+        studentId: booking.studentId,
+        recipient: 'student',
+        bookingId: booking.id,
+        type:      'booking_confirmed',
+        title:     'Lesson Confirmed ✓',
+        body:      `Your ${booking.durationMinutes}min lesson ${formatBookingTime(booking)} has been confirmed!`,
+      });
+    } else if (status === 'declined') {
+      await createNotification({
+        teacherId: booking.teacherId,
+        studentId: booking.studentId,
+        recipient: 'student',
+        bookingId: booking.id,
+        type:      'booking_declined',
+        title:     'Lesson Request Declined',
+        body:      `Your ${booking.durationMinutes}min lesson request ${formatBookingTime(booking)} was not accepted`,
+      });
+    }
+  }
+}
+
+/** Cancel a booking and notify the other party. */
+export async function cancelBooking(
+  booking:     LessonBooking,
+  cancelledBy: 'tutor' | 'student',
+): Promise<void> {
+  const { error } = await supabase
+    .from('lesson_bookings')
+    .update({ status: 'cancelled' })
+    .eq('id', booking.id);
+  if (error) throw error;
+
+  if (cancelledBy === 'student') {
+    await createNotification({
+      teacherId: booking.teacherId,
+      studentId: booking.studentId,
+      recipient: 'tutor',
+      bookingId: booking.id,
+      type:      'booking_cancelled_by_student',
+      title:     'Lesson Cancelled',
+      body:      `${booking.studentName} cancelled their ${booking.durationMinutes}min ${booking.bookingType} lesson ${formatBookingTime(booking)}`,
+    });
+  } else {
+    await createNotification({
+      teacherId: booking.teacherId,
+      studentId: booking.studentId,
+      recipient: 'student',
+      bookingId: booking.id,
+      type:      'booking_cancelled_by_tutor',
+      title:     'Lesson Cancelled',
+      body:      `Your ${booking.durationMinutes}min lesson ${formatBookingTime(booking)} was cancelled by the tutor`,
+    });
+  }
 }
 
 // ── Slot-conflict helpers ─────────────────────────────────────────────────────

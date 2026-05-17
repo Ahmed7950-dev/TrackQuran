@@ -10,6 +10,7 @@ import {
   LessonBooking,
   BookingPortal,
 } from '../services/lessonBookingService';
+import { AvailabilitySlot } from '../services/availabilityService';
 
 /* ------------------------------------------------------------------ */
 /*  Timezone helpers (mirrors CalendarPage)                             */
@@ -62,9 +63,13 @@ interface BookingModalProps {
   whatsapp?:    string;
   portalType:   BookingPortal;
   /** Student's IANA timezone for display */
-  studentTZ?:   string;
-  onClose:      () => void;
-  onBooked:     (booking: LessonBooking) => void;
+  studentTZ?:        string;
+  /** Other students' bookings — used for weekly conflict validation */
+  otherBookings?:    LessonBooking[];
+  /** Tutor's recurring availability — used for weekly slot validation */
+  availabilitySlots?: AvailabilitySlot[];
+  onClose:           () => void;
+  onBooked:          (booking: LessonBooking) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -82,6 +87,8 @@ const BookingModal: React.FC<BookingModalProps> = ({
   whatsapp,
   portalType,
   studentTZ,
+  otherBookings,
+  availabilitySlots,
   onClose,
   onBooked,
 }) => {
@@ -92,6 +99,23 @@ const BookingModal: React.FC<BookingModalProps> = ({
   const [error,        setError]        = useState<string | null>(null);
 
   const resolvedTZ  = studentTZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // ── Weekly booking validation ─────────────────────────────────────────────
+
+  const weeklyConflict = bookingType === 'weekly' && otherBookings?.some(b =>
+    b.status === 'confirmed' &&
+    b.bookingType === 'weekly' &&
+    b.dayOfWeek === dayIdx &&
+    b.hour === hour &&
+    b.minute === minute,
+  );
+
+  const notRecurring = bookingType === 'weekly' &&
+    availabilitySlots !== undefined &&
+    !availabilitySlots.some(s => s.dayOfWeek === dayIdx && s.hour === hour);
+
+  // Disable submit when there's a hard conflict for weekly bookings
+  const submitDisabled = loading || (bookingType === 'weekly' && !!weeklyConflict);
 
   // Calculate end time (hour + minute + duration)
   const startTotalMin = hour * 60 + minute;
@@ -238,6 +262,18 @@ const BookingModal: React.FC<BookingModalProps> = ({
                 Repeats every <strong>{weekdayName}</strong> at <strong>{istanbulStr}</strong> tutor time once confirmed.
               </p>
             )}
+            {/* Weekly conflict warning */}
+            {weeklyConflict && (
+              <p className="mt-2 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 px-3 py-2 rounded-lg">
+                ⚠️ This time slot is permanently reserved weekly by another student. Please choose a different slot or book a one-time lesson.
+              </p>
+            )}
+            {/* Not-recurring warning */}
+            {!weeklyConflict && notRecurring && (
+              <p className="mt-2 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 px-3 py-2 rounded-lg">
+                ⚠️ This slot is available this week but the tutor has not marked it as a recurring time slot. A weekly booking may not be honoured in future weeks. Consider a one-time lesson instead.
+              </p>
+            )}
           </div>
 
           {/* Note */}
@@ -272,7 +308,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitDisabled}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading && (

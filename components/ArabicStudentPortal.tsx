@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { ArabicStudent } from '../types';
 import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
+import NotificationCenter from './NotificationCenter';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
@@ -155,6 +156,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           </nav>
 
           <div className="flex-1" />
+
+          <NotificationCenter teacherId={student.teacherId} recipient="student" studentId={student.shareToken ?? ''} />
 
           {/* Theme toggle */}
           <button
