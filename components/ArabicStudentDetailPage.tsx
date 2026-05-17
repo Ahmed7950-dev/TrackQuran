@@ -928,7 +928,12 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
       {/* ── Tutor's Availability section (student mode only) ── */}
       {activeSection === 'calendar' && studentMode && (
-        <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} isStudentView={true} />
+        <CalendarPage
+          gcalToken={gcalToken}
+          onTokenChange={setGcalToken}
+          isStudentView={true}
+          studentTimezone={student.timezone || undefined}
+        />
       )}
 
       {/* ── Profile section ── */}

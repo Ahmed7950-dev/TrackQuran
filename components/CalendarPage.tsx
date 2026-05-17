@@ -113,16 +113,19 @@ function formatMonthYear(monday: Date): string {
 /* ------------------------------------------------------------------ */
 
 interface CalendarPageProps {
-  gcalToken:     string | null;
-  onTokenChange: (token: string | null) => void;
+  gcalToken:        string | null;
+  onTokenChange:    (token: string | null) => void;
   /** When true: hides connect button, shows events as grey "Booked" blocks */
-  isStudentView?: boolean;
+  isStudentView?:   boolean;
+  /** IANA timezone string from the student's profile, e.g. "America/New_York" */
+  studentTimezone?: string;
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
   gcalToken,
   onTokenChange,
   isStudentView = false,
+  studentTimezone,
 }) => {
   const [monday,     setMonday]     = useState<Date>(() => getMonday(new Date()));
   const [events,     setEvents]     = useState<GCalEvent[]>([]);
@@ -131,8 +134,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [connecting, setConnecting] = useState(false);
   const currentTimeRef = useRef<HTMLDivElement>(null);
 
-  // Student's local timezone — always show dual in student view
-  const studentTZ  = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Use profile timezone if provided, otherwise fall back to browser timezone
+  const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const showDualTZ = isStudentView;
 
   /* ---------------------------------------------------------------- */
