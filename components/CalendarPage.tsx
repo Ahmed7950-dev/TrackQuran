@@ -133,12 +133,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   isStudentView = false,
   studentTimezone,
 }) => {
-  const [monday,     setMonday]     = useState<Date>(() => getMonday(new Date()));
-  const [events,     setEvents]     = useState<GCalEvent[]>([]);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
+  const [events,      setEvents]      = useState<GCalEvent[]>([]);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
+  const [connecting,  setConnecting]  = useState(false);
+  const [exporting,   setExporting]   = useState(false);
   const currentTimeRef = useRef<HTMLDivElement>(null);
+  const calendarGridRef = useRef<HTMLDivElement>(null);
 
   // Use profile timezone if provided, otherwise fall back to browser timezone
   const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -200,6 +202,34 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     disconnectGoogleCalendar();
     onTokenChange(null);
     setEvents([]);
+  };
+
+  /* ---------------------------------------------------------------- */
+  /*  PDF export                                                        */
+  /* ---------------------------------------------------------------- */
+
+  const handleExportPDF = async () => {
+    if (!calendarGridRef.current) return;
+    setExporting(true);
+    try {
+      const sunday    = addDays(monday, 6);
+      const filename  = `Tutor_Availability_${monday.toLocaleDateString('en-CA')}_to_${sunday.toLocaleDateString('en-CA')}.pdf`;
+      const html2pdf  = (window as any).html2pdf;
+      await html2pdf()
+        .set({
+          margin:      [8, 8, 8, 8],
+          filename,
+          image:       { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+          jsPDF:       { unit: 'mm', format: 'a3', orientation: 'landscape' },
+        })
+        .from(calendarGridRef.current)
+        .save();
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   /* ---------------------------------------------------------------- */
@@ -319,6 +349,27 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
           </svg>
         )}
+
+        {/* Export PDF — student view only */}
+        {isStudentView && (
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? (
+              <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+            )}
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        )}
       </div>
 
       {/* Error banner */}
@@ -332,7 +383,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       )}
 
       {/* Calendar grid */}
-      <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div ref={calendarGridRef} className="flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
         {/* Day header row */}
         <div
           className="grid sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700"
