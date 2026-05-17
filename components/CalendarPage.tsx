@@ -178,7 +178,7 @@ function bookingBlockStyle(
       if (b.bookingType === 'weekly') {
         return { bg: 'bg-purple-100 dark:bg-purple-900/40', border: 'border-purple-300 dark:border-purple-700', text: 'text-purple-800 dark:text-purple-200', label: '🔁 Weekly lesson' };
       }
-      return { bg: 'bg-teal-100 dark:bg-teal-900/40', border: 'border-teal-300 dark:border-teal-700', text: 'text-teal-800 dark:text-teal-200', label: '✓ Single lesson' };
+      return { bg: 'bg-blue-100 dark:bg-blue-900/40', border: 'border-blue-300 dark:border-blue-700', text: 'text-blue-800 dark:text-blue-200', label: '✓ Lesson' };
     default:
       return { bg: 'bg-slate-100 dark:bg-slate-800', border: 'border-slate-200 dark:border-slate-700', text: 'text-slate-500', label: '' };
   }
@@ -192,7 +192,7 @@ function tutorBlockStyle(b: LessonBooking): { bg: string; text: string } {
     case 'confirmed':
       return b.bookingType === 'weekly'
         ? { bg: 'bg-purple-500 dark:bg-purple-600', text: 'text-white' }
-        : { bg: 'bg-teal-500 dark:bg-teal-600',    text: 'text-white' };
+        : { bg: 'bg-blue-500 dark:bg-blue-600',     text: 'text-white' };
     default:
       return { bg: 'bg-slate-400', text: 'text-white' };
   }
@@ -260,6 +260,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [actioningId,   setActioningId]   = useState<string | null>(null);
   /** Booking ID awaiting inline cancel confirmation */
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  /** Booking whose detail panel is open */
+  const [selectedBooking, setSelectedBooking] = useState<LessonBooking | null>(null);
 
   // Use profile timezone if provided, otherwise fall back to browser timezone
   const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -455,6 +457,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       console.error('Failed to cancel booking:', e);
     } finally {
       setCancelConfirmId(null);
+      setSelectedBooking(null);
     }
   };
 
@@ -466,6 +469,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       console.error('Failed to cancel booking:', e);
     } finally {
       setCancelConfirmId(null);
+      setSelectedBooking(null);
     }
   };
 
@@ -570,8 +574,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 <span className="w-3 h-3 rounded bg-amber-200 dark:bg-amber-800 border border-amber-400 inline-block" />
                 Pending
               </span>
-              <span className="flex items-center gap-1 text-xs text-teal-700 dark:text-teal-400">
-                <span className="w-3 h-3 rounded bg-teal-200 dark:bg-teal-800 border border-teal-400 inline-block" />
+              <span className="flex items-center gap-1 text-xs text-blue-700 dark:text-blue-400">
+                <span className="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border border-blue-400 inline-block" />
                 Confirmed
               </span>
               <span className="flex items-center gap-1 text-xs text-purple-700 dark:text-purple-400">
@@ -831,15 +835,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
                   if (isStudentView) {
                     const style = bookingBlockStyle(b, isMyBooking, isDeclined);
-                    const canCancel = isMyBooking && !isDeclined &&
-                      (b.status === 'confirmed' || b.status === 'pending') &&
-                      heightPx >= 40;
-                    const isCancelConfirming = cancelConfirmId === b.id;
+                    const canClick = isMyBooking && !isDeclined;
                     return (
                       <div
                         key={b.id}
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 border ${style.bg} ${style.border} ${isDeclined ? 'animate-pulse' : ''}`}
+                        onClick={canClick ? () => setSelectedBooking(b) : undefined}
+                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 border ${style.bg} ${style.border} ${isDeclined ? 'animate-pulse' : ''} ${canClick ? 'cursor-pointer hover:brightness-95 transition-all' : ''}`}
                       >
                         <p className={`text-[10px] font-bold leading-tight truncate ${style.text}`}>
                           {isCompact ? `${style.label} ${startLabel}` : style.label}
@@ -849,102 +851,29 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                             {startLabel}–{endLabel}
                           </p>
                         )}
-                        {canCancel && !isCancelConfirming && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setCancelConfirmId(b.id); }}
-                            className={`mt-0.5 text-[8px] font-semibold leading-tight px-1 py-px rounded ${style.text} opacity-70 hover:opacity-100 underline`}
-                          >
-                            × Cancel
-                          </button>
-                        )}
-                        {canCancel && isCancelConfirming && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className={`text-[8px] ${style.text}`}>Cancel?</span>
-                            <button
-                              onClick={e => { e.stopPropagation(); handleStudentCancel(b); }}
-                              className="text-[8px] font-bold px-1 py-px rounded bg-red-500 text-white leading-tight"
-                            >Yes</button>
-                            <button
-                              onClick={e => { e.stopPropagation(); setCancelConfirmId(null); }}
-                              className="text-[8px] font-bold px-1 py-px rounded bg-slate-400 text-white leading-tight"
-                            >No</button>
-                          </div>
-                        )}
                       </div>
                     );
                   }
 
                   // ── Tutor view ──
                   const { bg, text } = tutorBlockStyle(b);
-                  const isActioning  = actioningId === b.id;
-                  const isTutorCancelConfirming = cancelConfirmId === b.id;
                   return (
                     <div
                       key={b.id}
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 ${bg}`}
+                      onClick={() => setSelectedBooking(b)}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 cursor-pointer hover:brightness-90 transition-all ${bg}`}
                     >
-                      {/* Always show name + time in one compact line */}
                       <p className={`text-[10px] font-bold leading-tight truncate ${text}`}>
-                        {b.studentName} <span className="font-normal opacity-80">{startLabel} {b.durationMinutes}min</span>
+                        {b.studentName}
                       </p>
-                      {/* Action buttons — pending: confirm/decline; confirmed: cancel */}
-                      {b.status === 'pending' && (
-                        <div className={`flex gap-1 ${isCompact ? 'mt-0' : 'mt-0.5'} flex-wrap`}>
-                          <button
-                            onClick={() => handleTutorAction(b.id, 'confirmed')}
-                            disabled={isActioning}
-                            className="px-1 py-px bg-green-600 hover:bg-green-700 text-white rounded text-[8px] font-bold transition-colors disabled:opacity-60 leading-tight"
-                          >
-                            {isActioning ? '…' : '✓'}
-                          </button>
-                          <button
-                            onClick={() => handleTutorAction(b.id, 'declined')}
-                            disabled={isActioning}
-                            className="px-1 py-px bg-red-600 hover:bg-red-700 text-white rounded text-[8px] font-bold transition-colors disabled:opacity-60 leading-tight"
-                          >
-                            ✗
-                          </button>
-                          {b.whatsapp && (
-                            <a
-                              href={`https://wa.me/${b.whatsapp.replace(/\D/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-1 py-px bg-[#25d366] hover:bg-[#1da851] text-white rounded text-[8px] font-bold transition-colors leading-tight"
-                              title={`WhatsApp ${b.studentName}`}
-                            >
-                              <svg viewBox="0 0 24 24" fill="currentColor" className="w-2 h-2 inline">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                              </svg>
-                            </a>
-                          )}
-                        </div>
-                      )}
-                      {b.status === 'confirmed' && !isTutorCancelConfirming && (
-                        <button
-                          onClick={e => { e.stopPropagation(); setCancelConfirmId(b.id); }}
-                          className={`mt-0.5 text-[8px] font-semibold leading-tight px-1 py-px rounded ${text} opacity-70 hover:opacity-100 underline`}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                      {b.status === 'confirmed' && isTutorCancelConfirming && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className={`text-[8px] ${text}`}>Cancel?</span>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleTutorCancel(b); }}
-                            className="text-[8px] font-bold px-1 py-px rounded bg-red-600 text-white leading-tight"
-                          >Yes</button>
-                          <button
-                            onClick={e => { e.stopPropagation(); setCancelConfirmId(null); }}
-                            className="text-[8px] font-bold px-1 py-px rounded bg-slate-500 text-white leading-tight"
-                          >No</button>
-                        </div>
-                      )}
-                      {!isCompact && b.studentNote && b.status === 'pending' && (
-                        <p className={`text-[8px] mt-0.5 italic truncate ${text} opacity-70`} title={b.studentNote}>
-                          "{b.studentNote}"
+                      {!isCompact && (
+                        <p className={`text-[9px] leading-tight ${text} opacity-80`}>
+                          {startLabel}–{endLabel} · {b.durationMinutes}min
                         </p>
+                      )}
+                      {isCompact && (
+                        <p className={`text-[9px] leading-tight ${text} opacity-80`}>{startLabel}</p>
                       )}
                     </div>
                   );
@@ -984,7 +913,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                     );
                   }
 
-                  const colourClass = GCAL_COLOURS[ev.colorId ?? ''] ?? 'bg-teal-500';
+                  const colourClass = GCAL_COLOURS[ev.colorId ?? ''] ?? 'bg-teal-400';
                   return (
                     <div
                       key={ev.id}
@@ -1012,6 +941,189 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           Connect Google Calendar above to display your events on this calendar.
         </p>
       )}
+
+      {/* Booking detail / cancel modal */}
+      {selectedBooking && (() => {
+        const b          = selectedBooking;
+        const isMine     = isStudentView ? b.studentId === studentId : true;
+        const startLabel = `${String(b.hour).padStart(2,'0')}:${String(b.minute).padStart(2,'0')}`;
+        const endMin     = b.hour * 60 + b.minute + b.durationMinutes;
+        const endLabel   = `${String(Math.floor(endMin / 60)).padStart(2,'0')}:${String(endMin % 60).padStart(2,'0')}`;
+        const isActioning     = actioningId === b.id;
+        const isCancelling    = cancelConfirmId === b.id;
+        const canCancel       = isMine && (b.status === 'confirmed' || b.status === 'pending');
+        const WEEKDAY_NAMES   = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const statusChip: Record<string, string> = {
+          pending:   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+          confirmed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+          declined:  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+          cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={e => { if (e.target === e.currentTarget) { setSelectedBooking(null); setCancelConfirmId(null); } }}
+          >
+            <div className="w-full max-w-sm bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-gray-700">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-blue-600 dark:text-blue-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Lesson Details</h2>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusChip[b.status] ?? statusChip.cancelled}`}>
+                      {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
+                      {b.bookingType === 'weekly' ? ' · Weekly' : ''}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSelectedBooking(null); setCancelConfirmId(null); }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-4 space-y-3">
+                {/* Student name (tutor view) */}
+                {!isStudentView && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300 flex-shrink-0">
+                      {b.studentName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{b.studentName}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{b.portalType} student</p>
+                    </div>
+                    {b.whatsapp && (
+                      <a
+                        href={`https://wa.me/${b.whatsapp.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto px-2.5 py-1.5 rounded-lg bg-[#25d366] hover:bg-[#1da851] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                        </svg>
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Time info */}
+                <div className="bg-slate-50 dark:bg-gray-700/60 rounded-xl px-4 py-3 space-y-1">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    {b.bookingType === 'weekly'
+                      ? `Every ${WEEKDAY_NAMES[b.dayOfWeek]}`
+                      : `${WEEKDAY_NAMES[b.dayOfWeek]}${b.specificDate ? ', ' + new Date(b.specificDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''}`}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {startLabel} – {endLabel} · {b.durationMinutes} min (tutor time)
+                  </p>
+                </div>
+
+                {/* Student note */}
+                {b.studentNote && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
+                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 mb-0.5">Student note</p>
+                    <p className="text-xs text-amber-800 dark:text-amber-200 italic">"{b.studentNote}"</p>
+                  </div>
+                )}
+
+                {/* Tutor pending actions */}
+                {!isStudentView && b.status === 'pending' && (
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => { handleTutorAction(b.id, 'confirmed'); setSelectedBooking(null); }}
+                      disabled={isActioning}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-60"
+                    >
+                      {isActioning ? '…' : '✓ Confirm'}
+                    </button>
+                    <button
+                      onClick={() => { handleTutorAction(b.id, 'declined'); setSelectedBooking(null); }}
+                      disabled={isActioning}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-60"
+                    >
+                      ✗ Decline
+                    </button>
+                  </div>
+                )}
+
+                {/* Cancel section */}
+                {canCancel && b.status !== 'pending' && (
+                  !isCancelling ? (
+                    <button
+                      onClick={() => setCancelConfirmId(b.id)}
+                      className="w-full py-2 rounded-xl text-sm font-semibold border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      Cancel this lesson
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-4 py-3 space-y-2">
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-300 text-center">Cancel this lesson?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => isStudentView ? handleStudentCancel(b) : handleTutorCancel(b)}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors"
+                        >
+                          Yes, cancel
+                        </button>
+                        <button
+                          onClick={() => setCancelConfirmId(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {/* Student pending: just show cancel option */}
+                {canCancel && b.status === 'pending' && (
+                  !isCancelling ? (
+                    <button
+                      onClick={() => setCancelConfirmId(b.id)}
+                      className="w-full py-2 rounded-xl text-sm font-semibold border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                      Cancel request
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-4 py-3 space-y-2">
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-300 text-center">Cancel this request?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleStudentCancel(b)}
+                          className="flex-1 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors"
+                        >
+                          Yes, cancel
+                        </button>
+                        <button
+                          onClick={() => setCancelConfirmId(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Booking modal */}
       {bookingSlot && studentId && studentName && teacherId && portalType && (
