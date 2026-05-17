@@ -32,7 +32,7 @@ import FamilyLinkPage from './components/FamilyLinkPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
 import AccountSettingsPage from './components/AccountSettingsPage';
-import { getStoredToken, wasConnected, silentRefresh } from './services/googleCalendarService';
+import { getStoredToken, wasConnected, silentRefresh, scheduleAutoRefresh, cancelAutoRefresh } from './services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from './services/availabilityService';
 
 const useTheme = () => {
@@ -189,6 +189,20 @@ const App: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Proactively refresh the token ~5 min before it expires so events never disappear
+  useEffect(() => {
+    if (gcalToken) {
+      scheduleAutoRefresh(
+        token => setGcalToken(token),
+        ()    => setGcalToken(null),
+      );
+    } else {
+      cancelAutoRefresh();
+    }
+  // gcalToken is the only dep; the callbacks are stable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gcalToken]);
 
   // Load teacher availability slots whenever the logged-in teacher changes
   useEffect(() => {

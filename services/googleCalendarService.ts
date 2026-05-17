@@ -52,6 +52,49 @@ export function disconnectGoogleCalendar() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(EXPIRY_KEY);
   localStorage.removeItem(CONNECTED_KEY);
+  cancelAutoRefresh();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Proactive auto-refresh                                              */
+/*                                                                      */
+/*  Schedules a silent token refresh ~5 minutes before expiry.         */
+/*  Call this whenever a token is obtained (connect / silent refresh).  */
+/*  It automatically re-schedules after each successful refresh, so    */
+/*  the token stays alive for as long as the page is open.             */
+/* ------------------------------------------------------------------ */
+
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleAutoRefresh(
+  onNewToken: (token: string) => void,
+  onExpired:  () => void,
+): void {
+  // Cancel any pending timer before setting a new one
+  if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+
+  const expiry = Number(localStorage.getItem(EXPIRY_KEY) ?? '0');
+  if (!expiry) return;
+
+  const msLeft = expiry - Date.now();
+  // Refresh 5 minutes before expiry; wait at least 10 s to avoid tight loops
+  const delay  = Math.max(msLeft - 5 * 60 * 1000, 10_000);
+
+  _refreshTimer = setTimeout(() => {
+    _refreshTimer = null;
+    silentRefresh(
+      token => {
+        onNewToken(token);
+        // Schedule the next cycle
+        scheduleAutoRefresh(onNewToken, onExpired);
+      },
+      onExpired,
+    );
+  }, delay);
+}
+
+export function cancelAutoRefresh(): void {
+  if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
 }
 
 /* ------------------------------------------------------------------ */
