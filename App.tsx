@@ -796,11 +796,11 @@ const App: React.FC = () => {
                 >{t('header.aboutUs')}</button>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                 <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
                 <button
                     onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'calendar' ? 'main' : 'calendar'); }}
                     className={`text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
                 >Calendar</button>
-                <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
                 {/* Tools dropdown */}
                 <div className="relative">
                   <button
