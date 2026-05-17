@@ -6,6 +6,7 @@ import {
   fetchGCalEvents,
   getStoredToken,
 } from '../services/googleCalendarService';
+import { AvailabilitySlot } from '../services/availabilityService';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -119,12 +120,14 @@ function formatMonthYear(monday: Date): string {
 /* ------------------------------------------------------------------ */
 
 interface CalendarPageProps {
-  gcalToken:        string | null;
-  onTokenChange:    (token: string | null) => void;
+  gcalToken:          string | null;
+  onTokenChange:      (token: string | null) => void;
   /** When true: hides connect button, shows events as grey "Booked" blocks */
-  isStudentView?:   boolean;
+  isStudentView?:     boolean;
   /** IANA timezone string from the student's profile, e.g. "America/New_York" */
-  studentTimezone?: string;
+  studentTimezone?:   string;
+  /** Tutor's working hours — shown as light teal background in each day column */
+  availabilitySlots?: AvailabilitySlot[];
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
@@ -132,6 +135,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   onTokenChange,
   isStudentView = false,
   studentTimezone,
+  availabilitySlots = [],
 }) => {
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
@@ -145,6 +149,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // Use profile timezone if provided, otherwise fall back to browser timezone
   const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const showDualTZ = isStudentView;
+
+  // Build a quick-lookup Set: "dayOfWeek-hour" (Mon=0 … Sun=6, same as DAYS index)
+  const availSet = new Set(availabilitySlots.map(s => `${s.dayOfWeek}-${s.hour}`));
 
   /* ---------------------------------------------------------------- */
   /*  Fetch events                                                      */
@@ -296,6 +303,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block" />
               {shortTZName(TUTOR_TIMEZONE)}
             </span>
+          </div>
+        )}
+
+        {/* Working hours legend — shown whenever availability slots exist */}
+        {availabilitySlots.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-teal-700 dark:text-teal-300">
+            <span className="w-4 h-4 rounded bg-teal-100 dark:bg-teal-900/40 border border-teal-300 dark:border-teal-700 inline-block flex-shrink-0" />
+            Tutor's working hours
           </div>
         )}
 
@@ -454,6 +469,15 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 className={`relative border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''}`}
                 style={{ height: `${HOUR_HEIGHT_PX * 25}px` }}
               >
+                {/* Availability / working-hour background */}
+                {HOURS.slice(0, 24).map(h => availSet.has(`${dayIdx}-${h}`) && (
+                  <div
+                    key={`avail-${h}`}
+                    style={{ top: `${h * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}
+                    className="absolute w-full bg-teal-100/60 dark:bg-teal-900/25 pointer-events-none"
+                  />
+                ))}
+
                 {/* Hour lines */}
                 {HOURS.map(h => (
                   <div

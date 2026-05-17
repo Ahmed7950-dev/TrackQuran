@@ -31,8 +31,9 @@ import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
-import AccountSettingsModal from './components/AccountSettingsModal';
+import AccountSettingsPage from './components/AccountSettingsPage';
 import { getStoredToken, wasConnected, silentRefresh } from './services/googleCalendarService';
+import { getTeacherAvailability, AvailabilitySlot } from './services/availabilityService';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -175,8 +176,8 @@ const App: React.FC = () => {
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
-  const [isAccountSettingsOpen,    setIsAccountSettingsOpen]    = useState(false);
   const [gcalToken,                setGcalToken]                = useState<string | null>(() => getStoredToken());
+  const [availabilitySlots,        setAvailabilitySlots]        = useState<AvailabilitySlot[]>([]);
 
   // Silently re-acquire the token on page load if it expired but the user was previously connected
   useEffect(() => {
@@ -188,8 +189,17 @@ const App: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load teacher availability slots whenever the logged-in teacher changes
+  useEffect(() => {
+    if (currentUser?.role === 'teacher') {
+      getTeacherAvailability(currentUser.id).then(setAvailabilitySlots);
+    } else {
+      setAvailabilitySlots([]);
+    }
+  }, [currentUser]);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportBackup = () => {
@@ -723,25 +733,70 @@ const App: React.FC = () => {
               >{t('header.switchToQuran')}</button>
             </nav>
             <div className="flex-1 md:hidden" />
-            <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
-              {currentTheme === 'dark' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
-              ) : currentTheme === 'reading' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25c0 5.385 4.365 9.75 9.75 9.75 2.572 0 4.921-.994 6.697-2.648Z" /></svg>
-              )}
-            </button>
-            <button onClick={logout} className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors" title="Logout">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+                {currentTheme === 'dark' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+                ) : currentTheme === 'reading' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25c0 5.385 4.365 9.75 9.75 9.75 2.572 0 4.921-.994 6.697-2.648Z" /></svg>
+                )}
+              </button>
+              {/* Arabic user menu — same as Quran section */}
+              <div className="relative">
+                <button onClick={() => setIsUserMenuOpen(o => !o)} className="flex items-center gap-2 p-1.5 rounded-full bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
+                  <span className="w-7 h-7 bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300 rounded-full flex items-center justify-center font-bold text-sm">{currentUser.name.charAt(0).toUpperCase()}</span>
+                  <span className="hidden sm:inline text-sm font-semibold text-slate-700 dark:text-slate-200 pe-2">{currentUser.name}</span>
+                </button>
+                {isUserMenuOpen && (
+                  <div className="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                    <div className="py-1">
+                      <button onClick={() => { setIsUserMenuOpen(false); setActiveTab('accountSettings'); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                        Account Settings
+                      </button>
+                      {gcalToken ? (
+                        <button onClick={() => { setIsUserMenuOpen(false); import('./services/googleCalendarService').then(m => { m.disconnectGoogleCalendar(); setGcalToken(null); }); }} className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3">
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                          Disconnect Google Calendar
+                        </button>
+                      ) : (
+                        <button onClick={() => { setIsUserMenuOpen(false); setActiveTab('calendar'); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                          Connect Google Calendar
+                        </button>
+                      )}
+                      <div className="border-t border-slate-200 dark:border-gray-700 my-1" />
+                      <button onClick={() => { setIsUserMenuOpen(false); setIsContactSupportOpen(true); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>
+                        {t('userMenu.contactSupport')}
+                      </button>
+                      <div className="border-t border-slate-200 dark:border-gray-700 my-1" />
+                      <button onClick={logout} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
+                        {t('userMenu.logout')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </header>
         <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
-          {activeTab === 'aboutUs' ? (
+          {activeTab === 'accountSettings' ? (
+            <AccountSettingsPage
+              teacherId={currentUser.id}
+              userName={currentUser.name}
+              userEmail={currentUser.email ?? ''}
+              onBack={() => setActiveTab('main')}
+              onAvailabilityChange={setAvailabilitySlots}
+            />
+          ) : activeTab === 'aboutUs' ? (
             <AboutUsPage />
           ) : activeTab === 'calendar' ? (
-            <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} />
+            <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} availabilitySlots={availabilitySlots} />
           ) : activeTab === 'vocabulary' ? (
             selectedArabicStudent ? (
               <VocabularyPracticePage studentId={selectedArabicStudent.id} />
@@ -923,7 +978,7 @@ const App: React.FC = () => {
                         <div className="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                             <div className="py-1">
                                 {/* Account Settings */}
-                                <button onClick={() => { setIsUserMenuOpen(false); setIsAccountSettingsOpen(true); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
+                                <button onClick={() => { setIsUserMenuOpen(false); setActiveTab('accountSettings'); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
                                     Account Settings
                                 </button>
@@ -964,7 +1019,15 @@ const App: React.FC = () => {
         </div>
       </header>
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
-        {activeTab === 'lettersTrainer' ? (
+        {activeTab === 'accountSettings' ? (
+          <AccountSettingsPage
+            teacherId={currentUser.id}
+            userName={currentUser.name}
+            userEmail={currentUser.email ?? ''}
+            onBack={() => setActiveTab('main')}
+            onAvailabilityChange={setAvailabilitySlots}
+          />
+        ) : activeTab === 'lettersTrainer' ? (
           <LettersTrainerPage />
         ) : activeTab === 'alphabetTrainer' ? (
           <AlphabetTrainerPage />
@@ -973,7 +1036,7 @@ const App: React.FC = () => {
         ) : activeTab === 'tajweed' ? (
           <TajweedPage students={students} />
         ) : activeTab === 'calendar' ? (
-          <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} />
+          <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} availabilitySlots={availabilitySlots} />
         ) : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}
@@ -1039,13 +1102,6 @@ const App: React.FC = () => {
         quranStudents={students}
         arabicStudents={arabicStudents}
         onUpdateArabicStudent={handleUpdateArabicStudent}
-      />
-
-      <AccountSettingsModal
-        isOpen={isAccountSettingsOpen}
-        onClose={() => setIsAccountSettingsOpen(false)}
-        userName={currentUser.name}
-        userEmail={currentUser.email ?? ''}
       />
 
       <div className="no-print">

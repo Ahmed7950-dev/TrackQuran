@@ -18,6 +18,7 @@ import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
+import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 
 interface Props {
   student: ArabicStudent;
@@ -701,10 +702,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar'>('lessons');
   const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
 
   useEffect(() => {
     getArabicLessons().then(setLessons);
   }, []);
+
+  // Load teacher availability so the student can see working hours
+  useEffect(() => {
+    if (teacherId) getTeacherAvailability(teacherId).then(setAvailabilitySlots);
+  }, [teacherId]);
 
   const completedCount = student.completedLessonIds.length;
   const pct            = progressPercent(student);
@@ -933,6 +940,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           onTokenChange={setGcalToken}
           isStudentView={true}
           studentTimezone={student.timezone || undefined}
+          availabilitySlots={availabilitySlots}
         />
       )}
 

@@ -8,6 +8,7 @@ import AboutUsPage from './AboutUsPage';
 import type { Student, AttendanceRecord } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
+import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1112,7 +1113,8 @@ const ProgressTab: React.FC<{
 const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
-  const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData } | null>(null);
+  const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null>(null);
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar'>('mistakes');
@@ -1168,6 +1170,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         setReport(r);
         // Initialise font from teacher's saved preference stored in the report
         if (r.report_data.quranicFont) setQuranicFont(r.report_data.quranicFont);
+        // Load teacher's availability so student can see working hours
+        if (r.teacher_id) getTeacherAvailability(r.teacher_id).then(setAvailabilitySlots);
       }
       setLoading(false);
     });
@@ -1445,6 +1449,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 gcalToken={gcalToken}
                 onTokenChange={setGcalToken}
                 isStudentView={true}
+                availabilitySlots={availabilitySlots}
               />
             )}
             {activeTab === 'mistakes' && (
