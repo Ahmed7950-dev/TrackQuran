@@ -785,11 +785,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 {dayBookings.map(b => {
                   const isDeclined  = declinedIds.has(b.id);
                   const isMyBooking = isStudentView ? b.studentId === studentId : true;
-                  // Hide declined bookings that have faded out (not in declinedIds)
-                  if (isStudentView && b.status === 'declined' && !isDeclined) return null;
 
-                  const topPx     = b.hour * HOUR_HEIGHT_PX + (b.minute / 60) * HOUR_HEIGHT_PX;
-                  const heightPx  = (b.durationMinutes / 60) * HOUR_HEIGHT_PX;
+                  // Bug fix 1: hide declined — student view shows briefly in red, tutor view removes immediately
+                  if (b.status === 'declined') {
+                    if (isStudentView && !isDeclined) return null;  // student: hide after 3s fade
+                    if (!isStudentView) return null;                // tutor: remove right away
+                  }
+
+                  const topPx    = b.hour * HOUR_HEIGHT_PX + (b.minute / 60) * HOUR_HEIGHT_PX;
+                  // Bug fix 2: use exact duration height — no forced minimum
+                  const heightPx = (b.durationMinutes / 60) * HOUR_HEIGHT_PX;
+                  // Compact mode when the block is too short to show multi-line content
+                  const isCompact = heightPx < 44;
+
+                  // Helper: format end time label
+                  const endTotalMin = b.hour * 60 + b.minute + b.durationMinutes;
+                  const endLabel    = `${String(Math.floor(endTotalMin / 60)).padStart(2,'0')}:${String(endTotalMin % 60).padStart(2,'0')}`;
+                  const startLabel  = `${String(b.hour).padStart(2,'0')}:${String(b.minute).padStart(2,'0')}`;
 
                   if (isStudentView) {
                     const style = bookingBlockStyle(b, isMyBooking, isDeclined);
@@ -797,15 +809,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       <div
                         key={b.id}
                         style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-20 border ${style.bg} ${style.border} ${isDeclined ? 'animate-pulse' : ''}`}
+                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 border ${style.bg} ${style.border} ${isDeclined ? 'animate-pulse' : ''}`}
                       >
                         <p className={`text-[10px] font-bold leading-tight truncate ${style.text}`}>
-                          {style.label}
+                          {isCompact ? `${style.label} ${startLabel}` : style.label}
                         </p>
-                        {b.durationMinutes >= 25 && heightPx >= 30 && (
+                        {!isCompact && (
                           <p className={`text-[9px] leading-tight ${style.text} opacity-75`}>
-                            {String(b.hour).padStart(2,'0')}:{String(b.minute).padStart(2,'0')}
-                            –{(() => { const e = b.hour * 60 + b.minute + b.durationMinutes; return `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`; })()}
+                            {startLabel}–{endLabel}
                           </p>
                         )}
                       </div>
@@ -818,47 +829,46 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                     <div
                       key={b.id}
-                      style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 56)}px` }}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-20 ${bg}`}
+                      style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 ${bg}`}
                     >
+                      {/* Always show name + time in one compact line */}
                       <p className={`text-[10px] font-bold leading-tight truncate ${text}`}>
-                        {b.studentName}
+                        {b.studentName} <span className="font-normal opacity-80">{startLabel} {b.durationMinutes}min</span>
                       </p>
-                      <p className={`text-[9px] leading-tight ${text} opacity-80`}>
-                        {String(b.hour).padStart(2,'0')}:{String(b.minute).padStart(2,'0')} · {b.durationMinutes}min · {b.bookingType === 'weekly' ? '🔁' : '✓'}
-                      </p>
+                      {/* Action buttons — only when there's enough room OR always show them compactly */}
                       {b.status === 'pending' && (
-                        <div className="flex gap-1 mt-1 flex-wrap">
+                        <div className={`flex gap-1 ${isCompact ? 'mt-0' : 'mt-0.5'} flex-wrap`}>
                           <button
                             onClick={() => handleTutorAction(b.id, 'confirmed')}
                             disabled={isActioning}
-                            className="px-1.5 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold transition-colors disabled:opacity-60"
+                            className="px-1 py-px bg-green-600 hover:bg-green-700 text-white rounded text-[8px] font-bold transition-colors disabled:opacity-60 leading-tight"
                           >
-                            {isActioning ? '…' : '✓ Confirm'}
+                            {isActioning ? '…' : '✓'}
                           </button>
                           <button
                             onClick={() => handleTutorAction(b.id, 'declined')}
                             disabled={isActioning}
-                            className="px-1.5 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-bold transition-colors disabled:opacity-60"
+                            className="px-1 py-px bg-red-600 hover:bg-red-700 text-white rounded text-[8px] font-bold transition-colors disabled:opacity-60 leading-tight"
                           >
-                            ✗ Decline
+                            ✗
                           </button>
                           {b.whatsapp && (
                             <a
                               href={`https://wa.me/${b.whatsapp.replace(/\D/g, '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-1.5 py-0.5 bg-[#25d366] hover:bg-[#1da851] text-white rounded text-[9px] font-bold transition-colors"
+                              className="px-1 py-px bg-[#25d366] hover:bg-[#1da851] text-white rounded text-[8px] font-bold transition-colors leading-tight"
                               title={`WhatsApp ${b.studentName}`}
                             >
-                              <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 inline">
+                              <svg viewBox="0 0 24 24" fill="currentColor" className="w-2 h-2 inline">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
                               </svg>
                             </a>
                           )}
                         </div>
                       )}
-                      {b.studentNote && b.status === 'pending' && (
+                      {!isCompact && b.studentNote && b.status === 'pending' && (
                         <p className={`text-[8px] mt-0.5 italic truncate ${text} opacity-70`} title={b.studentNote}>
                           "{b.studentNote}"
                         </p>
