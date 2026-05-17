@@ -1450,6 +1450,10 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 onTokenChange={setGcalToken}
                 isStudentView={true}
                 availabilitySlots={availabilitySlots}
+                teacherId={report?.teacher_id}
+                studentId={report?.student_id}
+                studentName={report?.student_name}
+                portalType="quran"
               />
             )}
             {activeTab === 'mistakes' && (

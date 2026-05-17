@@ -7,6 +7,18 @@ import {
   getStoredToken,
 } from '../services/googleCalendarService';
 import { AvailabilitySlot } from '../services/availabilityService';
+import {
+  LessonBooking,
+  getTeacherBookings,
+  getStudentBookings,
+  updateBookingStatus,
+  isHourTaken,
+  studentAlreadyBooked,
+  istanbulDateString,
+  isSlotInPast,
+} from '../services/lessonBookingService';
+import BookingModal from './BookingModal';
+import { supabase } from '../lib/supabase';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -116,18 +128,101 @@ function formatMonthYear(monday: Date): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Booking helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Decide which bookings should appear in a given day column.
+ * - Single bookings: shown on their specificDate.
+ * - Weekly bookings: shown on every matching dayOfWeek on/after
+ *   the confirmed/requested date.
+ */
+function bookingsForDay(bookings: LessonBooking[], day: Date, dayIdx: number): LessonBooking[] {
+  const dateStr = istanbulDateString(day);
+  return bookings.filter(b => {
+    if (b.status === 'cancelled') return false;
+    if (b.bookingType === 'single') {
+      return b.specificDate === dateStr;
+    }
+    // weekly
+    if (b.dayOfWeek !== dayIdx) return false;
+    const startFrom = (b.status === 'confirmed' && b.confirmedAt)
+      ? b.confirmedAt
+      : b.requestedAt;
+    const startDateStr = istanbulDateString(new Date(startFrom));
+    return dateStr >= startDateStr;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Booking block colours                                               */
+/* ------------------------------------------------------------------ */
+
+function bookingBlockStyle(
+  b:           LessonBooking,
+  isMyBooking: boolean,
+  isDeclined:  boolean,
+): { bg: string; border: string; text: string; label: string } {
+  if (isDeclined) {
+    return { bg: 'bg-red-100 dark:bg-red-900/40', border: 'border-red-300 dark:border-red-700', text: 'text-red-700 dark:text-red-300', label: '✗ Declined' };
+  }
+  if (!isMyBooking) {
+    // Another student's confirmed slot — grey
+    return { bg: 'bg-slate-200 dark:bg-slate-700', border: 'border-slate-300 dark:border-slate-600', text: 'text-slate-600 dark:text-slate-300', label: 'Booked' };
+  }
+  switch (b.status) {
+    case 'pending':
+      return { bg: 'bg-amber-100 dark:bg-amber-900/40', border: 'border-amber-300 dark:border-amber-700', text: 'text-amber-800 dark:text-amber-200', label: '⏳ Waiting approval' };
+    case 'confirmed':
+      if (b.bookingType === 'weekly') {
+        return { bg: 'bg-purple-100 dark:bg-purple-900/40', border: 'border-purple-300 dark:border-purple-700', text: 'text-purple-800 dark:text-purple-200', label: '🔁 Weekly lesson' };
+      }
+      return { bg: 'bg-teal-100 dark:bg-teal-900/40', border: 'border-teal-300 dark:border-teal-700', text: 'text-teal-800 dark:text-teal-200', label: '✓ Single lesson' };
+    default:
+      return { bg: 'bg-slate-100 dark:bg-slate-800', border: 'border-slate-200 dark:border-slate-700', text: 'text-slate-500', label: '' };
+  }
+}
+
+/** Tutor-side booking block colours */
+function tutorBlockStyle(b: LessonBooking): { bg: string; text: string } {
+  switch (b.status) {
+    case 'pending':
+      return { bg: 'bg-amber-400 dark:bg-amber-500', text: 'text-amber-900 dark:text-amber-950' };
+    case 'confirmed':
+      return b.bookingType === 'weekly'
+        ? { bg: 'bg-purple-500 dark:bg-purple-600', text: 'text-white' }
+        : { bg: 'bg-teal-500 dark:bg-teal-600',    text: 'text-white' };
+    default:
+      return { bg: 'bg-slate-400', text: 'text-white' };
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                           */
 /* ------------------------------------------------------------------ */
 
 interface CalendarPageProps {
   gcalToken:          string | null;
   onTokenChange:      (token: string | null) => void;
-  /** When true: hides connect button, shows events as grey "Booked" blocks */
+  /** When true: hides connect button, shows booking UI for the student */
   isStudentView?:     boolean;
   /** IANA timezone string from the student's profile, e.g. "America/New_York" */
   studentTimezone?:   string;
   /** Tutor's working hours — shown as light teal background in each day column */
   availabilitySlots?: AvailabilitySlot[];
+  // ── Booking props (all optional — CalendarPage works without them) ──
+  /** Teacher's Supabase user id */
+  teacherId?:         string;
+  /** Opaque student identifier (share token / report id) */
+  studentId?:         string;
+  /** Student's display name */
+  studentName?:       string;
+  /** Student's WhatsApp number — Arabic portal only */
+  studentWhatsApp?:   string;
+  /** Which portal the student is using */
+  portalType?:        'arabic' | 'quran';
+  /** Called whenever the count of pending bookings changes (for nav badge) */
+  onPendingCountChange?: (n: number) => void;
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
@@ -136,6 +231,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   isStudentView = false,
   studentTimezone,
   availabilitySlots = [],
+  teacherId,
+  studentId,
+  studentName,
+  studentWhatsApp,
+  portalType,
+  onPendingCountChange,
 }) => {
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
@@ -143,8 +244,19 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [error,       setError]       = useState<string | null>(null);
   const [connecting,  setConnecting]  = useState(false);
   const [exporting,   setExporting]   = useState(false);
-  const currentTimeRef = useRef<HTMLDivElement>(null);
+  const currentTimeRef  = useRef<HTMLDivElement>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
+
+  // ── Booking state ────────────────────────────────────────────────────────
+  /** All bookings for this teacher (loaded once + kept live via Realtime) */
+  const [myBookings,    setMyBookings]    = useState<LessonBooking[]>([]);
+  const [otherBookings, setOtherBookings] = useState<LessonBooking[]>([]);
+  /** IDs of just-declined bookings (student view) — shown briefly in red */
+  const [declinedIds,   setDeclinedIds]   = useState<Set<string>>(new Set());
+  /** Slot the student clicked — triggers BookingModal */
+  const [bookingSlot,   setBookingSlot]   = useState<{ day: Date; dayIdx: number; hour: number } | null>(null);
+  /** Booking ID being actioned by the tutor (confirm / decline) */
+  const [actioningId,   setActioningId]   = useState<string | null>(null);
 
   // Use profile timezone if provided, otherwise fall back to browser timezone
   const studentTZ  = studentTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -153,8 +265,11 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // Build a quick-lookup Set: "dayOfWeek-hour" (Mon=0 … Sun=6, same as DAYS index)
   const availSet = new Set(availabilitySlots.map(s => `${s.dayOfWeek}-${s.hour}`));
 
+  // Booking is enabled when we have both teacherId and (student context OR tutor)
+  const bookingEnabled = !!teacherId;
+
   /* ---------------------------------------------------------------- */
-  /*  Fetch events                                                      */
+  /*  Fetch GCal events                                                 */
   /* ---------------------------------------------------------------- */
 
   const loadEvents = useCallback(async (token: string, weekMonday: Date) => {
@@ -175,6 +290,79 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     if (gcalToken) loadEvents(gcalToken, monday);
     else           setEvents([]);
   }, [gcalToken, monday, loadEvents]);
+
+  /* ---------------------------------------------------------------- */
+  /*  Fetch lesson bookings + Realtime subscription                     */
+  /* ---------------------------------------------------------------- */
+
+  const notifyPendingCount = useCallback((bookings: LessonBooking[]) => {
+    if (!onPendingCountChange) return;
+    const n = bookings.filter(b => b.status === 'pending').length;
+    onPendingCountChange(n);
+  }, [onPendingCountChange]);
+
+  const loadBookings = useCallback(async () => {
+    if (!teacherId) return;
+    try {
+      if (isStudentView && studentId) {
+        const { mine, others } = await getStudentBookings(teacherId, studentId);
+        setMyBookings(mine);
+        setOtherBookings(others);
+        // Mark newly declined as transient
+        mine.filter(b => b.status === 'declined').forEach(b => {
+          setDeclinedIds(prev => {
+            if (prev.has(b.id)) return prev;
+            const next = new Set(prev);
+            next.add(b.id);
+            setTimeout(() => setDeclinedIds(p => { const s = new Set(p); s.delete(b.id); return s; }), 3000);
+            return next;
+          });
+        });
+      } else if (!isStudentView) {
+        const all = await getTeacherBookings(teacherId);
+        setMyBookings(all);
+        notifyPendingCount(all);
+      }
+    } catch (e) {
+      console.error('Failed to load bookings:', e);
+    }
+  }, [teacherId, isStudentView, studentId, notifyPendingCount]);
+
+  useEffect(() => {
+    loadBookings();
+  }, [loadBookings]);
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!teacherId) return;
+    const channel = supabase
+      .channel(`lesson_bookings_${teacherId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'lesson_bookings', filter: `teacher_id=eq.${teacherId}` },
+        (payload) => {
+          // Re-fetch on any change; simple and reliable
+          loadBookings();
+          // If student's booking was just declined, flash it
+          if (isStudentView && studentId && payload.eventType === 'UPDATE') {
+            const row = payload.new as { id?: string; status?: string; student_id?: string };
+            if (row.status === 'declined' && row.student_id === studentId && row.id) {
+              const id = row.id;
+              setDeclinedIds(prev => {
+                const next = new Set(prev);
+                next.add(id);
+                return next;
+              });
+              setTimeout(() => {
+                setDeclinedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+              }, 3000);
+            }
+          }
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [teacherId, isStudentView, studentId, loadBookings]);
 
   /* ---------------------------------------------------------------- */
   /*  Current-time indicator                                            */
@@ -240,6 +428,38 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   };
 
   /* ---------------------------------------------------------------- */
+  /*  Tutor actions — confirm / decline                                 */
+  /* ---------------------------------------------------------------- */
+
+  const handleTutorAction = async (bookingId: string, status: 'confirmed' | 'declined') => {
+    setActioningId(bookingId);
+    try {
+      await updateBookingStatus(bookingId, status);
+      await loadBookings();
+    } catch (e) {
+      console.error('Failed to update booking status:', e);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  /* ---------------------------------------------------------------- */
+  /*  Student slot click                                                */
+  /* ---------------------------------------------------------------- */
+
+  const handleSlotClick = (dayIdx: number, day: Date, hour: number) => {
+    if (!isStudentView || !studentId || !teacherId || !studentName) return;
+    if (isSlotInPast(day, hour)) return;
+    const dateStr   = istanbulDateString(day);
+    const allMine   = myBookings;
+    // Don't allow clicking a slot already taken by another confirmed booking
+    if (isHourTaken([...myBookings, ...otherBookings], dayIdx, hour, dateStr, studentId)) return;
+    // Don't allow duplicate booking for the student themselves
+    if (studentAlreadyBooked(allMine.filter(b => b.status !== 'declined'), dayIdx, hour, dateStr)) return;
+    setBookingSlot({ day, dayIdx, hour });
+  };
+
+  /* ---------------------------------------------------------------- */
   /*  Navigation                                                        */
   /* ---------------------------------------------------------------- */
 
@@ -256,6 +476,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   /* ---------------------------------------------------------------- */
   /*  Render                                                            */
   /* ---------------------------------------------------------------- */
+
+  // All bookings to consider for student view = mine + others
+  const allBookingsForStudent = [...myBookings, ...otherBookings];
 
   return (
     <div className="flex flex-col h-full">
@@ -306,13 +529,33 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           </div>
         )}
 
-        {/* Working hours legend — shown whenever availability slots exist */}
-        {availabilitySlots.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs font-medium text-teal-700 dark:text-teal-300">
-            <span className="w-4 h-4 rounded bg-teal-100 dark:bg-teal-900/40 border border-teal-300 dark:border-teal-700 inline-block flex-shrink-0" />
-            Tutor's working hours
-          </div>
-        )}
+        {/* Legend row */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Working hours legend */}
+          {availabilitySlots.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs font-medium text-teal-700 dark:text-teal-300">
+              <span className="w-4 h-4 rounded bg-teal-100 dark:bg-teal-900/40 border border-teal-300 dark:border-teal-700 inline-block flex-shrink-0" />
+              {isStudentView && bookingEnabled ? 'Click a slot to book' : 'Tutor\'s working hours'}
+            </div>
+          )}
+          {/* Student booking legend */}
+          {isStudentView && bookingEnabled && (
+            <>
+              <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                <span className="w-3 h-3 rounded bg-amber-200 dark:bg-amber-800 border border-amber-400 inline-block" />
+                Pending
+              </span>
+              <span className="flex items-center gap-1 text-xs text-teal-700 dark:text-teal-400">
+                <span className="w-3 h-3 rounded bg-teal-200 dark:bg-teal-800 border border-teal-400 inline-block" />
+                Confirmed
+              </span>
+              <span className="flex items-center gap-1 text-xs text-purple-700 dark:text-purple-400">
+                <span className="w-3 h-3 rounded bg-purple-200 dark:bg-purple-800 border border-purple-400 inline-block" />
+                Weekly
+              </span>
+            </>
+          )}
+        </div>
 
         {/* Connect / disconnect (tutor only) */}
         {!isStudentView && (
@@ -352,7 +595,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           )
         )}
 
-        {/* Student view — no token info */}
+        {/* Student view */}
         {isStudentView && !gcalToken && (
           <span className="text-sm text-slate-400 dark:text-slate-500 italic">
             Your tutor hasn't set up calendar sharing yet.
@@ -463,27 +706,56 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           {weekDays.map((day, dayIdx) => {
             const isToday    = isSameDay(day, today);
             const dayEvents  = eventsForDay(day);
+            const dayBookings = bookingEnabled
+              ? bookingsForDay(
+                  isStudentView ? allBookingsForStudent : myBookings,
+                  day,
+                  dayIdx,
+                )
+              : [];
+
             return (
               <div
                 key={dayIdx}
                 className={`relative border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''}`}
                 style={{ height: `${HOUR_HEIGHT_PX * 25}px` }}
               >
-                {/* Availability / working-hour background */}
-                {HOURS.slice(0, 24).map(h => availSet.has(`${dayIdx}-${h}`) && (
-                  <div
-                    key={`avail-${h}`}
-                    style={{ top: `${h * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}
-                    className="absolute w-full bg-teal-100/60 dark:bg-teal-900/25 pointer-events-none"
-                  />
-                ))}
+                {/* Availability / working-hour background — clickable in student view */}
+                {HOURS.slice(0, 24).map(h => {
+                  const isAvail = availSet.has(`${dayIdx}-${h}`);
+                  if (!isAvail) return null;
+
+                  const canBook = isStudentView && bookingEnabled && studentId && studentName && !isSlotInPast(day, h);
+                  const dateStr = istanbulDateString(day);
+                  const taken   = canBook && isHourTaken(
+                    [...myBookings, ...otherBookings], dayIdx, h, dateStr, studentId,
+                  );
+                  const alreadyMine = canBook && studentAlreadyBooked(
+                    myBookings.filter(b => b.status !== 'declined'), dayIdx, h, dateStr,
+                  );
+                  const clickable = canBook && !taken && !alreadyMine;
+
+                  return (
+                    <div
+                      key={`avail-${h}`}
+                      style={{ top: `${h * HOUR_HEIGHT_PX}px`, height: `${HOUR_HEIGHT_PX}px` }}
+                      className={`absolute w-full bg-teal-100/60 dark:bg-teal-900/25 ${
+                        clickable
+                          ? 'cursor-pointer hover:bg-teal-200/70 dark:hover:bg-teal-800/40 transition-colors'
+                          : 'pointer-events-none'
+                      }`}
+                      onClick={clickable ? () => handleSlotClick(dayIdx, day, h) : undefined}
+                      title={clickable ? `Book ${String(h).padStart(2,'0')}:00` : undefined}
+                    />
+                  );
+                })}
 
                 {/* Hour lines */}
                 {HOURS.map(h => (
                   <div
                     key={h}
                     style={{ top: `${h * HOUR_HEIGHT_PX}px` }}
-                    className="absolute w-full border-t border-slate-100 dark:border-gray-700/60"
+                    className="absolute w-full border-t border-slate-100 dark:border-gray-700/60 pointer-events-none"
                   />
                 ))}
 
@@ -498,7 +770,92 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   </div>
                 )}
 
-                {/* Events */}
+                {/* ── Booking blocks ── */}
+                {dayBookings.map(b => {
+                  const isDeclined  = declinedIds.has(b.id);
+                  const isMyBooking = isStudentView ? b.studentId === studentId : true;
+                  // Hide declined bookings that have faded out (not in declinedIds)
+                  if (isStudentView && b.status === 'declined' && !isDeclined) return null;
+
+                  const topPx     = b.hour * HOUR_HEIGHT_PX;
+                  const heightPx  = (b.durationMinutes / 60) * HOUR_HEIGHT_PX;
+
+                  if (isStudentView) {
+                    const style = bookingBlockStyle(b, isMyBooking, isDeclined);
+                    return (
+                      <div
+                        key={b.id}
+                        style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                        className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-20 border ${style.bg} ${style.border} ${isDeclined ? 'animate-pulse' : ''}`}
+                      >
+                        <p className={`text-[10px] font-bold leading-tight truncate ${style.text}`}>
+                          {style.label}
+                        </p>
+                        {b.durationMinutes >= 50 && (
+                          <p className={`text-[9px] leading-tight ${style.text} opacity-75`}>
+                            {String(b.hour).padStart(2,'0')}:00–{String(b.hour).padStart(2,'0')}:50
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // ── Tutor view ──
+                  const { bg, text } = tutorBlockStyle(b);
+                  const isActioning  = actioningId === b.id;
+                  return (
+                    <div
+                      key={b.id}
+                      style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 56)}px` }}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-20 ${bg}`}
+                    >
+                      <p className={`text-[10px] font-bold leading-tight truncate ${text}`}>
+                        {b.studentName}
+                      </p>
+                      <p className={`text-[9px] leading-tight ${text} opacity-80`}>
+                        {b.durationMinutes}min · {b.bookingType === 'weekly' ? '🔁 Weekly' : '✓ Single'}
+                      </p>
+                      {b.status === 'pending' && (
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                          <button
+                            onClick={() => handleTutorAction(b.id, 'confirmed')}
+                            disabled={isActioning}
+                            className="px-1.5 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[9px] font-bold transition-colors disabled:opacity-60"
+                          >
+                            {isActioning ? '…' : '✓ Confirm'}
+                          </button>
+                          <button
+                            onClick={() => handleTutorAction(b.id, 'declined')}
+                            disabled={isActioning}
+                            className="px-1.5 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-bold transition-colors disabled:opacity-60"
+                          >
+                            ✗ Decline
+                          </button>
+                          {b.whatsapp && (
+                            <a
+                              href={`https://wa.me/${b.whatsapp.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-1.5 py-0.5 bg-[#25d366] hover:bg-[#1da851] text-white rounded text-[9px] font-bold transition-colors"
+                              title={`WhatsApp ${b.studentName}`}
+                            >
+                              <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 inline">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {b.studentNote && b.status === 'pending' && (
+                        <p className={`text-[8px] mt-0.5 italic truncate ${text} opacity-70`} title={b.studentNote}>
+                          "{b.studentNote}"
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* GCal Events */}
                 {dayEvents.map(ev => {
                   const startDT = ev.start.dateTime;
                   const endDT   = ev.end.dateTime;
@@ -558,6 +915,26 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         <p className="mt-3 text-center text-sm text-slate-400 dark:text-slate-500">
           Connect Google Calendar above to display your events on this calendar.
         </p>
+      )}
+
+      {/* Booking modal */}
+      {bookingSlot && studentId && studentName && teacherId && portalType && (
+        <BookingModal
+          day={bookingSlot.day}
+          dayIdx={bookingSlot.dayIdx}
+          hour={bookingSlot.hour}
+          teacherId={teacherId}
+          studentId={studentId}
+          studentName={studentName}
+          whatsapp={studentWhatsApp}
+          portalType={portalType}
+          studentTZ={studentTimezone}
+          onClose={() => setBookingSlot(null)}
+          onBooked={booking => {
+            setMyBookings(prev => [booking, ...prev]);
+            setBookingSlot(null);
+          }}
+        />
       )}
     </div>
   );

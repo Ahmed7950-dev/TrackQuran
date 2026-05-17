@@ -178,6 +178,7 @@ const App: React.FC = () => {
   const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
   const [gcalToken,                setGcalToken]                = useState<string | null>(() => getStoredToken());
   const [availabilitySlots,        setAvailabilitySlots]        = useState<AvailabilitySlot[]>([]);
+  const [pendingBookingCount,      setPendingBookingCount]      = useState(0);
 
   // Silently re-acquire the token on page load if it expired but the user was previously connected
   useEffect(() => {
@@ -734,8 +735,15 @@ const App: React.FC = () => {
               <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
               <button
                 onClick={() => setActiveTab(tab => tab === 'calendar' ? 'main' : 'calendar')}
-                className={`text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-              >Calendar</button>
+                className={`relative text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              >
+                Calendar
+                {pendingBookingCount > 0 && (
+                  <span className="absolute -top-1.5 -end-3 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {pendingBookingCount}
+                  </span>
+                )}
+              </button>
               <button
                 onClick={() => setActiveTab(tab => tab === 'vocabulary' ? 'main' : 'vocabulary')}
                 className={`text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -810,7 +818,13 @@ const App: React.FC = () => {
           ) : activeTab === 'aboutUs' ? (
             <AboutUsPage />
           ) : activeTab === 'calendar' ? (
-            <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} availabilitySlots={availabilitySlots} />
+            <CalendarPage
+              gcalToken={gcalToken}
+              onTokenChange={setGcalToken}
+              availabilitySlots={availabilitySlots}
+              teacherId={currentUser.id}
+              onPendingCountChange={setPendingBookingCount}
+            />
           ) : activeTab === 'vocabulary' ? (
             selectedArabicStudent ? (
               <VocabularyPracticePage studentId={selectedArabicStudent.id} />
@@ -886,8 +900,15 @@ const App: React.FC = () => {
                 <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
                 <button
                     onClick={() => { setSelectedStudentId(null); setSessionStudentId(null); setCurrentStudentView('details'); setActiveTab(t => t === 'calendar' ? 'main' : 'calendar'); }}
-                    className={`text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >Calendar</button>
+                    className={`relative text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                >
+                  Calendar
+                  {pendingBookingCount > 0 && (
+                    <span className="absolute -top-1.5 -end-3 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                      {pendingBookingCount}
+                    </span>
+                  )}
+                </button>
                 {/* Tools dropdown */}
                 <div className="relative">
                   <button
@@ -1050,7 +1071,13 @@ const App: React.FC = () => {
         ) : activeTab === 'tajweed' ? (
           <TajweedPage students={students} />
         ) : activeTab === 'calendar' ? (
-          <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} availabilitySlots={availabilitySlots} />
+          <CalendarPage
+            gcalToken={gcalToken}
+            onTokenChange={setGcalToken}
+            availabilitySlots={availabilitySlots}
+            teacherId={currentUser.id}
+            onPendingCountChange={setPendingBookingCount}
+          />
         ) : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}

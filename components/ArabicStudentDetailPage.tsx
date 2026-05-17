@@ -951,6 +951,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           isStudentView={true}
           studentTimezone={student.timezone || undefined}
           availabilitySlots={availabilitySlots}
+          teacherId={teacherId}
+          studentId={student.shareToken}
+          studentName={student.name}
+          studentWhatsApp={student.whatsapp}
+          portalType="arabic"
         />
       )}
 

@@ -1,0 +1,297 @@
+/**
+ * Lesson booking service — students can request 25- or 50-minute slots
+ * in the tutor's available hours. The tutor confirms or declines via the
+ * CalendarPage. Supabase Realtime keeps both sides in sync.
+ *
+ * Table required in Supabase:
+ *   lesson_bookings  (see SQL at the bottom of this file)
+ */
+
+import { supabase } from '../lib/supabase';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type BookingStatus = 'pending' | 'confirmed' | 'declined' | 'cancelled';
+export type BookingType   = 'single' | 'weekly';
+export type BookingPortal = 'arabic' | 'quran';
+
+export interface LessonBooking {
+  id:              string;
+  teacherId:       string;
+  studentName:     string;
+  /** Opaque identifier — share token for Arabic, report UUID for Quran */
+  studentId:       string;
+  portalType:      BookingPortal;
+  /** WhatsApp number — Arabic students only */
+  whatsapp?:       string;
+  /** 0 = Monday … 6 = Sunday, in Istanbul time */
+  dayOfWeek:       number;
+  /** 0-23, Istanbul hour */
+  hour:            number;
+  durationMinutes: 25 | 50;
+  bookingType:     BookingType;
+  /** ISO date YYYY-MM-DD in Istanbul tz — required when bookingType === 'single' */
+  specificDate?:   string;
+  status:          BookingStatus;
+  studentNote?:    string;
+  /** ISO timestamp */
+  requestedAt:     string;
+  /** ISO timestamp — set when tutor confirms */
+  confirmedAt?:    string;
+}
+
+// ── DB row ────────────────────────────────────────────────────────────────────
+
+interface BookingRow {
+  id:               string;
+  teacher_id:       string;
+  student_name:     string;
+  student_id:       string;
+  portal_type:      string;
+  whatsapp:         string | null;
+  day_of_week:      number;
+  hour:             number;
+  duration_minutes: number;
+  booking_type:     string;
+  specific_date:    string | null;
+  status:           string;
+  student_note:     string | null;
+  requested_at:     string;
+  confirmed_at:     string | null;
+}
+
+function rowToBooking(r: BookingRow): LessonBooking {
+  return {
+    id:              r.id,
+    teacherId:       r.teacher_id,
+    studentName:     r.student_name,
+    studentId:       r.student_id,
+    portalType:      r.portal_type as BookingPortal,
+    whatsapp:        r.whatsapp    ?? undefined,
+    dayOfWeek:       r.day_of_week,
+    hour:            r.hour,
+    durationMinutes: r.duration_minutes as 25 | 50,
+    bookingType:     r.booking_type  as BookingType,
+    specificDate:    r.specific_date ?? undefined,
+    status:          r.status        as BookingStatus,
+    studentNote:     r.student_note  ?? undefined,
+    requestedAt:     r.requested_at,
+    confirmedAt:     r.confirmed_at  ?? undefined,
+  };
+}
+
+// ── Istanbul timezone helpers ─────────────────────────────────────────────────
+
+const ISTANBUL_TZ = 'Europe/Istanbul';
+
+/**
+ * Returns the weekday index (0 = Monday … 6 = Sunday) for the given Date
+ * evaluated in Istanbul time.
+ */
+export function istanbulDayOfWeek(date: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    weekday:  'short',
+    timeZone: ISTANBUL_TZ,
+  }).formatToParts(date);
+  const wd = parts.find(p => p.type === 'weekday')?.value ?? 'Mon';
+  return ({ Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 } as Record<string, number>)[wd] ?? 0;
+}
+
+/**
+ * Returns the ISO date string YYYY-MM-DD for the given Date evaluated in
+ * Istanbul time (en-CA locale gives YYYY-MM-DD format).
+ */
+export function istanbulDateString(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: ISTANBUL_TZ }).format(date);
+}
+
+/**
+ * Returns true when the Istanbul date+hour of the given slot is in the past.
+ */
+export function isSlotInPast(day: Date, hour: number): boolean {
+  const now             = new Date();
+  const todayIstanbul   = istanbulDateString(now);
+  const slotDateIstanbul = istanbulDateString(day);
+  if (slotDateIstanbul < todayIstanbul) return true;
+  if (slotDateIstanbul > todayIstanbul) return false;
+  // Same day — compare hour
+  const nowHour = Number(
+    new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: ISTANBUL_TZ }).format(now)
+  );
+  return hour <= nowHour;
+}
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+
+/** All non-cancelled bookings for a teacher (used in the tutor's CalendarPage). */
+export async function getTeacherBookings(teacherId: string): Promise<LessonBooking[]> {
+  const { data, error } = await supabase
+    .from('lesson_bookings')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .neq('status', 'cancelled')
+    .order('requested_at', { ascending: false });
+  if (error) throw error;
+  return (data as BookingRow[]).map(rowToBooking);
+}
+
+/**
+ * All non-cancelled bookings for a teacher, split into the student's own
+ * bookings vs. other students' confirmed bookings (student CalendarPage).
+ */
+export async function getStudentBookings(
+  teacherId: string,
+  studentId: string,
+): Promise<{ mine: LessonBooking[]; others: LessonBooking[] }> {
+  const { data, error } = await supabase
+    .from('lesson_bookings')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .neq('status', 'cancelled')
+    .order('requested_at', { ascending: false });
+  if (error) throw error;
+  const all    = (data as BookingRow[]).map(rowToBooking);
+  const mine   = all.filter(b => b.studentId === studentId);
+  const others = all.filter(b => b.studentId !== studentId && b.status === 'confirmed');
+  return { mine, others };
+}
+
+// ── Create ────────────────────────────────────────────────────────────────────
+
+export interface CreateBookingInput {
+  teacherId:       string;
+  studentName:     string;
+  studentId:       string;
+  portalType:      BookingPortal;
+  whatsapp?:       string;
+  dayOfWeek:       number;
+  hour:            number;
+  durationMinutes: 25 | 50;
+  bookingType:     BookingType;
+  specificDate?:   string;
+  studentNote?:    string;
+}
+
+export async function createLessonBooking(input: CreateBookingInput): Promise<LessonBooking> {
+  const { data, error } = await supabase
+    .from('lesson_bookings')
+    .insert({
+      teacher_id:       input.teacherId,
+      student_name:     input.studentName,
+      student_id:       input.studentId,
+      portal_type:      input.portalType,
+      whatsapp:         input.whatsapp       ?? null,
+      day_of_week:      input.dayOfWeek,
+      hour:             input.hour,
+      duration_minutes: input.durationMinutes,
+      booking_type:     input.bookingType,
+      specific_date:    input.specificDate   ?? null,
+      status:           'pending',
+      student_note:     input.studentNote    ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return rowToBooking(data as BookingRow);
+}
+
+// ── Status update ─────────────────────────────────────────────────────────────
+
+export async function updateBookingStatus(
+  bookingId: string,
+  status: 'confirmed' | 'declined' | 'cancelled',
+): Promise<void> {
+  const update: Record<string, unknown> = { status };
+  if (status === 'confirmed') update.confirmed_at = new Date().toISOString();
+  const { error } = await supabase
+    .from('lesson_bookings')
+    .update(update)
+    .eq('id', bookingId);
+  if (error) throw error;
+}
+
+// ── Slot-conflict helpers ─────────────────────────────────────────────────────
+
+/**
+ * Returns true if an Istanbul-hour slot is already occupied by a *confirmed*
+ * booking belonging to a different student.
+ *
+ * For weekly bookings the conflict check is dayOfWeek + hour.
+ * For single  bookings the conflict check is specificDate  + hour.
+ */
+export function isHourTaken(
+  bookings:    LessonBooking[],
+  dayOfWeek:   number,
+  hour:        number,
+  dateStr:     string,   // Istanbul date string for the target day
+  myStudentId: string,
+): boolean {
+  return bookings.some(b => {
+    if (b.status      !== 'confirmed') return false;
+    if (b.studentId   === myStudentId) return false;
+    if (b.hour        !== hour)        return false;
+    if (b.bookingType === 'weekly')    return b.dayOfWeek === dayOfWeek;
+    return b.specificDate === dateStr;
+  });
+}
+
+/**
+ * Returns true if the student already has a booking (any status) at the
+ * given slot — prevents duplicate requests.
+ */
+export function studentAlreadyBooked(
+  myBookings: LessonBooking[],
+  dayOfWeek:  number,
+  hour:       number,
+  dateStr:    string,
+): boolean {
+  return myBookings.some(b => {
+    if (b.hour !== hour) return false;
+    if (b.bookingType === 'weekly') return b.dayOfWeek === dayOfWeek;
+    return b.specificDate === dateStr;
+  });
+}
+
+/*
+ * ── SQL (run once in Supabase SQL editor) ────────────────────────────────────
+ *
+ * CREATE TABLE IF NOT EXISTS lesson_bookings (
+ *   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+ *   teacher_id       uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+ *   student_name     text        NOT NULL,
+ *   student_id       text        NOT NULL,
+ *   portal_type      text        NOT NULL CHECK (portal_type IN ('arabic', 'quran')),
+ *   whatsapp         text,
+ *   day_of_week      integer     NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+ *   hour             integer     NOT NULL CHECK (hour BETWEEN 0 AND 23),
+ *   duration_minutes integer     NOT NULL CHECK (duration_minutes IN (25, 50)),
+ *   booking_type     text        NOT NULL CHECK (booking_type IN ('single', 'weekly')),
+ *   specific_date    date,
+ *   status           text        NOT NULL DEFAULT 'pending'
+ *                                CHECK (status IN ('pending','confirmed','declined','cancelled')),
+ *   student_note     text,
+ *   requested_at     timestamptz NOT NULL DEFAULT now(),
+ *   confirmed_at     timestamptz,
+ *   CONSTRAINT single_needs_date CHECK (booking_type <> 'single' OR specific_date IS NOT NULL)
+ * );
+ *
+ * ALTER TABLE lesson_bookings ENABLE ROW LEVEL SECURITY;
+ *
+ * -- Tutor: full access to their own rows
+ * CREATE POLICY "teacher_all" ON lesson_bookings
+ *   FOR ALL TO authenticated
+ *   USING  (teacher_id = auth.uid())
+ *   WITH CHECK (teacher_id = auth.uid());
+ *
+ * -- Students (anonymous): can insert new bookings
+ * CREATE POLICY "student_insert" ON lesson_bookings
+ *   FOR INSERT TO anon
+ *   WITH CHECK (true);
+ *
+ * -- Anyone: can read non-cancelled bookings (student sees "Booked" slots)
+ * CREATE POLICY "public_read" ON lesson_bookings
+ *   FOR SELECT TO anon
+ *   USING (status <> 'cancelled');
+ *
+ * -- Enable Realtime on this table (Dashboard → Database → Replication → lesson_bookings)
+ */
