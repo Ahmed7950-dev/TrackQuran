@@ -35,6 +35,12 @@ const GCAL_COLOURS: Record<string, string> = {
 /*  Timezone helpers                                                    */
 /* ------------------------------------------------------------------ */
 
+/** "America/New_York" → "New York",  "Asia/Riyadh" → "Riyadh" */
+function shortTZName(tz: string): string {
+  const city = tz.split('/').pop() ?? tz;
+  return city.replace(/_/g, ' ');
+}
+
 /**
  * Convert an Istanbul hour (0-23) to the student's local time string.
  * Istanbul is always UTC+3.
@@ -251,14 +257,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
         {/* Timezone legend (student view) */}
         {isStudentView && (
-          <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-600 dark:bg-slate-300 inline-block" />
-              Your local time
+          <div className="flex items-center gap-3 text-xs font-medium">
+            <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+              {shortTZName(studentTZ)}
             </span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
               <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block" />
-              Tutor (Istanbul)
+              {shortTZName(TUTOR_TIMEZONE)}
             </span>
           </div>
         )}
@@ -334,12 +340,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         >
           {/* Corner: timezone label */}
           <div className="border-e border-slate-200 dark:border-gray-700 flex flex-col items-end justify-end pb-1 pe-1.5">
-            {showDualTZ ? (
+            {showDualTZ && (
               <>
-                <span className="text-[9px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">Your time</span>
-                <span className="text-[9px] text-teal-500 dark:text-teal-400 leading-tight">Istanbul</span>
+                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 leading-tight">{shortTZName(studentTZ)}</span>
+                <span className="text-[9px] font-semibold text-teal-600 dark:text-teal-400 leading-tight">{shortTZName(TUTOR_TIMEZONE)}</span>
               </>
-            ) : null}
+            )}
           </div>
           {weekDays.map((day, i) => {
             const isToday = isSameDay(day, today);
@@ -371,11 +377,10 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
               >
                 {h < 24 && showDualTZ ? (
                   <>
-                    {/* Student view: local time primary, Istanbul secondary */}
-                    <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 leading-tight">
                       {istanbulHourToStudentTime(h, studentTZ)}
                     </span>
-                    <span className="text-[9px] text-teal-500 dark:text-teal-400 leading-tight">
+                    <span className="text-[9px] font-semibold text-teal-600 dark:text-teal-400 leading-tight">
                       {String(h).padStart(2, '0')}:00
                     </span>
                   </>
