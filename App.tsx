@@ -32,7 +32,7 @@ import FamilyLinkPage from './components/FamilyLinkPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
 import AccountSettingsModal from './components/AccountSettingsModal';
-import { getStoredToken } from './services/googleCalendarService';
+import { getStoredToken, wasConnected, silentRefresh } from './services/googleCalendarService';
 
 const useTheme = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -177,6 +177,17 @@ const App: React.FC = () => {
   const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
   const [isAccountSettingsOpen,    setIsAccountSettingsOpen]    = useState(false);
   const [gcalToken,                setGcalToken]                = useState<string | null>(() => getStoredToken());
+
+  // Silently re-acquire the token on page load if it expired but the user was previously connected
+  useEffect(() => {
+    if (!gcalToken && wasConnected()) {
+      silentRefresh(
+        token => setGcalToken(token),
+        ()    => { /* silent refresh failed — user will see Connect button */ },
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
   const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);

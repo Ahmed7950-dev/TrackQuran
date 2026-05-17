@@ -4,9 +4,10 @@
  * Requires VITE_GOOGLE_CLIENT_ID in .env
  */
 
-const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
-const STORAGE_KEY = 'gcal_access_token';
-const EXPIRY_KEY  = 'gcal_token_expiry';
+const SCOPES        = 'https://www.googleapis.com/auth/calendar.readonly';
+const STORAGE_KEY   = 'gcal_access_token';
+const EXPIRY_KEY    = 'gcal_token_expiry';
+const CONNECTED_KEY = 'gcal_was_connected'; // persists across token expiry
 
 export interface GCalEvent {
   id: string;
@@ -32,9 +33,15 @@ export function getStoredToken(): string | null {
   return token;
 }
 
+/** True if the user has ever connected — survives token expiry */
+export function wasConnected(): boolean {
+  return localStorage.getItem(CONNECTED_KEY) === 'true';
+}
+
 function storeToken(token: string, expiresIn: number) {
-  localStorage.setItem(STORAGE_KEY, token);
-  localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+  localStorage.setItem(STORAGE_KEY,   token);
+  localStorage.setItem(EXPIRY_KEY,    String(Date.now() + expiresIn * 1000));
+  localStorage.setItem(CONNECTED_KEY, 'true');
 }
 
 export function disconnectGoogleCalendar() {
@@ -44,6 +51,7 @@ export function disconnectGoogleCalendar() {
   }
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(EXPIRY_KEY);
+  localStorage.removeItem(CONNECTED_KEY);
 }
 
 /* ------------------------------------------------------------------ */
@@ -58,52 +66,83 @@ export function loadGIS(): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.id  = 'gis-script';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.onload  = () => { gisLoaded = true; resolve(); };
-    script.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+    const script    = document.createElement('script');
+    script.id       = 'gis-script';
+    script.src      = 'https://accounts.google.com/gsi/client';
+    script.async    = true;
+    script.onload   = () => { gisLoaded = true; resolve(); };
+    script.onerror  = () => reject(new Error('Failed to load Google Identity Services'));
     document.head.appendChild(script);
   });
 }
 
 /* ------------------------------------------------------------------ */
-/*  OAuth2 token client                                                 */
+/*  OAuth2 helpers                                                      */
 /* ------------------------------------------------------------------ */
 
+type TokenResponse = { access_token?: string; expires_in?: number; error?: string };
+
+function buildTokenClient(
+  clientId: string,
+  prompt: string,
+  callback: (resp: TokenResponse) => void,
+) {
+  return window.google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope:     SCOPES,
+    prompt,
+    callback,
+  });
+}
+
+/** Full connect — shows Google account picker */
 export function connectGoogleCalendar(
   onSuccess: (token: string) => void,
   onError:   (err: string) => void,
 ) {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  if (!clientId) {
-    onError('VITE_GOOGLE_CLIENT_ID is not configured.');
-    return;
-  }
+  if (!clientId) { onError('VITE_GOOGLE_CLIENT_ID is not configured.'); return; }
 
   loadGIS().then(() => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: SCOPES,
-      callback: (resp: { access_token?: string; expires_in?: number; error?: string }) => {
-        if (resp.error || !resp.access_token) {
-          onError(resp.error ?? 'Unknown OAuth error');
-          return;
-        }
-        storeToken(resp.access_token, resp.expires_in ?? 3600);
-        onSuccess(resp.access_token);
-      },
-    });
-    client.requestAccessToken();
+    buildTokenClient(clientId, 'select_account', (resp) => {
+      if (resp.error || !resp.access_token) {
+        onError(resp.error ?? 'Unknown OAuth error');
+        return;
+      }
+      storeToken(resp.access_token, resp.expires_in ?? 3600);
+      onSuccess(resp.access_token);
+    }).requestAccessToken();
   }).catch(err => onError(String(err)));
+}
+
+/**
+ * Silent re-auth — no popup, uses existing Google session.
+ * Call this on page load when the token is expired but the user was previously connected.
+ * Falls back to calling onFailure() if Google can't issue a token silently.
+ */
+export function silentRefresh(
+  onSuccess: (token: string) => void,
+  onFailure: () => void,
+) {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  if (!clientId) { onFailure(); return; }
+
+  loadGIS().then(() => {
+    buildTokenClient(clientId, '', (resp) => {
+      if (resp.error || !resp.access_token) {
+        onFailure();
+        return;
+      }
+      storeToken(resp.access_token, resp.expires_in ?? 3600);
+      onSuccess(resp.access_token);
+    }).requestAccessToken();
+  }).catch(() => onFailure());
 }
 
 /* ------------------------------------------------------------------ */
 /*  Calendar API fetch                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Fetch all calendar IDs the user has access to */
 async function fetchCalendarIds(token: string): Promise<string[]> {
   const res = await fetch(
     'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
@@ -120,7 +159,6 @@ async function fetchCalendarIds(token: string): Promise<string[]> {
   return (data.items ?? []).map(c => c.id);
 }
 
-/** Fetch events from a single calendar */
 async function fetchEventsFromCalendar(
   token: string,
   calendarId: string,
@@ -134,42 +172,32 @@ async function fetchEventsFromCalendar(
     orderBy:      'startTime',
     maxResults:   '250',
   });
-
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-
-  if (!res.ok) return []; // skip calendars we can't read
+  if (!res.ok) return [];
   const data = await res.json() as { items?: GCalEvent[] };
   return data.items ?? [];
 }
 
-/** Fetch events from ALL user calendars and merge them */
 export async function fetchGCalEvents(
   token: string,
   timeMin: Date,
   timeMax: Date,
 ): Promise<GCalEvent[]> {
   const calendarIds = await fetchCalendarIds(token);
-
-  const results = await Promise.all(
-    calendarIds.map(id => fetchEventsFromCalendar(token, id, timeMin, timeMax))
+  const results     = await Promise.all(
+    calendarIds.map(id => fetchEventsFromCalendar(token, id, timeMin, timeMax)),
   );
-
-  // Flatten and deduplicate by event id
   const seen = new Set<string>();
-  const allEvents: GCalEvent[] = [];
+  const all:  GCalEvent[] = [];
   for (const events of results) {
     for (const ev of events) {
-      if (!seen.has(ev.id)) {
-        seen.add(ev.id);
-        allEvents.push(ev);
-      }
+      if (!seen.has(ev.id)) { seen.add(ev.id); all.push(ev); }
     }
   }
-
-  return allEvents;
+  return all;
 }
 
 /* ------------------------------------------------------------------ */
