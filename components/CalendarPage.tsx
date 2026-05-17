@@ -131,9 +131,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [connecting, setConnecting] = useState(false);
   const currentTimeRef = useRef<HTMLDivElement>(null);
 
-  // Student's local timezone
-  const studentTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const showDualTZ = isStudentView && studentTZ !== TUTOR_TIMEZONE;
+  // Student's local timezone — always show dual in student view
+  const studentTZ  = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const showDualTZ = isStudentView;
 
   /* ---------------------------------------------------------------- */
   /*  Fetch events                                                      */
@@ -247,15 +247,15 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         </div>
 
         {/* Timezone legend (student view) */}
-        {isStudentView && showDualTZ && (
+        {isStudentView && (
           <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-600 dark:bg-slate-300 inline-block" />
+              Your local time
+            </span>
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block" />
               Tutor (Istanbul)
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" />
-              Your time
             </span>
           </div>
         )}
@@ -333,8 +333,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           <div className="border-e border-slate-200 dark:border-gray-700 flex flex-col items-end justify-end pb-1 pe-1.5">
             {showDualTZ ? (
               <>
-                <span className="text-[9px] font-semibold text-teal-600 dark:text-teal-400 leading-tight">Istanbul</span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">Your time</span>
+                <span className="text-[9px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">Your time</span>
+                <span className="text-[9px] text-teal-500 dark:text-teal-400 leading-tight">Istanbul</span>
               </>
             ) : null}
           </div>
@@ -366,18 +366,21 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 style={{ height: `${HOUR_HEIGHT_PX}px` }}
                 className="flex flex-col items-end justify-start pe-1.5 pt-1 gap-0"
               >
-                {h < 24 && (
+                {h < 24 && showDualTZ ? (
                   <>
-                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold leading-tight">
+                    {/* Student view: local time primary, Istanbul secondary */}
+                    <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-200 leading-tight">
+                      {istanbulHourToStudentTime(h, studentTZ)}
+                    </span>
+                    <span className="text-[9px] text-teal-500 dark:text-teal-400 leading-tight">
                       {String(h).padStart(2, '0')}:00
                     </span>
-                    {showDualTZ && (
-                      <span className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">
-                        {istanbulHourToStudentTime(h, studentTZ)}
-                      </span>
-                    )}
                   </>
-                )}
+                ) : h < 24 ? (
+                  <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold leading-tight">
+                    {String(h).padStart(2, '0')}:00
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

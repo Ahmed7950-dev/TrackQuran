@@ -16,8 +16,6 @@ import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
-import CalendarPage from './CalendarPage';
-import { getStoredToken } from '../services/googleCalendarService';
 
 interface Props {
   token: string;
@@ -27,8 +25,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
-  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary' | 'calendar'>('lessons');
-  const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
+  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
 
   useEffect(() => {
@@ -137,12 +134,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             >
               Vocabulary
             </button>
-            <button
-              onClick={() => setPortalTab(t => t === 'calendar' ? 'lessons' : 'calendar')}
-              className={`text-sm font-medium transition-colors ${portalTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              Tutor's Availability
-            </button>
           </nav>
 
           <div className="flex-1" />
@@ -195,12 +186,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             >
               Vocabulary
             </button>
-            <button
-              onClick={() => setPortalTab('calendar')}
-              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'calendar' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              Tutor's Availability
-            </button>
           </div>
         </nav>
       </header>
@@ -209,8 +194,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
         {portalTab === 'about' ? (
           <AboutUsPage />
-        ) : portalTab === 'calendar' ? (
-          <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} isStudentView={true} />
         ) : portalTab === 'vocabulary' ? (
           <VocabularyPracticePage studentId={student.id} />
         ) : (

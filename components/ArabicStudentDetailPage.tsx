@@ -16,6 +16,8 @@ import {
 import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
+import CalendarPage from './CalendarPage';
+import { getStoredToken } from '../services/googleCalendarService';
 
 interface Props {
   student: ArabicStudent;
@@ -696,8 +698,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar'>('lessons');
   const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
+  const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
 
   useEffect(() => {
     getArabicLessons().then(setLessons);
@@ -708,10 +711,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const lessonsPerWeek = lpw(student);
   const wl             = weeksLeft(student.goalDeadline);
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress'; label: string; mobileLabel: string }> = [
-    { key: 'lessons', label: `Lessons (${lessons.length})`, mobileLabel: `Lessons (${lessons.length})` },
-    { key: 'progress', label: "Student's Progress", mobileLabel: 'Progress' },
-    { key: 'profile', label: 'Student Profile', mobileLabel: 'Profile' },
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar'; label: string; mobileLabel: string }> = [
+    { key: 'lessons',  label: `Lessons (${lessons.length})`,  mobileLabel: `Lessons (${lessons.length})` },
+    { key: 'progress', label: "Student's Progress",           mobileLabel: 'Progress' },
+    { key: 'profile',  label: 'Student Profile',              mobileLabel: 'Profile' },
+    ...(studentMode ? [{ key: 'calendar' as const, label: "Tutor's Availability", mobileLabel: 'Availability' }] : []),
   ];
 
   return (
@@ -920,6 +924,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           lessons={lessons}
           onMistakesUpdated={() => setProgressKey(k => k + 1)}
         />
+      )}
+
+      {/* ── Tutor's Availability section (student mode only) ── */}
+      {activeSection === 'calendar' && studentMode && (
+        <CalendarPage gcalToken={gcalToken} onTokenChange={setGcalToken} isStudentView={true} />
       )}
 
       {/* ── Profile section ── */}
