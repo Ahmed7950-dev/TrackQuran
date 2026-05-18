@@ -4,6 +4,8 @@
 // Parents see all their children's progress in one place.
 // ---------------------------------------------------------------------------
 
+const SITE_URL = 'https://www.lisanquran.com';
+
 import React, { useEffect, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
 import { getSharedReport, getPageOfAyah, computeMistakesRate } from '../services/dataService';
@@ -146,8 +148,8 @@ const MemberCard: React.FC<{ member: FamilyMember; linkId: string }> = ({ member
 
   const backPath = encodeURIComponent(`/family/${linkId}`);
   const viewUrl = member.type === 'quran'
-    ? `${window.location.origin}/report/${member.report_id}?from=${backPath}`
-    : `${window.location.origin}/arabic/s/${member.share_token}?from=${backPath}`;
+    ? `${SITE_URL}/report/${member.report_id}?from=${backPath}`
+    : `${SITE_URL}/arabic/s/${member.share_token}?from=${backPath}`;
 
   const typeLabel = member.type === 'quran' ? 'Quran' : 'Arabic';
   const typeBg = member.type === 'quran'

@@ -819,14 +819,18 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         <div className="mt-5">
           {(() => {
             const completedSet = new Set(student.completedLessonIds);
+            // Only count lessons that match the student's dialect(s) in milestones
+            const dialectLessons = studentDialectFilter.length > 0
+              ? lessons.filter(l => studentDialectFilter.includes(l.dialect ?? 'levantine'))
+              : lessons;
             const levelCounts = ([1, 2, 3] as const).map(lvl => {
-              const lvlIds = lessons.filter(l => l.level === lvl).map(l => l.id);
+              const lvlIds = dialectLessons.filter(l => l.level === lvl).map(l => l.id);
               const done = lvlIds.filter(id => completedSet.has(id)).length;
               return { lvl, done };
             });
             const currentLevel = levelCounts.find(lc => lc.done < 20)?.lvl ?? 3;
             const cur          = levelCounts.find(lc => lc.lvl === currentLevel)!;
-            const lvlLessons   = lessons
+            const lvlLessons   = dialectLessons
               .filter(l => l.level === currentLevel)
               .sort((a, b) => a.orderIndex - b.orderIndex);
             const firstIncompleteIdx = lvlLessons.findIndex(l => !completedSet.has(l.id));
@@ -851,7 +855,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                     );
                   })}
                   <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 font-semibold">
-                    {cur.done} / {Math.min(lvlLessons.length, 20)} · {completedCount} / 60 total
+                    {cur.done} / {Math.min(lvlLessons.length, 20)} · {dialectLessons.filter(l => completedSet.has(l.id)).length} / {dialectLessons.length} total
                   </span>
                 </div>
 

@@ -3,6 +3,8 @@
 // Lists all Arabic students for the logged-in teacher.
 // ---------------------------------------------------------------------------
 
+const SITE_URL = 'https://www.lisanquran.com';
+
 import React, { useState } from 'react';
 import { ArabicStudent } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
@@ -43,7 +45,7 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
       if (!student.shareToken) {
         onUpdateStudent({ ...student, shareToken: token });
       }
-      const url = `${window.location.origin}/arabic/s/${token}`;
+      const url = `${SITE_URL}/arabic/s/${token}`;
       await navigator.clipboard.writeText(url);
       setCopiedId(student.id);
       setTimeout(() => setCopiedId(null), 2500);
@@ -193,7 +195,6 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onC
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{s.arabicLevel ? `Level ${s.arabicLevel} / 10` : 'No level set'}</p>
           </div>
         </div>
 

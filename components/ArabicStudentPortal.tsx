@@ -17,6 +17,7 @@ import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
+import Footer from './Footer';
 
 interface Props {
   token: string;
@@ -248,6 +249,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           />
         )}
       </main>
+      <Footer />
     </div>
   );
 };

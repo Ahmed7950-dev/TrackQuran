@@ -4,6 +4,8 @@
 // multiple siblings' progress to their parents.
 // ---------------------------------------------------------------------------
 
+const SITE_URL = 'https://www.lisanquran.com';
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { Student, ArabicStudent } from '../types';
 import {
@@ -138,7 +140,7 @@ const FamilyLinkModal: React.FC<Props> = ({
 
       // Copy the link right away for new links
       if (!editingId) {
-        const url = `${window.location.origin}/family/${savedId}`;
+        const url = `${SITE_URL}/family/${savedId}`;
         await navigator.clipboard.writeText(url).catch(() => {});
         setCopiedId(savedId);
         setTimeout(() => setCopiedId(null), 2500);
@@ -155,7 +157,7 @@ const FamilyLinkModal: React.FC<Props> = ({
 
   // ── Copy link ─────────────────────────────────────────────────────────────
   const copyLink = async (link: FamilyLink) => {
-    const url = `${window.location.origin}/family/${link.id}`;
+    const url = `${SITE_URL}/family/${link.id}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(link.id);
     setTimeout(() => setCopiedId(null), 2500);
