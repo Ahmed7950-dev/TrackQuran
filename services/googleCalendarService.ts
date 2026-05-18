@@ -1,13 +1,31 @@
 /**
  * Google Calendar OAuth2 + API service
- * Uses Google Identity Services (GSI) token-based flow.
- * Requires VITE_GOOGLE_CLIENT_ID in .env
+ *
+ * Uses the Authorization Code flow (GIS initCodeClient) so a long-lived
+ * refresh token is obtained on first connect and stored in localStorage.
+ * All token exchanges and refreshes go through a Supabase Edge Function
+ * ("google-token") that holds the client_secret server-side.
+ *
+ * After the initial connect the user is NEVER asked to log in again —
+ * the refresh token silently obtains new access tokens via the Edge Function,
+ * with no dependency on third-party cookies or Chrome Privacy Sandbox.
+ *
+ * Required env vars (in .env):
+ *   VITE_GOOGLE_CLIENT_ID
+ *   VITE_SUPABASE_URL
+ *   VITE_SUPABASE_ANON_KEY
+ *
+ * Required Supabase secrets (deploy once via CLI):
+ *   supabase secrets set GOOGLE_CLIENT_ID=<your-client-id>
+ *   supabase secrets set GOOGLE_CLIENT_SECRET=<your-client-secret>
+ *   supabase functions deploy google-token
  */
 
 const SCOPES        = 'https://www.googleapis.com/auth/calendar.readonly';
 const STORAGE_KEY   = 'gcal_access_token';
 const EXPIRY_KEY    = 'gcal_token_expiry';
-const CONNECTED_KEY = 'gcal_was_connected'; // persists across token expiry
+const REFRESH_KEY   = 'gcal_refresh_token';   // Long-lived; persists across sessions
+const CONNECTED_KEY = 'gcal_was_connected';
 
 export interface GCalEvent {
   id: string;
@@ -18,7 +36,7 @@ export interface GCalEvent {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Token helpers                                                        */
+/*  Token storage helpers                                               */
 /* ------------------------------------------------------------------ */
 
 export function getStoredToken(): string | null {
@@ -38,29 +56,127 @@ export function wasConnected(): boolean {
   return localStorage.getItem(CONNECTED_KEY) === 'true';
 }
 
-function storeToken(token: string, expiresIn: number) {
+function getStoredRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_KEY);
+}
+
+function storeAccessToken(token: string, expiresIn: number) {
   localStorage.setItem(STORAGE_KEY,   token);
   localStorage.setItem(EXPIRY_KEY,    String(Date.now() + expiresIn * 1000));
   localStorage.setItem(CONNECTED_KEY, 'true');
 }
 
+function storeRefreshToken(token: string) {
+  localStorage.setItem(REFRESH_KEY, token);
+}
+
 export function disconnectGoogleCalendar() {
-  const token = localStorage.getItem(STORAGE_KEY);
-  if (token && window.google?.accounts?.oauth2) {
-    window.google.accounts.oauth2.revoke(token, () => {});
+  // Revoke the refresh token — this also invalidates all linked access tokens
+  const refreshToken = getStoredRefreshToken();
+  if (refreshToken) {
+    fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`, {
+      method: 'POST',
+    }).catch(() => { /* best-effort */ });
+  }
+  // Also revoke access token via GIS if available
+  const accessToken = localStorage.getItem(STORAGE_KEY);
+  if (accessToken && window.google?.accounts?.oauth2) {
+    window.google.accounts.oauth2.revoke(accessToken, () => {});
   }
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(EXPIRY_KEY);
+  localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(CONNECTED_KEY);
   cancelAutoRefresh();
 }
 
 /* ------------------------------------------------------------------ */
+/*  Supabase Edge Function helpers                                      */
+/* ------------------------------------------------------------------ */
+
+function edgeFnUrl(): string {
+  const base = import.meta.env.VITE_SUPABASE_URL as string;
+  return `${base}/functions/v1/google-token`;
+}
+
+function edgeFnHeaders(): HeadersInit {
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  return {
+    'Content-Type':  'application/json',
+    'Authorization': `Bearer ${anonKey}`,
+    'apikey':        anonKey,
+  };
+}
+
+/** Exchange a GIS authorization code for access + refresh tokens (server-side). */
+async function exchangeCode(code: string): Promise<{
+  accessToken: string;
+  refreshToken: string | null;
+  expiresIn: number;
+}> {
+  const res = await fetch(edgeFnUrl(), {
+    method:  'POST',
+    headers: edgeFnHeaders(),
+    body:    JSON.stringify({ action: 'exchange', code }),
+  });
+  const data = await res.json() as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error?: string;
+    error_description?: string;
+  };
+  if (data.error || !data.access_token) {
+    throw new Error(data.error_description ?? data.error ?? 'Token exchange failed');
+  }
+  return {
+    accessToken:  data.access_token,
+    refreshToken: data.refresh_token ?? null,
+    expiresIn:    data.expires_in ?? 3600,
+  };
+}
+
+/**
+ * Silently get a fresh access token using the stored refresh token.
+ * Calls the Edge Function — no user interaction, no cookies required.
+ * Returns the new access token, or null if the refresh token is missing or revoked.
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(edgeFnUrl(), {
+      method:  'POST',
+      headers: edgeFnHeaders(),
+      body:    JSON.stringify({ action: 'refresh', refreshToken }),
+    });
+    const data = await res.json() as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      error?: string;
+    };
+    if (data.error || !data.access_token) {
+      console.warn('[GCal] Silent token refresh failed:', data.error);
+      return null;
+    }
+    storeAccessToken(data.access_token, data.expires_in ?? 3600);
+    // If Google rotates the refresh token, store the new one
+    if (data.refresh_token) storeRefreshToken(data.refresh_token);
+    return data.access_token;
+  } catch (err) {
+    console.warn('[GCal] Token refresh exception:', err);
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Proactive auto-refresh                                              */
 /*                                                                      */
-/*  Uses setInterval polling (not setTimeout) so it survives browser    */
-/*  tab throttling. Checks every 60 s — if the token has < 10 min       */
-/*  remaining, kicks off a silent refresh.                              */
+/*  Polls every 60 s. When the access token has < 10 min remaining,    */
+/*  calls the Edge Function to get a fresh one — completely silent,     */
+/*  no popup, no cookies needed.                                        */
 /* ------------------------------------------------------------------ */
 
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -70,7 +186,6 @@ export function scheduleAutoRefresh(
   onNewToken: (token: string) => void,
   onExpired:  () => void,
 ): void {
-  // Cancel any existing interval before starting a new one
   cancelAutoRefresh();
 
   const checkAndRefresh = () => {
@@ -79,25 +194,22 @@ export function scheduleAutoRefresh(
     if (!expiry) return;
 
     const msLeft = expiry - Date.now();
-    // Skip if more than 10 min remaining
-    if (msLeft > 10 * 60 * 1000) return;
-    // Give up if extremely stale (> 1 hr past expiry — user is long gone)
-    if (msLeft < -60 * 60 * 1000) return;
+    if (msLeft > 10 * 60 * 1000) return;   // > 10 min left — skip
+    if (msLeft < -60 * 60 * 1000) return;  // > 1 hr past expiry — give up
 
     _isRefreshing = true;
-    silentRefresh(
-      token => {
+    refreshAccessToken()
+      .then(newToken => {
         _isRefreshing = false;
-        onNewToken(token);
-      },
-      () => {
+        if (newToken) onNewToken(newToken);
+        else          onExpired();
+      })
+      .catch(() => {
         _isRefreshing = false;
         onExpired();
-      },
-    );
+      });
   };
 
-  // Run an immediate check, then poll every 60 s
   checkAndRefresh();
   _refreshInterval = setInterval(checkAndRefresh, 60_000);
 }
@@ -133,25 +245,10 @@ export function loadGIS(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  OAuth2 helpers                                                      */
+/*  OAuth2 — Authorization Code flow                                   */
 /* ------------------------------------------------------------------ */
 
-type TokenResponse = { access_token?: string; expires_in?: number; error?: string };
-
-function buildTokenClient(
-  clientId: string,
-  prompt: string,
-  callback: (resp: TokenResponse) => void,
-) {
-  return window.google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope:     SCOPES,
-    prompt,
-    callback,
-  });
-}
-
-/** Full connect — shows Google account picker */
+/** Full connect — shows Google account picker.  Stores refresh token so future sessions are silent. */
 export function connectGoogleCalendar(
   onSuccess: (token: string) => void,
   onError:   (err: string) => void,
@@ -160,81 +257,61 @@ export function connectGoogleCalendar(
   if (!clientId) { onError('VITE_GOOGLE_CLIENT_ID is not configured.'); return; }
 
   loadGIS().then(() => {
-    buildTokenClient(clientId, 'select_account', (resp) => {
-      if (resp.error || !resp.access_token) {
-        onError(resp.error ?? 'Unknown OAuth error');
-        return;
-      }
-      storeToken(resp.access_token, resp.expires_in ?? 3600);
-      onSuccess(resp.access_token);
-    }).requestAccessToken();
+    const client = window.google.accounts.oauth2.initCodeClient({
+      client_id: clientId,
+      scope:     SCOPES,
+      ux_mode:   'popup',
+      callback:  async (resp: { code?: string; error?: string }) => {
+        if (resp.error || !resp.code) {
+          onError(resp.error ?? 'No authorization code returned');
+          return;
+        }
+        try {
+          const tokens = await exchangeCode(resp.code);
+          storeAccessToken(tokens.accessToken, tokens.expiresIn);
+          if (tokens.refreshToken) {
+            storeRefreshToken(tokens.refreshToken);
+          }
+          onSuccess(tokens.accessToken);
+        } catch (err) {
+          onError(String(err));
+        }
+      },
+    });
+    client.requestCode();
   }).catch(err => onError(String(err)));
 }
 
 /**
- * Silent re-auth — no popup, uses existing Google session.
- * Call this on page load when the token is expired but the user was previously connected.
- * Falls back to calling onFailure() if Google can't issue a token silently
- * (e.g. third-party cookies blocked, user signed out of Google, etc.).
+ * Silent re-auth — uses the stored refresh token via the Edge Function.
+ * No popup, no cookies. Falls back to onFailure() only if the refresh
+ * token is missing or has been revoked by the user.
  */
 export function silentRefresh(
   onSuccess: (token: string) => void,
   onFailure: () => void,
-) {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  if (!clientId) { onFailure(); return; }
-
-  loadGIS().then(() => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope:     SCOPES,
-      callback: (resp: TokenResponse) => {
-        if (resp.error || !resp.access_token) {
-          console.warn('[GCal] Silent refresh failed:', resp.error ?? 'no token returned');
-          onFailure();
-          return;
-        }
-        storeToken(resp.access_token, resp.expires_in ?? 3600);
-        onSuccess(resp.access_token);
-      },
-    });
-    // prompt: '' means "use existing session without showing UI if possible"
-    // This is the documented silent-refresh path in Google Identity Services.
-    client.requestAccessToken({ prompt: '' });
-  }).catch(err => {
-    console.warn('[GCal] Silent refresh exception:', err);
-    onFailure();
-  });
+): void {
+  refreshAccessToken()
+    .then(token => { if (token) onSuccess(token); else onFailure(); })
+    .catch(() => onFailure());
 }
 
 /**
- * One-click reconnect — used after silentRefresh fails.
- * Skips the account-picker (unlike connectGoogleCalendar) so the user
- * just sees a brief Google consent flow if needed, then is back online.
+ * One-click reconnect — used when silentRefresh fails (refresh token revoked).
+ * Tries the stored refresh token first; if that fails, opens the full OAuth popup.
  */
 export function reconnectGoogleCalendar(
   onSuccess: (token: string) => void,
   onError:   (err: string) => void,
 ) {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  if (!clientId) { onError('VITE_GOOGLE_CLIENT_ID is not configured.'); return; }
-
-  loadGIS().then(() => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope:     SCOPES,
-      callback: (resp: TokenResponse) => {
-        if (resp.error || !resp.access_token) {
-          onError(resp.error ?? 'Unknown OAuth error');
-          return;
-        }
-        storeToken(resp.access_token, resp.expires_in ?? 3600);
-        onSuccess(resp.access_token);
-      },
-    });
-    // Empty prompt = no account picker, no consent re-prompt
-    client.requestAccessToken({ prompt: '' });
-  }).catch(err => onError(String(err)));
+  refreshAccessToken().then(token => {
+    if (token) {
+      onSuccess(token);
+    } else {
+      // Refresh token revoked or cleared — show full connect flow
+      connectGoogleCalendar(onSuccess, onError);
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -248,7 +325,9 @@ async function fetchCalendarIds(token: string): Promise<string[]> {
   );
   if (!res.ok) {
     if (res.status === 401) {
-      disconnectGoogleCalendar();
+      // Access token rejected — clear it so silentRefresh runs on next tick
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(EXPIRY_KEY);
       throw new Error('Token expired — please reconnect Google Calendar.');
     }
     throw new Error(`GCal API error ${res.status}`);
@@ -308,6 +387,7 @@ declare global {
       accounts: {
         oauth2: {
           initTokenClient: (cfg: object) => { requestAccessToken: (overrideConfig?: { prompt?: string }) => void };
+          initCodeClient:  (cfg: object) => { requestCode: () => void };
           revoke: (token: string, cb: () => void) => void;
         };
       };
