@@ -31,6 +31,7 @@ import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
+import GCalOAuthCallback from './components/GCalOAuthCallback';
 import AccountSettingsPage from './components/AccountSettingsPage';
 import NotificationCenter from './components/NotificationCenter';
 import { getStoredToken, wasConnected, silentRefresh, scheduleAutoRefresh, cancelAutoRefresh } from './services/googleCalendarService';
@@ -107,6 +108,9 @@ const useQuranicFont = () => {
 };
 
 const App: React.FC = () => {
+  // ── Google Calendar OAuth2 callback — must be checked first ────────────────
+  if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
+
   // ── Shared report route — no auth required ──────────────────────────────────
   const sharedReportId = (() => {
     const m = window.location.pathname.match(/^\/report\/([a-f0-9-]{36})$/i);

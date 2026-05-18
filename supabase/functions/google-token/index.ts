@@ -28,6 +28,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json() as {
       action: 'exchange' | 'refresh';
       code?: string;
+      redirectUri?: string;
       refreshToken?: string;
     };
 
@@ -43,13 +44,14 @@ Deno.serve(async (req: Request) => {
 
     let params: Record<string, string>;
 
-    if (body.action === 'exchange' && body.code) {
+    if (body.action === 'exchange' && body.code && body.redirectUri) {
       // Exchange authorization code → access_token + refresh_token
+      // redirect_uri must exactly match what was used in the authorization request
       params = {
         code:          body.code,
         client_id:     clientId,
         client_secret: clientSecret,
-        redirect_uri:  'postmessage',   // Required for GIS popup / code flow
+        redirect_uri:  body.redirectUri,
         grant_type:    'authorization_code',
       };
     } else if (body.action === 'refresh' && body.refreshToken) {
@@ -62,7 +64,7 @@ Deno.serve(async (req: Request) => {
       };
     } else {
       return new Response(
-        JSON.stringify({ error: 'invalid_request', error_description: 'Provide action=exchange+code or action=refresh+refreshToken.' }),
+        JSON.stringify({ error: 'invalid_request', error_description: 'Provide action=exchange+code+redirectUri or action=refresh+refreshToken.' }),
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       );
     }

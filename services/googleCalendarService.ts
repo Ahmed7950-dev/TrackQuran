@@ -108,8 +108,8 @@ function edgeFnHeaders(): HeadersInit {
   };
 }
 
-/** Exchange a GIS authorization code for access + refresh tokens (server-side). */
-async function exchangeCode(code: string): Promise<{
+/** Exchange an authorization code for access + refresh tokens (server-side). */
+async function exchangeCode(code: string, redirectUri: string): Promise<{
   accessToken: string;
   refreshToken: string | null;
   expiresIn: number;
@@ -117,7 +117,7 @@ async function exchangeCode(code: string): Promise<{
   const res = await fetch(edgeFnUrl(), {
     method:  'POST',
     headers: edgeFnHeaders(),
-    body:    JSON.stringify({ action: 'exchange', code }),
+    body:    JSON.stringify({ action: 'exchange', code, redirectUri }),
   });
   const data = await res.json() as {
     access_token?: string;
@@ -248,7 +248,12 @@ export function loadGIS(): Promise<void> {
 /*  OAuth2 — Authorization Code flow                                   */
 /* ------------------------------------------------------------------ */
 
-/** Full connect — shows Google account picker.  Stores refresh token so future sessions are silent. */
+/**
+ * Full connect — opens a Google OAuth2 popup.
+ * Uses a manual auth URL so we control the redirect_uri exactly,
+ * avoiding the redirect_uri mismatch that GIS initCodeClient can cause.
+ * Stores the refresh token so all future sessions are completely silent.
+ */
 export function connectGoogleCalendar(
   onSuccess: (token: string) => void,
   onError:   (err: string) => void,
@@ -256,30 +261,55 @@ export function connectGoogleCalendar(
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   if (!clientId) { onError('VITE_GOOGLE_CLIENT_ID is not configured.'); return; }
 
-  loadGIS().then(() => {
-    const client = window.google.accounts.oauth2.initCodeClient({
-      client_id: clientId,
-      scope:     SCOPES,
-      ux_mode:   'popup',
-      callback:  async (resp: { code?: string; error?: string }) => {
-        if (resp.error || !resp.code) {
-          onError(resp.error ?? 'No authorization code returned');
-          return;
-        }
-        try {
-          const tokens = await exchangeCode(resp.code);
-          storeAccessToken(tokens.accessToken, tokens.expiresIn);
-          if (tokens.refreshToken) {
-            storeRefreshToken(tokens.refreshToken);
-          }
-          onSuccess(tokens.accessToken);
-        } catch (err) {
-          onError(String(err));
-        }
-      },
-    });
-    client.requestCode();
-  }).catch(err => onError(String(err)));
+  const redirectUri = `${window.location.origin}/gcal-callback`;
+
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id:     clientId,
+    redirect_uri:  redirectUri,
+    response_type: 'code',
+    scope:         SCOPES,
+    access_type:   'offline',
+    prompt:        'consent',   // Always show consent so Google issues a fresh refresh_token
+  }).toString();
+
+  const popup = window.open(authUrl, 'gcal-auth', 'width=520,height=620,top=100,left=200');
+  if (!popup) {
+    onError('Popup was blocked — please allow popups for this site and try again.');
+    return;
+  }
+
+  // The GCalOAuthCallback page posts the code back via postMessage then closes itself
+  const handleMessage = async (event: MessageEvent) => {
+    if (event.origin !== window.location.origin) return;
+    if (!event.data?.gcalCode && !event.data?.gcalError) return;
+
+    window.removeEventListener('message', handleMessage);
+    clearInterval(closedChecker);
+
+    if (event.data.gcalError) {
+      onError(event.data.gcalError);
+      return;
+    }
+
+    try {
+      const tokens = await exchangeCode(event.data.gcalCode, redirectUri);
+      storeAccessToken(tokens.accessToken, tokens.expiresIn);
+      if (tokens.refreshToken) storeRefreshToken(tokens.refreshToken);
+      onSuccess(tokens.accessToken);
+    } catch (err) {
+      onError(String(err));
+    }
+  };
+
+  window.addEventListener('message', handleMessage);
+
+  // Clean up if the user closes the popup without completing auth
+  const closedChecker = setInterval(() => {
+    if (popup.closed) {
+      clearInterval(closedChecker);
+      window.removeEventListener('message', handleMessage);
+    }
+  }, 500);
 }
 
 /**
