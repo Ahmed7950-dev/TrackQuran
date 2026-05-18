@@ -303,9 +303,15 @@ export function connectGoogleCalendar(
 
   window.addEventListener('message', handleMessage);
 
-  // Clean up if the user closes the popup without completing auth
+  // Clean up if the user closes the popup without completing auth.
+  // Wrapped in try/catch because COOP headers can block popup.closed reads.
   const closedChecker = setInterval(() => {
-    if (popup.closed) {
+    try {
+      if (popup.closed) {
+        clearInterval(closedChecker);
+        window.removeEventListener('message', handleMessage);
+      }
+    } catch {
       clearInterval(closedChecker);
       window.removeEventListener('message', handleMessage);
     }
