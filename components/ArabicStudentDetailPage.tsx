@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail } from '../types';
+import { useI18n } from '../context/I18nProvider';
 import {
   getArabicLessons,
   getAllVocabAttemptsForStudent,
@@ -696,6 +697,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 const ArabicStudentDetailPage: React.FC<Props> = ({
   student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false, vocabCount = 0,
 }) => {
+  const { t } = useI18n();
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
@@ -728,10 +730,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     : lessons.length;
 
   const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar'; label: string; mobileLabel: string }> = [
-    { key: 'lessons',  label: `Lessons (${studentLessonCount})`,  mobileLabel: `Lessons (${studentLessonCount})` },
-    { key: 'progress', label: "Student's Progress",           mobileLabel: 'Progress' },
-    { key: 'profile',  label: 'Student Profile',              mobileLabel: 'Profile' },
-    ...(studentMode ? [{ key: 'calendar' as const, label: "Tutor's Availability", mobileLabel: 'Availability' }] : []),
+    { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
+    { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
+    { key: 'profile',  label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
+    ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
 
   return (

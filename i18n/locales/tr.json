@@ -454,6 +454,20 @@
         "challenge": "Alıştırma",
         "tajweedChallenge": "Tecvid alıştırması"
     },
+    "arabicPortal": {
+        "loading": "Sayfanız yükleniyor…",
+        "linkNotFound": "Bağlantı bulunamadı",
+        "linkNotFoundDesc": "Bu öğrenci bağlantısı geçersiz veya kaldırılmış. Öğretmeninizden yeni bir bağlantı isteyin.",
+        "family": "Aile",
+        "lessons": "Dersler",
+        "aboutUs": "Hakkımızda",
+        "contactUs": "İletişim",
+        "supportUs": "Destek Ol",
+        "vocabulary": "Kelimeler",
+        "tabProgress": "Öğrenci İlerlemesi",
+        "tabProfile": "Öğrenci Profili",
+        "tabAvailability": "Öğretmen Müsaitliği"
+    },
     "alphabetTrainer": {
         "pageTitle": "Arapça Alfabe Pratiği",
         "adultModeLabel": "Yetişkin modu",

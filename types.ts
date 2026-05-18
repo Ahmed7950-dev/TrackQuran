@@ -254,6 +254,7 @@ export interface ArabicLesson {
 
 export interface ArabicLevelPlan {
   level: 1 | 2 | 3;
+  dialect: ArabicCourseDialect;
   planImageUrl?: string;
 }
 

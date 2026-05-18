@@ -486,5 +486,19 @@
         "practiceAgain": "Practice again",
         "playAgainChild": "🔁 Play again!",
         "changeLetters": "← Change letters"
+    },
+    "arabicPortal": {
+        "loading": "Loading your page…",
+        "linkNotFound": "Link not found",
+        "linkNotFoundDesc": "This student link is invalid or has been removed. Ask your tutor for a fresh link.",
+        "family": "Family",
+        "lessons": "Lessons",
+        "aboutUs": "About Us",
+        "contactUs": "Contact Us",
+        "supportUs": "Support Us",
+        "vocabulary": "Vocabulary",
+        "tabProgress": "Student's Progress",
+        "tabProfile": "Student Profile",
+        "tabAvailability": "Tutor's Availability"
     }
 }

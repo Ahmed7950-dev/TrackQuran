@@ -454,6 +454,20 @@
         "challenge": "التحدي",
         "tajweedChallenge": "تحدي التجويد"
     },
+    "arabicPortal": {
+        "loading": "جارٍ تحميل صفحتك…",
+        "linkNotFound": "الرابط غير موجود",
+        "linkNotFoundDesc": "هذا الرابط غير صالح أو تمت إزالته. اطلب من معلمك رابطاً جديداً.",
+        "family": "العائلة",
+        "lessons": "الدروس",
+        "aboutUs": "من نحن",
+        "contactUs": "اتصل بنا",
+        "supportUs": "ادعمنا",
+        "vocabulary": "المفردات",
+        "tabProgress": "تقدم الطالب",
+        "tabProfile": "الملف الشخصي",
+        "tabAvailability": "مواعيد المعلم"
+    },
     "alphabetTrainer": {
         "pageTitle": "تدريب الحروف العربية",
         "adultModeLabel": "وضع الكبار",

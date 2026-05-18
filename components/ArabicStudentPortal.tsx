@@ -18,12 +18,14 @@ import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
 import Footer from './Footer';
+import { useI18n } from '../context/I18nProvider';
 
 interface Props {
   token: string;
 }
 
 const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
+  const { t } = useI18n();
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
@@ -75,7 +77,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-gray-900">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 rounded-full border-4 border-amber-400 border-t-transparent animate-spin mx-auto" />
-          <p className="text-slate-500 dark:text-slate-400 text-sm">Loading your page…</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">{t('arabicPortal.loading')}</p>
         </div>
       </div>
     );
@@ -87,9 +89,9 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-gray-900">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-12 text-center max-w-sm mx-4">
           <div className="text-5xl mb-4">🔗</div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Link not found</h2>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">{t('arabicPortal.linkNotFound')}</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            This student link is invalid or has been removed. Ask your tutor for a fresh link.
+            {t('arabicPortal.linkNotFoundDesc')}
           </p>
         </div>
       </div>
@@ -118,7 +120,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
               </svg>
-              <span className="hidden sm:inline">Family</span>
+              <span className="hidden sm:inline">{t('arabicPortal.family')}</span>
             </a>
           )}
 
@@ -139,20 +141,20 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
               onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
               className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              About Us
+              {t('arabicPortal.aboutUs')}
             </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">
-              Contact Us
+              {t('arabicPortal.contactUs')}
             </a>
             <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
-              Support Us
+              {t('arabicPortal.supportUs')}
             </a>
             <span className="w-px h-5 bg-slate-200 dark:bg-gray-600" />
             <button
               onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
               className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              Vocabulary
+              {t('arabicPortal.vocabulary')}
             </button>
           </nav>
 
@@ -206,26 +208,26 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
               onClick={() => setPortalTab('lessons')}
               className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              Lessons
+              {t('arabicPortal.lessons')}
             </button>
             <button
               onClick={() => setPortalTab('about')}
               className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'about' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              About Us
+              {t('arabicPortal.aboutUs')}
             </button>
             <a href="#" className="flex-shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500 px-3 py-1.5 rounded-full transition-colors">
-              Contact Us
+              {t('arabicPortal.contactUs')}
             </a>
             <a href="#" className="flex-shrink-0 text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-3 py-1.5 rounded-full">
-              Support Us
+              {t('arabicPortal.supportUs')}
             </a>
             <span className="flex-shrink-0 w-px h-4 bg-slate-200 dark:bg-gray-600 mx-1" />
             <button
               onClick={() => setPortalTab('vocabulary')}
               className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'vocabulary' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
             >
-              Vocabulary
+              {t('arabicPortal.vocabulary')}
             </button>
           </div>
         </nav>

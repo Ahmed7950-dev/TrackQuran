@@ -217,11 +217,12 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
 
 const LevelPlanModal: React.FC<{
   level: 1|2|3;
+  dialect: ArabicCourseDialect;
   imageUrl?: string;
   isAdmin: boolean;
   onClose: () => void;
   onUploaded: (url: string) => void;
-}> = ({ level, imageUrl, isAdmin, onClose, onUploaded }) => {
+}> = ({ level, dialect, imageUrl, isAdmin, onClose, onUploaded }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState('');
@@ -231,9 +232,9 @@ const LevelPlanModal: React.FC<{
     if (!f) return;
     if (!f.type.startsWith('image/')) { setErr('Please select an image file.'); return; }
     setUploading(true); setErr('');
-    const url = await uploadLevelPlanImage(level, f);
+    const url = await uploadLevelPlanImage(level, dialect, f);
     if (!url) { setErr('Upload failed. Check Storage permissions.'); setUploading(false); return; }
-    await saveLevelPlan(level, url);
+    await saveLevelPlan(level, dialect, url);
     setUploading(false);
     onUploaded(url);
   };
@@ -243,7 +244,7 @@ const LevelPlanModal: React.FC<{
 
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/70 backdrop-blur-sm flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold text-white text-base tracking-wide">Level {level} — Course Plan</h3>
+        <h3 className="font-bold text-white text-base tracking-wide">{COURSE_LABELS[dialect]} — Level {level} Plan</h3>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
@@ -325,8 +326,8 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [editing,    setEditing]    = useState<ArabicLesson | null>(null);
   const [viewing,    setViewing]    = useState<ArabicLesson | null>(null);
 
-  // Level plans
-  const [levelPlans, setLevelPlans] = useState<Record<number, string>>({});
+  // Level plans keyed by "dialect-level" (e.g. "msa-1", "levantine-2")
+  const [levelPlans, setLevelPlans] = useState<Record<string, string>>({});
   const [showPlan,   setShowPlan]   = useState<1|2|3|null>(null);
 
   // Per-lesson stats for student badges
@@ -349,8 +350,8 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
     getHomeworkCountsByLesson().then(setHwCounts);
     getLevelPlans().then(plans => {
-      const map: Record<number, string> = {};
-      plans.forEach(p => { if (p.planImageUrl) map[p.level] = p.planImageUrl; });
+      const map: Record<string, string> = {};
+      plans.forEach(p => { if (p.planImageUrl) map[`${p.dialect}-${p.level}`] = p.planImageUrl; });
       setLevelPlans(map);
     });
   }, []);
@@ -558,15 +559,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         />
       )}
 
-      {/* Level plan modal */}
+      {/* Level plan modal — scoped to the currently active dialect */}
       {showPlan && (
         <LevelPlanModal
           level={showPlan}
-          imageUrl={levelPlans[showPlan]}
+          dialect={activeDialect}
+          imageUrl={levelPlans[`${activeDialect}-${showPlan}`]}
           isAdmin={isAdmin}
           onClose={() => setShowPlan(null)}
           onUploaded={url => {
-            setLevelPlans(prev => ({ ...prev, [showPlan]: url }));
+            setLevelPlans(prev => ({ ...prev, [`${activeDialect}-${showPlan}`]: url }));
           }}
         />
       )}

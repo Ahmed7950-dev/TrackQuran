@@ -752,36 +752,45 @@ export async function uploadNoteImage(lessonId: string, authorId: string, file: 
   return data.publicUrl;
 }
 
-// ── Level plans (plan image per Level 1/2/3) ─────────────────────────────────
-// Table: arabic_level_plans(level INT PRIMARY KEY, plan_image_url TEXT, updated_at)
+// ── Level plans (plan image per dialect × level) ─────────────────────────────
+// Table: arabic_level_plans(level INT, dialect TEXT, plan_image_url TEXT)
+//   PRIMARY KEY (level, dialect)
+// Run supabase/level_plans_dialect_migration.sql once before deploying this.
 
 export async function getLevelPlans(): Promise<ArabicLevelPlan[]> {
   const { data, error } = await supabase
     .from('arabic_level_plans')
-    .select('level, plan_image_url');
+    .select('level, dialect, plan_image_url');
   if (error) { console.error('getLevelPlans:', error.message); return []; }
   return (data ?? []).map((r: any) => ({
-    level: r.level as 1|2|3,
+    level:        r.level as 1|2|3,
+    dialect:      (r.dialect ?? 'levantine') as ArabicCourseDialect,
     planImageUrl: r.plan_image_url ?? undefined,
   }));
 }
 
-export async function uploadLevelPlanImage(level: 1|2|3, file: File): Promise<string | null> {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const path = `arabic-level-plans/level-${level}.${ext}`;
-  // Remove old file first (ignore error if not exists)
+export async function uploadLevelPlanImage(
+  level: 1|2|3,
+  dialect: ArabicCourseDialect,
+  file: File,
+): Promise<string | null> {
+  const ext  = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const path = `arabic-level-plans/${dialect}-level-${level}.${ext}`;
   await supabase.storage.from(PDF_BUCKET).remove([path]);
   const { error } = await supabase.storage.from(PDF_BUCKET).upload(path, file, { upsert: true });
   if (error) { console.error('uploadLevelPlanImage:', error.message); return null; }
   const { data } = supabase.storage.from(PDF_BUCKET).getPublicUrl(path);
-  // Cache-bust with timestamp
   return `${data.publicUrl}?v=${Date.now()}`;
 }
 
-export async function saveLevelPlan(level: 1|2|3, planImageUrl: string): Promise<boolean> {
+export async function saveLevelPlan(
+  level: 1|2|3,
+  dialect: ArabicCourseDialect,
+  planImageUrl: string,
+): Promise<boolean> {
   const { error } = await supabase
     .from('arabic_level_plans')
-    .upsert({ level, plan_image_url: planImageUrl }, { onConflict: 'level' });
+    .upsert({ level, dialect, plan_image_url: planImageUrl }, { onConflict: 'level,dialect' });
   if (error) { console.error('saveLevelPlan:', error.message); return false; }
   return true;
 }
