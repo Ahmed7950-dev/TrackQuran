@@ -58,43 +58,56 @@ export function disconnectGoogleCalendar() {
 /* ------------------------------------------------------------------ */
 /*  Proactive auto-refresh                                              */
 /*                                                                      */
-/*  Schedules a silent token refresh ~5 minutes before expiry.         */
-/*  Call this whenever a token is obtained (connect / silent refresh).  */
-/*  It automatically re-schedules after each successful refresh, so    */
-/*  the token stays alive for as long as the page is open.             */
+/*  Uses setInterval polling (not setTimeout) so it survives browser    */
+/*  tab throttling. Checks every 60 s — if the token has < 10 min       */
+/*  remaining, kicks off a silent refresh.                              */
 /* ------------------------------------------------------------------ */
 
-let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let _refreshInterval: ReturnType<typeof setInterval> | null = null;
+let _isRefreshing = false;
 
 export function scheduleAutoRefresh(
   onNewToken: (token: string) => void,
   onExpired:  () => void,
 ): void {
-  // Cancel any pending timer before setting a new one
-  if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+  // Cancel any existing interval before starting a new one
+  cancelAutoRefresh();
 
-  const expiry = Number(localStorage.getItem(EXPIRY_KEY) ?? '0');
-  if (!expiry) return;
+  const checkAndRefresh = () => {
+    if (_isRefreshing) return;
+    const expiry = Number(localStorage.getItem(EXPIRY_KEY) ?? '0');
+    if (!expiry) return;
 
-  const msLeft = expiry - Date.now();
-  // Refresh 5 minutes before expiry; wait at least 10 s to avoid tight loops
-  const delay  = Math.max(msLeft - 5 * 60 * 1000, 10_000);
+    const msLeft = expiry - Date.now();
+    // Skip if more than 10 min remaining
+    if (msLeft > 10 * 60 * 1000) return;
+    // Give up if extremely stale (> 1 hr past expiry — user is long gone)
+    if (msLeft < -60 * 60 * 1000) return;
 
-  _refreshTimer = setTimeout(() => {
-    _refreshTimer = null;
+    _isRefreshing = true;
     silentRefresh(
       token => {
+        _isRefreshing = false;
         onNewToken(token);
-        // Schedule the next cycle
-        scheduleAutoRefresh(onNewToken, onExpired);
       },
-      onExpired,
+      () => {
+        _isRefreshing = false;
+        onExpired();
+      },
     );
-  }, delay);
+  };
+
+  // Run an immediate check, then poll every 60 s
+  checkAndRefresh();
+  _refreshInterval = setInterval(checkAndRefresh, 60_000);
 }
 
 export function cancelAutoRefresh(): void {
-  if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+  if (_refreshInterval !== null) {
+    clearInterval(_refreshInterval);
+    _refreshInterval = null;
+  }
+  _isRefreshing = false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,7 +174,8 @@ export function connectGoogleCalendar(
 /**
  * Silent re-auth — no popup, uses existing Google session.
  * Call this on page load when the token is expired but the user was previously connected.
- * Falls back to calling onFailure() if Google can't issue a token silently.
+ * Falls back to calling onFailure() if Google can't issue a token silently
+ * (e.g. third-party cookies blocked, user signed out of Google, etc.).
  */
 export function silentRefresh(
   onSuccess: (token: string) => void,
@@ -171,15 +185,56 @@ export function silentRefresh(
   if (!clientId) { onFailure(); return; }
 
   loadGIS().then(() => {
-    buildTokenClient(clientId, '', (resp) => {
-      if (resp.error || !resp.access_token) {
-        onFailure();
-        return;
-      }
-      storeToken(resp.access_token, resp.expires_in ?? 3600);
-      onSuccess(resp.access_token);
-    }).requestAccessToken();
-  }).catch(() => onFailure());
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope:     SCOPES,
+      callback: (resp: TokenResponse) => {
+        if (resp.error || !resp.access_token) {
+          console.warn('[GCal] Silent refresh failed:', resp.error ?? 'no token returned');
+          onFailure();
+          return;
+        }
+        storeToken(resp.access_token, resp.expires_in ?? 3600);
+        onSuccess(resp.access_token);
+      },
+    });
+    // prompt: '' means "use existing session without showing UI if possible"
+    // This is the documented silent-refresh path in Google Identity Services.
+    client.requestAccessToken({ prompt: '' });
+  }).catch(err => {
+    console.warn('[GCal] Silent refresh exception:', err);
+    onFailure();
+  });
+}
+
+/**
+ * One-click reconnect — used after silentRefresh fails.
+ * Skips the account-picker (unlike connectGoogleCalendar) so the user
+ * just sees a brief Google consent flow if needed, then is back online.
+ */
+export function reconnectGoogleCalendar(
+  onSuccess: (token: string) => void,
+  onError:   (err: string) => void,
+) {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  if (!clientId) { onError('VITE_GOOGLE_CLIENT_ID is not configured.'); return; }
+
+  loadGIS().then(() => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope:     SCOPES,
+      callback: (resp: TokenResponse) => {
+        if (resp.error || !resp.access_token) {
+          onError(resp.error ?? 'Unknown OAuth error');
+          return;
+        }
+        storeToken(resp.access_token, resp.expires_in ?? 3600);
+        onSuccess(resp.access_token);
+      },
+    });
+    // Empty prompt = no account picker, no consent re-prompt
+    client.requestAccessToken({ prompt: '' });
+  }).catch(err => onError(String(err)));
 }
 
 /* ------------------------------------------------------------------ */
@@ -252,7 +307,7 @@ declare global {
     google: {
       accounts: {
         oauth2: {
-          initTokenClient: (cfg: object) => { requestAccessToken: () => void };
+          initTokenClient: (cfg: object) => { requestAccessToken: (overrideConfig?: { prompt?: string }) => void };
           revoke: (token: string, cb: () => void) => void;
         };
       };

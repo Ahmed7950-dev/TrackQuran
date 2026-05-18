@@ -6,6 +6,8 @@ import {
   fetchGCalEvents,
   getStoredToken,
   silentRefresh,
+  reconnectGoogleCalendar,
+  wasConnected,
 } from '../services/googleCalendarService';
 import { AvailabilitySlot } from '../services/availabilityService';
 import {
@@ -246,6 +248,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [error,       setError]       = useState<string | null>(null);
   const [connecting,  setConnecting]  = useState(false);
   const [exporting,   setExporting]   = useState(false);
+  /** Set when silent refresh has failed — shows the reconnect banner */
+  const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
 
@@ -284,21 +288,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     try {
       const data = await fetchGCalEvents(token, weekMonday, addDays(weekMonday, 7));
       setEvents(data);
+      setNeedsReconnect(false); // success — hide banner if it was up
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load events.';
       if (msg.includes('reconnect')) {
-        // Token expired mid-session — attempt silent re-auth before showing an error
+        // Token expired mid-session — try silent re-auth, then show banner if it fails
         silentRefresh(
           newToken => {
             onTokenChange(newToken);
-            // Retry the fetch with the fresh token
+            setNeedsReconnect(false);
             fetchGCalEvents(newToken, weekMonday, addDays(weekMonday, 7))
               .then(data => { setEvents(data); setLoading(false); })
               .catch(() => { setLoading(false); });
           },
           () => {
-            // Silent refresh failed — clear token so Connect button reappears
-            onTokenChange(null);
+            // Silent refresh failed (third-party cookies blocked, etc.)
+            // Keep token state but show the reconnect banner
+            setNeedsReconnect(true);
             setLoading(false);
           },
         );
@@ -309,6 +315,29 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       setLoading(false);
     }
   }, [onTokenChange]);
+
+  /** One-click reconnect handler for the banner */
+  const handleReconnect = useCallback(() => {
+    setConnecting(true);
+    reconnectGoogleCalendar(
+      token => {
+        onTokenChange(token);
+        setNeedsReconnect(false);
+        setConnecting(false);
+      },
+      err => {
+        setError(err);
+        setConnecting(false);
+      },
+    );
+  }, [onTokenChange]);
+
+  /** Detect "user was connected but no current token" — show banner */
+  useEffect(() => {
+    if (!gcalToken && wasConnected() && !isStudentView) {
+      setNeedsReconnect(true);
+    }
+  }, [gcalToken, isStudentView]);
 
   useEffect(() => {
     if (gcalToken) loadEvents(gcalToken, monday);
@@ -685,6 +714,36 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
           </svg>
           {error}
+        </div>
+      )}
+
+      {/* Reconnect banner — shown when silent refresh fails (third-party cookies blocked, etc.) */}
+      {needsReconnect && !isStudentView && (
+        <div className="mb-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 flex items-center gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+              Google Calendar session expired
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Your browser blocked automatic refresh. Click to restore the connection — no account picker, just a quick consent.
+            </p>
+          </div>
+          <button
+            onClick={handleReconnect}
+            disabled={connecting}
+            className="flex-shrink-0 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center gap-2"
+          >
+            {connecting && (
+              <svg className="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              </svg>
+            )}
+            {connecting ? 'Reconnecting…' : 'Reconnect'}
+          </button>
         </div>
       )}
 
