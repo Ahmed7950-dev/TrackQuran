@@ -131,6 +131,7 @@ function shuffleArr<T>(arr: T[]): T[] {
 type MiniPhase = 'active' | 'wrong' | 'done';
 
 const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onComplete, onCancel }) => {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<MiniPhase>('active');
   const [shuffled, setShuffled] = useState<VocabMistakeDetail[]>(() => shuffleArr(words));
   const [cardIndex, setCardIndex] = useState(0);
@@ -162,17 +163,18 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center space-y-5 shadow-sm">
           <div className="text-6xl">🎉</div>
           <div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">All correct!</h3>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('arabicStudentDetail.allCorrect')}</h3>
             <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{lessonTitle}</p>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            You got all {words.length} word{words.length !== 1 ? 's' : ''} right in a row.
-            They will be removed from your wrong words list.
+            {words.length === 1
+              ? t('arabicStudentDetail.allCorrectMsg_one', { count: words.length })
+              : t('arabicStudentDetail.allCorrectMsg_other', { count: words.length })}
           </p>
           <button
             onClick={() => onComplete(words.map(w => w.id))}
             className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm transition-colors">
-            ✓ Done
+            {t('arabicStudentDetail.done')}
           </button>
         </div>
       </div>
@@ -187,7 +189,7 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
           <div className="text-4xl">😕</div>
           <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
           <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-5 space-y-2">
-            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
+            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">{t('arabicStudentDetail.theArabicWordIs')}</p>
             <p className="text-4xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{currentWord.arabic}</p>
             {currentWord.transliteration && (
               <p className="text-sm text-slate-500 dark:text-slate-400 italic">{currentWord.transliteration}</p>
@@ -195,17 +197,17 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
           </div>
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-              ❗ Get all words right in a row to complete the challenge!
+              ❗ {t('arabicStudentDetail.challengeWarning')}
             </p>
           </div>
         </div>
         <button onClick={restart}
           className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors">
-          🔄 Start Over
+          🔄 {t('arabicStudentDetail.startOver')}
         </button>
         <button onClick={onCancel}
           className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
-          Back to wrong words
+          {t('arabicStudentDetail.backToWrongWords')}
         </button>
       </div>
     );
@@ -217,12 +219,12 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-bold text-slate-800 dark:text-slate-100">Practising wrong words</h3>
+          <h3 className="font-bold text-slate-800 dark:text-slate-100">{t('arabicStudentDetail.practisingWrongWords')}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{lessonTitle}</p>
         </div>
         <button onClick={onCancel}
           className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-          Cancel
+          {t('arabicStudentDetail.cancel')}
         </button>
       </div>
 
@@ -240,7 +242,7 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
       {/* Card */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-12 px-8 text-center shadow-sm space-y-3">
         <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-          Do you know the Arabic for…
+          {t('arabicStudentDetail.doYouKnowArabicFor')}
         </p>
         <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
       </div>
@@ -249,11 +251,11 @@ const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onCom
       <div className="grid grid-cols-2 gap-4">
         <button onClick={handleNotSure}
           className="py-5 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-lg">
-          😕 Not Sure
+          😕 {t('arabicStudentDetail.notSure')}
         </button>
         <button onClick={handleKnow}
           className="py-5 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-lg">
-          ✓ I Know!
+          ✓ {t('arabicStudentDetail.iKnow')}
         </button>
       </div>
     </div>
@@ -269,6 +271,7 @@ interface ProgressTabProps {
 }
 
 const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesUpdated }) => {
+  const { t } = useI18n();
   const [attempts, setAttempts] = useState<VocabAttempt[]>([]);
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
   const [mistakes, setMistakes] = useState<VocabMistakeDetail[]>([]);
@@ -487,12 +490,12 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
       <section>
         <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
           <span className="inline-block w-1.5 h-5 bg-amber-400 rounded-full" />
-          Spaced-Repetition Schedule
+          {t('arabicStudentDetail.srsTitle')}
         </h2>
         <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-          Dates are calculated from the first flashcard session date (+1, +3, +7, +14 days).
-          <span className="ml-1 text-emerald-500 font-semibold">Green cells</span> = due today ·
-          <span className="ml-1 text-red-400 font-semibold">Red dates</span> = overdue.
+          {t('arabicStudentDetail.srsDescription')}
+          <span className="ml-1 text-emerald-500 font-semibold">{t('arabicStudentDetail.srsGreen')}</span> ·
+          <span className="ml-1 text-red-400 font-semibold">{t('arabicStudentDetail.srsRed')}</span>
         </p>
 
         {/* Today reminder banner */}
@@ -520,12 +523,12 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
             <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-gray-700">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Lesson / List</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">First Done</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+1 day</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+3 days</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+7 days</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">+14 days</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colLessonList')}</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colFirstDone')}</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col1day')}</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col3days')}</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col7days')}</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col14days')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -561,7 +564,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                 {lessonsWithVocab.length > 0 && listsWithAttempts.length > 0 && (
                   <tr>
                     <td colSpan={6} className="px-5 py-2 bg-slate-50 dark:bg-gray-700/50 border-y border-slate-100 dark:border-gray-700">
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Custom Vocabulary Lists</span>
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t('arabicStudentDetail.customVocabLists')}</span>
                     </td>
                   </tr>
                 )}
@@ -607,7 +610,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
       <section>
         <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
           <span className="inline-block w-1.5 h-5 bg-red-400 rounded-full" />
-          Wrong Words
+          {t('arabicStudentDetail.wrongWords')}
           {mistakes.length > 0 && (
             <span className="ml-1 px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold rounded-full">
               {mistakes.length}
@@ -637,7 +640,9 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                         {lessonTitle}
                       </span>
                       <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-semibold rounded-full">
-                        {sorted.length} word{sorted.length > 1 ? 's' : ''}
+                        {sorted.length === 1
+                          ? t('arabicStudentDetail.wordCount_one', { count: sorted.length })
+                          : t('arabicStudentDetail.wordCount_other', { count: sorted.length })}
                       </span>
                     </div>
                     <button
@@ -649,7 +654,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
                       </svg>
-                      Practice
+                      {t('arabicStudentDetail.practice')}
                     </button>
                   </div>
 
@@ -657,10 +662,10 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-gray-700">
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Arabic</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Transliteration</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">English</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Missed</th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colArabic')}</th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colTranslit')}</th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colEnglish')}</th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colMissed')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -746,13 +751,13 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
             </svg>
-            <span className="font-semibold">All Students</span>
+            <span className="font-semibold">{t('arabicStudentDetail.allStudents')}</span>
           </button>
         )}
         {studentMode && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-full">
             <span className="text-amber-600 dark:text-amber-400 text-sm">🎓</span>
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Student Portal</span>
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{t('arabicStudentDetail.studentPortal')}</span>
           </div>
         )}
         <div className="flex items-center gap-2">
@@ -761,7 +766,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
             </svg>
-            Edit My Info
+            {t('arabicStudentDetail.editMyInfo')}
           </button>
           {/* Delete — only shown to tutor, never to student */}
           {!studentMode && (!showDelete ? (
@@ -770,15 +775,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
               </svg>
-              Delete
+              {t('arabicStudentDetail.delete')}
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600 dark:text-red-400 font-semibold">Are you sure?</span>
+              <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('arabicStudentDetail.areYouSure')}</span>
               <button onClick={() => { onDeleteStudent(student.id); }}
-                className="px-3 py-1.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors">Yes, delete</button>
+                className="px-3 py-1.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors">{t('arabicStudentDetail.yesDelete')}</button>
               <button onClick={() => setShowDelete(false)}
-                className="px-3 py-1.5 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                className="px-3 py-1.5 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">{t('arabicStudentDetail.cancel')}</button>
             </div>
           ))}
         </div>
@@ -801,7 +806,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                   </svg>
-                  {vocabCount.toLocaleString()} words learned
+                  {t('arabicStudentDetail.wordsLearned', { count: vocabCount.toLocaleString() })}
                 </span>
               )}
             </div>
@@ -810,9 +815,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           {/* Lesson plan widget */}
           {lessonsPerWeek !== null && (
             <div className="flex-shrink-0 text-right">
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wide">Lessons / week</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wide">{t('arabicStudentDetail.lessonsPerWeek')}</p>
               <p className="text-4xl font-extrabold text-amber-600 dark:text-amber-300">{lessonsPerWeek}</p>
-              {wl !== null && <p className="text-xs text-amber-500/80 mt-0.5">{wl} weeks left</p>}
+              {wl !== null && <p className="text-xs text-amber-500/80 mt-0.5">{t('arabicStudentDetail.weeksLeft', { count: wl })}</p>}
             </div>
           )}
         </div>
@@ -969,21 +974,21 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       {activeSection === 'profile' && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 space-y-5">
           <dl className="space-y-4">
-            <InfoRow label="Date of birth"  value={student.dob ? new Date(student.dob).toLocaleDateString() : undefined} />
-            <InfoRow label="Lessons for"    value={student.forSelf ? 'Themselves' : `Someone else (${student.forWhom || 'not specified'})`} />
-            <InfoRow label="WhatsApp"        value={student.whatsapp} />
-            <InfoRow label="Nationality"     value={student.nationality} />
-            <InfoRow label="Timezone"        value={student.timezone} />
-            <InfoRow label="Goal deadline"   value={student.goalDeadline ? new Date(student.goalDeadline).toLocaleDateString() : undefined} />
-            <InfoRow label="Learning goals"
+            <InfoRow label={t('arabicStudentDetail.dob')}  value={student.dob ? new Date(student.dob).toLocaleDateString() : undefined} />
+            <InfoRow label={t('arabicStudentDetail.lessonsFor')}    value={student.forSelf ? t('arabicStudentDetail.themselves') : `${t('arabicStudentDetail.someoneElse')} (${student.forWhom || t('arabicStudentDetail.notSpecified')})`} />
+            <InfoRow label={t('arabicStudentDetail.whatsapp')}        value={student.whatsapp} />
+            <InfoRow label={t('arabicStudentDetail.nationality')}     value={student.nationality} />
+            <InfoRow label={t('arabicStudentDetail.timezone')}        value={student.timezone} />
+            <InfoRow label={t('arabicStudentDetail.goalDeadline')}   value={student.goalDeadline ? new Date(student.goalDeadline).toLocaleDateString() : undefined} />
+            <InfoRow label={t('arabicStudentDetail.learningGoals')}
               value={student.learningPurposes.length ? student.learningPurposes.join(', ') : undefined} />
-            <InfoRow label="Topics to focus"
+            <InfoRow label={t('arabicStudentDetail.topicsToFocus')}
               value={student.topicsToFocus.length ? student.topicsToFocus.join(', ') : undefined} />
           </dl>
 
           {student.availability.length > 0 && (
             <div>
-              <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Weekly availability</h3>
+              <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">{t('arabicStudentDetail.weeklyAvailability')}</h3>
               <AvailabilityGrid slots={student.availability} timezone={student.timezone} />
             </div>
           )}

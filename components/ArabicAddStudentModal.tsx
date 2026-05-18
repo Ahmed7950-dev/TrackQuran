@@ -6,6 +6,7 @@
 
 import React, { useRef, useState } from 'react';
 import { ArabicStudent, ArabicDialect, WeeklySlot } from '../types';
+import { useI18n } from '../context/I18nProvider';
 
 interface Props {
   isOpen: boolean;
@@ -140,6 +141,7 @@ const TagInput: React.FC<{
   onRemove: (v: string) => void;
   placeholder?: string;
 }> = ({ tags, onAdd, onRemove, placeholder = 'Type and press Enter…' }) => {
+  const { t } = useI18n();
   const [val, setVal] = useState('');
 
   const commit = () => {
@@ -165,7 +167,7 @@ const TagInput: React.FC<{
           disabled={!val.trim()}
           className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
         >
-          Add
+          {t('arabicStudentModal.add')}
         </button>
       </div>
       {tags.length > 0 && (
@@ -195,6 +197,7 @@ const TagInput: React.FC<{
 // ── Component ────────────────────────────────────────────────────────────────
 
 const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, onSave, existing }) => {
+  const { t } = useI18n();
   const isEdit = !!existing;
 
   // Form fields
@@ -274,8 +277,8 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!name.trim()) { setError('Student name is required.'); return; }
-    if (dialects.length === 0) { setError('Please select at least one Arabic variant.'); return; }
+    if (!name.trim()) { setError(t('arabicStudentModal.errNameRequired')); return; }
+    if (dialects.length === 0) { setError(t('arabicStudentModal.errDialectRequired')); return; }
 
     const student: ArabicStudent = {
       id:                 existing?.id ?? `ar-${Date.now()}`,
@@ -321,9 +324,9 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
         <div className="flex items-center justify-between px-7 pt-7 pb-5 border-b border-slate-100 dark:border-gray-700">
           <div>
             <h2 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-              {isEdit ? 'Edit Student' : 'Add Arabic Student'}
+              {isEdit ? t('arabicStudentModal.editStudent') : t('arabicStudentModal.addStudent')}
             </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Fill in the profile details below.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('arabicStudentModal.subtitle')}</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -335,37 +338,37 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
         <form onSubmit={handleSubmit} className="px-7 py-6 space-y-7">
 
           {/* ── A. Name & DOB ── */}
-          <Section title="A. Student information">
+          <Section title={t('arabicStudentModal.sectionA')}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Full name *</label>
-                <input value={name} onChange={e => setName(e.target.value)} className={inp} placeholder="e.g. Omar Hassan" />
+                <label className={lbl}>{t('arabicStudentModal.fullName')}</label>
+                <input value={name} onChange={e => setName(e.target.value)} className={inp} placeholder={t('arabicStudentModal.fullNamePlaceholder')} />
               </div>
               <div>
-                <label className={lbl}>Date of birth</label>
+                <label className={lbl}>{t('arabicStudentModal.dob')}</label>
                 <input type="date" value={dob} onChange={e => setDob(e.target.value)} className={inp} />
               </div>
             </div>
           </Section>
 
           {/* ── B. Lessons for ── */}
-          <Section title="B. Lessons for">
+          <Section title={t('arabicStudentModal.sectionB')}>
             <div className="flex flex-col gap-3">
               <div className="flex gap-3">
-                <button type="button" onClick={() => setForSelf(true)}  className={pill(forSelf)}>Themselves</button>
-                <button type="button" onClick={() => setForSelf(false)} className={pill(!forSelf)}>Someone else</button>
+                <button type="button" onClick={() => setForSelf(true)}  className={pill(forSelf)}>{t('arabicStudentModal.themselves')}</button>
+                <button type="button" onClick={() => setForSelf(false)} className={pill(!forSelf)}>{t('arabicStudentModal.someoneElse')}</button>
               </div>
               {!forSelf && (
                 <input
                   value={forWhom} onChange={e => setForWhom(e.target.value)}
-                  className={inp} placeholder="Relationship, e.g. son, daughter, wife…"
+                  className={inp} placeholder={t('arabicStudentModal.forWhomPlaceholder')}
                 />
               )}
             </div>
           </Section>
 
           {/* ── C. Dialect / variant ── */}
-          <Section title="C. Wants to learn *">
+          <Section title={t('arabicStudentModal.sectionC')}>
             <div className="flex flex-wrap gap-2">
               {(['msa', 'levantine', 'quranic'] as ArabicDialect[]).map(d => (
                 <button key={d} type="button" onClick={() => toggleDialect(d)} className={pill(dialects.includes(d))}>
@@ -376,12 +379,12 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
           </Section>
 
           {/* ── D. WhatsApp ── */}
-          <Section title="D. WhatsApp contact">
-            <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className={inp} placeholder="+1 234 567 8901 (include country code)" />
+          <Section title={t('arabicStudentModal.sectionD')}>
+            <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className={inp} placeholder={t('arabicStudentModal.whatsappPlaceholder')} />
           </Section>
 
           {/* ── E. Arabic level — slider 1–10 ── */}
-          <Section title="E. Arabic level">
+          <Section title={t('arabicStudentModal.sectionE')}>
             <div className="space-y-3 px-1">
               {/* Value + label display */}
               <div className="flex items-end justify-between">
@@ -389,7 +392,18 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                   <span className={`text-5xl font-extrabold tabular-nums ${levelColor(levelNum)}`}>{levelNum}</span>
                   <span className="text-slate-400 dark:text-slate-500 text-lg font-semibold"> / 10</span>
                 </div>
-                <span className={`text-sm font-semibold ${levelColor(levelNum)}`}>{levelLabel(levelNum)}</span>
+                <span className={`text-sm font-semibold ${levelColor(levelNum)}`}>{
+                  levelNum <= 1 ? t('arabicStudentModal.levelAbsBeginner') :
+                  levelNum <= 2 ? t('arabicStudentModal.levelBeginner') :
+                  levelNum <= 3 ? t('arabicStudentModal.levelElementary') :
+                  levelNum <= 4 ? t('arabicStudentModal.levelPreIntermediate') :
+                  levelNum <= 5 ? t('arabicStudentModal.levelIntermediate') :
+                  levelNum <= 6 ? t('arabicStudentModal.levelUpperIntermediate') :
+                  levelNum <= 7 ? t('arabicStudentModal.levelAdvanced') :
+                  levelNum <= 8 ? t('arabicStudentModal.levelProficient') :
+                  levelNum <= 9 ? t('arabicStudentModal.levelNearNative') :
+                  t('arabicStudentModal.levelNative')
+                }</span>
               </div>
 
               {/* Slider */}
@@ -418,45 +432,45 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
 
               {/* Band labels */}
               <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                <span>Beginner</span>
-                <span>Intermediate</span>
-                <span>Native</span>
+                <span>{t('arabicStudentModal.bandBeginner')}</span>
+                <span>{t('arabicStudentModal.bandIntermediate')}</span>
+                <span>{t('arabicStudentModal.bandNative')}</span>
               </div>
             </div>
           </Section>
 
           {/* ── F. Learning purposes — free-text tag input ── */}
-          <Section title="F. Learning purposes">
+          <Section title={t('arabicStudentModal.sectionF')}>
             <TagInput
               tags={purposes}
               onAdd={v => setPurposes(prev => [...prev, v])}
               onRemove={v => setPurposes(prev => prev.filter(x => x !== v))}
-              placeholder="e.g. Conversation, Travel, Business… then press Enter"
+              placeholder={t('arabicStudentModal.purposesPlaceholder')}
             />
           </Section>
 
           {/* ── G. Topics to focus on — free-text tag input ── */}
-          <Section title="G. Topics to focus on">
+          <Section title={t('arabicStudentModal.sectionG')}>
             <TagInput
               tags={topics}
               onAdd={v => setTopics(prev => [...prev, v])}
               onRemove={v => setTopics(prev => prev.filter(x => x !== v))}
-              placeholder="e.g. Grammar, Vocabulary, Speaking… then press Enter"
+              placeholder={t('arabicStudentModal.topicsPlaceholder')}
             />
           </Section>
 
           {/* ── H & I. Nationality + Timezone ── */}
-          <Section title="H &amp; I. Nationality &amp; Timezone">
+          <Section title={t('arabicStudentModal.sectionHI')}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Nationality</label>
+                <label className={lbl}>{t('arabicStudentModal.nationality')}</label>
                 <select value={nationality} onChange={e => setNationality(e.target.value)} className={inp}>
-                  <option value="">Select…</option>
+                  <option value="">{t('arabicStudentModal.selectPlaceholder')}</option>
                   {NATIONALITIES.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>
-                <label className={lbl}>Timezone</label>
+                <label className={lbl}>{t('arabicStudentModal.timezone')}</label>
                 <select value={timezone} onChange={e => setTimezone(e.target.value)} className={inp}>
                   {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
@@ -465,14 +479,10 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
           </Section>
 
           {/* ── J. Availability calendar ── */}
-          <Section title="J. Weekly availability">
+          <Section title={t('arabicStudentModal.sectionJ')}>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-              Times are in{' '}
-              <strong className="text-amber-600 dark:text-amber-400">{timezone}</strong>
-              {' '}
-              <span className="font-mono text-amber-500">({tzOffsetLabel})</span>.
-              {showTeacherEquiv && <span className="text-slate-400 dark:text-slate-500"> Small text shows Istanbul (teacher) time.</span>}
-              {' '}Click or drag cells to mark availability (green).
+              {t('arabicStudentModal.availabilityHint', { timezone, offset: tzOffsetLabel })}
+              {showTeacherEquiv && <span className="text-slate-400 dark:text-slate-500"> {t('arabicStudentModal.availabilityTeacherTime')}</span>}
             </p>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-600 select-none">
@@ -525,34 +535,34 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
               onClick={() => setGrid(new Set())}
               className="mt-2 text-xs text-slate-400 hover:text-red-500 transition-colors"
             >
-              Clear all
+              {t('arabicStudentModal.clearAll')}
             </button>
           </Section>
 
           {/* ── K. Goal deadline + lesson plan equation ── */}
-          <Section title="K. Goal deadline">
+          <Section title={t('arabicStudentModal.sectionK')}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
               <div>
-                <label className={lbl}>Target completion date</label>
+                <label className={lbl}>{t('arabicStudentModal.targetDate')}</label>
                 <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className={inp} />
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  The date by which the student wants to reach their goal (60 lessons total).
+                  {t('arabicStudentModal.targetDateHint')}
                 </p>
               </div>
               {deadline && lpw !== null && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
-                  <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold uppercase tracking-wide mb-1">Lesson plan</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold uppercase tracking-wide mb-1">{t('arabicStudentModal.lessonPlan')}</p>
                   <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-300">
-                    {lpw} <span className="text-base font-bold">lessons / week</span>
+                    {lpw} <span className="text-base font-bold">{t('arabicStudentModal.lessonsPerWeek')}</span>
                   </p>
                   <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-1">
-                    {60 - completedCount} remaining · {Math.max(0, Math.round(weeksUntil(deadline)))} weeks left
+                    {t('arabicStudentModal.remaining', { count: 60 - completedCount, weeks: Math.max(0, Math.round(weeksUntil(deadline))) })}
                   </p>
                 </div>
               )}
               {deadline && (lpw === null || lpw < 0) && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
-                  The deadline has already passed or is too close.
+                  {t('arabicStudentModal.deadlinePassed')}
                 </div>
               )}
             </div>
@@ -571,13 +581,13 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
               type="button" onClick={onClose}
               className="px-5 py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 rounded-lg font-semibold hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors"
             >
-              Cancel
+              {t('arabicStudentModal.cancel')}
             </button>
             <button
               type="submit"
               className="px-7 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-sm transition-colors"
             >
-              {isEdit ? 'Save Changes' : 'Add Student'}
+              {isEdit ? t('arabicStudentModal.saveChanges') : t('arabicStudentModal.addStudent')}
             </button>
           </div>
         </form>
@@ -589,10 +599,9 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
 // ── Section wrapper ───────────────────────────────────────────────────────────
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div>
-    <h3
-      className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-3"
-      dangerouslySetInnerHTML={{ __html: title }}
-    />
+    <h3 className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-3">
+      {title}
+    </h3>
     {children}
   </div>
 );

@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { ArabicStudent } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
+import { useI18n } from '../context/I18nProvider';
 
 interface Props {
   teacherId: string;
@@ -31,6 +32,7 @@ function dialectLabel(d: string): string {
 }
 
 const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {}, onAddStudent, onSelectStudent, onUpdateStudent, onFamilyLinks }) => {
+  const { t } = useI18n();
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [copyingId, setCopyingId] = useState<string | null>(null);
@@ -67,10 +69,12 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
         <div>
           <h1 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
             <span className="text-2xl" style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</span>
-            Arabic Students
+            {t('arabicDashboard.title')}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {students.length} {students.length === 1 ? 'student' : 'students'} · click any card to view their lessons
+            {students.length === 1
+              ? t('arabicDashboard.studentCount_one', { count: students.length })
+              : t('arabicDashboard.studentCount_other', { count: students.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -80,7 +84,7 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
               className="flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm transition-colors"
             >
               <span className="text-base">👨‍👩‍👧‍👦</span>
-              Family Links
+              {t('arabicDashboard.familyLinks')}
             </button>
           )}
           <button
@@ -90,7 +94,7 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Add Student
+            {t('arabicDashboard.addStudent')}
           </button>
         </div>
       </div>
@@ -103,7 +107,7 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
           </svg>
           <input
             value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search students…"
+            placeholder={t('arabicDashboard.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
         </div>
@@ -113,15 +117,15 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
       {students.length === 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-16 text-center">
           <div className="text-6xl mb-4" style={{ fontFamily: 'Amiri Regular, serif' }}>ع</div>
-          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-2">No Arabic students yet</h3>
+          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-2">{t('arabicDashboard.noStudents')}</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-            Click "Add Student" to register your first Arabic language student.
+            {t('arabicDashboard.noStudentsHint')}
           </p>
           <button
             onClick={() => setModalOpen(true)}
             className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors"
           >
-            Add your first student
+            {t('arabicDashboard.addFirstStudent')}
           </button>
         </div>
       )}
@@ -144,7 +148,7 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
       )}
 
       {filtered.length === 0 && students.length > 0 && (
-        <p className="text-center text-slate-500 dark:text-slate-400 py-8">No students match "{search}"</p>
+        <p className="text-center text-slate-500 dark:text-slate-400 py-8">{t('arabicDashboard.noMatch', { search })}</p>
       )}
 
       {/* ── Modal ── */}
@@ -170,6 +174,7 @@ interface CardProps {
 }
 
 const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onCopyLink, copying, copied }) => {
+  const { t } = useI18n();
   const pct = progressPercent(s);
 
   return (
@@ -191,7 +196,7 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onC
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                   </svg>
-                  {vocabCount.toLocaleString()} words
+                  {t('arabicPortal.words', { count: vocabCount.toLocaleString() })}
                 </span>
               )}
             </div>
@@ -215,7 +220,7 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onC
         {/* Progress bar */}
         <div>
           <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
-            <span>Lesson progress</span>
+            <span>{t('arabicDashboard.lessonProgress')}</span>
             <span className="font-semibold">{s.completedLessonIds.length} / 60</span>
           </div>
           <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -229,7 +234,7 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onC
         {/* Deadline */}
         {s.goalDeadline && (
           <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-            Goal: {new Date(s.goalDeadline).toLocaleDateString()}
+            {t('arabicDashboard.goal', { date: new Date(s.goalDeadline).toLocaleDateString() })}
           </p>
         )}
       </button>
@@ -259,7 +264,7 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, onClick, onC
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
             </svg>
           )}
-          {copying ? 'Generating…' : copied ? 'Link copied!' : 'Copy student link'}
+          {copying ? t('arabicDashboard.generating') : copied ? t('arabicDashboard.linkCopied') : t('arabicDashboard.copyLink')}
         </button>
       </div>
     </div>

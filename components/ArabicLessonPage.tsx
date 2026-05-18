@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect } from '../types';
 import { useAuth } from '../context/AuthProvider';
+import { useI18n } from '../context/I18nProvider';
 import {
   getArabicLessons,
   createArabicLesson,
@@ -49,6 +50,7 @@ const COURSE_LABELS: Record<ArabicCourseDialect, string> = {
 const CreateArabicLessonModal: React.FC<ModalProps> = ({
   isOpen, existing, onClose, onCreated, onUpdated, createdBy, defaultLevel = 1, defaultDialect = 'levantine',
 }) => {
+  const { t } = useI18n();
   const isEdit = !!existing;
   const [title,   setTitle]   = useState(existing?.title       ?? '');
   const [desc,    setDesc]    = useState(existing?.description ?? '');
@@ -67,34 +69,34 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.type !== 'application/pdf') { setErr('Please select a PDF file.'); return; }
-    if (f.size > 50 * 1024 * 1024) { setErr('PDF must be under 50 MB.'); return; }
+    if (f.type !== 'application/pdf') { setErr(t('arabicLessonPage.errPdfOnly')); return; }
+    if (f.size > 50 * 1024 * 1024) { setErr(t('arabicLessonPage.errPdfSize')); return; }
     setErr(''); setFile(f);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr('');
-    if (!title.trim()) { setErr('Lesson title is required.'); return; }
-    if (!isEdit && !file) { setErr('Please upload a PDF file.'); return; }
+    if (!title.trim()) { setErr(t('arabicLessonPage.errTitleRequired')); return; }
+    if (!isEdit && !file) { setErr(t('arabicLessonPage.errFileRequired')); return; }
     setSaving(true);
 
     let pdfUrl = existing?.pdfUrl;
     if (file) {
       const url = await uploadArabicLessonPdf(file);
-      if (!url) { setErr('PDF upload failed. Check storage permissions.'); setSaving(false); return; }
+      if (!url) { setErr(t('arabicLessonPage.errUploadFailed')); setSaving(false); return; }
       pdfUrl = url;
     }
 
     if (isEdit && existing) {
       const ok = await updateArabicLesson(existing.id, { title: title.trim(), description: desc.trim() || undefined, pdfUrl, level, dialect });
       setSaving(false);
-      if (!ok) { setErr('Failed to save changes.'); return; }
+      if (!ok) { setErr(t('arabicLessonPage.errSaveFailed')); return; }
       onUpdated?.({ ...existing, title: title.trim(), description: desc.trim() || undefined, pdfUrl, level, dialect });
       handleClose();
     } else {
       const lesson = await createArabicLesson({ title: title.trim(), description: desc.trim() || undefined, level, dialect, pdfUrl, createdBy });
       setSaving(false);
-      if (!lesson) { setErr('Failed to create lesson. Please try again.'); return; }
+      if (!lesson) { setErr(t('arabicLessonPage.errCreateFailed')); return; }
       onCreated?.(lesson);
       handleClose();
     }
@@ -107,7 +109,7 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-            {isEdit ? 'Edit Arabic Lesson' : 'Upload Arabic Lesson'}
+            {isEdit ? t('arabicLessonPage.editLesson') : t('arabicLessonPage.uploadLesson')}
           </h2>
           {!saving && (
             <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
@@ -119,20 +121,20 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Lesson title</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('arabicLessonPage.lessonTitle')}</label>
             <input type="text" value={title} onChange={e => setTitle(e.target.value)} disabled={saving} autoFocus
-              placeholder="e.g. Introduction to Arabic Alphabet" className={inp} />
+              placeholder={t('arabicLessonPage.lessonTitlePlaceholder')} className={inp} />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Description <span className="text-xs font-normal text-slate-400">(optional)</span>
+              {t('arabicLessonPage.description')} <span className="text-xs font-normal text-slate-400">({t('arabicLessonPage.optional')})</span>
             </label>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} disabled={saving} rows={2}
-              placeholder="Short summary…" className={inp} />
+              placeholder={t('arabicLessonPage.descriptionPlaceholder')} className={inp} />
           </div>
           {/* Course Type selector */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Course</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t('arabicLessonPage.course')}</label>
             <div className="flex gap-2">
               {(['levantine', 'msa'] as ArabicCourseDialect[]).map(d => (
                 <button key={d} type="button" onClick={() => setDialect(d)} disabled={saving}
@@ -148,7 +150,7 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
           </div>
           {/* Level selector */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Level</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t('arabicLessonPage.level')}</label>
             <div className="flex gap-2">
               {LEVELS.map(l => (
                 <button key={l} type="button" onClick={() => setLevel(l)} disabled={saving}
@@ -157,14 +159,14 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
                       ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
                       : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-amber-300'
                   }`}>
-                  Level {l}
+                  {t('arabicLessonPage.levelN', { n: l })}
                 </button>
               ))}
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              PDF file {isEdit && <span className="text-xs font-normal text-slate-400">(leave empty to keep current)</span>}
+              {t('arabicLessonPage.pdfFile')} {isEdit && <span className="text-xs font-normal text-slate-400">({t('arabicLessonPage.pdfKeepCurrent')})</span>}
             </label>
             <input ref={fileRef} type="file" accept="application/pdf" onChange={handleFileChange} disabled={saving} className="hidden" />
             <button type="button" onClick={() => fileRef.current?.click()} disabled={saving}
@@ -178,11 +180,11 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
                   <><p className="text-sm font-semibold text-amber-700 dark:text-amber-300 truncate">{file.name}</p>
                     <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(1)} MB</p></>
                 ) : existing?.pdfUrl ? (
-                  <><p className="text-sm text-slate-600 dark:text-slate-300">Current PDF attached — click to replace</p>
-                    <p className="text-xs text-slate-400">Max 50 MB</p></>
+                  <><p className="text-sm text-slate-600 dark:text-slate-300">{t('arabicLessonPage.pdfReplace')}</p>
+                    <p className="text-xs text-slate-400">{t('arabicLessonPage.pdfMaxSize')}</p></>
                 ) : (
-                  <><p className="text-sm text-slate-600 dark:text-slate-300">Click to choose a PDF file</p>
-                    <p className="text-xs text-slate-400">Max 50 MB</p></>
+                  <><p className="text-sm text-slate-600 dark:text-slate-300">{t('arabicLessonPage.pdfChoose')}</p>
+                    <p className="text-xs text-slate-400">{t('arabicLessonPage.pdfMaxSize')}</p></>
                 )}
               </div>
             </button>
@@ -194,17 +196,17 @@ const CreateArabicLessonModal: React.FC<ModalProps> = ({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
               </svg>
-              {file ? 'Uploading PDF…' : 'Saving…'}
+              {file ? t('arabicLessonPage.uploadingPdf') : t('arabicLessonPage.saving')}
             </div>
           )}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={handleClose} disabled={saving}
               className="px-4 py-2 bg-slate-200 text-slate-800 dark:bg-gray-600 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-gray-500 disabled:opacity-50">
-              Cancel
+              {t('arabicLessonPage.cancel')}
             </button>
             <button type="submit" disabled={saving}
               className="px-6 py-2 bg-amber-500 text-white font-semibold rounded-md shadow-sm hover:bg-amber-600 disabled:opacity-50 disabled:cursor-wait">
-              {saving ? '…' : isEdit ? 'Save Changes' : 'Upload Lesson'}
+              {saving ? '…' : isEdit ? t('arabicLessonPage.saveChanges') : t('arabicLessonPage.uploadLesson')}
             </button>
           </div>
         </form>
@@ -223,6 +225,7 @@ const LevelPlanModal: React.FC<{
   onClose: () => void;
   onUploaded: (url: string) => void;
 }> = ({ level, dialect, imageUrl, isAdmin, onClose, onUploaded }) => {
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState('');
@@ -230,10 +233,10 @@ const LevelPlanModal: React.FC<{
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
-    if (!f.type.startsWith('image/')) { setErr('Please select an image file.'); return; }
+    if (!f.type.startsWith('image/')) { setErr(t('arabicLessonPage.errImageOnly')); return; }
     setUploading(true); setErr('');
     const url = await uploadLevelPlanImage(level, dialect, f);
-    if (!url) { setErr('Upload failed. Check Storage permissions.'); setUploading(false); return; }
+    if (!url) { setErr(t('arabicLessonPage.errPlanUploadFailed')); setUploading(false); return; }
     await saveLevelPlan(level, dialect, url);
     setUploading(false);
     onUploaded(url);
@@ -251,7 +254,7 @@ const LevelPlanModal: React.FC<{
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
               <button onClick={() => fileRef.current?.click()} disabled={uploading}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
-                {uploading ? '⏳ Uploading…' : '📷 Upload Plan Image'}
+                {uploading ? t('arabicLessonPage.uploading') : t('arabicLessonPage.uploadPlanImage')}
               </button>
             </>
           )}
@@ -260,7 +263,7 @@ const LevelPlanModal: React.FC<{
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
-            Close
+            {t('arabicLessonPage.close')}
           </button>
         </div>
       </div>
@@ -284,8 +287,8 @@ const LevelPlanModal: React.FC<{
         ) : (
           <div className="flex flex-col items-center gap-3 text-white/50" onClick={e => e.stopPropagation()}>
             <span className="text-7xl">🗺</span>
-            <p className="font-semibold text-lg">No plan image uploaded yet</p>
-            {isAdmin && <p className="text-sm">Click "Upload Plan Image" above to add one</p>}
+            <p className="font-semibold text-lg">{t('arabicLessonPage.noPlanImage')}</p>
+            {isAdmin && <p className="text-sm">{t('arabicLessonPage.noPlanImageHint')}</p>}
           </div>
         )}
       </div>
@@ -311,6 +314,7 @@ interface Props {
 }
 
 const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter }) => {
+  const { t } = useI18n();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -363,7 +367,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   }, [preSelectedStudentId]);
 
   const handleDelete = async (l: ArabicLesson) => {
-    if (!confirm(`Delete lesson "${l.title}"? This cannot be undone.`)) return;
+    if (!confirm(t('arabicLessonPage.deleteConfirm', { title: l.title }))) return;
     const ok = await deleteLessonSvc(l.id);
     if (ok) setLessons(prev => prev.filter(x => x.id !== l.id));
   };
@@ -418,11 +422,11 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">Arabic Lessons</h1>
+          <h1 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonPage.title')}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {isAdmin
-              ? 'Upload and manage Arabic PDF lessons. Drag rows to reorder.'
-              : `${dialectLessons.length} lessons — choose a level to begin.`}
+              ? t('arabicLessonPage.adminSubtitle')
+              : t('arabicLessonPage.studentSubtitle', { count: dialectLessons.length })}
           </p>
         </div>
         {isAdmin && (
@@ -431,7 +435,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Upload Lesson
+            {t('arabicLessonPage.uploadLesson')}
           </button>
         )}
       </div>
@@ -467,7 +471,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
                   ? 'border-amber-500 text-amber-600 dark:text-amber-400'
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}>
-              Level {lvl}
+              {t('arabicLessonPage.levelN', { n: lvl })}
               {preSelectedStudentId && lvlLessons.length > 0 && (
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                   lvlDone === lvlLessons.length ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
@@ -485,16 +489,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
-            {COURSE_LABELS[activeDialect]} — Level {activeLevel} ({activeLevel === 1 ? 'Beginner' : activeLevel === 2 ? 'Intermediate' : 'Advanced'})
+            {COURSE_LABELS[activeDialect]} — {t('arabicLessonPage.levelN', { n: activeLevel })} ({activeLevel === 1 ? t('arabicLessonPage.beginner') : activeLevel === 2 ? t('arabicLessonPage.intermediate') : t('arabicLessonPage.advanced')})
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{levelTotal} lessons added · {LESSONS_PER_LEVEL} per level</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('arabicLessonPage.levelSummary', { count: levelTotal, total: LESSONS_PER_LEVEL })}</p>
         </div>
         <button onClick={() => setShowPlan(activeLevel)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
               </svg>
-              Show Plan
+              {t('arabicLessonPage.showPlan')}
         </button>
       </div>
 
@@ -502,9 +506,9 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       {levelLessons.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 p-12 text-center">
           <div className="text-5xl mb-3">📄</div>
-          <h3 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1">No lessons in Level {activeLevel} yet</h3>
+          <h3 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1">{t('arabicLessonPage.noLessons', { n: activeLevel })}</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isAdmin ? 'Click "Upload Lesson" and set Level to add one.' : 'Lessons will appear here once an admin adds them.'}
+            {isAdmin ? t('arabicLessonPage.noLessonsAdmin') : t('arabicLessonPage.noLessonsStudent')}
           </p>
         </div>
       ) : (
@@ -619,7 +623,9 @@ const ArabicLessonRow: React.FC<RowProps> = ({
   hwQuestionCount, homeworkDone, vocabRounds, showStudentStats,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
-}) => (
+}) => {
+  const { t } = useI18n();
+  return (
   <div
     draggable={isAdmin}
     onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
@@ -666,11 +672,11 @@ const ArabicLessonRow: React.FC<RowProps> = ({
             homeworkDone ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-800">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
-                Homework done
+                {t('arabicLessonPage.homeworkDone')}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-200 dark:border-amber-700">
-                📝 {hwQuestionCount} questions
+                📝 {t('arabicLessonPage.questions', { n: hwQuestionCount })}
               </span>
             )
           )}
@@ -680,7 +686,7 @@ const ArabicLessonRow: React.FC<RowProps> = ({
                 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                 : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700'
             }`}>
-              🎴 Flashcards: {vocabRounds}/5 rounds
+              🎴 {t('arabicLessonPage.flashcards', { n: vocabRounds })}
             </span>
           )}
         </div>
@@ -692,12 +698,12 @@ const ArabicLessonRow: React.FC<RowProps> = ({
     </svg>
     {isAdmin && (
       <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <button onClick={onEdit} title="Edit" className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-gray-700 rounded transition-colors">
+        <button onClick={onEdit} title={t('arabicLessonPage.edit')} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-gray-700 rounded transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
           </svg>
         </button>
-        <button onClick={onDelete} title="Delete" className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">
+        <button onClick={onDelete} title={t('arabicLessonPage.delete')} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
           </svg>
@@ -705,6 +711,7 @@ const ArabicLessonRow: React.FC<RowProps> = ({
       </div>
     )}
   </div>
-);
+  );
+};
 
 export default ArabicLessonPage;

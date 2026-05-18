@@ -11,6 +11,7 @@ import {
 } from '../types';
 // VocabMode kept in types import for saveSpacedRep (both modes saved)
 import { useAuth } from '../context/AuthProvider';
+import { useI18n } from '../context/I18nProvider';
 import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
@@ -109,6 +110,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   preSelectedStudentId, onClose, onStudentUpdated, onHomeworkComplete,
   studentMode = false,
 }) => {
+  const { t } = useI18n();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const [lesson, setLesson] = useState(initialLesson);
@@ -213,12 +215,12 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
 
   // Tabs — Teacher's Note hidden in student mode; grammar always shown
   const tabs: { id: Tab; icon: string; label: string; popup?: boolean }[] = [
-    { id: 'lesson',       icon: '📖', label: 'Lesson PDF'      },
-    { id: 'homework',     icon: '📝', label: 'Homework'        },
-    { id: 'vocabulary',   icon: '🔤', label: 'Vocabulary'      },
-    { id: 'video',        icon: '🎬', label: 'Dialogue Video'  },
-    ...(!studentMode ? [{ id: 'teacher_note' as Tab, icon: '🗒️', label: "Teacher's Note", popup: true }] : []),
-    { id: 'grammar',      icon: '📐', label: 'Grammar Summary' },
+    { id: 'lesson',       icon: '📖', label: t('arabicLessonDetail.tabLesson')      },
+    { id: 'homework',     icon: '📝', label: t('arabicLessonDetail.tabHomework')    },
+    { id: 'vocabulary',   icon: '🔤', label: t('arabicLessonDetail.tabVocabulary')  },
+    { id: 'video',        icon: '🎬', label: t('arabicLessonDetail.tabVideo')       },
+    ...(!studentMode ? [{ id: 'teacher_note' as Tab, icon: '🗒️', label: t('arabicLessonDetail.tabTeacherNote'), popup: true }] : []),
+    { id: 'grammar',      icon: '📐', label: t('arabicLessonDetail.tabGrammar')     },
   ];
 
   // Whiteboard is shared per student — authorId = student being viewed, or teacher if no student context
@@ -262,7 +264,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
           </svg>
-          <span className="font-semibold text-sm">All Lessons</span>
+          <span className="font-semibold text-sm">{t('arabicLessonDetail.allLessons')}</span>
         </button>
         <div className="w-px h-5 bg-slate-200 dark:bg-gray-600" />
         <h1 className="font-bold text-slate-800 dark:text-slate-100 text-base truncate flex-1">{lesson.title}</h1>
@@ -273,7 +275,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         {tabs.map(tab => (
           <button key={tab.id}
             onClick={() => tab.popup ? openTeacherNoteWindow() : setActiveTab(tab.id)}
-            title={tab.popup ? 'Opens in a separate private window' : undefined}
+            title={tab.popup ? t('arabicLessonDetail.openPrivate') : undefined}
             className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
               tab.popup
                 ? 'border-transparent text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300'
@@ -343,11 +345,11 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         {activeTab === 'grammar' && (
           <div className="h-full overflow-y-auto p-6">
             <NoteTab
-              label="Grammar Summary"
+              label={t('arabicLessonDetail.tabGrammar')}
               icon="📐"
               description={studentMode
-                ? 'Grammar rules and structures covered in this lesson.'
-                : 'Summarise the grammar rules, patterns, or structures covered in this lesson.'}
+                ? t('arabicLessonDetail.grammarDescStudent')
+                : t('arabicLessonDetail.grammarDescAdmin')}
               value={grammarSummary}
               saveStatus={grammarSaveStatus}
               onChange={handleGrammarChange}
@@ -372,7 +374,9 @@ const NoteTab: React.FC<{
   saveStatus: 'saved' | 'saving' | null;
   onChange: (val: string) => void;
   readOnly?: boolean;
-}> = ({ label, icon, description, value, saveStatus, onChange, readOnly = false }) => (
+}> = ({ label, icon, description, value, saveStatus, onChange, readOnly = false }) => {
+  const { t } = useI18n();
+  return (
   <div className="max-w-3xl mx-auto space-y-4">
     {/* Header */}
     <div className="flex items-start justify-between gap-4">
@@ -388,7 +392,7 @@ const NoteTab: React.FC<{
           {saveStatus === 'saving' && (
             <>
               <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
-              <span className="text-amber-600 dark:text-amber-400">Saving…</span>
+              <span className="text-amber-600 dark:text-amber-400">{t('arabicLessonDetail.saving')}</span>
             </>
           )}
           {saveStatus === 'saved' && (
@@ -396,7 +400,7 @@ const NoteTab: React.FC<{
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500">
                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
               </svg>
-              <span className="text-emerald-600 dark:text-emerald-400">Saved</span>
+              <span className="text-emerald-600 dark:text-emerald-400">{t('arabicLessonDetail.saved')}</span>
             </>
           )}
         </div>
@@ -413,7 +417,7 @@ const NoteTab: React.FC<{
         </div>
       ) : (
         <div className="w-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-gray-800 border border-dashed border-slate-200 dark:border-gray-700 rounded-xl">
-          <p className="text-sm text-slate-400 dark:text-slate-500 italic">No grammar summary added yet.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 italic">{t('arabicLessonDetail.noGrammar')}</p>
         </div>
       )
     ) : (
@@ -428,13 +432,14 @@ const NoteTab: React.FC<{
         />
         {!value && (
           <p className="text-xs text-slate-400 dark:text-slate-500 italic">
-            Start typing — changes are saved automatically.
+            {t('arabicLessonDetail.autoSaveHint')}
           </p>
         )}
       </>
     )}
   </div>
-);
+  );
+};
 
 // ═══════════════════════════════════════════════════════
 // HOMEWORK TAB
@@ -448,6 +453,7 @@ const HomeworkTab: React.FC<{
   studentId?: string;
   onHomeworkComplete?: (lessonId: string) => void;
 }> = ({ lessonId, isAdmin, studentId, onHomeworkComplete }) => {
+  const { t } = useI18n();
   const [questions, setQuestions]   = useState<HomeworkQuestion[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showForm, setShowForm]     = useState(false);
@@ -498,7 +504,7 @@ const HomeworkTab: React.FC<{
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this question?')) return;
+    if (!confirm(t('arabicLessonDetail.deleteQuestionConfirm'))) return;
     if (await deleteHomeworkQuestion(id)) setQuestions(prev => prev.filter(q => q.id !== id));
   };
 
@@ -513,8 +519,8 @@ const HomeworkTab: React.FC<{
     return (
       <div className="max-w-4xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-base text-slate-500 dark:text-slate-400">Question {qIndex + 1} of {questions.length}</span>
-          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
+          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.questionOf', { n: qIndex + 1, total: questions.length })}</span>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(qIndex / questions.length) * 100}%` }} />
@@ -551,7 +557,7 @@ const HomeworkTab: React.FC<{
             </div>
           ) : q.type === 'true_false' ? (
             <div className="flex gap-4">
-              {['True', 'False'].map(opt => (
+              {([t('arabicLessonDetail.true'), t('arabicLessonDetail.false')]).map(opt => (
                 <button key={opt} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
                   className={`flex-1 py-4 rounded-xl border-2 font-semibold text-base transition-colors ${
                     userAnswer === opt
@@ -603,10 +609,10 @@ const HomeworkTab: React.FC<{
             <div className={`flex items-start gap-4 p-4 rounded-xl ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
               <span className="text-2xl">{feedback === 'correct' ? '✅' : '❌'}</span>
               <div>
-                <p className="font-semibold text-lg">{feedback === 'correct' ? 'Correct!' : 'Incorrect'}</p>
+                <p className="font-semibold text-lg">{feedback === 'correct' ? t('arabicLessonDetail.correct') : t('arabicLessonDetail.incorrect')}</p>
                 {feedback === 'wrong' && (
                   <p className="text-base mt-0.5">
-                    Correct answer: <span className="font-bold">
+                    {t('arabicLessonDetail.correctAnswer')} <span className="font-bold">
                       {q.type === 'fill_blank'
                         ? fbAnswers.join(' / ')
                         : q.correctAnswer}
@@ -624,12 +630,12 @@ const HomeworkTab: React.FC<{
                   ? Object.keys(blankAnswers).length < (q.question.match(/___/g) ?? []).length
                   : !userAnswer}
                 className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors text-base">
-                Submit
+                {t('arabicLessonDetail.submit')}
               </button>
             ) : (
               <button onClick={nextQuestion}
                 className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-                {qIndex + 1 >= questions.length ? 'See Results' : 'Next Question →'}
+                {qIndex + 1 >= questions.length ? t('arabicLessonDetail.seeResults') : t('arabicLessonDetail.nextQuestion')}
               </button>
             )}
           </div>
@@ -644,17 +650,17 @@ const HomeworkTab: React.FC<{
     return (
       <div className="max-w-2xl mx-auto p-12 text-center space-y-6">
         <div className="text-7xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
-        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">Practice Complete</h2>
+        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.practiceComplete')}</h2>
         <p className="text-lg text-slate-500 dark:text-slate-400">
-          You got <span className="font-bold text-amber-600 dark:text-amber-400">{score} / {questions.length}</span> correct ({pct}%)
+          {t('arabicLessonDetail.practiceScore', { score, total: questions.length, pct })}
         </p>
         <button onClick={startPractice}
           className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-          Try Again
+          {t('arabicLessonDetail.tryAgain')}
         </button>
         <button onClick={() => setPhase('idle')}
           className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
-          Back to Questions
+          {t('arabicLessonDetail.backToQuestions')}
         </button>
       </div>
     );
@@ -665,23 +671,22 @@ const HomeworkTab: React.FC<{
     <div className="max-w-5xl mx-auto p-8 space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Homework Questions</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.homeworkTitle')}</h2>
           <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
-            {questions.length} {questions.length === 1 ? 'exercise' : 'exercises'}
-            {isAdmin ? ' · add or edit questions below' : ' · click Practice to test yourself'}
+            {t('arabicLessonDetail.homeworkSubtitle', { count: questions.length, hint: isAdmin ? t('arabicLessonDetail.homeworkHintAdmin') : t('arabicLessonDetail.homeworkHintStudent') })}
           </p>
         </div>
         <div className="flex gap-2">
           {questions.length > 0 && !isAdmin && (
             <button onClick={startPractice}
               className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
-              ▶ Start Practice
+              ▶ {t('arabicLessonDetail.startPractice')}
             </button>
           )}
           {isAdmin && (
             <button onClick={() => { setEditingQ(null); setShowForm(v => !v); }}
               className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
-              {showForm && !editingQ ? '✕ Cancel' : '+ Add Question'}
+              {showForm && !editingQ ? `✕ ${t('arabicLessonDetail.cancel')}` : `+ ${t('arabicLessonDetail.addQuestion')}`}
             </button>
           )}
         </div>
@@ -702,9 +707,9 @@ const HomeworkTab: React.FC<{
       {questions.length === 0 && !showForm && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center">
           <div className="text-5xl mb-3">📝</div>
-          <p className="font-semibold text-slate-700 dark:text-slate-200">No questions yet</p>
+          <p className="font-semibold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.noQuestions')}</p>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isAdmin ? 'Click "Add Question" to create the first exercise.' : 'Questions will appear here once an admin adds them.'}
+            {isAdmin ? t('arabicLessonDetail.noQuestionsAdmin') : t('arabicLessonDetail.noQuestionsStudent')}
           </p>
         </div>
       )}
@@ -795,7 +800,7 @@ const HomeworkTab: React.FC<{
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
           </svg>
-          Export Homework to PDF
+          {t('arabicLessonDetail.exportHomework')}
         </button>
       )}
     </div>
@@ -815,6 +820,7 @@ interface AddHWProps {
 const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
   lessonId, existingQuestion, onCreated, onUpdated, onCancel,
 }) => {
+  const { t } = useI18n();
   const isEdit = !!existingQuestion;
   const [type, setType]               = useState<HomeworkQuestionType>(existingQuestion?.type ?? 'multiple_choice');
   const [question, setQuestion]       = useState(
@@ -844,21 +850,21 @@ const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
       finalQuestion = q;
       finalOptions = opts;
       finalCorrect = opts.join(' | ');
-      if (!finalQuestion.includes('___')) { setErr('Add at least one blank (___) using the "+ Blank" button.'); return; }
-      if (opts.some(o => !o.trim())) { setErr('All blanks need an answer filled in.'); return; }
+      if (!finalQuestion.includes('___')) { setErr(t('arabicLessonDetail.errAddBlank')); return; }
+      if (opts.some(o => !o.trim())) { setErr(t('arabicLessonDetail.errFillBlanks')); return; }
     } else {
-      if (!finalQuestion) { setErr('Question text is required.'); return; }
+      if (!finalQuestion) { setErr(t('arabicLessonDetail.errQuestionRequired')); return; }
     }
 
     if (type === 'multiple_choice' || type === 'fill_blank_options') {
       finalOptions = options.map(o => o.trim());
-      if (finalOptions.some(o => !o)) { setErr('All options must be filled in.'); return; }
-      if (!finalCorrect) { setErr('Select the correct answer.'); return; }
-      if (!finalOptions.includes(finalCorrect)) { setErr('Correct answer must match one of the options.'); return; }
+      if (finalOptions.some(o => !o)) { setErr(t('arabicLessonDetail.errAllOptions')); return; }
+      if (!finalCorrect) { setErr(t('arabicLessonDetail.errSelectCorrect')); return; }
+      if (!finalOptions.includes(finalCorrect)) { setErr(t('arabicLessonDetail.errCorrectMatch')); return; }
     } else if (type === 'true_false') {
-      if (!finalCorrect) { setErr('Select True or False as the correct answer.'); return; }
+      if (!finalCorrect) { setErr(t('arabicLessonDetail.errSelectTrueFalse')); return; }
     } else if (type !== 'fill_blank') {
-      if (!finalCorrect) { setErr('Correct answer is required.'); return; }
+      if (!finalCorrect) { setErr(t('arabicLessonDetail.errCorrectRequired')); return; }
     }
 
     setSaving(true);
@@ -866,12 +872,12 @@ const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
       const patch = { question: finalQuestion, options: finalOptions, correctAnswer: finalCorrect };
       const ok = await updateHWQ(existingQuestion.id, patch);
       setSaving(false);
-      if (!ok) { setErr('Failed to save changes.'); return; }
+      if (!ok) { setErr(t('arabicLessonDetail.errSaveFailed')); return; }
       onUpdated({ ...existingQuestion, ...patch });
     } else {
       const q = await createHomeworkQuestion({ lessonId, type, question: finalQuestion, options: finalOptions, correctAnswer: finalCorrect });
       setSaving(false);
-      if (!q) { setErr('Failed to save. Please try again.'); return; }
+      if (!q) { setErr(t('arabicLessonDetail.errSaveRetry')); return; }
       onCreated(q);
     }
   };
@@ -881,11 +887,11 @@ const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
-      <h3 className="font-bold text-amber-800 dark:text-amber-300">{isEdit ? 'Edit Question' : 'New Question'}</h3>
+      <h3 className="font-bold text-amber-800 dark:text-amber-300">{isEdit ? t('arabicLessonDetail.editQuestion') : t('arabicLessonDetail.newQuestion')}</h3>
 
       {!isEdit && (
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">Question type</label>
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">{t('arabicLessonDetail.questionType')}</label>
           <select value={type} onChange={e => setType(e.target.value as HomeworkQuestionType)} className={inp}>
             {(Object.entries(QUESTION_TYPE_LABELS) as [HomeworkQuestionType, string][]).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
@@ -981,11 +987,11 @@ const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
       <div className="flex gap-3">
         <button type="button" onClick={onCancel}
           className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">
-          Cancel
+          {t('arabicLessonDetail.cancel')}
         </button>
         <button type="submit" disabled={saving}
           className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors">
-          {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Question'}
+          {saving ? t('arabicLessonDetail.savingEllipsis') : isEdit ? t('arabicLessonDetail.saveChanges') : t('arabicLessonDetail.addQuestion')}
         </button>
       </div>
     </form>
@@ -995,6 +1001,7 @@ const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
 // ── Fill-in-blank segment editor ──────────────────────────────────────────────
 
 const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment[]) => void }> = ({ segments, onChange }) => {
+  const { t } = useI18n();
   const addText  = () => onChange([...segments, { id: genId(), type: 'text',  value: '' }]);
   const addBlank = () => onChange([...segments, { id: genId(), type: 'blank', answer: '' }]);
   const removeSeg = (id: string) => onChange(segments.filter(s => s.id !== id));
@@ -1005,11 +1012,11 @@ const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Build the question</label>
-      <p className="text-xs text-slate-400">Alternate text segments and blanks (answer boxes). The student will see ___ for each blank.</p>
+      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">{t('arabicLessonDetail.buildQuestion')}</label>
+      <p className="text-xs text-slate-400">{t('arabicLessonDetail.buildQuestionHint')}</p>
 
       {segments.length === 0 && (
-        <p className="text-xs text-slate-400 italic">Click "+ Text" or "+ Blank" to start building.</p>
+        <p className="text-xs text-slate-400 italic">{t('arabicLessonDetail.buildQuestionEmpty')}</p>
       )}
 
       <div className="space-y-2">
@@ -1018,7 +1025,7 @@ const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment
             <span className="flex-shrink-0 text-xs text-slate-400 w-4">{idx + 1}.</span>
             {seg.type === 'text' ? (
               <>
-                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-500 rounded font-semibold">Text</span>
+                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-500 rounded font-semibold">{t('arabicLessonDetail.segText')}</span>
                 <input value={seg.value}
                   onChange={e => updateSeg(seg.id, { value: e.target.value })}
                   placeholder="Type text here…"
@@ -1026,7 +1033,7 @@ const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment
               </>
             ) : (
               <>
-                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded font-semibold">Blank</span>
+                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded font-semibold">{t('arabicLessonDetail.segBlank')}</span>
                 <input value={seg.answer}
                   onChange={e => updateSeg(seg.id, { answer: e.target.value })}
                   placeholder="Answer for this blank…"
@@ -1042,18 +1049,18 @@ const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment
       <div className="flex gap-2 pt-1">
         <button type="button" onClick={addText}
           className="px-3 py-1.5 text-xs border border-dashed border-slate-300 dark:border-gray-600 rounded-lg text-slate-500 dark:text-slate-400 hover:border-slate-400 transition-colors">
-          + Text segment
+          + {t('arabicLessonDetail.addTextSeg')}
         </button>
         <button type="button" onClick={addBlank}
           className="px-3 py-1.5 text-xs border border-dashed border-amber-400 dark:border-amber-600 rounded-lg text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/10 hover:border-amber-500 transition-colors">
-          + Blank ___
+          + {t('arabicLessonDetail.addBlank')}
         </button>
       </div>
 
       {/* Live preview */}
       {segments.length > 0 && (
         <div className="mt-2 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-slate-700 dark:text-slate-200">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">Preview:</span>
+          <span className="text-xs font-semibold text-slate-400 block mb-1">{t('arabicLessonDetail.preview')}</span>
           {segments.map((s, i) => (
             <span key={i}>{s.type === 'text' ? s.value : <span className="px-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded">___</span>}</span>
           ))}
@@ -1077,6 +1084,7 @@ interface VocabTabProps {
 type ChallengePhase = 'idle' | 'active' | 'wrong' | 'complete';
 
 const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, preSelectedStudentId }) => {
+  const { t } = useI18n();
   const [words, setWords]           = useState<VocabWord[]>([]);
   const [loading, setLoading]       = useState(true);
   const [showAddWord, setShowAdd]   = useState(false);
@@ -1194,7 +1202,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   };
 
   const handleDeleteWord = async (id: string) => {
-    if (!confirm('Delete this word?')) return;
+    if (!confirm(t('arabicLessonDetail.deleteWordConfirm'))) return;
     if (await deleteVocabWord(id)) setWords(prev => prev.filter(w => w.id !== id));
   };
 
@@ -1206,26 +1214,26 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     return (
       <div className="max-w-3xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-base text-slate-500 dark:text-slate-400">Card {cardIndex + 1} / {shuffled.length}</span>
-          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× Exit</button>
+          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.cardOf', { n: cardIndex + 1, total: shuffled.length })}</span>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-16 px-12 text-center shadow-sm space-y-4">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Do you know the Arabic for…</p>
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">{t('arabicLessonDetail.doYouKnow')}</p>
           <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
           <button onClick={handleNotSure}
             className="py-7 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-2xl">
-            😕 Not Sure
+            😕 {t('arabicLessonDetail.notSure')}
           </button>
           <button onClick={handleKnow}
             className="py-7 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-2xl">
-            ✓ I Know!
+            ✓ {t('arabicLessonDetail.iKnow')}
           </button>
         </div>
       </div>
@@ -1241,23 +1249,23 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           <div className="text-5xl">😕</div>
           <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
           <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 space-y-2">
-            <p className="text-sm font-semibold text-red-500 uppercase tracking-wide">The Arabic word is:</p>
+            <p className="text-sm font-semibold text-red-500 uppercase tracking-wide">{t('arabicLessonDetail.theArabicWordIs')}</p>
             <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
             {word.transliteration && (
               <p className="text-base text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>
             )}
           </div>
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
-            <p className="text-base font-semibold text-amber-700 dark:text-amber-300">❗ Get all words right in a row to complete the challenge!</p>
+            <p className="text-base font-semibold text-amber-700 dark:text-amber-300">❗ {t('arabicLessonDetail.challengeWarning')}</p>
           </div>
         </div>
         <button onClick={handleRestartAfterWrong}
           className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-xl">
-          🔄 Start Over
+          🔄 {t('arabicLessonDetail.startOver')}
         </button>
         <button onClick={() => setPhase('idle')}
           className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
-          Back to word list
+          {t('arabicLessonDetail.backToWordList')}
         </button>
       </div>
     );
@@ -1269,17 +1277,17 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
       <div className="max-w-3xl mx-auto p-10 space-y-8">
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center shadow-sm space-y-5">
           <div className="text-7xl">🎉</div>
-          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">Challenge Complete!</h2>
-          <p className="text-lg text-slate-500 dark:text-slate-400">You got all {words.length} words correct in a row!</p>
+          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.challengeComplete')}</h2>
+          <p className="text-lg text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.challengeCompleteMsg', { count: words.length })}</p>
           {selectedStudentId && (
             <p className="text-base text-emerald-600 dark:text-emerald-400 font-semibold">
-              {saving ? '⏳ Saving progress…' : '✅ Progress saved!'}
+              {saving ? t('arabicLessonDetail.savingProgress') : t('arabicLessonDetail.progressSaved')}
             </p>
           )}
         </div>
         {wrongWords.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 space-y-4">
-            <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">Words that need more practice</h3>
+            <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.needMorePractice')}</h3>
             <div className="divide-y divide-slate-100 dark:divide-gray-700">
               {wrongWords.map(w => (
                 <div key={w.id} className="py-3 grid grid-cols-3 gap-2 text-base text-center">
@@ -1294,11 +1302,11 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
         <div className="flex gap-4">
           <button onClick={startChallenge}
             className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-            Practice Again
+            {t('arabicLessonDetail.practiceAgain')}
           </button>
           <button onClick={() => setPhase('idle')}
             className="flex-1 py-4 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
-            Back to Words
+            {t('arabicLessonDetail.backToWords')}
           </button>
         </div>
       </div>
@@ -1310,21 +1318,20 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     <div className="max-w-5xl mx-auto p-8 space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Vocabulary Trainer</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.vocabTrainer')}</h2>
           <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
-            {words.length} {words.length === 1 ? 'word' : 'words'}
-            {isAdmin ? ' · add words individually or bulk-import' : ' · run the flashcard challenge to practise'}
+            {t('arabicLessonDetail.vocabSubtitle', { count: words.length, hint: isAdmin ? t('arabicLessonDetail.vocabHintAdmin') : t('arabicLessonDetail.vocabHintStudent') })}
           </p>
         </div>
         {isAdmin && (
           <div className="flex gap-2">
             <button onClick={() => { setShowAdd(false); setShowBulk(v => !v); }}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${showBulk ? 'bg-amber-100 text-amber-700' : 'bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
-              📋 Bulk Import
+              📋 {t('arabicLessonDetail.bulkImport')}
             </button>
             <button onClick={() => { setShowBulk(false); setShowAdd(v => !v); }}
               className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-sm">
-              {showAddWord ? '✕ Cancel' : '+ Add Word'}
+              {showAddWord ? `✕ ${t('arabicLessonDetail.cancel')}` : `+ ${t('arabicLessonDetail.addWord')}`}
             </button>
           </div>
         )}
@@ -1344,9 +1351,9 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
       {words.length === 0 && !showAddWord && !showBulk && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center">
           <div className="text-5xl mb-3">🔤</div>
-          <p className="font-semibold text-slate-700 dark:text-slate-200">No vocabulary words yet</p>
+          <p className="font-semibold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.noVocab')}</p>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isAdmin ? 'Click "Add Word" or "Bulk Import" to build the vocabulary table.' : 'The admin hasn\'t added any words yet.'}
+            {isAdmin ? t('arabicLessonDetail.noVocabAdmin') : t('arabicLessonDetail.noVocabStudent')}
           </p>
         </div>
       )}
@@ -1385,25 +1392,25 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           {!isAdmin && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-4">
               <div>
-                <h3 className="font-bold text-slate-700 dark:text-slate-200">Flashcard Challenge</h3>
+                <h3 className="font-bold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.flashcardChallenge')}</h3>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  Each card shows the English meaning — tap <strong>I Know</strong> to advance or <strong>Not Sure</strong> to see the Arabic and restart. Get all {words.length} cards right in a row to complete the round.
+                  {t('arabicLessonDetail.flashcardDesc', { count: words.length })}
                 </p>
               </div>
               {/* Student selector only when no student pre-selected */}
               {!preSelectedStudentId && students.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Track progress for</label>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">{t('arabicLessonDetail.trackProgressFor')}</label>
                   <select value={selectedStudentId} onChange={e => setStudentId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
-                    <option value="">No student (practice only)</option>
+                    <option value="">{t('arabicLessonDetail.noStudentPractice')}</option>
                     {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               )}
               <button onClick={startChallenge}
                 className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
-                🎴 Start Flashcard Challenge ({words.length} words)
+                🎴 {t('arabicLessonDetail.startFlashcard', { count: words.length })}
               </button>
             </div>
           )}
@@ -1416,6 +1423,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 // ── Add single word form ──────────────────────────────────────────────────────
 
 const AddVocabWordForm: React.FC<{ lessonId: string; onCreated: (w: VocabWord) => void; onCancel: () => void }> = ({ lessonId, onCreated, onCancel }) => {
+  const { t } = useI18n();
   const [arabic, setArabic]         = useState('');
   const [translit, setTranslit]     = useState('');
   const [english, setEnglish]       = useState('');
@@ -1425,31 +1433,31 @@ const AddVocabWordForm: React.FC<{ lessonId: string; onCreated: (w: VocabWord) =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr('');
-    if (!arabic.trim() || !translit.trim() || !english.trim()) { setErr('All three fields are required.'); return; }
+    if (!arabic.trim() || !translit.trim() || !english.trim()) { setErr(t('arabicLessonDetail.errAllFieldsRequired')); return; }
     setSaving(true);
     const w = await createVocabWord({ lessonId, arabic: arabic.trim(), transliteration: translit.trim(), english: english.trim() });
     setSaving(false);
-    if (!w) { setErr('Failed to save.'); return; }
+    if (!w) { setErr(t('arabicLessonDetail.errFailedToSave')); return; }
     onCreated(w);
   };
 
   return (
     <form onSubmit={handleSubmit} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
-      <h3 className="font-bold text-amber-800 dark:text-amber-300">Add Word</h3>
+      <h3 className="font-bold text-amber-800 dark:text-amber-300">{t('arabicLessonDetail.addWord')}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Arabic</label>
+        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.colArabic')}</label>
           <input value={arabic} onChange={e => setArabic(e.target.value)} dir="rtl" placeholder="كتاب" className={inp} /></div>
-        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Transliteration</label>
+        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.colTranslit')}</label>
           <input value={translit} onChange={e => setTranslit(e.target.value)} placeholder="kitāb" className={inp} /></div>
-        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">English</label>
+        <div><label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.colEnglish')}</label>
           <input value={english} onChange={e => setEnglish(e.target.value)} placeholder="book" className={inp} /></div>
       </div>
       {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
       <div className="flex gap-3">
         <button type="button" onClick={onCancel}
-          className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+          className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">{t('arabicLessonDetail.cancel')}</button>
         <button type="submit" disabled={saving}
-          className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors">{saving ? 'Saving…' : 'Add Word'}</button>
+          className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors">{saving ? t('arabicLessonDetail.savingEllipsis') : t('arabicLessonDetail.addWord')}</button>
       </div>
     </form>
   );
@@ -1458,6 +1466,7 @@ const AddVocabWordForm: React.FC<{ lessonId: string; onCreated: (w: VocabWord) =
 // ── Bulk import form ──────────────────────────────────────────────────────────
 
 const BulkVocabImport: React.FC<{ lessonId: string; onImported: (ws: VocabWord[]) => void; onCancel: () => void }> = ({ lessonId, onImported, onCancel }) => {
+  const { t } = useI18n();
   const [arabicText, setArabic]     = useState('');
   const [translitText, setTranslit] = useState('');
   const [englishText, setEnglish]   = useState('');
@@ -1470,9 +1479,9 @@ const BulkVocabImport: React.FC<{ lessonId: string; onImported: (ws: VocabWord[]
 
   const handleImport = async () => {
     setErr('');
-    if (!arabicLines.length) { setErr('Paste at least one Arabic word.'); return; }
+    if (!arabicLines.length) { setErr(t('arabicLessonDetail.errPasteArabic')); return; }
     if (arabicLines.length !== translitLines.length || arabicLines.length !== englishLines.length) {
-      setErr(`Line counts don't match — Arabic: ${arabicLines.length}, Transliteration: ${translitLines.length}, English: ${englishLines.length}. Each column must have the same number of lines.`);
+      setErr(t('arabicLessonDetail.errLinesMismatch', { arabic: arabicLines.length, translit: translitLines.length, english: englishLines.length }));
       return;
     }
     setSaving(true);
@@ -1490,24 +1499,24 @@ const BulkVocabImport: React.FC<{ lessonId: string; onImported: (ws: VocabWord[]
   return (
     <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
       <div>
-        <h3 className="font-bold text-amber-800 dark:text-amber-300">Bulk Import</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Paste each column (one word per line). All three columns must have the same number of lines.</p>
+        <h3 className="font-bold text-amber-800 dark:text-amber-300">{t('arabicLessonDetail.bulkImport')}</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('arabicLessonDetail.bulkImportDesc')}</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Arabic (one per line)</label>
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.bulkArabic')}</label>
           <textarea value={arabicText} onChange={e => setArabic(e.target.value)} rows={8}
             dir="rtl" placeholder={"كتاب\nقلم\nمدرسة"} className={ta} />
           <p className="text-xs text-slate-400 mt-0.5">{arabicLines.length} line{arabicLines.length !== 1 ? 's' : ''}</p>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Transliteration (one per line)</label>
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.bulkTranslit')}</label>
           <textarea value={translitText} onChange={e => setTranslit(e.target.value)} rows={8}
             placeholder={"kitāb\nqalam\nmadrasah"} className={ta} />
           <p className="text-xs text-slate-400 mt-0.5">{translitLines.length} line{translitLines.length !== 1 ? 's' : ''}</p>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">English (one per line)</label>
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('arabicLessonDetail.bulkEnglish')}</label>
           <textarea value={englishText} onChange={e => setEnglish(e.target.value)} rows={8}
             placeholder={"book\npen\nschool"} className={ta} />
           <p className="text-xs text-slate-400 mt-0.5">{englishLines.length} line{englishLines.length !== 1 ? 's' : ''}</p>
@@ -1516,10 +1525,10 @@ const BulkVocabImport: React.FC<{ lessonId: string; onImported: (ws: VocabWord[]
       {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
       <div className="flex gap-3">
         <button type="button" onClick={onCancel}
-          className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+          className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">{t('arabicLessonDetail.cancel')}</button>
         <button type="button" onClick={handleImport} disabled={saving || !arabicLines.length}
           className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors">
-          {saving ? 'Importing…' : `Import ${arabicLines.length} word${arabicLines.length !== 1 ? 's' : ''}`}
+          {saving ? t('arabicLessonDetail.importing') : t('arabicLessonDetail.importWords', { count: arabicLines.length })}
         </button>
       </div>
     </div>
@@ -1531,6 +1540,7 @@ const BulkVocabImport: React.FC<{ lessonId: string; onImported: (ws: VocabWord[]
 // ═══════════════════════════════════════════════════════
 
 const VideoTab: React.FC<{ lesson: ArabicLesson; isAdmin: boolean; onLessonUpdated: (l: ArabicLesson) => void }> = ({ lesson, isAdmin, onLessonUpdated }) => {
+  const { t } = useI18n();
   const [urlInput, setUrlInput] = useState(lesson.videoUrl ?? '');
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
@@ -1541,11 +1551,11 @@ const VideoTab: React.FC<{ lesson: ArabicLesson; isAdmin: boolean; onLessonUpdat
   const handleSave = async () => {
     setErr(''); setSaved(false);
     const trimmed = urlInput.trim();
-    if (trimmed && !extractYoutubeId(trimmed)) { setErr('Please enter a valid YouTube URL.'); return; }
+    if (trimmed && !extractYoutubeId(trimmed)) { setErr(t('arabicLessonDetail.errInvalidYouTube')); return; }
     setSaving(true);
     const ok = await updateArabicLesson(lesson.id, { videoUrl: trimmed || undefined });
     setSaving(false);
-    if (!ok) { setErr('Failed to save.'); return; }
+    if (!ok) { setErr(t('arabicLessonDetail.errFailedToSave')); return; }
     onLessonUpdated({ ...lesson, videoUrl: trimmed || undefined });
     setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
@@ -1553,26 +1563,26 @@ const VideoTab: React.FC<{ lesson: ArabicLesson; isAdmin: boolean; onLessonUpdat
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Dialogue Video</h2>
+        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.dialogueVideo')}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          {isAdmin ? 'Paste a YouTube link for the dialogue video.' : 'Watch the dialogue video for this lesson.'}
+          {isAdmin ? t('arabicLessonDetail.videoDescAdmin') : t('arabicLessonDetail.videoDescStudent')}
         </p>
       </div>
 
       {isAdmin && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-3">
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">YouTube URL</label>
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">{t('arabicLessonDetail.youtubeUrl')}</label>
           <div className="flex gap-3">
             <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
-              placeholder="https://youtube.com/watch?v=… or https://youtu.be/…"
+              placeholder={t('arabicLessonDetail.youtubePlaceholder')}
               className="flex-1 px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white" />
             <button onClick={handleSave} disabled={saving}
               className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors flex-shrink-0">
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('arabicLessonDetail.savingEllipsis') : t('arabicLessonDetail.save')}
             </button>
           </div>
           {err  && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
-          {saved && <p className="text-sm text-emerald-600 dark:text-emerald-400">✅ Video link saved!</p>}
+          {saved && <p className="text-sm text-emerald-600 dark:text-emerald-400">✅ {t('arabicLessonDetail.videoSaved')}</p>}
         </div>
       )}
 
