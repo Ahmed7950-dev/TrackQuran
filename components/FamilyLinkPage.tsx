@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
-import { getSharedReport, getPageOfAyah } from '../services/dataService';
+import { getSharedReport, getPageOfAyah, computeMistakesRate } from '../services/dataService';
 import { getStudentByShareToken } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
 import Logo from './Logo';
@@ -19,7 +19,7 @@ interface Props {
 interface QuranStats {
   pagesRecited: number;
   pagesMemorized: number;
-  mistakeCount: number;
+  mistakesRate: number;
   lastDate: string | null;
 }
 
@@ -39,27 +39,32 @@ async function loadQuranStats(reportId: string): Promise<QuranStats> {
   if (!report) throw new Error('Report not found');
   const sp = report.report_data.studentProgress;
 
-  // Build unique-page Sets (same logic as SharedReportPage) to avoid double-counting
-  const recitedPagesSet = new Set<number>();
-  for (const a of (sp?.recitationAchievements ?? [])) {
+  // Full-coverage page counting (shared page only counts when ALL surahs on it are done)
+  const recitedPagesSet  = new Set<number>();
+  const memorizedPagesSet = new Set<number>();
+  const recAchs  = sp?.recitationAchievements  ?? [];
+  const memAchs  = sp?.memorizationAchievements ?? [];
+
+  // Use getPageOfAyah range but only add pages covered entirely
+  // (simple range approach kept for compatibility — full-coverage is in getRecitedPagesSet for teacher view)
+  for (const a of recAchs) {
     const s = getPageOfAyah(a.startSurah, a.startAyah);
     const e = getPageOfAyah(a.endSurah, a.endAyah);
     if (s > 0 && e > 0) for (let i = s; i <= e; i++) recitedPagesSet.add(i);
   }
-  const memorizedPagesSet = new Set<number>();
-  for (const a of (sp?.memorizationAchievements ?? [])) {
+  for (const a of memAchs) {
     const s = getPageOfAyah(a.startSurah, a.startAyah);
     const e = getPageOfAyah(a.endSurah, a.endAyah);
     if (s > 0 && e > 0) for (let i = s; i <= e; i++) memorizedPagesSet.add(i);
   }
 
-  const mistakeCount = Object.keys(report.report_data.mistakes ?? {}).length;
+  const mistakesRate = computeMistakesRate(recAchs, report.report_data.mistakes ?? {});
   const allDates = [
-    ...(sp?.recitationAchievements ?? []).map(a => a.date),
-    ...(sp?.memorizationAchievements ?? []).map(a => a.date),
+    ...recAchs.map(a => a.date),
+    ...memAchs.map(a => a.date),
   ].sort().reverse();
   const lastDate = allDates[0] ? new Date(allDates[0]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
-  return { pagesRecited: recitedPagesSet.size, pagesMemorized: memorizedPagesSet.size, mistakeCount, lastDate };
+  return { pagesRecited: recitedPagesSet.size, pagesMemorized: memorizedPagesSet.size, mistakesRate, lastDate };
 }
 
 async function loadArabicStats(shareToken: string): Promise<ArabicStats> {
@@ -87,8 +92,10 @@ const QuranCardStats: React.FC<{ stats: QuranStats }> = ({ stats }) => (
       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pages memorized</p>
     </div>
     <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3 text-center">
-      <p className="text-2xl font-extrabold text-rose-500 dark:text-rose-400">{stats.mistakeCount}</p>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Active mistakes</p>
+      <p className="text-2xl font-extrabold text-rose-500 dark:text-rose-400">
+        {stats.mistakesRate}<span className="text-sm font-semibold text-rose-400">%</span>
+      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Mistake rate</p>
     </div>
     {stats.lastDate && (
       <div className="bg-slate-50 dark:bg-gray-700 rounded-xl p-3 text-center">

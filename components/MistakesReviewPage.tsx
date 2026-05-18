@@ -691,7 +691,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         const updatedMistakes = { ...student.mistakes };
         Object.keys(updatedMistakes).forEach(key => {
             if (key.startsWith(`${surahNum}:${ayahNum}:`)) {
-                updatedMistakes[key] = { level: 1, date: updatedMistakes[key]?.date || new Date().toISOString() };
+                delete updatedMistakes[key];
             }
         });
         const updatedStudent: Student = { ...student, mistakes: updatedMistakes };

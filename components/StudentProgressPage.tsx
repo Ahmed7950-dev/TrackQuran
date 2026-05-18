@@ -1470,46 +1470,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 const selectedMeta = QURAN_METADATA.find(s => s.number === selectedSurahId);
                 if (!selectedMeta) throw new Error('Surah not found.');
 
-                // If the selected surah fits on a single page, fetch ALL surahs on that page
-                // together so they display as one continuous page (like in the Mushaf).
-                // For longer surahs that span multiple pages, just fetch that surah alone.
-                const isSinglePage = selectedMeta.startPage === selectedMeta.endPage;
-                const surahsToFetch = isSinglePage
-                    ? QURAN_METADATA.filter(s => s.startPage === selectedMeta.startPage)
-                    : [selectedMeta];
+                const response = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedMeta.number}`);
+                if (!response.ok) throw new Error('Failed to fetch Surah data.');
+                const data = await response.json();
+                setVerses(data.verses);
 
-                const responses = await Promise.all(
-                    surahsToFetch.map(s =>
-                        fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${s.number}`)
-                    )
-                );
-                for (const resp of responses) {
-                    if (!resp.ok) throw new Error('Failed to fetch Surah data.');
-                }
-                const dataArr = await Promise.all(responses.map(r => r.json()));
-
-                // Merge and sort verses by (surah, ayah) so multi-surah pages are in Quran order
-                const mergedVerses = dataArr
-                    .flatMap((d: any) => d.verses)
-                    .sort((a: any, b: any) => {
-                        const [aS, aA] = a.verse_key.split(':').map(Number);
-                        const [bS, bA] = b.verse_key.split(':').map(Number);
-                        return aS !== bS ? aS - bS : aA - bA;
-                    });
-
-                setVerses(mergedVerses);
-
-                // Reset page range to where the selected surah starts
-                if (mergedVerses.length > 0) {
-                    const firstSelectedVerse =
-                        mergedVerses.find((v: any) => parseInt(v.verse_key.split(':')[0], 10) === selectedSurahId) ||
-                        mergedVerses[0];
-                    const [surahNum, ayahNum] = firstSelectedVerse.verse_key.split(':').map(Number);
-                    const firstPage = getPageOfAyah(surahNum, ayahNum);
-                    const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
-                    const newEnd = Math.min(604, newStart + 4);
-                    setCurrentPageRange({ start: newStart, end: newEnd });
-                }
+                // Reset page range to where this surah starts
+                const firstPage = selectedMeta.startPage;
+                const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
+                const newEnd = Math.min(604, newStart + 4);
+                setCurrentPageRange({ start: newStart, end: newEnd });
             } catch (err: any) {
                 setError(err.message); setVerses([]);
             } finally {

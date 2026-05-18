@@ -201,25 +201,88 @@ export const getPageOfAyah = (surahNum: number, ayahNum: number): number => {
   return 1;
 };
 
-export const getRecitedPagesSet = (student: Student): Set<number> => {
-  const pages = new Set<number>();
-  student.recitationAchievements.forEach(ach => {
-    const s = getPageOfAyah(ach.startSurah, ach.startAyah);
-    const e = getPageOfAyah(ach.endSurah, ach.endAyah);
-    if (s > 0 && e > 0) for (let i = s; i <= e; i++) pages.add(i);
-  });
+// ── Full-page coverage helpers ──────────────────────────────────────────────
+
+/** Lazily built map: page number → all [surah, ayah] pairs on that page */
+let _pageVerseMap: Map<number, Array<[number, number]>> | null = null;
+
+function getPageVerseMap(): Map<number, Array<[number, number]>> {
+  if (_pageVerseMap) return _pageVerseMap;
+  const map = new Map<number, Array<[number, number]>>();
+  for (let p = 1; p <= 604; p++) map.set(p, []);
+
+  for (let pi = 0; pi < pageVerseList.length; pi++) {
+    const [pageNum, startSurah, startAyah] = pageVerseList[pi];
+    const nextEntry = pageVerseList[pi + 1] ?? null;
+
+    const endSurah = nextEntry ? nextEntry[1] : 114;
+    const nextAyah  = nextEntry ? nextEntry[2] : null; // exclusive start of next page
+
+    for (let s = startSurah; s <= endSurah; s++) {
+      const meta = QURAN_METADATA.find(m => m.number === s);
+      if (!meta) continue;
+      const aStart = s === startSurah ? startAyah : 1;
+      const aEnd   = s === endSurah
+        ? (nextAyah !== null ? nextAyah - 1 : meta.numberOfAyahs)
+        : meta.numberOfAyahs;
+      if (aEnd < aStart) continue;
+      for (let a = aStart; a <= aEnd; a++) map.get(pageNum)!.push([s, a]);
+    }
+  }
+  _pageVerseMap = map;
+  return map;
+}
+
+type AchRange = { startSurah: number; startAyah: number; endSurah: number; endAyah: number };
+
+function buildCoveredVerseKeys(achievements: AchRange[]): Set<string> {
+  const covered = new Set<string>();
+  for (const ach of achievements) {
+    for (let s = ach.startSurah; s <= ach.endSurah; s++) {
+      const meta = QURAN_METADATA.find(m => m.number === s);
+      if (!meta) continue;
+      const aStart = s === ach.startSurah ? ach.startAyah : 1;
+      const aEnd   = s === ach.endSurah   ? ach.endAyah   : meta.numberOfAyahs;
+      for (let a = aStart; a <= aEnd; a++) covered.add(`${s}:${a}`);
+    }
+  }
+  return covered;
+}
+
+/** Pages where every verse on the page is covered by at least one achievement */
+function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
+  const map     = getPageVerseMap();
+  const covered = buildCoveredVerseKeys(achievements);
+  const pages   = new Set<number>();
+  for (const [page, verses] of map) {
+    if (verses.length > 0 && verses.every(([s, a]) => covered.has(`${s}:${a}`))) pages.add(page);
+  }
   return pages;
+}
+
+/**
+ * Mistake rate: percentage of recited verses that have at least one mistake.
+ * Used in FamilyLinkPage stats.
+ */
+export const computeMistakesRate = (
+  recitationAchievements: AchRange[],
+  mistakes: Record<string, unknown>,
+): number => {
+  const covered = buildCoveredVerseKeys(recitationAchievements);
+  if (covered.size === 0) return 0;
+  const mistakeVerses = new Set<string>();
+  for (const key of Object.keys(mistakes)) {
+    const parts = key.split(':');
+    if (parts.length >= 2) mistakeVerses.add(`${parts[0]}:${parts[1]}`);
+  }
+  return Math.round((mistakeVerses.size / covered.size) * 1000) / 10; // one decimal, e.g. 12.5
 };
 
-export const getMemorizedPagesSet = (student: Student): Set<number> => {
-  const pages = new Set<number>();
-  student.memorizationAchievements.forEach(ach => {
-    const s = getPageOfAyah(ach.startSurah, ach.startAyah);
-    const e = getPageOfAyah(ach.endSurah, ach.endAyah);
-    if (s > 0 && e > 0) for (let i = s; i <= e; i++) pages.add(i);
-  });
-  return pages;
-};
+export const getRecitedPagesSet = (student: Student): Set<number> =>
+  fullyRecitedPageSet(student.recitationAchievements);
+
+export const getMemorizedPagesSet = (student: Student): Set<number> =>
+  fullyRecitedPageSet(student.memorizationAchievements);
 
 export const calculateVersesAndPages = (
   startSurah: number, startAyah: number, endSurah: number, endAyah: number,
