@@ -127,7 +127,7 @@ async function exchangeCode(code: string, redirectUri: string): Promise<{
     error_description?: string;
   };
   if (data.error || !data.access_token) {
-    throw new Error(data.error_description ?? data.error ?? 'Token exchange failed');
+    throw new Error(`Token exchange failed (HTTP ${res.status}): ${data.error_description ?? data.error ?? JSON.stringify(data)}`);
   }
   return {
     accessToken:  data.access_token,
