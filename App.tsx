@@ -181,28 +181,52 @@ const App: React.FC = () => {
   const [availabilitySlots,        setAvailabilitySlots]        = useState<AvailabilitySlot[]>([]);
   const [pendingBookingCount,      setPendingBookingCount]      = useState(0);
 
-  // Silently re-acquire the token on page load if it expired but the user was previously connected
+  // Attempt a silent re-auth whenever the token is missing but user was previously connected.
+  // This covers: page load after expiry, token cleared mid-session by a 401, and tab resume.
   useEffect(() => {
-    if (!gcalToken && wasConnected()) {
-      silentRefresh(
-        token => setGcalToken(token),
-        ()    => { /* silent refresh failed — user will see Connect button */ },
-      );
-    }
+    if (gcalToken) return; // token is fine
+    if (!wasConnected()) return; // never connected — nothing to do
+    silentRefresh(
+      token => setGcalToken(token),
+      ()    => { /* could not get token silently — Connect button stays visible */ },
+    );
+  // Re-run when gcalToken transitions to null so mid-session expiry is handled too
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gcalToken]);
+
+  // Re-attempt silent refresh whenever the browser tab becomes visible again.
+  // This recovers from the OS/browser throttling setTimeout while the tab was hidden.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !getStoredToken() && wasConnected()) {
+        silentRefresh(
+          token => setGcalToken(token),
+          ()    => { /* still can't refresh silently */ },
+        );
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Proactively refresh the token ~5 min before it expires so events never disappear
+  // Proactively refresh the token ~5 min before it expires.
+  // On expiry (timer fires late), try silent re-auth before falling back to null.
   useEffect(() => {
     if (gcalToken) {
       scheduleAutoRefresh(
         token => setGcalToken(token),
-        ()    => setGcalToken(null),
+        ()    => {
+          // Auto-refresh timed out — try one more silent re-auth before clearing
+          silentRefresh(
+            token => setGcalToken(token),
+            ()    => setGcalToken(null),
+          );
+        },
       );
     } else {
       cancelAutoRefresh();
     }
-  // gcalToken is the only dep; the callbacks are stable
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcalToken]);
 

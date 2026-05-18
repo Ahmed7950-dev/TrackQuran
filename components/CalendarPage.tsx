@@ -5,6 +5,7 @@ import {
   disconnectGoogleCalendar,
   fetchGCalEvents,
   getStoredToken,
+  silentRefresh,
 } from '../services/googleCalendarService';
 import { AvailabilitySlot } from '../services/availabilityService';
 import {
@@ -284,8 +285,26 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       const data = await fetchGCalEvents(token, weekMonday, addDays(weekMonday, 7));
       setEvents(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load events.');
-      if (err instanceof Error && err.message.includes('reconnect')) onTokenChange(null);
+      const msg = err instanceof Error ? err.message : 'Failed to load events.';
+      if (msg.includes('reconnect')) {
+        // Token expired mid-session — attempt silent re-auth before showing an error
+        silentRefresh(
+          newToken => {
+            onTokenChange(newToken);
+            // Retry the fetch with the fresh token
+            fetchGCalEvents(newToken, weekMonday, addDays(weekMonday, 7))
+              .then(data => { setEvents(data); setLoading(false); })
+              .catch(() => { setLoading(false); });
+          },
+          () => {
+            // Silent refresh failed — clear token so Connect button reappears
+            onTokenChange(null);
+            setLoading(false);
+          },
+        );
+        return; // loading state managed by the callbacks above
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
