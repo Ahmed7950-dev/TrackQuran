@@ -1475,11 +1475,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 const data = await response.json();
                 setVerses(data.verses);
 
-                // Reset page range to where this surah starts
+                // Set page range to cover the full surah.
+                // Short surahs (≤ 5 Mushaf pages) are shown completely in one go.
+                // Long surahs use a 5-page window starting at the surah's first page.
                 const firstPage = selectedMeta.startPage;
-                const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
-                const newEnd = Math.min(604, newStart + 4);
-                setCurrentPageRange({ start: newStart, end: newEnd });
+                const lastPage  = selectedMeta.endPage;
+                if (lastPage - firstPage <= 4) {
+                  // Surah fits in ≤ 5 pages — show the whole thing
+                  setCurrentPageRange({ start: firstPage, end: lastPage });
+                } else {
+                  const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
+                  const newEnd   = Math.min(604, newStart + 4);
+                  setCurrentPageRange({ start: newStart, end: newEnd });
+                }
             } catch (err: any) {
                 setError(err.message); setVerses([]);
             } finally {

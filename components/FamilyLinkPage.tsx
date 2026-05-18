@@ -93,9 +93,9 @@ const QuranCardStats: React.FC<{ stats: QuranStats }> = ({ stats }) => (
     </div>
     <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3 text-center">
       <p className="text-2xl font-extrabold text-rose-500 dark:text-rose-400">
-        {stats.mistakesRate}<span className="text-sm font-semibold text-rose-400">%</span>
+        {stats.mistakesRate}<span className="text-sm font-semibold text-rose-400">/pg</span>
       </p>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Mistake rate</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Mistakes/page</p>
     </div>
     {stats.lastDate && (
       <div className="bg-slate-50 dark:bg-gray-700 rounded-xl p-3 text-center">

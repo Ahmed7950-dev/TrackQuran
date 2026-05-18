@@ -261,21 +261,22 @@ function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
 }
 
 /**
- * Mistake rate: percentage of recited verses that have at least one mistake.
+ * Average number of mistake-verses per recited page.
+ * e.g. 20 unique mistake-verses across 10 recited pages → 2.0
  * Used in FamilyLinkPage stats.
  */
 export const computeMistakesRate = (
   recitationAchievements: AchRange[],
   mistakes: Record<string, unknown>,
 ): number => {
-  const covered = buildCoveredVerseKeys(recitationAchievements);
-  if (covered.size === 0) return 0;
+  const pages = fullyRecitedPageSet(recitationAchievements);
+  if (pages.size === 0) return 0;
   const mistakeVerses = new Set<string>();
   for (const key of Object.keys(mistakes)) {
     const parts = key.split(':');
     if (parts.length >= 2) mistakeVerses.add(`${parts[0]}:${parts[1]}`);
   }
-  return Math.round((mistakeVerses.size / covered.size) * 1000) / 10; // one decimal, e.g. 12.5
+  return Math.round((mistakeVerses.size / pages.size) * 10) / 10; // one decimal, e.g. 2.3
 };
 
 export const getRecitedPagesSet = (student: Student): Set<number> =>
