@@ -37,10 +37,11 @@ const StarPatternDefs: React.FC<{ id: string; color: string; opacity?: number }>
 );
 
 // ── Theme detection ─────────────────────────────────────────────────────────────
-type AppTheme = 'light' | 'dark' | 'reading';
+type AppTheme = 'light' | 'dark';
 const getStoredTheme = (): AppTheme => {
   const s = localStorage.getItem('theme');
-  if (s === 'light' || s === 'dark' || s === 'reading') return s;
+  if (s === 'dark') return 'dark';
+  if (s === 'light') return 'light';
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
   return 'light';
 };
@@ -77,7 +78,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
     root.classList.remove('dark');
     root.removeAttribute('data-theme');
     if (theme === 'dark') root.classList.add('dark');
-    else if (theme === 'reading') root.setAttribute('data-theme', 'reading');
+    else root.classList.remove('dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -89,7 +90,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
   }, []);
 
   const cycleTheme = () => {
-    setThemeState(prev => prev === 'light' ? 'dark' : prev === 'dark' ? 'reading' : 'light');
+    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
   };
 
   const isDark = theme === 'dark';
@@ -125,16 +126,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
     setMobileNavOpen(false);
   };
 
-  // Theme icon
+  // Theme icon — sun when dark (click to go light), moon when light (click to go dark)
   const ThemeIcon: React.FC = () => {
-    if (theme === 'dark') return (
+    if (isDark) return (
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={18} height={18}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-      </svg>
-    );
-    if (theme === 'reading') return (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={18} height={18}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
       </svg>
     );
     return (
@@ -164,16 +160,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
       }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 24, height: 64 }}>
           {/* Brand */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <img src="/TQ LOGO DM.png" alt="Logo" style={{ height: 36, width: 'auto' }} />
-            <div>
-              <div style={{ fontFamily: F.display, fontWeight: 600, fontSize: 17, color: isDark ? C.goldSoft : C.green, lineHeight: 1.1 }}>
-                {t('landing.brandName')}
-              </div>
-              <div style={{ fontSize: 9, letterSpacing: '0.15em', color: textMuted, fontWeight: 600 }}>
-                {t('landing.brandTagline')}
-              </div>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <img src={isDark ? '/TQ LOGO DM.png' : '/TQ LOGO.png'} alt="Lisan & Quran" style={{ height: 40, width: 'auto' }} />
           </div>
 
           {/* Desktop nav links */}
@@ -611,9 +599,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 32, marginBottom: 48 }}>
             {/* Brand column */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <img src="/TQ LOGO DM.png" alt="Logo" style={{ height: 32, width: 'auto' }} />
-                <span style={{ fontFamily: F.display, fontWeight: 600, fontSize: 16, color: C.goldSoft }}>{t('landing.brandName')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                <img src="/TQ LOGO DM.png" alt="Lisan & Quran" style={{ height: 36, width: 'auto' }} />
               </div>
               <p style={{ fontSize: 13, lineHeight: 1.65, color: 'rgba(255,255,255,0.55)', maxWidth: 220 }}>{t('landing.footerDesc')}</p>
               {/* Language switcher in footer */}
