@@ -206,6 +206,40 @@ const ExportReportModal: React.FC<ExportReportModalProps> = ({ isOpen, onClose, 
     }
 }, [student.name, isExporting]);
 
+  const handleExportHTML = useCallback(() => {
+    const element = reportContentRef.current;
+    if (!element) return;
+
+    // Remove interactive-only elements (textarea, buttons inside the report)
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.no-export').forEach(el => el.remove());
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${student.name} — Progress Report</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: #f8fafc; padding: 24px; }
+    @media print { body { background: white; padding: 0; } }
+  </style>
+</head>
+<body>
+  ${clone.outerHTML}
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${student.name.replace(/ /g, '_')}_progress_report.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [student.name]);
+
   const now = new Date();
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
@@ -271,6 +305,10 @@ const ExportReportModal: React.FC<ExportReportModalProps> = ({ isOpen, onClose, 
                         </option>
                     ))}
                  </select>
+                <button onClick={handleExportHTML} className="px-4 py-2 text-white font-semibold rounded-md shadow-sm transition-colors bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm4.75 6.75a.75.75 0 0 1 1.5 0v2.546l.943-1.048a.75.75 0 1 1 1.114 1.004l-2.25 2.5a.75.75 0 0 1-1.114 0l-2.25-2.5a.75.75 0 1 1 1.114-1.004l.943 1.048V8.75Z" clipRule="evenodd" /></svg>
+                    Download HTML
+                </button>
                 <button onClick={handleExport} disabled={isButtonDisabled} className={`px-4 py-2 text-white font-semibold rounded-md shadow-sm transition-colors w-36 text-center bg-teal-600 hover:bg-teal-700 dark:bg-orange-600 dark:hover:bg-orange-700 disabled:bg-slate-400 disabled:cursor-not-allowed`}>{getButtonText()}</button>
                 <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-300 dark:hover:text-white text-2xl">&times;</button>
             </div>
