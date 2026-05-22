@@ -4,7 +4,7 @@ import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchie
 import MilestoneTracker from './MilestoneTracker';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
-import { getPageOfAyah } from '../services/dataService';
+import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -1265,6 +1265,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showQalqalah, setShowQalqalah] = useState(false);
     const [showGhunnah, setShowGhunnah] = useState(false);
     const [showMadd, setShowMadd] = useState(false);
+    const [showTajweedMenu, setShowTajweedMenu] = useState(false);
+    const tajweedMenuRef = useRef<HTMLDivElement>(null);
+
+    // ── Teacher's Notes popup ────────────────────────────────────────────────
+    const [teacherNote, setTeacherNote] = useState(student.teacherNote ?? '');
+    const noteWindowRef = useRef<Window | null>(null);
     const [translations, setTranslations] = useState<Record<string, string>>({});
     const [isTranslationLoading, setIsTranslationLoading] = useState(false);
     const [translationError, setTranslationError] = useState<string | null>(null);
@@ -1313,6 +1319,90 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
     const handleDecreaseSpeed = () => setScrollSpeed(prev => Math.max(1, prev - 5));
+
+    // ── Close tajweed menu on outside click ──────────────────────────────────
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (tajweedMenuRef.current && !tajweedMenuRef.current.contains(e.target as Node)) {
+                setShowTajweedMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    // ── Teacher's Notes popup + postMessage listener ─────────────────────────
+    useEffect(() => {
+        const handler = (e: MessageEvent) => {
+            if (e.data?.type !== 'quran_teacher_note' || e.data?.studentId !== student.id) return;
+            const val: string = e.data.value ?? '';
+            setTeacherNote(val);
+            saveStudentTeacherNote(student.id, val);
+        };
+        window.addEventListener('message', handler);
+        return () => window.removeEventListener('message', handler);
+    }, [student.id]);
+
+    const openTeacherNoteWindow = useCallback(() => {
+        if (noteWindowRef.current && !noteWindowRef.current.closed) {
+            noteWindowRef.current.focus();
+            return;
+        }
+        const win = window.open('', `quran_note_${student.id}`, 'width=860,height=700,resizable=yes,scrollbars=yes');
+        if (!win) return;
+        noteWindowRef.current = win;
+        const escaped = (teacherNote ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const studentIdStr = student.id;
+        const studentName = student.name;
+        win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teacher's Notes — ${studentName}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#fafafa;display:flex;flex-direction:column;height:100vh;padding:20px;gap:12px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+    h1{font-size:17px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px}
+    .sub{font-size:12px;color:#64748b;margin-top:2px}
+    .status{font-size:12px;font-weight:600;color:#94a3b8;flex-shrink:0}
+    .status.saving{color:#f59e0b}
+    .status.saved{color:#22c55e}
+    textarea{flex:1;width:100%;padding:16px;font-size:14px;line-height:1.7;
+             border:1px solid #e2e8f0;border-radius:10px;resize:none;
+             background:#fff;outline:none;color:#1e293b}
+    textarea:focus{border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.15)}
+    .hint{font-size:11px;color:#94a3b8;flex-shrink:0}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🗒️ Teacher's Notes</h1>
+      <div class="sub">${studentName}</div>
+    </div>
+    <span class="status" id="st">Auto-saves as you type</span>
+  </header>
+  <textarea id="ta" placeholder="Write your notes, observations, or reminders for this student…">${escaped}</textarea>
+  <div class="hint">This window is separate from the lesson — safe to write notes while screen-sharing the main tab.</div>
+  <script>
+    var ta=document.getElementById('ta'),st=document.getElementById('st'),timer;
+    ta.addEventListener('input',function(){
+      clearTimeout(timer);
+      st.className='status saving';st.textContent='Saving…';
+      timer=setTimeout(function(){
+        if(window.opener&&!window.opener.closed){
+          window.opener.postMessage({type:'quran_teacher_note',studentId:'${studentIdStr}',value:ta.value},'*');
+          st.className='status saved';st.textContent='✓ Saved';
+        }
+      },1200);
+    });
+    ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
+  <\/script>
+</body>
+</html>`);
+        win.document.close();
+    }, [student.id, student.name, teacherNote]);
 
     useEffect(() => {
         const handleManualInteraction = () => { if (isAutoScrolling) setIsAutoScrolling(false); };
@@ -2622,12 +2712,52 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 {isAutoScrolling && (<div className="flex items-center justify-center gap-1 flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
                             </div>
 
-                            {/* Tajweed colour toggles */}
-                            <div className="flex items-center gap-1">
+                            {/* Tajweed colour toggles — combined dropdown */}
+                            <div className="flex items-center gap-1.5">
+                                {/* Translation toggle */}
                                 <button onClick={() => setShowTranslation(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showTranslation ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-teal-100'}`} aria-pressed={showTranslation} title={t('liveSession.toggleTranslation')}>T</button>
-                                <button onClick={() => setShowQalqalah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showQalqalah ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-sky-100'}`} aria-pressed={showQalqalah} title={t('liveSession.toggleQalqalah')}>Q</button>
-                                <button onClick={() => setShowGhunnah(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showGhunnah ? 'bg-green-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-green-100'}`} aria-pressed={showGhunnah} title={t('liveSession.toggleGhunnah')}>G</button>
-                                <button onClick={() => setShowMadd(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showMadd ? 'bg-pink-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-pink-100'}`} aria-pressed={showMadd} title={t('liveSession.toggleMadd')}>M</button>
+
+                                {/* Combined Tajweed highlights button */}
+                                <div className="relative" ref={tajweedMenuRef}>
+                                    <button
+                                        onClick={() => setShowTajweedMenu(prev => !prev)}
+                                        title="Tajweed highlights"
+                                        className={`h-7 px-2 flex items-center gap-1 rounded-md text-xs font-bold transition-colors duration-200 ${(showQalqalah || showGhunnah || showMadd) ? 'bg-indigo-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-indigo-100'}`}
+                                    >
+                                        {/* Coloured dots showing active highlights */}
+                                        <span className={`w-2 h-2 rounded-full ${showQalqalah ? 'bg-sky-300' : 'bg-slate-400/40'}`} />
+                                        <span className={`w-2 h-2 rounded-full ${showGhunnah ? 'bg-green-300' : 'bg-slate-400/40'}`} />
+                                        <span className={`w-2 h-2 rounded-full ${showMadd ? 'bg-pink-300' : 'bg-slate-400/40'}`} />
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="w-3 h-3 ml-0.5 opacity-70"><path d="M6 8L1 3h10L6 8z"/></svg>
+                                    </button>
+
+                                    {showTajweedMenu && (
+                                        <div className="absolute top-full mt-1.5 end-0 z-50 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-lg p-3 flex flex-col gap-2 min-w-[160px]">
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">Tajweed Highlights</p>
+                                            <button onClick={() => setShowQalqalah(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showQalqalah ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
+                                                <span className="w-3 h-3 rounded-full bg-sky-400 flex-shrink-0" />
+                                                {t('liveSession.toggleQalqalah')}
+                                            </button>
+                                            <button onClick={() => setShowGhunnah(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showGhunnah ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
+                                                <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" />
+                                                {t('liveSession.toggleGhunnah')}
+                                            </button>
+                                            <button onClick={() => setShowMadd(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showMadd ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
+                                                <span className="w-3 h-3 rounded-full bg-pink-500 flex-shrink-0" />
+                                                {t('liveSession.toggleMadd')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Teacher's Notes */}
+                                <button
+                                    onClick={openTeacherNoteWindow}
+                                    title="Teacher's Notes"
+                                    className={`h-7 px-2 flex items-center gap-1 rounded-md text-xs font-semibold transition-colors duration-200 ${teacherNote ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
+                                >
+                                    🗒️
+                                </button>
                             </div>
 
                             {/* Search */}

@@ -38,6 +38,7 @@ const rowToStudent = (row: any): Student => ({
   tafsirReviews:               row.tafsir_reviews               ?? [],
   tafsirMemorizationReviews:   row.tafsir_memorization_reviews  ?? [],
   mistakes:                    row.mistakes                     ?? {},
+  teacherNote:                 row.teacher_note                 ?? undefined,
 });
 
 const studentToRow = (teacherId: string, s: Student) => ({
@@ -53,6 +54,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   tafsir_reviews:              s.tafsirReviews,
   tafsir_memorization_reviews: s.tafsirMemorizationReviews,
   mistakes:                    s.mistakes,
+  teacher_note:                s.teacherNote ?? null,
 });
 
 export const getStudents = async (teacherId: string): Promise<Student[]> => {
@@ -78,6 +80,15 @@ export const saveStudent = async (teacherId: string, student: Student): Promise<
 export const deleteStudent = async (studentId: string): Promise<void> => {
   const { error } = await supabase.from('students').delete().eq('id', studentId);
   if (error) console.error('deleteStudent:', error.message);
+};
+
+/** Lightweight update — only writes the teacher_note column, no full re-save needed */
+export const saveStudentTeacherNote = async (studentId: string, note: string): Promise<void> => {
+  const { error } = await supabase
+    .from('students')
+    .update({ teacher_note: note })
+    .eq('id', studentId);
+  if (error) console.error('saveStudentTeacherNote:', error.message);
 };
 
 // ============================================================

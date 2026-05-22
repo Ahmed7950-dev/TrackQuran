@@ -82,6 +82,7 @@ export interface Student {
   tafsirReviews: TafsirReview[];
   tafsirMemorizationReviews: TafsirMemorizationReview[];
   mistakes: { [key: string]: Mistake };
+  teacherNote?: string;
 }
 
 // ── Tajweed lesson ──────────────────────────────────────────────────────────
