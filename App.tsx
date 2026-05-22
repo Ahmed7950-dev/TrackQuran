@@ -22,6 +22,7 @@ import SharedReportPage from './components/SharedReportPage';
 import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
+import LandingPage from './components/LandingPage';
 import TajweedPage from './components/TajweedPage';
 import SubjectSelectionPage from './components/SubjectSelectionPage';
 import VocabularyPracticePage from './components/VocabularyPracticePage';
@@ -105,6 +106,39 @@ const useQuranicFont = () => {
   }, [font]);
 
   return { currentFont: font, setFont, fonts: QURANIC_FONTS };
+};
+
+/**
+ * Wrapper that renders the public marketing landing page.
+ * When the user clicks "Sign in" or any CTA, a modal overlay with the
+ * existing LoginPage slides in on top. After successful auth the
+ * AuthProvider updates currentUser, the parent App re-renders and
+ * immediately shows the dashboard — the landing page unmounts automatically.
+ */
+const LandingPageWithAuth: React.FC = () => {
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  return (
+    <>
+      <LandingPage onOpenAuth={() => setShowAuthModal(true)} />
+      {showAuthModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,50,30,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAuthModal(false); }}
+        >
+          <div style={{ position: 'relative', width: '100%', maxWidth: 440 }}>
+            <button
+              onClick={() => setShowAuthModal(false)}
+              aria-label="Close"
+              style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, background: 'none', border: 'none', cursor: 'pointer', color: '#5C6B62', fontSize: 20, lineHeight: 1 }}
+            >
+              ✕
+            </button>
+            <LoginPage />
+          </div>
+        </div>
+      )}
+    </>
+  );
 };
 
 const App: React.FC = () => {
@@ -625,7 +659,8 @@ const App: React.FC = () => {
   }
 
   if (!currentUser) {
-    return <LoginPage />;
+    // Show marketing landing page with an inline auth modal overlay
+    return <LandingPageWithAuth />;
   }
   
   // Student View-Only Page
