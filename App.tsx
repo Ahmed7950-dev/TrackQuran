@@ -181,7 +181,7 @@ const AuthModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <rect width="100%" height="100%" fill="url(#modal-star)" />
           </svg>
           <div style={{ position: 'relative' }}>
-            <img src={isDark ? '/TQ LOGO DM.png' : '/TQ LOGO.png'} alt="Lisan & Quran" style={{ height: 52, width: 'auto', margin: '0 auto' }} />
+            <img src="/TQ LOGO DM.png" alt="Lisan & Quran" style={{ height: 52, width: 'auto', margin: '0 auto' }} />
             <p style={{ margin: '10px 0 0', fontSize: 13, color: 'rgba(250,246,236,0.65)', fontFamily: "'DM Sans', sans-serif", letterSpacing: '0.04em' }}>
               {isSignUp ? t('login.signUp') : t('login.signIn')} · Lisan &amp; Quran
             </p>

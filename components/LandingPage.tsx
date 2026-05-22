@@ -161,7 +161,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 24, height: 64 }}>
           {/* Brand */}
           <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <img src={isDark ? '/TQ LOGO DM.png' : '/TQ LOGO.png'} alt="Lisan & Quran" style={{ height: 40, width: 'auto' }} />
+            <img src={isDark ? '/TQ LOGO DM.png' : '/TQ LOGO.png'} alt="Lisan & Quran" style={{ height: 56, width: 'auto' }} />
           </div>
 
           {/* Desktop nav links */}
