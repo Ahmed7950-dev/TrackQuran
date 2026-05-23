@@ -23,6 +23,18 @@ import { useI18n } from '../context/I18nProvider';
 
 /* -------------------------------------------------------------------------- */
 
+function formatCountdown(targetIso: string, now: Date): string {
+  const ms = new Date(targetIso).getTime() - now.getTime();
+  if (ms <= 0) return 'Now';
+  const totalMinutes = Math.floor(ms / 60000);
+  const days    = Math.floor(totalMinutes / 1440);
+  const hours   = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 interface Props {
   token: string;
 }
@@ -33,6 +45,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
 
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
   const [sessions, setSessions] = useState<LessonSession[]>([]);
+  const [now, setNow] = useState(() => new Date());
   const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
@@ -53,6 +66,11 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
 
   const toggleTheme = () =>
     setTheme(t => t === 'light' ? 'reading' : t === 'reading' ? 'dark' : 'light');
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     document.title = 'LisanQuran Student Portal';
@@ -243,7 +261,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
 
         {/* ── Next Lesson Banner ─────────────────────────────────────────────── */}
         {(() => {
-          const now = new Date();
           const nextSession = sessions
             .filter(s => new Date(s.startAt) > now)
             .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0];
@@ -254,40 +271,51 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           const lessonDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
           const diffDays = Math.round((lessonDay.getTime() - today.getTime()) / 86400000);
           const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          let label: string;
-          if (diffDays === 0)      label = t('arabicPortal.nextLessonToday',    { time });
-          else if (diffDays === 1) label = t('arabicPortal.nextLessonTomorrow', { time });
+          let dateLabel: string;
+          if (diffDays === 0)      dateLabel = t('arabicPortal.nextLessonToday',    { time });
+          else if (diffDays === 1) dateLabel = t('arabicPortal.nextLessonTomorrow', { time });
           else {
             const date = d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-            label = t('arabicPortal.nextLessonDate', { date, time });
+            dateLabel = t('arabicPortal.nextLessonDate', { date, time });
           }
+          const countdown = formatCountdown(nextSession.startAt, now);
 
           return (
-            <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 border border-teal-200 dark:border-teal-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-teal-600 dark:text-teal-400 uppercase tracking-wider">{t('arabicPortal.nextLesson')}</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-base leading-tight">{label}</p>
-                  {nextSession.title && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextSession.title}</p>}
+            <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 border border-teal-200 dark:border-teal-700 rounded-2xl p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                {/* Icon + info */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-teal-600 dark:text-teal-400 uppercase tracking-wider">{t('arabicPortal.nextLesson')}</p>
+                    <p className="font-bold text-slate-800 dark:text-slate-100 text-base leading-tight">{dateLabel}</p>
+                    {nextSession.title && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextSession.title}</p>}
+                  </div>
                 </div>
-              </div>
-              <div className="flex-shrink-0">
-                {nextSession.meetUrl ? (
-                  <a
-                    href={nextSession.meetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-                    </svg>
-                    {t('arabicPortal.joinLesson')}
-                  </a>
-                ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 italic">{t('arabicPortal.noMeetLink')}</p>
-                )}
+
+                {/* Countdown chip */}
+                <div className="flex-shrink-0 flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded-full text-sm font-bold">
+                    ⏱ {countdown}
+                  </span>
+
+                  {/* Join or "no link" */}
+                  {nextSession.meetUrl ? (
+                    <a
+                      href={nextSession.meetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-colors shadow-sm"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                      </svg>
+                      {t('arabicPortal.joinLesson')} 🚀
+                    </a>
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">{t('arabicPortal.noMeetLink')}</p>
+                  )}
+                </div>
               </div>
             </div>
           );

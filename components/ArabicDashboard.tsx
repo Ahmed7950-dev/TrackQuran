@@ -7,22 +7,16 @@
 
 const SITE_URL = 'https://www.lisanquran.com';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
+import { getTeacherBookings } from '../services/lessonBookingService';
 import {
-  getStoredToken,
-  refreshAccessToken,
-  wasConnected,
-  fetchGCalEvents,
   createGoogleMeetLink,
-  type GCalEvent,
 } from '../services/googleCalendarService';
 import {
   getUpcomingSessions,
-  linkGCalSession,
-  unlinkSession,
   updateSessionMeetUrl,
 } from '../services/lessonSessionService';
 import { useI18n } from '../context/I18nProvider';
@@ -60,6 +54,29 @@ function formatSessionDate(iso: string): string {
   return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${time}`;
 }
 
+/** Convert a LessonBooking to its next occurrence Date (Istanbul time → local) */
+function getBookingNextDate(booking: import('../services/lessonBookingService').LessonBooking): Date | null {
+  const now = new Date();
+  if (booking.bookingType === 'single' && booking.specificDate) {
+    const d = new Date(`${booking.specificDate}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`);
+    return d > now ? d : null;
+  }
+  // Weekly: find next occurrence
+  const targetDay = booking.dayOfWeek; // 0=Mon…6=Sun (Istanbul)
+  for (let i = 0; i <= 7; i++) {
+    const candidate = new Date(now);
+    candidate.setDate(candidate.getDate() + i);
+    // JS getDay: 0=Sun…6=Sat; convert to Mon=0…Sun=6
+    const jsDay = candidate.getDay();
+    const monDay = jsDay === 0 ? 6 : jsDay - 1;
+    if (monDay !== targetDay) continue;
+    const iso = `${candidate.toISOString().slice(0, 10)}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`;
+    const d = new Date(iso);
+    if (d > now) return d;
+  }
+  return null;
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 const ArabicDashboard: React.FC<Props> = ({
@@ -76,14 +93,7 @@ const ArabicDashboard: React.FC<Props> = ({
 
   // sessions
   const [sessions,        setSessions]        = useState<LessonSession[]>([]);
-
-  // calendar panel
-  const [showCalPanel,    setShowCalPanel]    = useState(false);
-  const [gcalEvents,      setGcalEvents]      = useState<GCalEvent[]>([]);
-  const [gcalLoading,     setGcalLoading]     = useState(false);
-  const [gcalError,       setGcalError]       = useState<string | null>(null);
-  const [linkingId,       setLinkingId]       = useState<string | null>(null); // gcalEventId being linked
-  const [linkSelections,  setLinkSelections]  = useState<Record<string, string>>({}); // gcalEventId → studentId
+  const [bookings,        setBookings]        = useState<import('../services/lessonBookingService').LessonBooking[]>([]);
 
   // meet link
   const [meetGenerating,  setMeetGenerating]  = useState(false);
@@ -96,87 +106,45 @@ const ArabicDashboard: React.FC<Props> = ({
       .catch(err => console.error('[Sessions] load failed:', err));
   }, [teacherId]);
 
-  // ── next lesson from sessions ─────────────────────────────────────────────
-  const nextSession = useMemo(() => {
-    if (!sessions.length) return null;
+  useEffect(() => {
+    getTeacherBookings(teacherId)
+      .then(all => setBookings(all.filter(b => b.status === 'confirmed' && b.portalType === 'arabic')))
+      .catch(console.error);
+  }, [teacherId]);
+
+  // ── next lesson from sessions + bookings ─────────────────────────────────
+  const nextLesson = useMemo(() => {
     const now = new Date();
-    const upcoming = sessions
-      .filter(s => new Date(s.startAt) > now)
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-    const session = upcoming[0] ?? null;
-    if (!session) return null;
-    const student = students.find(s => s.id === session.studentId) ?? null;
-    if (!student) return null;
-    return { session, student };
-  }, [sessions, students]);
+    let best: { date: Date; student: ArabicStudent; session: LessonSession | null; studentName: string } | null = null;
 
-  const highlightedStudentId = nextSession?.student.id ?? null;
-
-  // ── GCal panel ───────────────────────────────────────────────────────────
-  const loadGCalEvents = useCallback(async () => {
-    setGcalLoading(true);
-    setGcalError(null);
-    try {
-      let token = getStoredToken();
-      if (!token) token = await refreshAccessToken();
-      if (!token) {
-        setGcalError('Google Calendar is not connected. Connect it from the Calendar page first.');
-        return;
-      }
-      const now  = new Date();
-      const max  = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-      const evts = await fetchGCalEvents(token, now, max);
-      setGcalEvents(evts);
-    } catch (err) {
-      setGcalError(String(err));
-    } finally {
-      setGcalLoading(false);
+    // From linked GCal sessions
+    for (const session of sessions) {
+      const d = new Date(session.startAt);
+      if (d <= now) continue;
+      const student = students.find(s => s.id === session.studentId);
+      if (!student) continue;
+      if (!best || d < best.date) best = { date: d, student, session, studentName: student.name };
     }
-  }, []);
 
-  const handleToggleCalPanel = useCallback(() => {
-    if (!showCalPanel && gcalEvents.length === 0) loadGCalEvents();
-    setShowCalPanel(v => !v);
-  }, [showCalPanel, gcalEvents.length, loadGCalEvents]);
-
-  const sessionByGcalId = useMemo(() => {
-    const map: Record<string, LessonSession> = {};
-    for (const s of sessions) { if (s.gcalEventId) map[s.gcalEventId] = s; }
-    return map;
-  }, [sessions]);
-
-  async function handleLinkEvent(gcalEvent: GCalEvent) {
-    const studentId = linkSelections[gcalEvent.id];
-    if (!studentId) return;
-    setLinkingId(gcalEvent.id);
-    try {
-      const startAt = gcalEvent.start.dateTime ?? gcalEvent.start.date ?? '';
-      const endAt   = gcalEvent.end.dateTime   ?? gcalEvent.end.date   ?? undefined;
-      const session = await linkGCalSession(
-        teacherId, studentId, gcalEvent.id,
-        gcalEvent.summary ?? 'Lesson', startAt, endAt,
-      );
-      setSessions(prev => {
-        const without = prev.filter(s => s.gcalEventId !== gcalEvent.id);
-        return [...without, session].sort(
-          (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
-        );
-      });
-    } catch (err) {
-      console.error('[CalLink] link failed:', err);
-    } finally {
-      setLinkingId(null);
+    // From platform bookings (matched by share token)
+    for (const booking of bookings) {
+      const d = getBookingNextDate(booking);
+      if (!d) continue;
+      if (best && d >= best.date) continue;
+      const student = students.find(s => s.shareToken === booking.studentId);
+      if (!student) continue;
+      best = { date: d, student, session: null, studentName: student.name };
     }
-  }
 
-  async function handleUnlinkEvent(session: LessonSession) {
-    try {
-      await unlinkSession(session.id);
-      setSessions(prev => prev.filter(s => s.id !== session.id));
-    } catch (err) {
-      console.error('[CalLink] unlink failed:', err);
-    }
-  }
+    return best;
+  }, [sessions, bookings, students]);
+
+  // Keep nextSession alias for meet link handlers (only valid when session !== null)
+  const nextSession = nextLesson && nextLesson.session
+    ? { session: nextLesson.session, student: nextLesson.student }
+    : null;
+
+  const highlightedStudentId = nextLesson?.student.id ?? null;
 
   // ── Meet link ─────────────────────────────────────────────────────────────
   async function handleGenerateMeetLink() {
@@ -240,59 +208,6 @@ const ArabicDashboard: React.FC<Props> = ({
   return (
     <div className="space-y-6">
 
-      {/* ── Next Lesson Banner ──────────────────────────────────────────────── */}
-      {nextSession && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Next Lesson</p>
-              <p className="font-bold text-slate-800 dark:text-slate-100 text-base leading-tight truncate">{nextSession.student.name}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{formatSessionDate(nextSession.session.startAt)}</p>
-              {nextSession.session.title && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextSession.session.title}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-            {nextSession.session.meetUrl ? (
-              <>
-                <button
-                  onClick={handleCopyMeetLink}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  {meetCopied ? '✓ Copied!' : (
-                    <><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>
-                  )}
-                </button>
-                <a
-                  href={nextSession.session.meetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-                  Join Lesson
-                </a>
-                <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={handleGenerateMeetLink}
-                disabled={meetGenerating}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
-                {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -307,20 +222,6 @@ const ArabicDashboard: React.FC<Props> = ({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Link Calendar Events button */}
-          <button
-            onClick={handleToggleCalPanel}
-            className={`flex items-center gap-2 px-4 py-2.5 font-semibold rounded-lg border shadow-sm transition-colors text-sm ${
-              showCalPanel
-                ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-200 dark:hover:border-blue-700 hover:text-blue-700 dark:hover:text-blue-300'
-            }`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-            </svg>
-            Link Calendar Events
-          </button>
           {onFamilyLinks && (
             <button
               onClick={onFamilyLinks}
@@ -342,114 +243,64 @@ const ArabicDashboard: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ── Calendar Link Panel ─────────────────────────────────────────────── */}
-      {showCalPanel && (
-        <div className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-2xl overflow-hidden shadow-sm">
-          {/* Panel header */}
-          <div className="flex items-center justify-between px-5 py-3 bg-blue-50 dark:bg-blue-900/30 border-b border-blue-100 dark:border-blue-800">
-            <div className="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-blue-600 dark:text-blue-400">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-              </svg>
-              <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                Upcoming Google Calendar Events — next 14 days
-              </span>
+      {/* ── Next Lesson Banner ──────────────────────────────────────────────── */}
+      {nextLesson && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                You have a lesson with{' '}
+                <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                {' '}on{' '}
+                <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+              </p>
+              {nextLesson.session?.title && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.session.title}</p>
+              )}
             </div>
-            <button
-              onClick={loadGCalEvents}
-              disabled={gcalLoading}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-3.5 h-3.5 ${gcalLoading ? 'animate-spin' : ''}`}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-              {gcalLoading ? 'Loading…' : 'Refresh'}
-            </button>
           </div>
 
-          {/* Error */}
-          {gcalError && (
-            <div className="px-5 py-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20">
-              ⚠️ {gcalError}
-            </div>
-          )}
-
-          {/* Loading skeleton */}
-          {gcalLoading && !gcalError && (
-            <div className="p-5 space-y-3">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-14 bg-slate-100 dark:bg-gray-700 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          )}
-
-          {/* Empty */}
-          {!gcalLoading && !gcalError && gcalEvents.length === 0 && (
-            <div className="px-5 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-              No upcoming events found in the next 14 days.
-            </div>
-          )}
-
-          {/* Event rows */}
-          {!gcalLoading && !gcalError && gcalEvents.length > 0 && (
-            <div className="divide-y divide-slate-100 dark:divide-gray-700">
-              {gcalEvents.map(evt => {
-                const linked   = sessionByGcalId[evt.id];
-                const startIso = evt.start.dateTime ?? evt.start.date ?? '';
-                const label    = startIso ? formatSessionDate(startIso) : '';
-                const isLinking = linkingId === evt.id;
-                const linkedStudent = linked ? students.find(s => s.id === linked.studentId) : null;
-
-                return (
-                  <div key={evt.id} className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3">
-                    {/* Event info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{evt.summary}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-                    </div>
-
-                    {/* Link controls */}
-                    {linked && linkedStudent ? (
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 rounded-lg text-xs font-semibold">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                          {linkedStudent.name}
-                        </span>
-                        <button
-                          onClick={() => handleUnlinkEvent(linked)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg border border-slate-200 dark:border-gray-600 transition-colors"
-                        >
-                          Unlink
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <select
-                          value={linkSelections[evt.id] ?? ''}
-                          onChange={e => setLinkSelections(prev => ({ ...prev, [evt.id]: e.target.value }))}
-                          className="text-xs border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Select student…</option>
-                          {students.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => handleLinkEvent(evt)}
-                          disabled={!linkSelections[evt.id] || isLinking}
-                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-blue-800 text-white rounded-lg transition-colors"
-                        >
-                          {isLinking ? '…' : 'Link'}
-                        </button>
-                      </div>
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            {nextLesson.session ? (
+              nextLesson.session.meetUrl ? (
+                <>
+                  <button
+                    onClick={handleCopyMeetLink}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {meetCopied ? '✓ Copied!' : (
+                      <><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>
                     )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </button>
+                  <a
+                    href={nextLesson.session.meetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                    Join Lesson
+                  </a>
+                  <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleGenerateMeetLink}
+                  disabled={meetGenerating}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                  {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+                </button>
+              )
+            ) : (
+              <span className="text-xs text-slate-400 italic">Platform-scheduled · Use Calendar tab for Meet link</span>
+            )}
+          </div>
         </div>
       )}
 

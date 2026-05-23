@@ -106,3 +106,43 @@ export async function updateSessionMeetUrl(id: string, meetUrl: string | null): 
     .eq('id', id);
   if (error) throw error;
 }
+
+/**
+ * Links ALL Google Calendar events whose summary matches `eventTitle`
+ * (fetched for the next 60 days) to the given student.
+ * Returns the number of sessions created/updated.
+ */
+export async function linkAllEventsByTitle(
+  teacherId: string,
+  studentId: string,
+  eventTitle: string,
+  gcalToken: string,
+): Promise<number> {
+  // Import fetchGCalEvents dynamically to avoid circular deps
+  const { fetchGCalEvents } = await import('./googleCalendarService');
+  const now = new Date();
+  const max = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
+  const allEvents = await fetchGCalEvents(gcalToken, now, max);
+  const matching  = allEvents.filter(ev => ev.summary === eventTitle);
+  if (!matching.length) return 0;
+
+  await Promise.all(matching.map(ev => {
+    const startAt = ev.start.dateTime ?? ev.start.date ?? '';
+    const endAt   = ev.end.dateTime   ?? ev.end.date   ?? undefined;
+    return linkGCalSession(teacherId, studentId, ev.id, ev.summary, startAt, endAt);
+  }));
+  return matching.length;
+}
+
+/**
+ * Load all sessions for a teacher keyed by gcal_event_id.
+ * Used by CalendarPage to show which events are already linked.
+ */
+export async function getSessionsByGcalId(teacherId: string): Promise<Record<string, LessonSession>> {
+  const sessions = await getUpcomingSessions(teacherId);
+  const map: Record<string, LessonSession> = {};
+  for (const s of sessions) {
+    if (s.gcalEventId) map[s.gcalEventId] = s;
+  }
+  return map;
+}

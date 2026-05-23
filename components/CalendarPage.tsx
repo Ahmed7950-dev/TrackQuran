@@ -21,6 +21,8 @@ import {
   istanbulDateString,
   isSlotInPast,
 } from '../services/lessonBookingService';
+import { ArabicStudent, LessonSession } from '../types';
+import { linkAllEventsByTitle, getSessionsByGcalId } from '../services/lessonSessionService';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
 
@@ -227,6 +229,10 @@ interface CalendarPageProps {
   portalType?:        'arabic' | 'quran';
   /** Called whenever the count of pending bookings changes (for nav badge) */
   onPendingCountChange?: (n: number) => void;
+  /** Arabic students list — enables GCal event → student linking */
+  arabicStudents?: ArabicStudent[];
+  /** Called when a GCal event is successfully linked to a student */
+  onSessionLinked?: () => void;
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
@@ -241,6 +247,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   studentWhatsApp,
   portalType,
   onPendingCountChange,
+  arabicStudents = [],
+  onSessionLinked,
 }) => {
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
@@ -248,6 +256,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [error,       setError]       = useState<string | null>(null);
   const [connecting,  setConnecting]  = useState(false);
   const [exporting,   setExporting]   = useState(false);
+  // ── GCal event linking (tutor only) ──────────────────────────────────────
+  const [linkMode,          setLinkMode]          = useState(false);
+  const [linkTarget,        setLinkTarget]        = useState<{ id: string; summary: string } | null>(null);
+  const [linking,           setLinking]           = useState(false);
+  const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession>>({});
+  const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
   /** Set when silent refresh has failed — shows the reconnect banner */
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
@@ -417,6 +431,25 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     return () => { supabase.removeChannel(channel); };
   }, [teacherId, isStudentView, studentId, loadBookings]);
 
+  // Load already-linked sessions whenever link mode is toggled on
+  useEffect(() => {
+    if (!linkMode || !teacherId) return;
+    getSessionsByGcalId(teacherId).then(map => {
+      setLinkedSessions(map);
+    }).catch(console.error);
+  }, [linkMode, teacherId]);
+
+  // Build a studentName lookup from linkedSessions
+  useEffect(() => {
+    if (!arabicStudents.length) return;
+    const names: Record<string, string> = {};
+    for (const [gcalId, session] of Object.entries(linkedSessions) as Array<[string, LessonSession]>) {
+      const student = arabicStudents.find(s => s.id === session.studentId);
+      if (student) names[gcalId] = student.name;
+    }
+    setLinkedStudentNames(names);
+  }, [linkedSessions, arabicStudents]);
+
   /* ---------------------------------------------------------------- */
   /*  Current-time indicator                                            */
   /* ---------------------------------------------------------------- */
@@ -520,6 +553,37 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       setSelectedBooking(null);
     }
   };
+
+  async function handleLinkToStudent(studentId: string) {
+    if (!linkTarget || !gcalToken || !teacherId) return;
+    setLinking(true);
+    try {
+      const student = arabicStudents.find(s => s.id === studentId);
+      await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
+      // Refresh linked sessions map
+      const map = await getSessionsByGcalId(teacherId);
+      setLinkedSessions(map);
+      if (student) {
+        // Update name display for all events with this title
+        setLinkedStudentNames(prev => {
+          const next = { ...prev };
+          for (const [gcalId, session] of Object.entries(map)) {
+            if (session.studentId === studentId) {
+              next[gcalId] = student.name;
+            }
+          }
+          return next;
+        });
+      }
+      onSessionLinked?.();
+      setLinkTarget(null);
+      setLinkMode(false);
+    } catch (err) {
+      console.error('[Link] failed:', err);
+    } finally {
+      setLinking(false);
+    }
+  }
 
   /* ---------------------------------------------------------------- */
   /*  Student slot click                                                */
@@ -634,6 +698,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           )}
         </div>
 
+        {/* Link GCal Events button — tutor only, when connected */}
+        {!isStudentView && gcalToken && arabicStudents.length > 0 && (
+          <button
+            onClick={() => { setLinkMode(v => !v); setLinkTarget(null); }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+              linkMode
+                ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300'
+                : 'bg-white dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-700 dark:hover:text-violet-300'
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+            </svg>
+            {linkMode ? 'Cancel Linking' : 'Link Events'}
+          </button>
+        )}
+
         {/* Connect / disconnect (tutor only) */}
         {!isStudentView && (
           gcalToken ? (
@@ -744,6 +825,16 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             )}
             {connecting ? 'Reconnecting…' : 'Reconnect'}
           </button>
+        </div>
+      )}
+
+      {/* Link mode banner */}
+      {linkMode && (
+        <div className="mx-0 mb-2 px-4 py-2.5 bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 rounded-xl text-sm text-violet-700 dark:text-violet-300 font-medium flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+          </svg>
+          Click any Google Calendar event to link it (and all events with the same title) to a student.
         </div>
       )}
 
@@ -992,11 +1083,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   }
 
                   const colourClass = GCAL_COLOURS[ev.colorId ?? ''] ?? 'bg-teal-400';
+                  const isLinked    = !!linkedSessions[ev.id];
+                  const linkedName  = linkedStudentNames[ev.id];
                   return (
                     <div
                       key={ev.id}
-                      title={`${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 cursor-default ${colourClass} opacity-75 hover:opacity-90 transition-opacity border-l-2 border-dashed border-white/50`}
+                      title={`${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${linkedName ? `\nLinked: ${linkedName}` : ''}`}
+                      onClick={linkMode ? () => setLinkTarget({ id: ev.id, summary: ev.summary }) : undefined}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 ${colourClass} opacity-75 hover:opacity-90 transition-opacity border-l-2 border-dashed border-white/50 ${linkMode ? 'cursor-pointer ring-2 ring-violet-400 ring-offset-1' : 'cursor-default'} ${isLinked ? 'ring-2 ring-green-400 ring-offset-1' : ''}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
                       <p className="text-[10px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
@@ -1004,6 +1098,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                         {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
                       </p>
                       <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
+                      {isLinked && (
+                        <span className="absolute bottom-0.5 right-1 text-[8px] text-white font-bold leading-none">✓</span>
+                      )}
                     </div>
                   );
                 })}
@@ -1224,6 +1321,46 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             setBookingSlot(null);
           }}
         />
+      )}
+
+      {/* ── GCal Link: student picker modal ──────────────────────────────── */}
+      {linkTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">Link events to student</p>
+              <p className="font-bold text-slate-800 dark:text-slate-100 truncate">"{linkTarget.summary}"</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All events with this title (next 60 days) will be linked.</p>
+            </div>
+            {/* Student list */}
+            <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
+              {arabicStudents.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => handleLinkToStudent(s.id)}
+                  disabled={linking}
+                  className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors disabled:opacity-50"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold text-sm flex-shrink-0">
+                    {s.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="font-medium text-slate-800 dark:text-slate-100 text-sm">{s.name}</span>
+                  {linking && <svg className="ml-auto w-4 h-4 animate-spin text-violet-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+                </button>
+              ))}
+            </div>
+            {/* Cancel */}
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700">
+              <button
+                onClick={() => setLinkTarget(null)}
+                className="w-full py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
