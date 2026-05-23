@@ -323,3 +323,16 @@ export interface VocabAttempt {
   completedAt?: string;    // ISO — null = pending
   createdAt: string;
 }
+
+export interface LessonSession {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  gcalEventId?: string;   // set when linked from Google Calendar
+  title?: string;         // event title
+  startAt: string;        // ISO datetime
+  endAt?: string;         // ISO datetime
+  meetUrl?: string;       // Google Meet link
+  status: 'confirmed' | 'pending' | 'cancelled';
+  createdAt: string;
+}
