@@ -2,9 +2,9 @@
 -- Creates the arabic_lesson_sessions table for tracking scheduled lessons.
 
 CREATE TABLE IF NOT EXISTS arabic_lesson_sessions (
-  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  teacher_id     UUID        NOT NULL,
-  student_id     UUID        NOT NULL REFERENCES arabic_students(id) ON DELETE CASCADE,
+  id             TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  teacher_id     TEXT        NOT NULL,
+  student_id     TEXT        NOT NULL REFERENCES arabic_students(id) ON DELETE CASCADE,
   gcal_event_id  TEXT,
   title          TEXT,
   start_at       TIMESTAMPTZ NOT NULL,
