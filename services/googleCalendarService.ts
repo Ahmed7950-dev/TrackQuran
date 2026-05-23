@@ -21,7 +21,7 @@
  *   supabase functions deploy google-token
  */
 
-const SCOPES        = 'https://www.googleapis.com/auth/calendar.readonly';
+const SCOPES        = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
 const STORAGE_KEY   = 'gcal_access_token';
 const EXPIRY_KEY    = 'gcal_token_expiry';
 const REFRESH_KEY   = 'gcal_refresh_token';   // Long-lived; persists across sessions
