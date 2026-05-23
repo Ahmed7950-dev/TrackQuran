@@ -203,7 +203,7 @@ const LessonRow: React.FC<RowProps> = ({
 }) => (
   <div
     draggable={isAdmin}
-    onDragStart={onDragStart}
+    onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
     onDragOver={onDragOver}
     onDrop={onDrop}
     onDragEnd={onDragEnd}
@@ -219,6 +219,7 @@ const LessonRow: React.FC<RowProps> = ({
       <div
         className="flex-shrink-0 text-slate-300 dark:text-gray-600 hover:text-slate-500 dark:hover:text-gray-400 cursor-grab active:cursor-grabbing"
         onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
           <path d="M7 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM13 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM7 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM13 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM7 15a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM13 15a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z" />
