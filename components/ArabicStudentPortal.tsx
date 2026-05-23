@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useState } from 'react';
-import { ArabicStudent } from '../types';
+import { ArabicStudent, WeeklySlot } from '../types';
 import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
 import NotificationCenter from './NotificationCenter';
@@ -19,6 +19,45 @@ import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
 import Footer from './Footer';
 import { useI18n } from '../context/I18nProvider';
+
+/* ── Next-lesson helpers (mirrors ArabicDashboard) ───────────────────────── */
+
+function getNextLessonDate(slots: WeeklySlot[]): Date | null {
+  if (!slots.length) return null;
+  const now = new Date();
+  let best: Date | null = null;
+  for (let daysAhead = 0; daysAhead <= 7; daysAhead++) {
+    const candidate = new Date(now);
+    candidate.setDate(candidate.getDate() + daysAhead);
+    candidate.setSeconds(0, 0);
+    const jsDay   = candidate.getDay(); // 0=Sun … 6=Sat
+    const slotDay = jsDay === 0 ? -1 : jsDay - 1; // Mon=0…Sat=5, Sun=-1 (skip)
+    const match   = slots.find(s => s.day === slotDay);
+    if (!match) continue;
+    candidate.setHours(match.startHour, 0, 0, 0);
+    if (candidate <= now) continue;
+    if (!best || candidate < best) best = candidate;
+  }
+  return best;
+}
+
+function formatNextLessonLabel(
+  d: Date,
+  t: (key: string, opts?: Record<string, string | number>) => string,
+): string {
+  const now      = new Date();
+  const todayStr = now.toDateString();
+  const nextStr  = d.toDateString();
+  const time     = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+
+  if (nextStr === todayStr)              return t('arabicPortal.nextLessonToday',    { time });
+  if (nextStr === tomorrow.toDateString()) return t('arabicPortal.nextLessonTomorrow', { time });
+  const date = d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  return t('arabicPortal.nextLessonDate', { date, time });
+}
+
+/* -------------------------------------------------------------------------- */
 
 interface Props {
   token: string;
@@ -234,7 +273,46 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
       </header>
 
       {/* ── Main content ── */}
-      <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
+      <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8 space-y-4">
+
+        {/* ── Next Lesson Banner ─────────────────────────────────────────────── */}
+        {(() => {
+          const nextDate = getNextLessonDate(student.availability ?? []);
+          if (!nextDate) return null;
+          const label = formatNextLessonLabel(nextDate, t);
+          return (
+            <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 border border-teal-200 dark:border-teal-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              {/* Icon + info */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-teal-600 dark:text-teal-400 uppercase tracking-wider">{t('arabicPortal.nextLesson')}</p>
+                  <p className="font-bold text-slate-800 dark:text-slate-100 text-base leading-tight">{label}</p>
+                </div>
+              </div>
+
+              {/* Join button or "no link" message */}
+              <div className="flex-shrink-0">
+                {student.activeMeetUrl ? (
+                  <a
+                    href={student.activeMeetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                    {t('arabicPortal.joinLesson')}
+                  </a>
+                ) : (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 italic">{t('arabicPortal.noMeetLink')}</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {portalTab === 'about' ? (
           <AboutUsPage />
         ) : portalTab === 'vocabulary' ? (

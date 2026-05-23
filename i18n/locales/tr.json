@@ -467,7 +467,13 @@
         "tabProgress": "Öğrenci İlerlemesi",
         "tabProfile": "Öğrenci Profili",
         "tabAvailability": "Öğretmen Müsaitliği",
-        "words": "{{count}} kelime"
+        "words": "{{count}} kelime",
+        "nextLesson": "Sonraki dersiniz",
+        "nextLessonToday": "Bugün · {{time}}",
+        "nextLessonTomorrow": "Yarın · {{time}}",
+        "nextLessonDate": "{{date}} · {{time}}",
+        "joinLesson": "Derse Katıl",
+        "noMeetLink": "Öğretmeniniz henüz toplantı bağlantısı oluşturmadı"
     },
     "arabicDashboard": {
         "title": "Arapça Öğrencileri",

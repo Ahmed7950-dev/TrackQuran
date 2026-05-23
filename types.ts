@@ -234,6 +234,7 @@ export interface ArabicStudent {
   goalDeadline?: string;           // ISO date
   completedLessonIds: string[];    // arabic lesson ids
   shareToken?: string;             // UUID; present once tutor has generated the link
+  activeMeetUrl?: string;          // Google Meet link for the next lesson
   createdAt: string;
 }
 

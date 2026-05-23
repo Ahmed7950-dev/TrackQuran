@@ -38,6 +38,7 @@ interface ArabicStudentRow {
   goal_deadline: string | null;
   completed_lesson_ids: string[];
   share_token: string | null;
+  active_meet_url: string | null;
   created_at: string;
 }
 
@@ -110,7 +111,8 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     availability:        r.availability,
     goalDeadline:        r.goal_deadline ?? undefined,
     completedLessonIds:  r.completed_lesson_ids,
-    shareToken:          r.share_token ?? undefined,
+    shareToken:          r.share_token      ?? undefined,
+    activeMeetUrl:       r.active_meet_url  ?? undefined,
     createdAt:           r.created_at,
   };
 }
@@ -133,7 +135,8 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     availability:        s.availability,
     goal_deadline:       s.goalDeadline ?? null,
     completed_lesson_ids: s.completedLessonIds,
-    share_token:         s.shareToken   ?? null,
+    share_token:         s.shareToken      ?? null,
+    active_meet_url:     s.activeMeetUrl   ?? null,
     created_at:          s.createdAt,
   };
 }
@@ -793,4 +796,13 @@ export async function saveLevelPlan(
     .upsert({ level, dialect, plan_image_url: planImageUrl }, { onConflict: 'level,dialect' });
   if (error) { console.error('saveLevelPlan:', error.message); return false; }
   return true;
+}
+
+/** Save or clear the active Google Meet link for a student */
+export async function saveActiveMeetUrl(studentId: string, url: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_students')
+    .update({ active_meet_url: url })
+    .eq('id', studentId);
+  if (error) console.error('saveActiveMeetUrl:', error.message);
 }

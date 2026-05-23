@@ -467,7 +467,13 @@
         "tabProgress": "تقدم الطالب",
         "tabProfile": "الملف الشخصي",
         "tabAvailability": "مواعيد المعلم",
-        "words": "{{count}} كلمة"
+        "words": "{{count}} كلمة",
+        "nextLesson": "درسك القادم",
+        "nextLessonToday": "اليوم · {{time}}",
+        "nextLessonTomorrow": "غداً · {{time}}",
+        "nextLessonDate": "{{date}} · {{time}}",
+        "joinLesson": "انضم للدرس",
+        "noMeetLink": "لم يُنشئ معلمك رابط الاجتماع بعد"
     },
     "arabicDashboard": {
         "title": "طلاب العربية",

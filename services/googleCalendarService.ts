@@ -413,6 +413,54 @@ export async function fetchGCalEvents(
   return all;
 }
 
+/**
+ * Create a Google Calendar event with an auto-generated Meet link.
+ * Returns the hangoutLink (e.g. "https://meet.google.com/abc-defg-hij") or null on failure.
+ * The event lasts 1 hour starting at startISO.
+ */
+export async function createGoogleMeetLink(
+  studentName: string,
+  startISO: string,
+): Promise<string | null> {
+  // Try stored token first, refresh if needed
+  let token = getStoredToken();
+  if (!token) token = await refreshAccessToken();
+  if (!token) return null;
+
+  const start = new Date(startISO);
+  const end   = new Date(start.getTime() + 60 * 60 * 1000); // +1 hour
+
+  try {
+    const res = await fetch(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
+      {
+        method: 'POST',
+        headers: {
+          Authorization:  `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: `Arabic Lesson — ${studentName}`,
+          start:   { dateTime: start.toISOString() },
+          end:     { dateTime: end.toISOString() },
+          conferenceData: {
+            createRequest: { requestId: `lisan-${studentName.replace(/\s/g, '')}-${Date.now()}` },
+          },
+        }),
+      },
+    );
+    if (!res.ok) {
+      console.error('[GCal] createMeetLink failed:', res.status, await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return (data.hangoutLink as string) ?? null;
+  } catch (err) {
+    console.error('[GCal] createMeetLink exception:', err);
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Global type augmentation for GIS                                    */
 /* ------------------------------------------------------------------ */

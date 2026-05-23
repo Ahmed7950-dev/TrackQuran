@@ -5,10 +5,11 @@
 
 const SITE_URL = 'https://www.lisanquran.com';
 
-import React, { useState } from 'react';
-import { ArabicStudent } from '../types';
+import React, { useState, useMemo } from 'react';
+import { ArabicStudent, WeeklySlot } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
-import { ensureShareToken } from '../services/arabicService';
+import { ensureShareToken, saveActiveMeetUrl } from '../services/arabicService';
+import { createGoogleMeetLink } from '../services/googleCalendarService';
 import { useI18n } from '../context/I18nProvider';
 
 interface Props {
@@ -31,12 +32,56 @@ function dialectLabel(d: string): string {
   return { msa: 'MSA', levantine: 'Levantine', quranic: 'Quranic' }[d] ?? d;
 }
 
+/** Returns the next upcoming lesson Date from a student's weekly availability slots */
+function getNextLessonDate(slots: WeeklySlot[]): Date | null {
+  if (!slots || slots.length === 0) return null;
+  const now = new Date();
+  for (let daysAhead = 0; daysAhead <= 7; daysAhead++) {
+    const candidate = new Date(now);
+    candidate.setDate(now.getDate() + daysAhead);
+    const jsDay  = candidate.getDay();          // 0=Sun … 6=Sat
+    const slotDay = jsDay === 0 ? -1 : jsDay - 1; // Mon=0 … Sat=5; Sun has no slot
+    if (slotDay < 0) continue;
+    const matching = slots.filter(s => s.day === slotDay).sort((a, b) => a.startHour - b.startHour);
+    for (const slot of matching) {
+      const lessonDate = new Date(candidate);
+      lessonDate.setHours(slot.startHour, 0, 0, 0);
+      if (lessonDate > now) return lessonDate;
+    }
+  }
+  return null;
+}
+
+/** Format a lesson date as "Today 6:00 PM", "Tomorrow 6:00 PM", or "Mon 23 May · 6:00 PM" */
+function formatLessonDate(d: Date): string {
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lessonDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((lessonDay.getTime() - today.getTime()) / 86400000);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diffDays === 0) return `Today · ${time}`;
+  if (diffDays === 1) return `Tomorrow · ${time}`;
+  return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${time}`;
+}
+
 const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {}, onAddStudent, onSelectStudent, onUpdateStudent, onFamilyLinks }) => {
   const { t } = useI18n();
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [meetGenerating, setMeetGenerating] = useState(false);
+  const [meetCopied, setMeetCopied] = useState(false);
+
+  // ── Find the student with the soonest next lesson ─────────────────────────
+  const nextLessonEntry = useMemo(() => {
+    let best: { student: ArabicStudent; date: Date } | null = null;
+    for (const s of students) {
+      const d = getNextLessonDate(s.availability);
+      if (d && (!best || d < best.date)) best = { student: s, date: d };
+    }
+    return best;
+  }, [students]);
 
   async function handleCopyLink(student: ArabicStudent, e: React.MouseEvent) {
     e.stopPropagation(); // don't open the student page
@@ -58,12 +103,97 @@ const ArabicDashboard: React.FC<Props> = ({ teacherId, students, vocabCounts = {
     }
   }
 
+  async function handleGenerateMeetLink() {
+    if (!nextLessonEntry) return;
+    setMeetGenerating(true);
+    try {
+      const url = await createGoogleMeetLink(
+        nextLessonEntry.student.name,
+        nextLessonEntry.date.toISOString(),
+      );
+      if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
+      await saveActiveMeetUrl(nextLessonEntry.student.id, url);
+      onUpdateStudent({ ...nextLessonEntry.student, activeMeetUrl: url });
+    } finally {
+      setMeetGenerating(false);
+    }
+  }
+
+  async function handleCopyMeetLink() {
+    if (!nextLessonEntry?.student.activeMeetUrl) return;
+    await navigator.clipboard.writeText(nextLessonEntry.student.activeMeetUrl);
+    setMeetCopied(true);
+    setTimeout(() => setMeetCopied(false), 2500);
+  }
+
+  async function handleClearMeetLink() {
+    if (!nextLessonEntry) return;
+    await saveActiveMeetUrl(nextLessonEntry.student.id, null);
+    onUpdateStudent({ ...nextLessonEntry.student, activeMeetUrl: undefined });
+  }
+
   const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
+
+      {/* ── Next Lesson Banner ───────────────────────────────────────────────── */}
+      {nextLessonEntry && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Left: lesson info */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Next Lesson</p>
+              <p className="font-bold text-slate-800 dark:text-slate-100 text-base leading-tight truncate">{nextLessonEntry.student.name}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{formatLessonDate(nextLessonEntry.date)}</p>
+            </div>
+          </div>
+
+          {/* Right: action buttons */}
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            {nextLessonEntry.student.activeMeetUrl ? (
+              <>
+                {/* Copy link */}
+                <button
+                  onClick={handleCopyMeetLink}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {meetCopied ? '✓ Copied!' : (
+                    <><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>
+                  )}
+                </button>
+                {/* Join */}
+                <a
+                  href={nextLessonEntry.student.activeMeetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                  Join Lesson
+                </a>
+                {/* Clear */}
+                <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleGenerateMeetLink}
+                disabled={meetGenerating}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

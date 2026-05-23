@@ -500,7 +500,13 @@
         "tabProgress": "Student's Progress",
         "tabProfile": "Student Profile",
         "tabAvailability": "Tutor's Availability",
-        "words": "{{count}} words"
+        "words": "{{count}} words",
+        "nextLesson": "Your next lesson",
+        "nextLessonToday": "Today · {{time}}",
+        "nextLessonTomorrow": "Tomorrow · {{time}}",
+        "nextLessonDate": "{{date}} · {{time}}",
+        "joinLesson": "Join Lesson",
+        "noMeetLink": "Your tutor has not generated the meeting link yet"
     },
     "arabicDashboard": {
         "title": "Arabic Students",
