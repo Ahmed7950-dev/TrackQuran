@@ -41,6 +41,7 @@ export interface LessonBooking {
   requestedAt:     string;
   /** ISO timestamp — set when tutor confirms */
   confirmedAt?:    string;
+  meetUrl?:        string;
 }
 
 // ── DB row ────────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ interface BookingRow {
   student_note:     string | null;
   requested_at:     string;
   confirmed_at:     string | null;
+  meet_url:         string | null;
 }
 
 function rowToBooking(r: BookingRow): LessonBooking {
@@ -82,6 +84,7 @@ function rowToBooking(r: BookingRow): LessonBooking {
     studentNote:     r.student_note  ?? undefined,
     requestedAt:     r.requested_at,
     confirmedAt:     r.confirmed_at  ?? undefined,
+    meetUrl:         r.meet_url      ?? undefined,
   };
 }
 
@@ -348,6 +351,27 @@ export function studentAlreadyBooked(
     const bEnd   = bStart + b.durationMinutes;
     return bStart < slotEnd && bEnd > slotStart;
   });
+}
+
+/** Update the Google Meet URL on a platform booking */
+export async function updateBookingMeetUrl(bookingId: string, meetUrl: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('lesson_bookings')
+    .update({ meet_url: meetUrl })
+    .eq('id', bookingId);
+  if (error) throw error;
+}
+
+/** Get all confirmed Arabic portal bookings for a student (by their share token) */
+export async function getConfirmedArabicBookingsByToken(shareToken: string): Promise<LessonBooking[]> {
+  const { data, error } = await supabase
+    .from('lesson_bookings')
+    .select('*')
+    .eq('student_id', shareToken)
+    .eq('portal_type', 'arabic')
+    .eq('status', 'confirmed');
+  if (error) throw error;
+  return (data as BookingRow[]).map(rowToBooking);
 }
 
 /*

@@ -18,8 +18,10 @@ import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import CalendarPage from './CalendarPage';
+import LessonTimeline from './LessonTimeline';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
+import { getStudentUnifiedLessons, type UnifiedLesson } from '../services/lessonSessionService';
 
 interface Props {
   student: ArabicStudent;
@@ -706,14 +708,24 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule'>('lessons');
   const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [upcomingLessons, setUpcomingLessons] = useState<UnifiedLesson[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(false);
 
   useEffect(() => {
     getArabicLessons().then(setLessons);
   }, []);
+
+  useEffect(() => {
+    setLessonsLoading(true);
+    getStudentUnifiedLessons(student.id, student.shareToken)
+      .then(setUpcomingLessons)
+      .catch(console.error)
+      .finally(() => setLessonsLoading(false));
+  }, [student.id, student.shareToken]);
 
   // Load teacher availability so the student can see working hours
   useEffect(() => {
@@ -736,9 +748,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
+    { key: 'schedule', label: '📅 Schedule', mobileLabel: 'Schedule' },
     { key: 'profile',  label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
     ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
@@ -967,6 +980,70 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           portalType="arabic"
         />
       )}
+
+      {/* ── Schedule section ── */}
+        {activeSection === 'schedule' && (
+          <div className="space-y-4">
+            {/* Next lesson banner */}
+            {upcomingLessons.length > 0 && (() => {
+              const next = upcomingLessons[0];
+              const now = new Date();
+              const d = next.startAt;
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const lessonDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+              const diffDays = Math.round((lessonDay.getTime() - today.getTime()) / 86400000);
+              const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const dateLabel = diffDays === 0
+                ? `Today · ${time}`
+                : diffDays === 1
+                ? `Tomorrow · ${time}`
+                : `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${time}`;
+              // Countdown
+              const msLeft = d.getTime() - now.getTime();
+              const totalMin = Math.max(0, Math.floor(msLeft / 60000));
+              const days = Math.floor(totalMin / 1440);
+              const hours = Math.floor((totalMin % 1440) / 60);
+              const mins = totalMin % 60;
+              const countdown = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+              return (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-0.5">Next Lesson</p>
+                      <p className="font-bold text-slate-800 dark:text-slate-100 text-base">{dateLabel}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-full text-sm font-bold">⏱ {countdown}</span>
+                    {next.meetUrl ? (
+                      <a href={next.meetUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                        Join Lesson 🚀
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">No meet link yet</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Full timeline */}
+            {lessonsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" />
+              </div>
+            ) : (
+              <LessonTimeline
+                lessons={upcomingLessons}
+                showJoin={true}
+                emptyMessage="No upcoming lessons scheduled. Link calendar events or have the student book a lesson."
+              />
+            )}
+          </div>
+        )}
 
       {/* ── Profile section ── */}
       {activeSection === 'profile' && (

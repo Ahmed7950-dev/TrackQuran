@@ -146,3 +146,107 @@ export async function getSessionsByGcalId(teacherId: string): Promise<Record<str
   }
   return map;
 }
+
+// ── Unified lesson type (GCal session OR platform booking) ───────────────────
+
+export interface UnifiedLesson {
+  id: string;
+  source: 'gcal' | 'platform';
+  startAt: Date;
+  endAt?: Date;
+  title: string;
+  meetUrl?: string;
+  /** Set when source === 'gcal' */
+  sessionId?: string;
+  /** Set when source === 'platform' */
+  bookingId?: string;
+}
+
+/** Generate all future occurrences of a booking within the next `maxDays` days */
+function getBookingOccurrences(
+  booking: import('./lessonBookingService').LessonBooking,
+  maxDays = 90,
+): Date[] {
+  const now   = new Date();
+  const dates: Date[] = [];
+
+  if (booking.bookingType === 'single' && booking.specificDate) {
+    const d = new Date(
+      `${booking.specificDate}T${String(booking.hour).padStart(2, '0')}:${String(booking.minute).padStart(2, '0')}:00+03:00`,
+    );
+    if (d > now) dates.push(d);
+  } else if (booking.bookingType === 'weekly') {
+    const targetDay = booking.dayOfWeek; // 0 = Mon … 6 = Sun (Istanbul)
+    for (let i = 0; i <= maxDays; i++) {
+      const candidate = new Date(now);
+      candidate.setDate(candidate.getDate() + i);
+      const jsDay  = candidate.getDay(); // 0 = Sun … 6 = Sat
+      const monDay = jsDay === 0 ? 6 : jsDay - 1; // Mon=0 … Sun=6
+      if (monDay !== targetDay) continue;
+      const iso = `${candidate.toISOString().slice(0, 10)}T${String(booking.hour).padStart(2, '0')}:${String(booking.minute).padStart(2, '0')}:00+03:00`;
+      const d = new Date(iso);
+      if (d > now) dates.push(d);
+    }
+  }
+  return dates;
+}
+
+/**
+ * Returns all upcoming lessons for a student, combining GCal-linked sessions
+ * and platform bookings, sorted by startAt ascending.
+ *
+ * @param studentId   - arabic_students.id (for sessions)
+ * @param shareToken  - student's share token (for platform bookings); optional
+ */
+export async function getStudentUnifiedLessons(
+  studentId: string,
+  shareToken?: string,
+): Promise<UnifiedLesson[]> {
+  const { getConfirmedArabicBookingsByToken } = await import('./lessonBookingService');
+  const results: UnifiedLesson[] = [];
+  const now = new Date();
+
+  // 1. GCal-linked sessions
+  const sessions = await getStudentUpcomingSessions(studentId);
+  for (const s of sessions) {
+    const startAt = new Date(s.startAt);
+    if (startAt <= now) continue;
+    results.push({
+      id:        `session-${s.id}`,
+      source:    'gcal',
+      startAt,
+      endAt:     s.endAt ? new Date(s.endAt) : undefined,
+      title:     s.title ?? 'Arabic Lesson',
+      meetUrl:   s.meetUrl,
+      sessionId: s.id,
+    });
+  }
+
+  // 2. Platform bookings (matched by share token)
+  if (shareToken) {
+    try {
+      const bookings = await getConfirmedArabicBookingsByToken(shareToken);
+      for (const b of bookings) {
+        const occurrences = getBookingOccurrences(b);
+        for (const startAt of occurrences) {
+          const endAt = new Date(startAt.getTime() + b.durationMinutes * 60 * 1000);
+          results.push({
+            id:        `booking-${b.id}-${startAt.toISOString()}`,
+            source:    'platform',
+            startAt,
+            endAt,
+            title:     'Arabic Lesson (Platform)',
+            meetUrl:   b.meetUrl,
+            bookingId: b.id,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[UnifiedLessons] bookings fetch failed:', err);
+    }
+  }
+
+  // Sort ascending and deduplicate by approximate time (within 5 min)
+  results.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  return results;
+}

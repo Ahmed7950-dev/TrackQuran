@@ -12,12 +12,13 @@ import React, { useEffect, useState } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
-import { getStudentUpcomingSessions } from '../services/lessonSessionService';
+import { getStudentUpcomingSessions, getStudentUnifiedLessons, type UnifiedLesson } from '../services/lessonSessionService';
 import NotificationCenter from './NotificationCenter';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
+import LessonTimeline from './LessonTimeline';
 import Footer from './Footer';
 import { useI18n } from '../context/I18nProvider';
 
@@ -45,6 +46,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
 
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
   const [sessions, setSessions] = useState<LessonSession[]>([]);
+  const [unifiedLessons, setUnifiedLessons] = useState<UnifiedLesson[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
@@ -90,6 +92,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
         );
         setTotalVocabCount(lessonWords + customCount);
         getStudentUpcomingSessions(s.id).then(setSessions).catch(() => {});
+        getStudentUnifiedLessons(s.id, s.shareToken).then(setUnifiedLessons).catch(() => {});
       }
     });
   }, [token]);
@@ -261,12 +264,10 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
 
         {/* ── Next Lesson Banner ─────────────────────────────────────────────── */}
         {(() => {
-          const nextSession = sessions
-            .filter(s => new Date(s.startAt) > now)
-            .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0];
+          const nextSession = unifiedLessons[0] ?? null;
           if (!nextSession) return null;
 
-          const d   = new Date(nextSession.startAt);
+          const d   = nextSession.startAt;
           const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           const lessonDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
           const diffDays = Math.round((lessonDay.getTime() - today.getTime()) / 86400000);
@@ -278,7 +279,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             const date = d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
             dateLabel = t('arabicPortal.nextLessonDate', { date, time });
           }
-          const countdown = formatCountdown(nextSession.startAt, now);
+          const countdown = formatCountdown(nextSession.startAt.toISOString(), now);
 
           return (
             <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 border border-teal-200 dark:border-teal-700 rounded-2xl p-5">
@@ -320,6 +321,16 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             </div>
           );
         })()}
+
+        {/* ── Full Lesson Schedule Timeline ──────────────────────────────────── */}
+        {unifiedLessons.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm p-5">
+            <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-4 flex items-center gap-2">
+              📅 <span>Your Upcoming Lessons</span>
+            </h2>
+            <LessonTimeline lessons={unifiedLessons} showJoin={true} />
+          </div>
+        )}
 
         {portalTab === 'about' ? (
           <AboutUsPage />

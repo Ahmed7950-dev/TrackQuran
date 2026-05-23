@@ -11,7 +11,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
-import { getTeacherBookings } from '../services/lessonBookingService';
+import { getTeacherBookings, updateBookingMeetUrl } from '../services/lessonBookingService';
 import {
   createGoogleMeetLink,
 } from '../services/googleCalendarService';
@@ -115,72 +115,96 @@ const ArabicDashboard: React.FC<Props> = ({
   // ── next lesson from sessions + bookings ─────────────────────────────────
   const nextLesson = useMemo(() => {
     const now = new Date();
-    let best: { date: Date; student: ArabicStudent; session: LessonSession | null; studentName: string } | null = null;
+    let best: {
+      date: Date;
+      student: ArabicStudent;
+      meetUrl?: string;
+      sessionId?: string;
+      bookingId?: string;
+      title?: string;
+    } | null = null;
 
-    // From linked GCal sessions
+    // From GCal-linked sessions
     for (const session of sessions) {
       const d = new Date(session.startAt);
       if (d <= now) continue;
       const student = students.find(s => s.id === session.studentId);
       if (!student) continue;
-      if (!best || d < best.date) best = { date: d, student, session, studentName: student.name };
+      if (!best || d < best.date) {
+        best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: session.title };
+      }
     }
 
     // From platform bookings (matched by share token)
     for (const booking of bookings) {
-      const d = getBookingNextDate(booking);
-      if (!d) continue;
-      if (best && d >= best.date) continue;
+      if (booking.status !== 'confirmed' || booking.portalType !== 'arabic') continue;
       const student = students.find(s => s.shareToken === booking.studentId);
       if (!student) continue;
-      best = { date: d, student, session: null, studentName: student.name };
+      // Next occurrence
+      const now2 = new Date();
+      let nextDate: Date | null = null;
+      if (booking.bookingType === 'single' && booking.specificDate) {
+        const d = new Date(`${booking.specificDate}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`);
+        if (d > now2) nextDate = d;
+      } else if (booking.bookingType === 'weekly') {
+        for (let i = 0; i <= 7; i++) {
+          const c = new Date(now2); c.setDate(c.getDate() + i);
+          const jsDay = c.getDay(); const monDay = jsDay === 0 ? 6 : jsDay - 1;
+          if (monDay !== booking.dayOfWeek) continue;
+          const iso = `${c.toISOString().slice(0,10)}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`;
+          const d = new Date(iso); if (d > now2) { nextDate = d; break; }
+        }
+      }
+      if (!nextDate) continue;
+      if (!best || nextDate < best.date) {
+        best = { date: nextDate, student, meetUrl: booking.meetUrl, bookingId: booking.id };
+      }
     }
 
     return best;
   }, [sessions, bookings, students]);
 
-  // Keep nextSession alias for meet link handlers (only valid when session !== null)
-  const nextSession = nextLesson && nextLesson.session
-    ? { session: nextLesson.session, student: nextLesson.student }
-    : null;
-
   const highlightedStudentId = nextLesson?.student.id ?? null;
 
   // ── Meet link ─────────────────────────────────────────────────────────────
   async function handleGenerateMeetLink() {
-    if (!nextSession) return;
+    if (!nextLesson) return;
     setMeetGenerating(true);
     try {
       const url = await createGoogleMeetLink(
-        nextSession.student.name,
-        nextSession.session.startAt,
+        nextLesson.student.name,
+        nextLesson.date.toISOString(),
       );
-      if (!url) {
-        alert('Could not generate Meet link. Make sure Google Calendar is connected.');
-        return;
+      if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
+
+      if (nextLesson.sessionId) {
+        await updateSessionMeetUrl(nextLesson.sessionId, url);
+        setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: url } : s));
+      } else if (nextLesson.bookingId) {
+        await updateBookingMeetUrl(nextLesson.bookingId, url);
+        setBookings(prev => prev.map(b => b.id === nextLesson.bookingId ? { ...b, meetUrl: url } : b));
       }
-      await updateSessionMeetUrl(nextSession.session.id, url);
-      setSessions(prev =>
-        prev.map(s => s.id === nextSession.session.id ? { ...s, meetUrl: url } : s),
-      );
     } finally {
       setMeetGenerating(false);
     }
   }
 
   async function handleCopyMeetLink() {
-    if (!nextSession?.session.meetUrl) return;
-    await navigator.clipboard.writeText(nextSession.session.meetUrl);
+    if (!nextLesson?.meetUrl) return;
+    await navigator.clipboard.writeText(nextLesson.meetUrl);
     setMeetCopied(true);
     setTimeout(() => setMeetCopied(false), 2500);
   }
 
   async function handleClearMeetLink() {
-    if (!nextSession) return;
-    await updateSessionMeetUrl(nextSession.session.id, null);
-    setSessions(prev =>
-      prev.map(s => s.id === nextSession.session.id ? { ...s, meetUrl: undefined } : s),
-    );
+    if (!nextLesson) return;
+    if (nextLesson.sessionId) {
+      await updateSessionMeetUrl(nextLesson.sessionId, null);
+      setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: undefined } : s));
+    } else if (nextLesson.bookingId) {
+      await updateBookingMeetUrl(nextLesson.bookingId, null);
+      setBookings(prev => prev.map(b => b.id === nextLesson.bookingId ? { ...b, meetUrl: undefined } : b));
+    }
   }
 
   // ── copy share link ───────────────────────────────────────────────────────
@@ -256,49 +280,31 @@ const ArabicDashboard: React.FC<Props> = ({
                 {' '}on{' '}
                 <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
               </p>
-              {nextLesson.session?.title && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.session.title}</p>
+              {nextLesson.title && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.title}</p>
               )}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-            {nextLesson.session ? (
-              nextLesson.session.meetUrl ? (
-                <>
-                  <button
-                    onClick={handleCopyMeetLink}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    {meetCopied ? '✓ Copied!' : (
-                      <><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>
-                    )}
-                  </button>
-                  <a
-                    href={nextLesson.session.meetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-                    Join Lesson
-                  </a>
-                  <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={handleGenerateMeetLink}
-                  disabled={meetGenerating}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
-                  {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+            {nextLesson.meetUrl ? (
+              <>
+                <button onClick={handleCopyMeetLink} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                  {meetCopied ? '✓ Copied!' : (<><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>)}
                 </button>
-              )
+                <a href={nextLesson.meetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                  Join Lesson
+                </a>
+                <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </>
             ) : (
-              <span className="text-xs text-slate-400 italic">Platform-scheduled · Use Calendar tab for Meet link</span>
+              <button onClick={handleGenerateMeetLink} disabled={meetGenerating} className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+              </button>
             )}
           </div>
         </div>
