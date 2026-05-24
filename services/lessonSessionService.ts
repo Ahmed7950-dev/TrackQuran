@@ -147,6 +147,24 @@ export async function getSessionsByGcalId(teacherId: string): Promise<Record<str
   return map;
 }
 
+/**
+ * Delete all sessions for a given teacher + student + event title.
+ * Used when the tutor wants to unlink a student from all events with a specific title.
+ */
+export async function unlinkSessionsByStudentAndTitle(
+  teacherId: string,
+  studentId: string,
+  title: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_sessions')
+    .delete()
+    .eq('teacher_id', teacherId)
+    .eq('student_id', studentId)
+    .eq('title', title);
+  if (error) throw error;
+}
+
 // ── Unified lesson type (GCal session OR platform booking) ───────────────────
 
 export interface UnifiedLesson {

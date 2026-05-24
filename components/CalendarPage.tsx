@@ -22,7 +22,7 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession } from '../types';
-import { linkAllEventsByTitle, getSessionsByGcalId } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle } from '../services/lessonSessionService';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
 
@@ -262,6 +262,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [linking,           setLinking]           = useState(false);
   const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession>>({});
   const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
+  /** Set when user clicks a linked event in link mode — shows unlink confirmation */
+  const [unlinkTarget, setUnlinkTarget] = useState<{ gcalId: string; studentId: string; studentName: string; title: string } | null>(null);
   /** Set when silent refresh has failed — shows the reconnect banner */
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
@@ -582,6 +584,27 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       console.error('[Link] failed:', err);
     } finally {
       setLinking(false);
+    }
+  }
+
+  async function handleUnlink() {
+    if (!unlinkTarget || !teacherId) return;
+    setLinking(true);
+    try {
+      await unlinkSessionsByStudentAndTitle(teacherId, unlinkTarget.studentId, unlinkTarget.title);
+      const map = await getSessionsByGcalId(teacherId);
+      setLinkedSessions(map);
+      setLinkedStudentNames(prev => {
+        const next = { ...prev };
+        delete next[unlinkTarget.gcalId];
+        return next;
+      });
+      onSessionLinked?.();
+    } catch (err) {
+      console.error('[Unlink] failed:', err);
+    } finally {
+      setLinking(false);
+      setUnlinkTarget(null);
     }
   }
 
@@ -1085,21 +1108,56 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   const colourClass = GCAL_COLOURS[ev.colorId ?? ''] ?? 'bg-teal-400';
                   const isLinked    = !!linkedSessions[ev.id];
                   const linkedName  = linkedStudentNames[ev.id];
+                  const linkedSession = linkedSessions[ev.id];
+
+                  const handleEvClick = () => {
+                    if (!linkMode) return;
+                    if (isLinked && linkedSession && linkedName) {
+                      // Show unlink confirmation instead of link picker
+                      setUnlinkTarget({
+                        gcalId:      ev.id,
+                        studentId:   linkedSession.studentId,
+                        studentName: linkedName,
+                        title:       ev.summary,
+                      });
+                    } else {
+                      setLinkTarget({ id: ev.id, summary: ev.summary });
+                    }
+                  };
+
                   return (
                     <div
                       key={ev.id}
-                      title={`${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${linkedName ? `\nLinked: ${linkedName}` : ''}`}
-                      onClick={linkMode ? () => setLinkTarget({ id: ev.id, summary: ev.summary }) : undefined}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 ${colourClass} opacity-75 hover:opacity-90 transition-opacity border-l-2 border-dashed border-white/50 ${linkMode ? 'cursor-pointer ring-2 ring-violet-400 ring-offset-1' : 'cursor-default'} ${isLinked ? 'ring-2 ring-green-400 ring-offset-1' : ''}`}
+                      title={isLinked && linkedName
+                        ? `🔗 ${linkedName}\n${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`
+                        : `${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`}
+                      onClick={linkMode ? handleEvClick : undefined}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 transition-opacity border-l-2 border-dashed border-white/50
+                        ${isLinked
+                          ? 'bg-green-500 opacity-90 hover:opacity-100'
+                          : `${colourClass} opacity-75 hover:opacity-90`}
+                        ${linkMode && !isLinked ? 'cursor-pointer ring-2 ring-violet-400 ring-offset-1' : ''}
+                        ${linkMode && isLinked ? 'cursor-pointer ring-2 ring-red-400 ring-offset-1' : ''}
+                        ${!linkMode ? 'cursor-default' : ''}
+                      `}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
-                      <p className="text-[10px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
-                      <p className="text-[9px] text-white/80 leading-tight">
-                        {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
-                      </p>
-                      <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
-                      {isLinked && (
-                        <span className="absolute bottom-0.5 right-1 text-[8px] text-white font-bold leading-none">✓</span>
+                      {isLinked && linkedName ? (
+                        <>
+                          <p className="text-[10px] font-bold text-white leading-tight truncate">🔗 {linkedName}</p>
+                          <p className="text-[9px] text-white/80 leading-tight truncate">{ev.summary}</p>
+                          <p className="text-[9px] text-white/70 leading-tight">
+                            {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
+                          <p className="text-[9px] text-white/80 leading-tight">
+                            {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
+                          </p>
+                          <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
+                        </>
                       )}
                     </div>
                   );
@@ -1335,26 +1393,68 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             </div>
             {/* Student list */}
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
-              {arabicStudents.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => handleLinkToStudent(s.id)}
-                  disabled={linking}
-                  className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors disabled:opacity-50"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold text-sm flex-shrink-0">
-                    {s.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="font-medium text-slate-800 dark:text-slate-100 text-sm">{s.name}</span>
-                  {linking && <svg className="ml-auto w-4 h-4 animate-spin text-violet-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-                </button>
-              ))}
+              {(() => {
+                const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
+                const available = arabicStudents.filter(s => !linkedStudentIds.has(s.id));
+                if (available.length === 0) {
+                  return (
+                    <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                      All students are already linked to events.
+                    </div>
+                  );
+                }
+                return available.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleLinkToStudent(s.id)}
+                    disabled={linking}
+                    className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors disabled:opacity-50"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold text-sm flex-shrink-0">
+                      {s.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-medium text-slate-800 dark:text-slate-100 text-sm">{s.name}</span>
+                    {linking && <svg className="ml-auto w-4 h-4 animate-spin text-violet-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+                  </button>
+                ));
+              })()}
             </div>
             {/* Cancel */}
             <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700">
               <button
                 onClick={() => setLinkTarget(null)}
                 className="w-full py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GCal Unlink confirmation modal ───────────────────────────────── */}
+      {unlinkTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Unlink student</p>
+              <p className="font-bold text-slate-800 dark:text-slate-100">"{unlinkTarget.title}"</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Remove <span className="font-semibold text-slate-700 dark:text-slate-200">{unlinkTarget.studentName}</span> from all events with this title?
+              </p>
+            </div>
+            <div className="px-5 py-4 flex gap-3">
+              <button
+                onClick={handleUnlink}
+                disabled={linking}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-60"
+              >
+                {linking ? 'Unlinking…' : 'Yes, unlink'}
+              </button>
+              <button
+                onClick={() => setUnlinkTarget(null)}
+                disabled={linking}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>

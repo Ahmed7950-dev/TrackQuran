@@ -165,6 +165,7 @@ const ArabicDashboard: React.FC<Props> = ({
   }, [sessions, bookings, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
+  const linkedStudentIds = new Set(sessions.map(s => s.studentId));
 
   // ── Meet link ─────────────────────────────────────────────────────────────
   async function handleGenerateMeetLink() {
@@ -348,6 +349,7 @@ const ArabicDashboard: React.FC<Props> = ({
               student={s}
               vocabCount={vocabCounts[s.id] ?? 0}
               isNext={s.id === highlightedStudentId}
+              isLinked={linkedStudentIds.has(s.id)}
               onClick={() => onSelectStudent(s.id)}
               onCopyLink={e => handleCopyLink(s, e)}
               copying={copyingId === s.id}
@@ -380,13 +382,14 @@ interface CardProps {
   student: ArabicStudent;
   vocabCount: number;
   isNext: boolean;
+  isLinked: boolean;
   onClick: () => void;
   onCopyLink: (e: React.MouseEvent) => void;
   copying: boolean;
   copied: boolean;
 }
 
-const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, onClick, onCopyLink, copying, copied }) => {
+const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, isLinked, onClick, onCopyLink, copying, copied }) => {
   const { t } = useI18n();
   const pct = progressPercent(s);
 
@@ -417,6 +420,11 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, onCl
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
+              {isLinked && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full">
+                  🔗 Linked
+                </span>
+              )}
               {vocabCount > 0 && (
                 <span className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
