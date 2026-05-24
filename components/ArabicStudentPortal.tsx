@@ -18,7 +18,6 @@ import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
-import LessonTimeline from './LessonTimeline';
 import Footer from './Footer';
 import { useI18n } from '../context/I18nProvider';
 
@@ -321,16 +320,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
             </div>
           );
         })()}
-
-        {/* ── Full Lesson Schedule Timeline ──────────────────────────────────── */}
-        {unifiedLessons.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm p-5">
-            <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-4 flex items-center gap-2">
-              📅 <span>Your Upcoming Lessons</span>
-            </h2>
-            <LessonTimeline lessons={unifiedLessons} showJoin={true} />
-          </div>
-        )}
 
         {portalTab === 'about' ? (
           <AboutUsPage />
