@@ -233,23 +233,6 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
             {themeIcon}
           </button>
 
-          {/* Language switcher */}
-          <div className="p-0.5 bg-slate-100 dark:bg-gray-700 rounded-lg flex gap-0.5">
-            {(['en', 'ar', 'tr'] as const).map(lang => (
-              <button
-                key={lang}
-                onClick={() => setLanguage(lang)}
-                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition-colors ${
-                  language === lang
-                    ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-teal-400 shadow'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                {lang.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
           <span className="text-sm text-slate-500 dark:text-slate-400 hidden md:block">{currentUser.name}</span>
           <button
             onClick={onLogout}
@@ -271,7 +254,19 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
             {/* Ticket list */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-slate-100 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">All Tickets ({tickets.length})</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">All Tickets ({tickets.length})</h3>
+                  {openCount > 0 && (
+                    <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-full">
+                      {openCount} open
+                    </span>
+                  )}
+                  {openCount === 0 && tickets.length > 0 && (
+                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs font-bold rounded-full">
+                      All resolved
+                    </span>
+                  )}
+                </div>
                 <button onClick={() => setShowSupport(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -386,7 +381,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
         {/* ── Stats ──────────────────────────────────────────────────────────── */}
         {!showSupport && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               {/* Total Teachers */}
               <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
                 <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">{teachers.length}</p>
@@ -406,16 +401,6 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                     🌙 {totalArabicStudents ?? '…'} Arabic
                   </span>
                 </div>
-              </div>
-              {/* Open tickets */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
-                <p className={`text-3xl font-bold ${openCount > 0 ? 'text-orange-500' : 'text-green-600'}`}>{openCount}</p>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Open Tickets</p>
-              </div>
-              {/* Total tickets */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
-                <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">{tickets.length}</p>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Total Tickets</p>
               </div>
             </div>
 
