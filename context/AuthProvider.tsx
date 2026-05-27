@@ -156,8 +156,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+/** Safe default returned when useAuth is called outside an AuthProvider (e.g. public shared-report pages). */
+const AUTH_GUEST: AuthContextType = {
+  currentUser: null,
+  loading: false,
+  login: async () => ({ error: 'Not authenticated' }),
+  signup: async () => ({ error: 'Not authenticated' }),
+  studentLogin: async () => null,
+  signInWithGoogle: async () => {},
+  logout: async () => {},
+};
+
 export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  // Return safe guest defaults when used outside an AuthProvider (public pages).
+  if (!ctx) return AUTH_GUEST;
   return ctx;
 };

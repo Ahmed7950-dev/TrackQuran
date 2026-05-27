@@ -10,6 +10,7 @@ import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 import NotificationCenter from './NotificationCenter';
+import TajweedPage from './TajweedPage';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -1109,6 +1110,258 @@ const ProgressTab: React.FC<{
   );
 };
 
+// ── QuranStudentTab ───────────────────────────────────────────────────────────
+
+interface QuranStudentTabProps {
+  mistakes: Record<string, any>;
+  recitationAchievements: Array<{ startSurah: number; startAyah: number; endSurah: number; endAyah: number }>;
+  memorizationAchievements: Array<{ startSurah: number; startAyah: number; endSurah: number; endAyah: number }>;
+  quranicFont: string;
+}
+
+const QuranStudentTab: React.FC<QuranStudentTabProps> = ({
+  mistakes,
+  recitationAchievements,
+  memorizationAchievements,
+  quranicFont,
+}) => {
+  const [selectedSurah, setSelectedSurah] = useState(1);
+  const [verses, setVerses] = useState<{ verse_key: string; text_uthmani: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(5);
+  const [activeAudio, setActiveAudio] = useState<{ surah: number; ayah: number } | null>(null);
+
+  // Fetch verse text from Quran.com API whenever the selected surah changes
+  useEffect(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    setVerses([]);
+    setActiveAudio(null);
+    fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedSurah}`)
+      .then(r => { if (!r.ok) throw new Error('Network error'); return r.json(); })
+      .then(d => { setVerses(d.verses ?? []); setIsLoading(false); })
+      .catch(() => { setLoadError('Could not load surah. Check your connection.'); setIsLoading(false); });
+  }, [selectedSurah]);
+
+  // Helpers ──────────────────────────────────────────────────────────────────
+
+  const isVerseAfterOrEqual = (v1: { surah: number; ayah: number }, v2: { surah: number; ayah: number }) =>
+    v1.surah > v2.surah || (v1.surah === v2.surah && v1.ayah >= v2.ayah);
+
+  const isVerseRead = (surahNum: number, ayahNum: number) =>
+    recitationAchievements.some(a =>
+      isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, { surah: a.startSurah, ayah: a.startAyah }) &&
+      isVerseAfterOrEqual({ surah: a.endSurah, ayah: a.endAyah }, { surah: surahNum, ayah: ayahNum }),
+    );
+
+  const isVerseMemorized = (surahNum: number, ayahNum: number) =>
+    memorizationAchievements.some(a =>
+      isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, { surah: a.startSurah, ayah: a.startAyah }) &&
+      isVerseAfterOrEqual({ surah: a.endSurah, ayah: a.endAyah }, { surah: surahNum, ayah: ayahNum }),
+    );
+
+  /** True if any achievement range covers this surah (for nav button tinting). */
+  const isSurahRead = (n: number) => recitationAchievements.some(a => n >= a.startSurah && n <= a.endSurah);
+  const isSurahMemorized = (n: number) => memorizationAchievements.some(a => n >= a.startSurah && n <= a.endSurah);
+
+  const handleVerseNumberClick = (surahNum: number, ayahNum: number) => {
+    setActiveAudio(prev =>
+      prev?.surah === surahNum && prev?.ayah === ayahNum ? null : { surah: surahNum, ayah: ayahNum },
+    );
+  };
+
+  /** Render a single word with mistake highlights (word-level and letter-level). */
+  const renderWord = (rawWord: string, surahNum: number, ayahNum: number, wordIndex: number) => {
+    const word = rawWord.replace(/ْ/g, 'ۡ');
+    const wordKey = `${surahNum}:${ayahNum}:${wordIndex}`;
+    const wordMistake = mistakes[wordKey];
+    const letters = parseWordIntoLetters(word);
+
+    const hasLetterAnnotations = letters.some(({ index: li }) => mistakes[`${surahNum}:${ayahNum}:${wordIndex}:${li}`]?.errorText);
+
+    if (!hasLetterAnnotations) {
+      return (
+        <span key={wordKey} className={`px-0.5 rounded ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`}>
+          {processTextWithU06DF(word)}
+        </span>
+      );
+    }
+
+    return (
+      <span key={wordKey} style={{ display: 'inline', position: 'relative', whiteSpace: 'nowrap' }}>
+        {letters.map(({ letter, index: li }) => {
+          const lk = `${surahNum}:${ayahNum}:${wordIndex}:${li}`;
+          const lm = mistakes[lk];
+          const bg = lm?.errorText
+            ? lm.errorType === 'tajweed' ? 'bg-green-200' : 'bg-red-200'
+            : lm ? getMistakeBg(lm.level) : '';
+          return (
+            <span key={lk} className={`rounded ${bg}`} style={{ display: 'inline' }}>
+              {processTextWithU06DF(letter)}
+            </span>
+          );
+        })}
+      </span>
+    );
+  };
+
+  const surahInfo = QURAN_METADATA.find(s => s.number === selectedSurah);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4">
+
+      {/* Info banner */}
+      <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-xl p-4 text-sm text-teal-800 dark:text-teal-200" dir="ltr">
+        <p className="font-semibold mb-1">📖 Browse the Quran</p>
+        <p>Colours show your progress and recorded mistakes. Tap any <strong>verse number ⬤</strong> to hear Sheikh Al-Minshawi's recitation.</p>
+      </div>
+
+      {/* Surah navigation */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3">
+        <div className="overflow-x-auto">
+          <div className="flex items-center gap-2 pb-1 min-w-max">
+            {QURAN_METADATA.map(s => {
+              const active = s.number === selectedSurah;
+              const read = isSurahRead(s.number);
+              const memorized = isSurahMemorized(s.number);
+              return (
+                <button
+                  key={s.number}
+                  onClick={() => setSelectedSurah(s.number)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
+                    active
+                      ? 'bg-teal-600 text-white shadow-md scale-105'
+                      : memorized
+                        ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 hover:bg-sky-200'
+                        : read
+                          ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 hover:bg-teal-200'
+                          : 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  <span className="font-mono opacity-60">{s.number}</span>
+                  <span>{s.transliteratedName}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Font size controls */}
+      <div className="flex items-center gap-2 justify-end" dir="ltr">
+        <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-lg p-1">
+          <button onClick={() => setFontSize(p => Math.max(p - 1, 2))} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition">−</button>
+          <span className="text-slate-600 dark:text-slate-300 font-semibold w-7 text-center text-sm">A</span>
+          <button onClick={() => setFontSize(p => Math.min(p + 1, 8))} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition">+</button>
+        </div>
+      </div>
+
+      {/* Verse content */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-32">
+            <svg className="animate-spin w-8 h-8 text-teal-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+            </svg>
+          </div>
+        ) : loadError ? (
+          <div className="text-center p-8 text-red-500">{loadError}</div>
+        ) : (
+          <>
+            {/* Surah header */}
+            <div className="text-center pt-8 pb-4 px-6">
+              <p style={{ fontFamily: quranicFont }} className="text-4xl text-slate-700 dark:text-slate-100">{surahInfo?.name}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{surahInfo?.englishName} · {surahInfo?.transliteratedName}</p>
+            </div>
+            {selectedSurah !== 1 && selectedSurah !== 9 && (
+              <p className="text-center mb-6 text-4xl text-slate-800 dark:text-slate-200" style={{ fontFamily: quranicFont }}>
+                بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
+              </p>
+            )}
+
+            {/* Verses — one block per verse for clean audio player placement */}
+            <div className="divide-y divide-slate-50 dark:divide-gray-700/50 pb-6">
+              {verses.map(verse => {
+                const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+                const read = isVerseRead(surahNum, ayahNum);
+                const memorized = isVerseMemorized(surahNum, ayahNum);
+                const svgFill = memorized ? '#38bdf8' : read ? '#a7f3d0' : 'currentColor';
+                const isPlaying = activeAudio?.surah === surahNum && activeAudio?.ayah === ayahNum;
+                const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ');
+
+                return (
+                  <div
+                    key={verse.verse_key}
+                    className={`px-4 sm:px-6 py-3 transition-colors ${isPlaying ? 'bg-teal-50 dark:bg-teal-900/10' : ''}`}
+                  >
+                    {/* Verse text + number */}
+                    <div
+                      className="text-center select-none"
+                      dir="rtl"
+                      style={{ fontFamily: quranicFont, fontSize: `${fontSize}rem`, lineHeight: 2.2 }}
+                    >
+                      {words.map((word, wi) => (
+                        <React.Fragment key={wi}>
+                          {renderWord(word, surahNum, ayahNum, wi)}{' '}
+                        </React.Fragment>
+                      ))}
+                      {/* Clickable verse-number circle */}
+                      <span
+                        className="inline-flex items-center justify-center w-12 h-12 mx-1 font-mono text-base font-bold text-slate-700 dark:text-slate-200 cursor-pointer relative rounded-full hover:scale-110 transition-transform"
+                        style={{ verticalAlign: 'middle' }}
+                        onClick={() => handleVerseNumberClick(surahNum, ayahNum)}
+                        role="button"
+                        aria-label={`Listen to verse ${ayahNum}`}
+                        title="Tap to listen"
+                      >
+                        <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-600" viewBox="0 0 100 100" fill={svgFill}>
+                          <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
+                          <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
+                        </svg>
+                        <span className="relative z-10">{toEasternArabicNumerals(ayahNum)}</span>
+                      </span>
+                    </div>
+                    {/* Audio player — shown when this verse is active */}
+                    {isPlaying && (
+                      <div dir="ltr" className="mt-3 max-w-sm mx-auto">
+                        <VerseAudioPlayer surah={surahNum} ayah={ayahNum} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Colour legend */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4" dir="ltr">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">Colour Legend</p>
+        <div className="flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-300">
+          {[
+            { cls: 'bg-teal-100 border-teal-200',     label: 'Recited' },
+            { cls: 'bg-sky-200 border-sky-300',        label: 'Memorised' },
+            { cls: 'bg-yellow-200 border-yellow-300',  label: 'Mistake (level 1)' },
+            { cls: 'bg-orange-200 border-orange-300',  label: 'Mistake (level 2)' },
+            { cls: 'bg-red-200 border-red-300',        label: 'Mistake (level 3)' },
+            { cls: 'bg-green-200 border-green-300',    label: 'Tajweed error (letter)' },
+            { cls: 'bg-red-200 border-red-300',        label: 'Reading error (letter)' },
+          ].map(l => (
+            <span key={l.label} className="flex items-center gap-1.5">
+              <span className={`w-4 h-4 rounded inline-block border ${l.cls}`} />
+              {l.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── main page ─────────────────────────────────────────────────────────────────
 
 const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
@@ -1118,7 +1371,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar'>('mistakes');
+  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed'>('mistakes');
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1395,7 +1648,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         {/* Tab bar — hidden when About Us is open */}
         {portalTab === 'content' && (
           <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
-            <div className="container mx-auto px-3 sm:px-4 flex">
+            <div className="container mx-auto px-3 sm:px-4 flex overflow-x-auto">
               <button
                 onClick={() => setActiveTab('mistakes')}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
@@ -1436,6 +1689,32 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                 </svg>
                 Tutor's Availability
+              </button>
+              <button
+                onClick={() => setActiveTab('quran')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'quran'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+                Quran
+              </button>
+              <button
+                onClick={() => setActiveTab('tajweed')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'tajweed'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                Tajweed
               </button>
             </div>
           </div>
@@ -1491,6 +1770,17 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 />
               );
             })()}
+            {activeTab === 'quran' && (
+              <QuranStudentTab
+                mistakes={report_data.mistakes ?? {}}
+                recitationAchievements={studentProgress?.recitationAchievements ?? []}
+                memorizationAchievements={studentProgress?.memorizationAchievements ?? []}
+                quranicFont={quranicFont}
+              />
+            )}
+            {activeTab === 'tajweed' && (
+              <TajweedPage students={[]} />
+            )}
 
             <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">
               <p>Generated by Lisan &amp; Quran · {new Date(generatedAt).toLocaleString()}</p>
