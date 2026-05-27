@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
+import VerseAudioPlayer from './VerseAudioPlayer';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
@@ -29,6 +30,8 @@ interface StudentProgressPageProps {
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
   onGoBack: () => void;
+  /** When true: disables all logging interactions; verse-number click plays audio instead */
+  readOnly?: boolean;
 }
 
 const getAge = (dob: string) => {
@@ -1245,9 +1248,10 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
+    const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
     const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
@@ -2333,10 +2337,31 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements).isLogged;
         const isTafseer   = getTafseerRangeInfo(surah, number).isLogged;
         const isLongPressStart = longPressStart?.surah === surah && longPressStart?.ayah === number;
-        const glowClass = isSelectedStart ? 'ring-2 ring-offset-4 ring-teal-500 dark:ring-orange-500 animate-pulse' : '';
-        const longPressGlowClass = isLongPressStart ? 'animate-glow' : '';
+        const glowClass = (!readOnly && isSelectedStart) ? 'ring-2 ring-offset-4 ring-teal-500 dark:ring-orange-500 animate-pulse' : '';
+        const longPressGlowClass = (!readOnly && isLongPressStart) ? 'animate-glow' : '';
         // sky = memorized (highest priority), teal = read, amber = tafseer only
         const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : isTafseer ? '#fde68a' : 'currentColor';
+        // In readOnly mode: clicking the verse number toggles the audio player for that verse
+        const isAudioActive = readOnly && readOnlyAudioVerse?.surah === surah && readOnlyAudioVerse?.ayah === number;
+        const audioActiveClass = isAudioActive ? 'ring-2 ring-teal-500 dark:ring-teal-400' : '';
+
+        if (readOnly) {
+            return (
+                <span
+                    onClick={() => setReadOnlyAudioVerse(prev =>
+                        prev?.surah === surah && prev?.ayah === number ? null : { surah, ayah: number }
+                    )}
+                    className={`inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 cursor-pointer relative transition-all rounded-full ${audioActiveClass}`}
+                    style={{ verticalAlign: 'middle' }} role="button" aria-label={`Play verse ${number}`}
+                >
+                    <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill={svgFill}>
+                        <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
+                        <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
+                    </svg>
+                    <span className="relative z-10">{toEasternArabicNumerals(number)}</span>
+                </span>
+            );
+        }
 
         return (
             <span
@@ -2440,7 +2465,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     mistake={mistake}
                                     isEditing={isEditing}
                                     errorText={errorTextInput}
-                                    onLetterClick={handleLetterClick}
+                                    onLetterClick={readOnly ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
                                     onTextCancel={handleLetterTextCancel}
@@ -2475,13 +2500,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </span>
             );
 
-            const verseContainerClass = `my-4${showTranslation ? '' : ' inline'}`;
+            const isAudioVerseActive = readOnly && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
+            // In readOnly mode, force a block container when the audio player is open for this verse
+            const verseContainerClass = `my-4${showTranslation || isAudioVerseActive ? '' : ' inline'}`;
             const verseContainerId = `verse-container-${verse.verse_key}`;
 
             if (showTranslation) {
                 const verseContainer = (
                     <div id={verseContainerId} key={`verse-container-${verse.verse_key}`} className="my-4">
                         <div className="arabic-verse leading-[2.8]">{verseTextNode}{verseMarker}</div>
+                        {isAudioVerseActive && (
+                            <div dir="ltr">
+                                <VerseAudioPlayer surah={surahNum} ayah={ayahNum} onEnded={() => setReadOnlyAudioVerse(null)} />
+                            </div>
+                        )}
                         <div key={`trans-container-${verse.verse_key}`} dir="ltr" className="translation-container mt-4 text-left font-sans text-base leading-relaxed space-y-3">
                             {isTranslationLoading ? (
                                 <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-lg text-slate-500 animate-pulse">{t('liveSession.loadingTranslation')}</div>
@@ -2507,11 +2539,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     </div>
                 );
                 surahContent.push(verseContainer);
-            } else { 
+            } else {
                 surahContent.push(
                     <div id={verseContainerId} key={verseContainerId} className={verseContainerClass}>
                         {verseTextNode}
                         {verseMarker}
+                        {isAudioVerseActive && (
+                            <div dir="ltr">
+                                <VerseAudioPlayer surah={surahNum} ayah={ayahNum} onEnded={() => setReadOnlyAudioVerse(null)} />
+                            </div>
+                        )}
                     </div>
                 );
              }
@@ -2624,7 +2661,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky top-[100px] z-30">
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls */}
                     <div className="flex items-center gap-2 min-w-0">
-                        {/* ── Left: error type toggle + reveal hidden ── */}
+                        {/* ── Left: error type toggle + reveal hidden (hidden in read-only mode) ── */}
+                        {!readOnly && (
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-full px-2 py-1 h-10">
                                 <button
@@ -2654,6 +2692,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 )}
                             </div>
                         </div>
+                        )}
                         {/* ── Middle: surah pills — first & last pinned, middle scrolls ── */}
                         <div className="flex-1 flex items-center gap-2 min-w-0 overflow-hidden">
                             {/* First surah (Al-Fatihah) — pinned */}
@@ -2750,7 +2789,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     )}
                                 </div>
 
-                                {/* Teacher's Notes */}
+                                {/* Teacher's Notes — hidden in read-only (student) mode */}
+                                {!readOnly && (
                                 <button
                                     onClick={openTeacherNoteWindow}
                                     title="Teacher's Notes"
@@ -2758,6 +2798,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 >
                                     🗒️
                                 </button>
+                                )}
                             </div>
 
                             {/* Search */}
