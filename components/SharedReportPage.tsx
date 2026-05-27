@@ -1390,6 +1390,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               return (
                 <StudentProgressPage
                   readOnly
+                  toolbarStickyTop={156}
                   student={quranFakeStudent}
                   students={[quranFakeStudent]}
                   studentProgress={sp ? { surah: sp.recitationAchievements?.[sp.recitationAchievements.length - 1]?.endSurah ?? 1, ayah: sp.recitationAchievements?.[sp.recitationAchievements.length - 1]?.endAyah ?? 1 } : { surah: 1, ayah: 1 }}

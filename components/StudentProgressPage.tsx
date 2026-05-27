@@ -32,6 +32,13 @@ interface StudentProgressPageProps {
   onGoBack: () => void;
   /** When true: disables all logging interactions; verse-number click plays audio instead */
   readOnly?: boolean;
+  /**
+   * Top offset (px) for the sticky surah navigation toolbar.
+   * Set to the height of the page header above this component.
+   * Defaults to 100 (tutor app header). Pass a higher value when
+   * rendering inside SharedReportPage which has a taller header.
+   */
+  toolbarStickyTop?: number;
 }
 
 const getAge = (dob: string) => {
@@ -1248,7 +1255,7 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false, toolbarStickyTop = 100 }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1336,21 +1343,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
-
-    // ── ReadOnly hidden audio: play/pause when active verse changes ─────────
-    useEffect(() => {
-        if (!readOnly) return;
-        const audio = readOnlyAudioRef.current;
-        if (!audio) return;
-        if (!readOnlyAudioVerse) {
-            audio.pause();
-            return;
-        }
-        audio.src = audioUrl(readOnlyAudioVerse.surah, readOnlyAudioVerse.ayah);
-        audio.playbackRate = readOnlySpeed;
-        audio.load();
-        audio.play().catch(() => {});
-    }, [readOnly, readOnlyAudioVerse]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── ReadOnly hidden audio: update playback rate live ─────────────────────
     useEffect(() => {
@@ -2517,9 +2509,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         ${readOnly ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
                     onClick={readOnly
-                        ? () => setReadOnlyAudioVerse(prev =>
-                            prev?.surah === surahNum && prev?.ayah === ayahNum ? null : { surah: surahNum, ayah: ayahNum }
-                          )
+                        ? () => {
+                            // Must be synchronous within the click gesture — useEffect would break autoplay policy
+                            const audio = readOnlyAudioRef.current;
+                            if (!audio) return;
+                            const isSame = readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
+                            if (isSame) {
+                                // Same verse: toggle play/pause
+                                if (audio.paused) {
+                                    audio.play().catch(() => {});
+                                } else {
+                                    audio.pause();
+                                    setReadOnlyAudioVerse(null);
+                                }
+                                return;
+                            }
+                            // New verse: stop current and start new one
+                            audio.pause();
+                            audio.src = audioUrl(surahNum, ayahNum);
+                            audio.playbackRate = readOnlySpeed;
+                            audio.play().catch(() => {});
+                            setReadOnlyAudioVerse({ surah: surahNum, ayah: ayahNum });
+                          }
                         : (e) => handleVerseContainerClick(e, surahNum, ayahNum)}
                     onMouseEnter={!readOnly ? () => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; } : undefined}
                     onMouseLeave={!readOnly ? () => { hoveredVerse.current = null; } : undefined}
@@ -2674,7 +2685,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
 
             <div className="space-y-6">
-                <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky top-[100px] z-30">
+                <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls */}
                     <div className="flex items-center gap-2 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
