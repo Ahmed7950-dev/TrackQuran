@@ -2508,30 +2508,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         ${isVerseHidden ? 'opacity-0' : 'opacity-100'}
                         ${readOnly ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
-                    onClick={readOnly
-                        ? () => {
-                            // Must be synchronous within the click gesture — useEffect would break autoplay policy
-                            const audio = readOnlyAudioRef.current;
-                            if (!audio) return;
-                            const isSame = readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
-                            if (isSame) {
-                                // Same verse: toggle play/pause
-                                if (audio.paused) {
-                                    audio.play().catch(() => {});
-                                } else {
-                                    audio.pause();
-                                    setReadOnlyAudioVerse(null);
-                                }
-                                return;
+                    // readOnly: use CAPTURE phase so LetterWithError's stopPropagation() (bubble phase) can't block us
+                    onClickCapture={readOnly ? () => {
+                        const audio = readOnlyAudioRef.current;
+                        if (!audio) return;
+                        const isSame = readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
+                        if (isSame) {
+                            if (audio.paused) {
+                                audio.play().catch(() => {});
+                            } else {
+                                audio.pause();
+                                setReadOnlyAudioVerse(null);
                             }
-                            // New verse: stop current and start new one
-                            audio.pause();
-                            audio.src = audioUrl(surahNum, ayahNum);
-                            audio.playbackRate = readOnlySpeed;
-                            audio.play().catch(() => {});
-                            setReadOnlyAudioVerse({ surah: surahNum, ayah: ayahNum });
-                          }
-                        : (e) => handleVerseContainerClick(e, surahNum, ayahNum)}
+                            return;
+                        }
+                        audio.pause();
+                        audio.src = audioUrl(surahNum, ayahNum);
+                        audio.playbackRate = readOnlySpeed;
+                        audio.play().catch(() => {});
+                        setReadOnlyAudioVerse({ surah: surahNum, ayah: ayahNum });
+                    } : undefined}
+                    onClick={!readOnly ? (e) => handleVerseContainerClick(e, surahNum, ayahNum) : undefined}
                     onMouseEnter={!readOnly ? () => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; } : undefined}
                     onMouseLeave={!readOnly ? () => { hoveredVerse.current = null; } : undefined}
                 >
