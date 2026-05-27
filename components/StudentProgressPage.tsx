@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
-import VerseAudioPlayer from './VerseAudioPlayer';
+import { audioUrl } from './VerseAudioPlayer';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
@@ -1252,6 +1252,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
+    const [readOnlySpeed, setReadOnlySpeed] = useState(1);
+    const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
     const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
@@ -1334,6 +1336,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    // ── ReadOnly hidden audio: play/pause when active verse changes ─────────
+    useEffect(() => {
+        if (!readOnly) return;
+        const audio = readOnlyAudioRef.current;
+        if (!audio) return;
+        if (!readOnlyAudioVerse) {
+            audio.pause();
+            return;
+        }
+        audio.src = audioUrl(readOnlyAudioVerse.surah, readOnlyAudioVerse.ayah);
+        audio.playbackRate = readOnlySpeed;
+        audio.load();
+        audio.play().catch(() => {});
+    }, [readOnly, readOnlyAudioVerse]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── ReadOnly hidden audio: update playback rate live ─────────────────────
+    useEffect(() => {
+        if (readOnlyAudioRef.current) {
+            readOnlyAudioRef.current.playbackRate = readOnlySpeed;
+        }
+    }, [readOnlySpeed]);
 
     // ── Teacher's Notes popup + postMessage listener ─────────────────────────
     useEffect(() => {
@@ -2341,18 +2365,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const longPressGlowClass = (!readOnly && isLongPressStart) ? 'animate-glow' : '';
         // sky = memorized (highest priority), teal = read, amber = tafseer only
         const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : isTafseer ? '#fde68a' : 'currentColor';
-        // In readOnly mode: clicking the verse number toggles the audio player for that verse
-        const isAudioActive = readOnly && readOnlyAudioVerse?.surah === surah && readOnlyAudioVerse?.ayah === number;
-        const audioActiveClass = isAudioActive ? 'ring-2 ring-teal-500 dark:ring-teal-400' : '';
 
         if (readOnly) {
+            // In readOnly mode: verse number is a pure colour indicator — no click interaction
             return (
                 <span
-                    onClick={() => setReadOnlyAudioVerse(prev =>
-                        prev?.surah === surah && prev?.ayah === number ? null : { surah, ayah: number }
-                    )}
-                    className={`inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 cursor-pointer relative transition-all rounded-full ${audioActiveClass}`}
-                    style={{ verticalAlign: 'middle' }} role="button" aria-label={`Play verse ${number}`}
+                    className="inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 relative"
+                    style={{ verticalAlign: 'middle' }} aria-label={`Verse ${number}`}
                 >
                     <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill={svgFill}>
                         <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
@@ -2488,32 +2507,34 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             });
             const isSelectedStart = selectionStart?.surah === surahNum && selectionStart?.ayah === ayahNum;
             const verseMarker = (<VerseMarker key={`marker-${verse.verse_key}`} number={ayahNum} surah={surahNum} isSelectedStart={isSelectedStart}/>);
+            const isVerseNowPlaying = readOnly && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
             const verseTextNode = (
                 <span
                     key={`text-${verse.verse_key}`}
-                    className={`px-1 py-1 rounded-md transition-opacity duration-300 ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : isRead ? 'bg-teal-50 dark:bg-teal-900/30' : isTafseer ? 'bg-amber-50 dark:bg-amber-900/20' : ''} ${isVerseHidden ? 'opacity-0' : 'opacity-100'}`}
-                    onClick={(e) => handleVerseContainerClick(e, surahNum, ayahNum)}
-                    onMouseEnter={() => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; }}
-                    onMouseLeave={() => { hoveredVerse.current = null; }}
+                    className={`px-1 py-1 rounded-md transition-all duration-300
+                        ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : isRead ? 'bg-teal-50 dark:bg-teal-900/30' : isTafseer ? 'bg-amber-50 dark:bg-amber-900/20' : ''}
+                        ${isVerseHidden ? 'opacity-0' : 'opacity-100'}
+                        ${readOnly ? 'cursor-pointer' : ''}
+                        ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
+                    onClick={readOnly
+                        ? () => setReadOnlyAudioVerse(prev =>
+                            prev?.surah === surahNum && prev?.ayah === ayahNum ? null : { surah: surahNum, ayah: ayahNum }
+                          )
+                        : (e) => handleVerseContainerClick(e, surahNum, ayahNum)}
+                    onMouseEnter={!readOnly ? () => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; } : undefined}
+                    onMouseLeave={!readOnly ? () => { hoveredVerse.current = null; } : undefined}
                 >
                     {verseWords}
                 </span>
             );
 
-            const isAudioVerseActive = readOnly && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
-            // In readOnly mode, force a block container when the audio player is open for this verse
-            const verseContainerClass = `my-4${showTranslation || isAudioVerseActive ? '' : ' inline'}`;
+            const verseContainerClass = `my-4${showTranslation ? '' : ' inline'}`;
             const verseContainerId = `verse-container-${verse.verse_key}`;
 
             if (showTranslation) {
                 const verseContainer = (
                     <div id={verseContainerId} key={`verse-container-${verse.verse_key}`} className="my-4">
                         <div className="arabic-verse leading-[2.8]">{verseTextNode}{verseMarker}</div>
-                        {isAudioVerseActive && (
-                            <div dir="ltr">
-                                <VerseAudioPlayer surah={surahNum} ayah={ayahNum} onEnded={() => setReadOnlyAudioVerse(null)} />
-                            </div>
-                        )}
                         <div key={`trans-container-${verse.verse_key}`} dir="ltr" className="translation-container mt-4 text-left font-sans text-base leading-relaxed space-y-3">
                             {isTranslationLoading ? (
                                 <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-lg text-slate-500 animate-pulse">{t('liveSession.loadingTranslation')}</div>
@@ -2544,11 +2565,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div id={verseContainerId} key={verseContainerId} className={verseContainerClass}>
                         {verseTextNode}
                         {verseMarker}
-                        {isAudioVerseActive && (
-                            <div dir="ltr">
-                                <VerseAudioPlayer surah={surahNum} ayah={ayahNum} onEnded={() => setReadOnlyAudioVerse(null)} />
-                            </div>
-                        )}
                     </div>
                 );
              }
@@ -2661,8 +2677,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky top-[100px] z-30">
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls */}
                     <div className="flex items-center gap-2 min-w-0">
-                        {/* ── Left: error type toggle + reveal hidden (hidden in read-only mode) ── */}
-                        {!readOnly && (
+                        {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
+                        {readOnly ? (
+                        <div className="flex items-center gap-1.5 flex-shrink-0 bg-slate-100 dark:bg-gray-700/60 rounded-full px-2 py-1 h-10" dir="ltr">
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 select-none">Speed</span>
+                            {[0.5, 0.75, 1, 1.25, 1.5].map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setReadOnlySpeed(s)}
+                                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
+                                >
+                                    {s}×
+                                </button>
+                            ))}
+                        </div>
+                        ) : (
                         <div className="flex items-center gap-2 flex-shrink-0">
                             <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-full px-2 py-1 h-10">
                                 <button
@@ -2945,6 +2974,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* ── ReadOnly hidden audio element ───────────────────────────── */}
+            {readOnly && (
+                <audio
+                    ref={readOnlyAudioRef}
+                    onEnded={() => setReadOnlyAudioVerse(null)}
+                    preload="none"
+                    style={{ display: 'none' }}
+                />
             )}
         </div>
     );
