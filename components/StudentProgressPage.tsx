@@ -1278,14 +1278,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
-    const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('tajweed');
+    const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
     const [selectedSurahId, setSelectedSurahId] = useState<number>(studentProgress?.surah || 1);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
-    const [fontSize, setFontSize] = useState(5); 
+    const [fontSize, setFontSize] = useState(4);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
     const [showQalqalah, setShowQalqalah] = useState(false);
@@ -1412,56 +1412,113 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             noteWindowRef.current.focus();
             return;
         }
-        const win = window.open('', `quran_note_${student.id}`, 'width=860,height=700,resizable=yes,scrollbars=yes');
+        const win = window.open('', `quran_note_${student.id}`, 'width=820,height=750,resizable=yes,scrollbars=yes');
         if (!win) return;
         noteWindowRef.current = win;
-        const escaped = (teacherNote ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Escape only the initial raw value for safe JSON embedding
+        const rawNote = teacherNote ?? '';
         const studentIdStr = student.id;
         const studentName = student.name;
+        // JSON-encode the raw string so it survives embedding in JS
+        const jsonNote = JSON.stringify(rawNote);
+        const jsonStudentId = JSON.stringify(studentIdStr);
         win.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Teacher's Notes — ${studentName}</title>
+  <meta charset="UTF-8"/>
+  <title>Teacher’s Notes — ${studentName}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,sans-serif;background:#fafafa;display:flex;flex-direction:column;height:100vh;padding:20px;gap:12px}
-    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
-    h1{font-size:17px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px}
+    body{font-family:system-ui,sans-serif;background:#f8fafc;display:flex;flex-direction:column;height:100vh;padding:16px;gap:10px}
+    header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+    h1{font-size:16px;font-weight:700;color:#1e293b}
     .sub{font-size:12px;color:#64748b;margin-top:2px}
-    .status{font-size:12px;font-weight:600;color:#94a3b8;flex-shrink:0}
-    .status.saving{color:#f59e0b}
-    .status.saved{color:#22c55e}
-    textarea{flex:1;width:100%;padding:16px;font-size:14px;line-height:1.7;
-             border:1px solid #e2e8f0;border-radius:10px;resize:none;
-             background:#fff;outline:none;color:#1e293b}
-    textarea:focus{border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.15)}
-    .hint{font-size:11px;color:#94a3b8;flex-shrink:0}
+    .status{font-size:11px;font-weight:600;color:#94a3b8}
+    .status.saving{color:#f59e0b}.status.saved{color:#22c55e}
+    #notes-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px}
+    .empty{text-align:center;color:#94a3b8;font-size:13px;padding:32px 0}
+    .note-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;position:relative}
+    .note-date{font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:5px}
+    .note-text{font-size:13.5px;color:#334155;white-space:pre-wrap;line-height:1.6}
+    .del-btn{position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:16px;line-height:1;padding:2px 5px;border-radius:4px}
+    .del-btn:hover{color:#ef4444;background:#fef2f2}
+    .add-area{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px;flex-shrink:0}
+    .new-note{width:100%;padding:8px 10px;font-size:13.5px;border:1px solid #e2e8f0;border-radius:7px;resize:vertical;min-height:72px;font-family:inherit;color:#1e293b;outline:none}
+    .new-note:focus{border-color:#0d9488;box-shadow:0 0 0 2px rgba(13,148,136,.15)}
+    .add-btn{margin-top:7px;padding:7px 18px;background:#0d9488;color:#fff;border:none;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer}
+    .add-btn:hover{background:#0f766e}
   </style>
 </head>
 <body>
   <header>
-    <div>
-      <h1>🗒️ Teacher's Notes</h1>
-      <div class="sub">${studentName}</div>
-    </div>
-    <span class="status" id="st">Auto-saves as you type</span>
+    <div><h1>🗒️ Teacher’s Notes</h1><div class="sub">${studentName}</div></div>
+    <span class="status" id="st"></span>
   </header>
-  <textarea id="ta" placeholder="Write your notes, observations, or reminders for this student…">${escaped}</textarea>
-  <div class="hint">This window is separate from the lesson — safe to write notes while screen-sharing the main tab.</div>
+  <div id="notes-list"></div>
+  <div class="add-area">
+    <textarea class="new-note" id="new-note" placeholder="Write a new note…"></textarea>
+    <button class="add-btn" onclick="addNote()">+ Add Note</button>
+  </div>
   <script>
-    var ta=document.getElementById('ta'),st=document.getElementById('st'),timer;
-    ta.addEventListener('input',function(){
-      clearTimeout(timer);
+    var SEP='\\n\\n---\\n\\n';
+    var STUDENT_ID=${jsonStudentId};
+    var notes=parseNotes(${jsonNote});
+    renderNotes();
+
+    function parseNotes(raw){
+      if(!raw||!raw.trim())return[];
+      var entries=raw.indexOf(SEP)!==-1?raw.split(SEP):[raw];
+      return entries.filter(function(e){return e.trim();}).map(function(entry){
+        var m=entry.match(/^\\[([^\\]]+)\\]\\n([\\s\\S]*)$/);
+        if(m)return{date:m[1],text:m[2].trim()};
+        return{date:'',text:entry.trim()};
+      });
+    }
+    function serializeNotes(){
+      return notes.map(function(n){return'['+n.date+']\\n'+n.text;}).join(SEP);
+    }
+    function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function renderNotes(){
+      var list=document.getElementById('notes-list');
+      if(!notes.length){list.innerHTML='<div class="empty">No notes yet — add your first note below.</div>';return;}
+      list.innerHTML=notes.map(function(n,i){
+        return '<div class="note-card">'
+          +(n.date?'<div class="note-date">'+esc(n.date)+'</div>':'')
+          +'<div class="note-text">'+esc(n.text)+'</div>'
+          +'<button class="del-btn" title="Delete" onclick="deleteNote('+i+')">×</button>'
+          +'</div>';
+      }).join('');
+    }
+    function addNote(){
+      var ta=document.getElementById('new-note');
+      var text=ta.value.trim();
+      if(!text)return;
+      var now=new Date();
+      var date=now.toLocaleDateString('en-GB',{year:'numeric',month:'short',day:'numeric'})
+               +' '+now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      notes.unshift({date:date,text:text});
+      ta.value='';
+      renderNotes();
+      save();
+    }
+    function deleteNote(i){
+      if(!confirm('Delete this note?'))return;
+      notes.splice(i,1);
+      renderNotes();
+      save();
+    }
+    function save(){
+      var val=serializeNotes();
+      var st=document.getElementById('st');
       st.className='status saving';st.textContent='Saving…';
-      timer=setTimeout(function(){
-        if(window.opener&&!window.opener.closed){
-          window.opener.postMessage({type:'quran_teacher_note',studentId:'${studentIdStr}',value:ta.value},'*');
-          st.className='status saved';st.textContent='✓ Saved';
-        }
-      },1200);
+      if(window.opener&&!window.opener.closed){
+        window.opener.postMessage({type:'quran_teacher_note',studentId:STUDENT_ID,value:val},'*');
+        setTimeout(function(){st.className='status saved';st.textContent='✓ Saved';},400);
+      }
+    }
+    document.getElementById('new-note').addEventListener('keydown',function(e){
+      if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();addNote();}
     });
-    ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
   <\/script>
 </body>
 </html>`);
@@ -1519,6 +1576,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const handleKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement;
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+            // Prevent Enter from scrolling the page while the Quran view is active
+            if (event.key === 'Enter') { event.preventDefault(); return; }
 
             if (event.code === 'Space') {
                 event.preventDefault();
@@ -2475,7 +2535,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     const surahMeta = QURAN_METADATA.find(s => s.number === surahNum);
                     if (surahMeta) {
                         surahContent.push(
-                            <div key={`surah-header-${surahNum}`} className="text-center pt-10 pb-6 px-6 sm:px-12">
+                            <div key={`surah-header-${surahNum}`} className="text-center pt-10 pb-6 px-2">
                                 <p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{surahMeta.name}</p>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{surahMeta.englishName} · {surahMeta.transliteratedName}</p>
                                 <hr className="w-48 h-1 mx-auto my-6 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
@@ -2706,7 +2766,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 );
              }
         });
-        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center text-${fontSize}xl select-none p-6 sm:p-12` + (showTranslation ? '' : ' leading-[2.6]');
+        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center text-${fontSize}xl select-none py-6 px-2 sm:py-10 sm:px-4` + (showTranslation ? '' : ' leading-[2.6]');
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
@@ -2990,7 +3050,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
                 <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
                     <div>
-                        <div className="text-center pt-12 pb-8 px-6 sm:px-12"><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></div>
+                        <div className="text-center pt-12 pb-8 px-2"><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></div>
                         {showTranslation && isTranslationLoading && <div className="text-center my-4 p-3 bg-slate-100 dark:bg-gray-700 rounded-lg mx-6 sm:mx-12"><p className="text-slate-600 dark:text-slate-300 animate-pulse font-semibold">{t('liveSession.loadingTranslation')}</p></div>}
                         {showTranslation && translationError && <div className="text-center my-4 p-3 bg-red-100 text-red-700 rounded-lg mx-6 sm:mx-12"><p className="font-semibold">{translationError}</p></div>}
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />

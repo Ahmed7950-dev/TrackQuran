@@ -9,24 +9,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Student, TajweedLesson } from '../types';
 import { useAuth } from '../context/AuthProvider';
-import { listLessons, deleteLesson, updateLesson } from '../services/tajweedService';
+import { listLessons, deleteLesson, updateLesson, getCompletedLessonIds } from '../services/tajweedService';
 import CreateLessonModal from './CreateLessonModal';
 import TajweedLessonViewer from './TajweedLessonViewer';
 
 interface Props {
   students: Student[];
+  preSelectedStudentId?: string;
 }
 
-const TajweedPage: React.FC<Props> = ({ students }) => {
+const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId }) => {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const tutorId = (currentUser?.role === 'teacher' || currentUser?.role === 'admin') ? currentUser.id : '';
 
-  const [lessons,    setLessons]    = useState<TajweedLesson[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editing,    setEditing]    = useState<TajweedLesson | null>(null);
-  const [viewing,    setViewing]    = useState<TajweedLesson | null>(null);
+  const [lessons,       setLessons]       = useState<TajweedLesson[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [createOpen,    setCreateOpen]    = useState(false);
+  const [editing,       setEditing]       = useState<TajweedLesson | null>(null);
+  const [viewing,       setViewing]       = useState<TajweedLesson | null>(null);
+  const [completedIds,  setCompletedIds]  = useState<Set<string>>(new Set());
 
   // ── Drag state (admin only) ────────────────────────────────────────────────
   const dragIdx    = useRef<number | null>(null);
@@ -38,6 +40,12 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
       setLoading(false);
     })();
   }, []);
+
+  // Fetch completed lesson IDs for the pre-selected student (student portal)
+  useEffect(() => {
+    if (!preSelectedStudentId) return;
+    getCompletedLessonIds(preSelectedStudentId).then(setCompletedIds).catch(console.warn);
+  }, [preSelectedStudentId]);
 
   const handleDelete = async (l: TajweedLesson) => {
     if (!confirm(`Delete lesson "${l.title}"? This cannot be undone.`)) return;
@@ -132,6 +140,7 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
               index={idx}
               isAdmin={isAdmin}
               isDragOver={overIdx === idx}
+              isCompleted={completedIds.has(lesson.id)}
               onView={() => setViewing(lesson)}
               onEdit={e => { e.stopPropagation(); setEditing(lesson); }}
               onDelete={e => { e.stopPropagation(); handleDelete(lesson); }}
@@ -172,6 +181,7 @@ const TajweedPage: React.FC<Props> = ({ students }) => {
           lesson={viewing}
           students={students}
           tutorId={tutorId}
+          preSelectedStudentId={preSelectedStudentId}
           onClose={() => setViewing(null)}
         />
       )}
@@ -187,6 +197,7 @@ interface RowProps {
   index: number;
   isAdmin: boolean;
   isDragOver: boolean;
+  isCompleted?: boolean;
   onView: () => void;
   onEdit: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
@@ -197,7 +208,7 @@ interface RowProps {
 }
 
 const LessonRow: React.FC<RowProps> = ({
-  lesson, index, isAdmin, isDragOver,
+  lesson, index, isAdmin, isDragOver, isCompleted = false,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) => (
@@ -211,7 +222,9 @@ const LessonRow: React.FC<RowProps> = ({
     className={`group flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors
       ${isDragOver
         ? 'bg-teal-50 dark:bg-teal-900/20 border-t-2 border-teal-500'
-        : 'hover:bg-slate-50 dark:hover:bg-gray-700/50'
+        : isCompleted
+          ? 'bg-emerald-50 dark:bg-emerald-900/15 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/25'
+          : 'hover:bg-slate-50 dark:hover:bg-gray-700/50'
       }`}
   >
     {/* Drag handle — admin only */}
@@ -242,11 +255,21 @@ const LessonRow: React.FC<RowProps> = ({
 
     {/* Title + description */}
     <div className="flex-1 min-w-0">
-      <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{lesson.title}</p>
+      <p className={`font-semibold truncate ${isCompleted ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-100'}`}>{lesson.title}</p>
       {lesson.description && (
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{lesson.description}</p>
       )}
     </div>
+
+    {/* Completed badge */}
+    {isCompleted && (
+      <span className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+        </svg>
+        Done
+      </span>
+    )}
 
     {/* Chevron (hint to click) */}
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"

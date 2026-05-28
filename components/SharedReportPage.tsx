@@ -971,7 +971,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed'>('mistakes');
+  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed'>('quran');
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1412,7 +1412,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               );
             })()}
             {activeTab === 'tajweed' && (
-              <TajweedPage students={[]} />
+              <TajweedPage students={[]} preSelectedStudentId={report.student_id} />
             )}
 
             <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">
