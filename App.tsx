@@ -1289,6 +1289,7 @@ const App: React.FC = () => {
           <StudentProgressPage
             student={sessionStudent}
             students={students}
+            notesStudentId={sessionStudent.id}
             studentProgress={progress[sessionStudent.id]}
             studentMistakes={sessionStudent.mistakes || {}}
             recitationAchievements={sessionStudent.recitationAchievements || []}

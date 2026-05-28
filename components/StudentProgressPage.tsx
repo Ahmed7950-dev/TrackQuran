@@ -3,6 +3,7 @@ import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl } from './VerseAudioPlayer';
+import { loadVerseNotes, saveVerseNote } from '../services/tadabburService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
@@ -39,6 +40,12 @@ interface StudentProgressPageProps {
    * rendering inside SharedReportPage which has a taller header.
    */
   toolbarStickyTop?: number;
+  /**
+   * When provided, verse notes (Tadabbur) are loaded for this student ID.
+   * In readOnly mode the student can also write/edit notes.
+   * In live (tutor) mode notes are shown read-only as context.
+   */
+  notesStudentId?: string;
 }
 
 const getAge = (dob: string) => {
@@ -1255,12 +1262,18 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false, toolbarStickyTop = 100 }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
     const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
+    // ── Tadabbur (verse notes) ────────────────────────────────────────────────
+    const [tadabburMode, setTadabburMode] = useState(false);
+    const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
+    const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+    const [editingNoteText, setEditingNoteText] = useState('');
+    const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
     const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
@@ -1350,6 +1363,37 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             readOnlyAudioRef.current.playbackRate = readOnlySpeed;
         }
     }, [readOnlySpeed]);
+
+    // ── Tadabbur: load notes when notesStudentId is available ─────────────────
+    useEffect(() => {
+        if (!notesStudentId) return;
+        loadVerseNotes(notesStudentId)
+            .then(setVerseNotes)
+            .catch(err => console.warn('[Tadabbur] load notes failed:', err));
+    }, [notesStudentId]);
+
+    // ── Tadabbur: save / delete a note then update local state ────────────────
+    const handleSaveNote = useCallback(async (surahNum: number, ayahNum: number, text: string) => {
+        if (!notesStudentId) return;
+        const key = `${surahNum}:${ayahNum}`;
+        setSavingNoteKey(key);
+        try {
+            await saveVerseNote(notesStudentId, surahNum, ayahNum, text);
+            setVerseNotes(prev => {
+                const trimmed = text.trim();
+                if (trimmed) return { ...prev, [key]: trimmed };
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+            setEditingNoteKey(null);
+            setEditingNoteText('');
+        } catch (err) {
+            console.error('[Tadabbur] save failed:', err);
+        } finally {
+            setSavingNoteKey(null);
+        }
+    }, [notesStudentId]);
 
     // ── Teacher's Notes popup + postMessage listener ─────────────────────────
     useEffect(() => {
@@ -2536,13 +2580,95 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </span>
             );
 
-            const verseContainerClass = `my-4${showTranslation ? '' : ' inline'}`;
+            // ── Tadabbur note section ─────────────────────────────────────────
+            const noteKey = `${surahNum}:${ayahNum}`;
+            const existingNote = verseNotes[noteKey] ?? '';
+            const isEditingThisNote = editingNoteKey === noteKey;
+            const isSavingThisNote = savingNoteKey === noteKey;
+            // Show note area when tadabbur mode is on (student writing) OR a note already exists (visible to all)
+            const showNoteArea = !!notesStudentId && (tadabburMode || !!existingNote);
+
+            const noteSection = showNoteArea ? (
+                <div dir="ltr" className="mt-3 font-sans text-left" onClickCapture={e => e.stopPropagation()}>
+                    {isEditingThisNote ? (
+                        /* ── Edit mode ── */
+                        <div className="flex flex-col gap-2">
+                            <textarea
+                                value={editingNoteText}
+                                onChange={e => setEditingNoteText(e.target.value)}
+                                rows={3}
+                                autoFocus
+                                placeholder="اكتب تأملك في هذه الآية... / Write your reflection on this verse..."
+                                className="w-full p-3 text-sm border-2 border-emerald-400 dark:border-emerald-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 resize-none transition"
+                                onKeyDown={e => { if (e.key === 'Escape') { setEditingNoteKey(null); setEditingNoteText(''); } }}
+                            />
+                            <div className="flex gap-2 justify-end items-center">
+                                <span className="text-[10px] text-slate-400 mr-auto">Esc to cancel</span>
+                                <button
+                                    onClick={() => { setEditingNoteKey(null); setEditingNoteText(''); }}
+                                    className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-600 transition font-medium"
+                                >Cancel</button>
+                                <button
+                                    onClick={() => handleSaveNote(surahNum, ayahNum, editingNoteText)}
+                                    disabled={isSavingThisNote}
+                                    className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition font-medium flex items-center gap-1.5"
+                                >
+                                    {isSavingThisNote
+                                        ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
+                                        : '💾 Save'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : existingNote ? (
+                        /* ── Note exists: show it ── */
+                        <div
+                            className={`group relative p-3 rounded-xl border text-sm leading-relaxed whitespace-pre-wrap
+                                bg-emerald-50 dark:bg-emerald-900/20
+                                border-emerald-200 dark:border-emerald-800
+                                text-slate-700 dark:text-slate-300
+                                ${readOnly && tadabburMode ? 'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 transition-all' : ''}`}
+                            onClick={readOnly && tadabburMode
+                                ? () => { setEditingNoteKey(noteKey); setEditingNoteText(existingNote); }
+                                : undefined}
+                        >
+                            <div className="flex items-start gap-2">
+                                <span className="flex-shrink-0 text-emerald-600 dark:text-emerald-400 text-xs font-semibold mt-0.5">
+                                    {readOnly ? '✍️' : '🎓'}
+                                </span>
+                                <p>{existingNote}</p>
+                            </div>
+                            {readOnly && tadabburMode && (
+                                <span className="absolute top-2 end-2 text-[10px] text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    Edit ✏️
+                                </span>
+                            )}
+                            {!readOnly && (
+                                <span className="absolute top-2 end-2 text-[10px] text-emerald-500 font-semibold opacity-60">
+                                    Student's Tadabbur
+                                </span>
+                            )}
+                        </div>
+                    ) : tadabburMode ? (
+                        /* ── Tadabbur mode ON, no note yet: add prompt ── */
+                        <button
+                            onClick={() => { setEditingNoteKey(noteKey); setEditingNoteText(''); }}
+                            className="w-full text-left text-xs text-emerald-600 dark:text-emerald-400 py-2 px-3 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/10 transition-all font-medium"
+                        >
+                            + تدبر / Add reflection
+                        </button>
+                    ) : null}
+                </div>
+            ) : null;
+
+            // Force block container when note section is visible (breaks inline Quran flow intentionally)
+            const verseContainerClass = `my-4${showTranslation || showNoteArea ? '' : ' inline'}`;
             const verseContainerId = `verse-container-${verse.verse_key}`;
 
             if (showTranslation) {
                 const verseContainer = (
                     <div id={verseContainerId} key={`verse-container-${verse.verse_key}`} className="my-4">
                         <div className="arabic-verse leading-[2.8]">{verseTextNode}{verseMarker}</div>
+                        {noteSection}
                         <div key={`trans-container-${verse.verse_key}`} dir="ltr" className="translation-container mt-4 text-left font-sans text-base leading-relaxed space-y-3">
                             {isTranslationLoading ? (
                                 <div className="p-4 bg-slate-50 dark:bg-gray-700/50 rounded-lg text-slate-500 animate-pulse">{t('liveSession.loadingTranslation')}</div>
@@ -2573,6 +2699,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div id={verseContainerId} key={verseContainerId} className={verseContainerClass}>
                         {verseTextNode}
                         {verseMarker}
+                        {noteSection}
                     </div>
                 );
              }
@@ -2834,6 +2961,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     className={`h-7 px-2 flex items-center gap-1 rounded-md text-xs font-semibold transition-colors duration-200 ${teacherNote ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
                                 >
                                     🗒️
+                                </button>
+                                )}
+
+                                {/* Tadabbur toggle — shown to student (readOnly) when notesStudentId is set */}
+                                {readOnly && notesStudentId && (
+                                <button
+                                    onClick={() => setTadabburMode(p => !p)}
+                                    title={tadabburMode ? 'Exit Tadabbur mode' : 'Tadabbur — write verse reflections'}
+                                    className={`h-7 px-2.5 flex items-center gap-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${tadabburMode ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
+                                >
+                                    <span style={{ fontFamily: 'Amiri Regular', fontSize: '0.85rem' }}>تدبر</span>
                                 </button>
                                 )}
                             </div>
