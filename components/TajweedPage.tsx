@@ -182,7 +182,14 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId }) => {
           students={students}
           tutorId={tutorId}
           preSelectedStudentId={preSelectedStudentId}
-          onClose={() => setViewing(null)}
+          onClose={() => {
+            setViewing(null);
+            // Re-fetch completed IDs so any "Mark Done" changes in the viewer
+            // are immediately reflected in the lesson list highlights
+            if (preSelectedStudentId) {
+              getCompletedLessonIds(preSelectedStudentId).then(setCompletedIds).catch(console.warn);
+            }
+          }}
         />
       )}
     </div>

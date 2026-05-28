@@ -1276,7 +1276,7 @@ const App: React.FC = () => {
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
         ) : activeTab === 'tajweed' ? (
-          <TajweedPage students={students} />
+          <TajweedPage students={students} preSelectedStudentId={selectedStudentId ?? undefined} />
         ) : activeTab === 'calendar' ? (
           <CalendarPage
             gcalToken={gcalToken}
