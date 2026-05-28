@@ -2553,7 +2553,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         ${readOnly ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
                     // readOnly: use CAPTURE phase so LetterWithError's stopPropagation() (bubble phase) can't block us
-                    onClickCapture={readOnly ? () => {
+                    // Skip audio if the click originated inside the Tadabbur note section
+                    onClickCapture={readOnly ? (e) => {
+                        if ((e.target as Element).closest?.('[data-tadabbur]')) return;
                         const audio = readOnlyAudioRef.current;
                         if (!audio) return;
                         const isSame = readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
@@ -2589,7 +2591,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const showNoteArea = !!notesStudentId && (tadabburMode || !!existingNote);
 
             const noteSection = showNoteArea ? (
-                <div dir="ltr" className="mt-3 font-sans text-left" onClickCapture={e => e.stopPropagation()}>
+                <div dir="ltr" className="mt-3 font-sans text-left" data-tadabbur="true">
                     {isEditingThisNote ? (
                         /* ── Edit mode ── */
                         <div className="flex flex-col gap-2">
