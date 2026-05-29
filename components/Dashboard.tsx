@@ -117,6 +117,51 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     const readingRate = mistakePages > 0 ? readingMistakesCount / mistakePages : 0;
     const tajweedRate = mistakePages > 0 ? tajweedMistakesCount / mistakePages : 0;
 
+    // ── Trend: compare new mistakes/page in last session vs. previous session ──
+    // Each mistake stores the date it was marked; each achievement stores the session date.
+    // We find the two most recent sessions with pages > 0 and compare how many new
+    // mistakes were logged on each of those days relative to pages covered.
+    const mistakeRateTrend = useMemo((): { dir: 'better' | 'worse' | 'same'; readingDelta: number; tajweedDelta: number } | null => {
+      const sessions = [...student.recitationAchievements]
+        .filter(a => (a.pagesCompleted ?? 0) > 0)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      if (sessions.length < 2) return null;
+
+      const lastDateStr = new Date(sessions[0].date).toDateString();
+      const prevDateStr = new Date(sessions[1].date).toDateString();
+      if (lastDateStr === prevDateStr) return null; // same-day sessions — no comparison
+
+      const allMistakeEntries = Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][];
+
+      const mistakesOnDay = (dateStr: string) => {
+        const entries = allMistakeEntries.filter(([, m]) => m.date && new Date(m.date).toDateString() === dateStr);
+        return {
+          reading: entries.filter(([, m]) => !m.errorType || m.errorType === 'reading').length,
+          tajweed: entries.filter(([, m]) => m.errorType === 'tajweed').length,
+        };
+      };
+
+      const last = mistakesOnDay(lastDateStr);
+      const prev = mistakesOnDay(prevDateStr);
+      const lastPages = sessions[0].pagesCompleted;
+      const prevPages = sessions[1].pagesCompleted;
+
+      const lastReadingRate  = last.reading  / lastPages;
+      const prevReadingRate  = prev.reading  / prevPages;
+      const lastTajweedRate  = last.tajweed  / lastPages;
+      const prevTajweedRate  = prev.tajweed  / prevPages;
+
+      const readingDelta = lastReadingRate - prevReadingRate;
+      const tajweedDelta = lastTajweedRate - prevTajweedRate;
+      const totalDelta   = readingDelta + tajweedDelta;
+
+      const THRESHOLD = 0.04;
+      const dir = Math.abs(totalDelta) < THRESHOLD ? 'same' : totalDelta < 0 ? 'better' : 'worse';
+
+      return { dir, readingDelta, tajweedDelta };
+    }, [student]);
+
     // Get milestone badges
     const achievedReadingMilestones = useMemo(() => {
         const pages = getRecitedPagesSet(student);
@@ -163,8 +208,29 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                             {viewMode === 'points' ? (
                               <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
                             ) : (
-                              <span className="text-xs font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                {(readingRate + tajweedRate).toFixed(2)} err/pg
+                              <span className="flex items-center gap-1 flex-wrap">
+                                <span className="text-xs font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                  {(readingRate + tajweedRate).toFixed(2)} err/pg
+                                </span>
+                                {mistakeRateTrend && mistakeRateTrend.dir !== 'same' && (
+                                  <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                    mistakeRateTrend.dir === 'better'
+                                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                                      : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                                  }`}>
+                                    {mistakeRateTrend.dir === 'better'
+                                      ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>
+                                      : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>
+                                    }
+                                    {mistakeRateTrend.dir === 'better' ? 'Improving' : 'Higher'}
+                                  </span>
+                                )}
+                                {mistakeRateTrend && mistakeRateTrend.dir === 'same' && (
+                                  <span className="inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M2.75 8a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5h-9A.75.75 0 0 1 2.75 8Z" clipRule="evenodd" /></svg>
+                                    Steady
+                                  </span>
+                                )}
                               </span>
                             )}
                         </div>
@@ -204,16 +270,34 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 ) : (
                   <div className="flex justify-around items-center text-center">
                     <div className="text-center">
-                      <p className={`text-xl font-bold ${readingRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : readingRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {readingRate.toFixed(2)}
-                      </p>
+                      <div className="flex items-center justify-center gap-1">
+                        <p className={`text-xl font-bold ${readingRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : readingRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                          {readingRate.toFixed(2)}
+                        </p>
+                        {mistakeRateTrend && (() => {
+                          const d = mistakeRateTrend.readingDelta;
+                          if (Math.abs(d) < 0.04) return null;
+                          return d < 0
+                            ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>
+                            : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-red-500 flex-shrink-0"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>;
+                        })()}
+                      </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">reading<br/>mistakes/pg</p>
                     </div>
                     <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
                     <div className="text-center">
-                      <p className={`text-xl font-bold ${tajweedRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : tajweedRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {tajweedRate.toFixed(2)}
-                      </p>
+                      <div className="flex items-center justify-center gap-1">
+                        <p className={`text-xl font-bold ${tajweedRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : tajweedRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                          {tajweedRate.toFixed(2)}
+                        </p>
+                        {mistakeRateTrend && (() => {
+                          const d = mistakeRateTrend.tajweedDelta;
+                          if (Math.abs(d) < 0.04) return null;
+                          return d < 0
+                            ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>
+                            : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-red-500 flex-shrink-0"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>;
+                        })()}
+                      </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">tajweed<br/>mistakes/pg</p>
                     </div>
                     <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
