@@ -264,7 +264,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
       </nav>
 
       {/* ── 3. Hero ─────────────────────────────────────────────────────────── */}
-      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '72px 24px 64px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }}
+      <section style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gap: 40, alignItems: 'center' }}
         className="hero-grid">
         {/* Left */}
         <div>
@@ -289,7 +289,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </button>
           </div>
           {/* Trust row */}
-          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             {[
               { num: '2400+', label: t('landing.trustStudents') },
               { num: '38',    label: t('landing.trustCountries') },
@@ -304,7 +304,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         </div>
 
         {/* Right — medallion */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+        <div className="hero-medallion-wrap">
           {/* 8-point star frame */}
           <svg width="340" height="340" viewBox="0 0 340 340" style={{ position: 'absolute' }}>
             <StarPatternDefs id="hero-pat" color={C.green} opacity={0.035} />
@@ -315,7 +315,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           </svg>
 
           {/* Center circle */}
-          <div style={{
+          <div className="hero-medallion-circle" style={{
             width: 220, height: 220, borderRadius: '50%',
             background: isDark ? C.greenDeep : C.green,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -327,19 +327,19 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </div>
           </div>
 
-          {/* Floating cards */}
-          <div style={{ position: 'absolute', top: '8%', insetInlineEnd: '2%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 148 }}>
+          {/* Floating cards — hidden on small screens */}
+          <div className="hero-float-card" style={{ position: 'absolute', top: '8%', insetInlineEnd: '2%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 148 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.green, marginBottom: 2 }}>{t('landing.heroCard1Title')}</div>
             <div style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard1Sub')}</div>
           </div>
-          <div style={{ position: 'absolute', insetInlineStart: '0%', top: '38%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 130 }}>
+          <div className="hero-float-card" style={{ position: 'absolute', insetInlineStart: '0%', top: '38%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 130 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: textPrimary, marginBottom: 2 }}>{t('landing.heroCard2Title')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
               <span style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard2Sub')}</span>
             </div>
           </div>
-          <div style={{ position: 'absolute', bottom: '10%', insetInlineEnd: '4%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 160 }}>
+          <div className="hero-float-card" style={{ position: 'absolute', bottom: '10%', insetInlineEnd: '4%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 160 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 2 }}>🏆 {t('landing.heroCard3Title')}</div>
             <div style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard3Sub')}</div>
           </div>
@@ -563,8 +563,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
       {/* ── 10. CTA Banner ──────────────────────────────────────────────────── */}
       <section style={{ padding: '48px 24px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{
-            background: ctaBannerBg, borderRadius: 24, padding: '64px 48px', textAlign: 'center',
+          <div className="cta-banner-inner" style={{
+            background: ctaBannerBg, borderRadius: 24, textAlign: 'center',
             position: 'relative', overflow: 'hidden',
           }}>
             {/* Star pattern bg */}
@@ -596,7 +596,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
       {/* ── 11. Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ background: isDark ? C.greenDeep : C.greenDeep, color: 'rgba(255,255,255,0.75)', padding: '56px 24px 24px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 32, marginBottom: 48 }}>
+          <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 32, marginBottom: 48 }}>
             {/* Brand column */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
@@ -647,20 +647,59 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         </div>
       </footer>
 
-      {/* Responsive hero grid styles */}
+      {/* Responsive styles */}
       <style>{`
+        /* ── Hero grid ── */
         .hero-grid {
           grid-template-columns: 1fr 1fr;
+          padding: 72px 24px 64px;
         }
         @media (max-width: 768px) {
           .hero-grid {
             grid-template-columns: 1fr;
+            padding: 40px 16px 40px;
+            gap: 32px !important;
           }
         }
+
+        /* ── Hero medallion — shrink on mobile ── */
+        .hero-medallion-wrap { display: flex; justify-content: center; align-items: center; position: relative; }
+        .hero-medallion-wrap svg:first-child { width: 340px; height: 340px; }
+        .hero-medallion-circle { width: 220px !important; height: 220px !important; }
+        @media (max-width: 480px) {
+          .hero-medallion-wrap svg:first-child { width: 240px; height: 240px; }
+          .hero-medallion-circle { width: 160px !important; height: 160px !important; }
+          .hero-medallion-circle div { font-size: 44px !important; }
+        }
+
+        /* ── Floating hero cards — hide on single-column layout ── */
+        @media (max-width: 768px) {
+          .hero-float-card { display: none !important; }
+        }
+
+        /* ── Section padding ── */
         @media (max-width: 640px) {
-          .hidden.sm\\:flex, .hidden.sm\\:block {
-            display: none !important;
-          }
+          section { padding-top: 52px !important; padding-bottom: 52px !important; }
+          section > div { padding-left: 0 !important; padding-right: 0 !important; }
+        }
+
+        /* ── CTA banner ── */
+        .cta-banner-inner { padding: 64px 48px; position: relative; overflow: hidden; }
+        @media (max-width: 640px) {
+          .cta-banner-inner { padding: 40px 20px !important; border-radius: 16px !important; }
+        }
+
+        /* ── Footer grid ── */
+        @media (max-width: 640px) {
+          .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 24px !important; }
+        }
+        @media (max-width: 380px) {
+          .footer-grid { grid-template-columns: 1fr !important; }
+        }
+
+        /* ── Tailwind compat ── */
+        @media (max-width: 640px) {
+          .hidden.sm\\:flex, .hidden.sm\\:block { display: none !important; }
         }
         @media (min-width: 640px) {
           .sm\\:flex { display: flex !important; }

@@ -355,6 +355,7 @@ const App: React.FC = () => {
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
   const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
+  const [isMobileNavOpen,          setIsMobileNavOpen]          = useState(false);
   const [gcalToken,                setGcalToken]                = useState<string | null>(() => getStoredToken());
   const [availabilitySlots,        setAvailabilitySlots]        = useState<AvailabilitySlot[]>([]);
   const [pendingBookingCount,      setPendingBookingCount]      = useState(0);
@@ -832,6 +833,19 @@ const App: React.FC = () => {
                     >{t('header.alphabetTrainer')}</button>
                 </nav>
                 <div className="flex items-center gap-4">
+                    {/* Mobile hamburger — student view */}
+                    <button
+                        onClick={() => setIsMobileNavOpen(o => !o)}
+                        className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                        aria-label="Toggle navigation"
+                    >
+                        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                            {isMobileNavOpen
+                                ? <path d="M4 4L18 18M18 4L4 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                : <path d="M3 6h16M3 11h16M3 16h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            }
+                        </svg>
+                    </button>
                     <span className="font-semibold text-slate-700 dark:text-slate-200 hidden sm:block">{currentUser.student.name}</span>
                     <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
                         {currentTheme === 'dark' ? (
@@ -882,6 +896,16 @@ const App: React.FC = () => {
                     </button>
                 </div>
             </div>
+          {/* Mobile nav drawer — student view */}
+          {isMobileNavOpen && (
+            <div className="md:hidden border-t border-slate-100 dark:border-gray-700">
+              <nav className="flex flex-col py-2">
+                <button onClick={() => { setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.aboutUs')}</button>
+                <button onClick={() => { setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔡 {t('header.lettersTrainer')}</button>
+                <button onClick={() => { setActiveTab(t => t === 'alphabetTrainer' ? 'main' : 'alphabetTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔤 {t('header.alphabetTrainer')}</button>
+              </nav>
+            </div>
+          )}
           </header>
           <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
               {activeTab === 'lettersTrainer' ? (
@@ -960,6 +984,19 @@ const App: React.FC = () => {
             </nav>
             <div className="flex-1 md:hidden" />
             <div className="flex items-center gap-2">
+              {/* Mobile hamburger — Arabic section */}
+              <button
+                onClick={() => setIsMobileNavOpen(o => !o)}
+                className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Toggle navigation"
+              >
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  {isMobileNavOpen
+                    ? <path d="M4 4L18 18M18 4L4 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    : <path d="M3 6h16M3 11h16M3 16h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  }
+                </svg>
+              </button>
               <NotificationCenter teacherId={currentUser.id} recipient="tutor" />
               <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
                 {currentTheme === 'dark' ? (
@@ -1010,6 +1047,21 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
+          {/* Mobile nav drawer — Arabic section */}
+          {isMobileNavOpen && (
+            <div className="md:hidden border-t border-slate-100 dark:border-gray-700">
+              <nav className="flex flex-col py-2">
+                <button onClick={() => { setActiveTab(tab => tab === 'aboutUs' ? 'main' : 'aboutUs'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.aboutUs')}</button>
+                <button onClick={() => { setActiveTab(tab => tab === 'calendar' ? 'main' : 'calendar'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+                  <span>Calendar</span>
+                  {pendingBookingCount > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingBookingCount}</span>}
+                </button>
+                <button onClick={() => { setActiveTab(tab => tab === 'vocabulary' ? 'main' : 'vocabulary'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>Vocabulary</button>
+                <div className="mx-5 my-1 border-t border-slate-100 dark:border-gray-700" />
+                <button onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); setActiveTab('main'); setIsMobileNavOpen(false); }} className="flex items-center gap-3 px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">{t('header.switchToQuran')}</button>
+              </nav>
+            </div>
+          )}
         </header>
         <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
           {activeTab === 'accountSettings' ? (
@@ -1155,6 +1207,19 @@ const App: React.FC = () => {
                 >العربية</button>
             </nav>
             <div className="flex items-center gap-2">
+                {/* Mobile hamburger — visible only below md */}
+                <button
+                    onClick={() => setIsMobileNavOpen(o => !o)}
+                    className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                    aria-label="Toggle navigation"
+                >
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                        {isMobileNavOpen
+                            ? <path d="M4 4L18 18M18 4L4 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            : <path d="M3 6h16M3 11h16M3 16h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        }
+                    </svg>
+                </button>
                 {isDetailedView && (
                     <button
                         onClick={handleBack}
@@ -1259,6 +1324,23 @@ const App: React.FC = () => {
                 </div>
             </div>
         </div>
+        {/* Mobile nav drawer — teacher/quran */}
+        {isMobileNavOpen && (
+          <div className="md:hidden border-t border-slate-100 dark:border-gray-700">
+            <nav className="flex flex-col py-2">
+              <button onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.aboutUs')}</button>
+              <button onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'calendar' ? 'main' : 'calendar'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+                <span>Calendar</span>
+                {pendingBookingCount > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingBookingCount}</span>}
+              </button>
+              <button onClick={() => { setActiveTab('lettersTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔡 {t('header.lettersTrainer')}</button>
+              <button onClick={() => { setActiveTab('alphabetTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔤 {t('header.alphabetTrainer')}</button>
+              <button onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.tajweed')}</button>
+              <div className="mx-5 my-1 border-t border-slate-100 dark:border-gray-700" />
+              <button onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); setIsMobileNavOpen(false); }} className="flex items-center gap-3 px-5 py-3 text-sm font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</button>
+            </nav>
+          </div>
+        )}
       </header>
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
         {activeTab === 'accountSettings' ? (

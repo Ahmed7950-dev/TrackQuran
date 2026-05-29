@@ -1248,10 +1248,10 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         {/* Tab bar — hidden when About Us is open */}
         {portalTab === 'content' && (
           <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
-            <div className="container mx-auto px-3 sm:px-4 flex overflow-x-auto">
+            <div className="container mx-auto px-3 sm:px-4 flex overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
               <button
                 onClick={() => setActiveTab('mistakes')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'mistakes'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1264,7 +1264,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               </button>
               <button
                 onClick={() => setActiveTab('progress')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'progress'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1279,7 +1279,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               </button>
               <button
                 onClick={() => setActiveTab('calendar')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'calendar'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1292,7 +1292,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               </button>
               <button
                 onClick={() => setActiveTab('quran')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'quran'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1305,7 +1305,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               </button>
               <button
                 onClick={() => setActiveTab('tajweed')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'tajweed'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'

@@ -625,7 +625,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     );
 
     const MilestoneSection = ({ completedPages }: { completedPages: Set<number> }) => (
-        <div className="flex items-center">
+        <div className="overflow-x-auto -mx-1 px-1">
+        <div className="flex items-center min-w-max">
             {MILESTONES.map((milestone, index) => {
                 const achieved = milestone.isAchieved(completedPages);
                 const IconComponent = milestone.badgeIcon;
@@ -643,6 +644,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     </Fragment>
                 );
             })}
+        </div>
         </div>
     );
     
