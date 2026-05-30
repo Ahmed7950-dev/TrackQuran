@@ -803,15 +803,31 @@ const LetterWithError: React.FC<{
         }
     }, [isEditing]);
 
-    const getLetterColor = () => {
-        if (clickState === 1) return 'bg-yellow-100 dark:bg-yellow-900/40';
+    const getLetterStyle = (): React.CSSProperties => {
+        if (clickState === 1) return {
+            backgroundColor: 'rgba(254,240,138,0.80)',
+            borderBottom: '2px solid #ca8a04',
+            borderRadius: '3px',
+        };
         if (mistake) {
-            if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
-            if (mistake.errorType === 'reading') return 'bg-red-100 dark:bg-red-900/40';
-            // Mistake exists but errorType was cleared (verse removed from review) → yellow
-            return 'bg-yellow-100 dark:bg-yellow-900/40';
+            if (mistake.errorType === 'tajweed') return {
+                backgroundColor: 'rgba(134,239,172,0.70)',
+                borderBottom: '2px solid #16a34a',
+                borderRadius: '3px',
+            };
+            if (mistake.errorType === 'reading') return {
+                backgroundColor: 'rgba(252,165,165,0.75)',
+                borderBottom: '2px solid #dc2626',
+                borderRadius: '3px',
+            };
+            // Mistake exists but errorType was cleared → yellow
+            return {
+                backgroundColor: 'rgba(254,240,138,0.80)',
+                borderBottom: '2px solid #ca8a04',
+                borderRadius: '3px',
+            };
         }
-        return '';
+        return {};
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -899,12 +915,12 @@ const LetterWithError: React.FC<{
                 onMouseDown={(e) => {
                     e.stopPropagation();
                 }}
-                className={`inline cursor-pointer rounded transition-colors relative z-10 ${getLetterColor()} ${
+                className={`inline cursor-pointer transition-colors relative z-10 ${
                     shouldHighlightSilent(letter)
                         ? '!text-slate-400 dark:!text-slate-500'
                         : `${showGhunnah && shouldHighlightGhunnah(letter, letterIndex, word, nextWord) ? '!text-green-600 dark:!text-green-400' : ''} ${showMadd && shouldHighlightMadd(letter, letterIndex, word, prevWord) ? '!text-pink-600 dark:!text-pink-400' : ''} ${showQalqalah && shouldHighlightQalqalah(letter, letterIndex, word, isLastWordInVerse, isLastLetterOfWord) ? '!text-sky-500 dark:!text-sky-400' : ''}`
                 }`}
-                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
+                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle() }}
             >
                 {letter.includes('\u06DF') ? (
                     letter.split('').map((char, idx) => 
