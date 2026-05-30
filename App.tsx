@@ -1342,7 +1342,7 @@ const App: React.FC = () => {
           </div>
         )}
       </header>
-      <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
+      <main className={`flex-grow ${sessionStudent ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
         {activeTab === 'accountSettings' ? (
           <AccountSettingsPage
             teacherId={currentUser.id}

@@ -2771,7 +2771,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
 
     return (
-        <div className="space-y-6 relative">
+        <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
             {/* Red screen overlay for mistake indication */}
             {showMistakeHighlight && (
                 <div 
