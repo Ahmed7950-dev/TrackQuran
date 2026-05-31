@@ -311,89 +311,92 @@ const AlphabetTrainerPage: React.FC = () => {
 
   // ─── PRACTICE VIEW ─────────────────────────────────────────────────────────
   const renderPractice = () => (
-    <div className="max-w-xl mx-auto px-4 pb-12 pt-2">
-      {/* Top bar: back + progress + count */}
-      <div className="flex items-center gap-3 mb-8">
-        <button
-          onClick={() => { setView('select'); setRestartMsg(''); }}
-          className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
-            childMode
-              ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
-              : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
-          }`}
-        >{t('alphabetTrainer.backBtn')}</button>
-        <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
+    <>
+      {/* Constrained: progress bar + letter card + buttons */}
+      <div className="max-w-xl mx-auto px-4 pb-4 pt-2">
+        {/* Top bar: back + progress + count */}
+        <div className="flex items-center gap-3 mb-8">
+          <button
+            onClick={() => { setView('select'); setRestartMsg(''); }}
+            className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
+              childMode
+                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
+                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
+            }`}
+          >{t('alphabetTrainer.backBtn')}</button>
+          <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
+              style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
+            />
+          </div>
+          <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
+            {pos} / {queue.length}
+          </span>
+        </div>
+
+        {/* Letter card */}
+        <div className="flex justify-center mb-10">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
-            style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
-          />
+            key={`${pos}-${letter}`}
+            className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'at-shake' : ''} ${childMode ? 'at-card-kid border-4 border-indigo-200 shadow-xl' : 'at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'}`}
+            style={{ width: 'min(240px,70vw)', height: 'min(240px,70vw)' }}
+          >
+            <span
+              style={{
+                fontFamily: 'Amiri, serif',
+                fontSize: 'clamp(5rem,18vw,8rem)',
+                lineHeight: 1,
+                color: childMode ? '#3c4a8a' : undefined,
+              }}
+              className={childMode ? '' : 'text-slate-700 dark:text-slate-200'}
+            >{letter}</span>
+          </div>
         </div>
-        <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
-          {pos} / {queue.length}
-        </span>
-      </div>
 
-      {/* Letter card */}
-      <div className="flex justify-center mb-10">
-        <div
-          key={`${pos}-${letter}`}
-          className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'at-shake' : ''} ${childMode ? 'at-card-kid border-4 border-indigo-200 shadow-xl' : 'at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'}`}
-          style={{ width: 'min(240px,70vw)', height: 'min(240px,70vw)' }}
-        >
-          <span
-            style={{
-              fontFamily: 'Amiri, serif',
-              fontSize: 'clamp(5rem,18vw,8rem)',
-              lineHeight: 1,
-              color: childMode ? '#3c4a8a' : undefined,
-            }}
-            className={childMode ? '' : 'text-slate-700 dark:text-slate-200'}
-          >{letter}</span>
+        {/* Correct / Wrong buttons */}
+        <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
+          <button
+            onClick={handleCorrect}
+            disabled={celebrating}
+            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
+              childMode
+                ? 'rounded-full bg-green-500 hover:bg-green-400 text-white shadow-md shadow-green-200'
+                : 'rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white'
+            }`}
+          >{childMode ? t('alphabetTrainer.correctChild') : t('alphabetTrainer.correct')}</button>
+          <button
+            onClick={handleWrong}
+            disabled={celebrating}
+            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
+              childMode
+                ? 'rounded-full bg-rose-500 hover:bg-rose-400 text-white shadow-md shadow-rose-200'
+                : 'rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white'
+            }`}
+          >{childMode ? t('alphabetTrainer.wrongChild') : t('alphabetTrainer.wrong')}</button>
         </div>
+
+        {restartMsg && (
+          <p className={`text-center mt-5 text-sm font-semibold ${childMode ? 'text-pink-500' : 'text-red-400'}`}>
+            {restartMsg}
+          </p>
+        )}
       </div>
 
-      {/* Correct / Wrong buttons */}
-      <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-        <button
-          onClick={handleCorrect}
-          disabled={celebrating}
-          className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-            childMode
-              ? 'rounded-full bg-green-500 hover:bg-green-400 text-white shadow-md shadow-green-200'
-              : 'rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white'
-          }`}
-        >{childMode ? t('alphabetTrainer.correctChild') : t('alphabetTrainer.correct')}</button>
-        <button
-          onClick={handleWrong}
-          disabled={celebrating}
-          className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-            childMode
-              ? 'rounded-full bg-rose-500 hover:bg-rose-400 text-white shadow-md shadow-rose-200'
-              : 'rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white'
-          }`}
-        >{childMode ? t('alphabetTrainer.wrongChild') : t('alphabetTrainer.wrong')}</button>
-      </div>
-
-      {restartMsg && (
-        <p className={`text-center mt-5 text-sm font-semibold ${childMode ? 'text-pink-500' : 'text-red-400'}`}>
-          {restartMsg}
-        </p>
-      )}
-
-      {/* Battle arena — children mode only */}
+      {/* Battle arena — full viewport width, children mode only */}
       {childMode && (
-        <div className="mt-6">
-          <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="w-full mt-3 pb-6">
+          <div className="flex items-center gap-2 mb-2 px-4">
             <span className="text-sm font-extrabold text-indigo-500 tracking-wide">⚔️ Battle Arena</span>
             <span className="text-xs text-indigo-300 font-semibold">— get letters right to send your soldiers!</span>
           </div>
           <TowerDefenseGame ref={gameRef} />
-          <p className="text-center mt-2 text-xs font-bold text-indigo-400">
+          <p className="text-center mt-2 text-xs font-bold text-indigo-400 px-4">
             🪖 Answer correctly → your soldier marches! 🏰 Defeat the enemy tent to win!
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 
   // ─── WIN VIEW ──────────────────────────────────────────────────────────────

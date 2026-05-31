@@ -46,7 +46,7 @@ const CANVAS_H    = 250;
 const TENT_MAX_HP = 100;
 const SOL_MAX_HP  = 3;
 const FIGHT_RANGE = 28;
-const WALK_SPEED  = 0.85;
+const WALK_SPEED  = 0.38;
 const TENT_DMG    = 25;
 const DEATH_TICKS = 14;
 const GROUND_Y    = CANVAS_H - 32;   // absolute ground line
@@ -793,9 +793,10 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         width: '100%',
         height: `${CANVAS_H}px`,
         display: 'block',
-        borderRadius: '16px',
-        border: '2px solid rgba(99,102,241,0.25)',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.4)',
+        borderRadius: 0,
+        borderTop: '2px solid rgba(99,102,241,0.22)',
+        borderBottom: '2px solid rgba(99,102,241,0.22)',
+        boxShadow: '0 6px 28px rgba(0,0,0,0.14)',
       }}
     />
   );
