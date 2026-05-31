@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useI18n } from '../context/I18nProvider';
+import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 
 const LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
 
@@ -66,10 +67,24 @@ const AlphabetTrainerPage: React.FC = () => {
     emoji: '🌟', text: 'Amazing!', phase: 'hidden',
   });
   const [shaking, setShaking] = useState(false);
+  const gameRef = useRef<TowerDefenseRef>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(priorities));
   }, [priorities]);
+
+  // Hidden tutor shortcut: press R to send an enemy soldier (child mode only)
+  useEffect(() => {
+    if (!childMode || view !== 'practice') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        gameRef.current?.spawnEnemySoldier();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [childMode, view]);
 
   useEffect(() => {
     const id = 'at-styles';
@@ -142,6 +157,7 @@ const AlphabetTrainerPage: React.FC = () => {
     if (unique === 0) return;
     const q = buildQueue(priorities);
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
+    gameRef.current?.reset();
   };
 
   const advancePos = () => {
@@ -155,6 +171,7 @@ const AlphabetTrainerPage: React.FC = () => {
   const handleCorrect = () => {
     if (celebrating) return;
     setRestartMsg('');
+    gameRef.current?.spawnPlayerSoldier();
     if (childMode) {
       setCelebrating(true);
       celebrate(() => { setCelebrating(false); advancePos(); });
@@ -362,6 +379,20 @@ const AlphabetTrainerPage: React.FC = () => {
           {restartMsg}
         </p>
       )}
+
+      {/* Battle arena — children mode only */}
+      {childMode && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <span className="text-sm font-extrabold text-indigo-500 tracking-wide">⚔️ Battle Arena</span>
+            <span className="text-xs text-indigo-300 font-semibold">— get letters right to send your soldiers!</span>
+          </div>
+          <TowerDefenseGame ref={gameRef} />
+          <p className="text-center mt-2 text-xs font-bold text-indigo-400">
+            🪖 Answer correctly → your soldier marches! 🏰 Defeat the enemy tent to win!
+          </p>
+        </div>
+      )}
     </div>
   );
 
@@ -389,7 +420,7 @@ const AlphabetTrainerPage: React.FC = () => {
       </p>
       <div className="flex gap-3 flex-wrap justify-center">
         <button
-          onClick={() => { setQueue(buildQueue(priorities)); setPos(0); setRestartMsg(''); setView('practice'); }}
+          onClick={() => { setQueue(buildQueue(priorities)); setPos(0); setRestartMsg(''); setView('practice'); gameRef.current?.reset(); }}
           className={`px-6 py-2.5 font-bold transition-all active:scale-95 ${
             childMode
               ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md'
