@@ -1316,6 +1316,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const scrollVelocityRef     = useRef(0);
     const scrollTransformRef    = useRef(0);          // current translateX in px (imperative)
     const progressBarFillRef    = useRef<HTMLDivElement>(null);
+    // Refs that mirror state values so the RAF loop can read them without stale closures
+    const isAutoScrollingRef    = useRef(false);
+    const scrollSpeedRef        = useRef(50);
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1552,9 +1555,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         win.document.close();
     }, [student.id, student.name, teacherNote]);
 
+    // Keep refs in sync so the RAf loop always reads current values without stale closures
+    useEffect(() => { isAutoScrollingRef.current = isAutoScrolling; }, [isAutoScrolling]);
+    useEffect(() => { scrollSpeedRef.current = scrollSpeed; }, [scrollSpeed]);
+
     useEffect(() => {
         const handleManualInteraction = () => { if (isAutoScrolling) setIsAutoScrolling(false); };
-        if (isAutoScrolling) {
+        // In focus mode the horizontal RAF loop drives scrolling — skip vertical scroll
+        if (isAutoScrolling && !focusMode) {
             const intervalDelay = 155 - (scrollSpeed * 1.5);
             scrollIntervalRef.current = window.setInterval(() => {
                 if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) setIsAutoScrolling(false);
@@ -1568,7 +1576,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             window.removeEventListener('wheel', handleManualInteraction);
             window.removeEventListener('touchmove', handleManualInteraction);
         };
-    }, [isAutoScrolling, scrollSpeed]);
+    }, [isAutoScrolling, scrollSpeed, focusMode]);
 
     // Initialize mistake sound effect
     useEffect(() => {
@@ -1696,11 +1704,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     initialized = true;
                 }
 
-                if      (scrollKeyHeldRef.current === 'left')  scrollVelocityRef.current =  SPEED;
-                else if (scrollKeyHeldRef.current === 'right') scrollVelocityRef.current = -SPEED;
-                else                                           scrollVelocityRef.current *= FRICTION;
+                if (isAutoScrollingRef.current) {
+                    // Auto-scroll: constant velocity toward the end (0), scaled by scrollSpeed
+                    // speed 1 → 0.3 px/frame, speed 100 → 10 px/frame
+                    scrollVelocityRef.current = 0.3 + (scrollSpeedRef.current / 100) * 9.7;
+                    // Stop auto-scroll when strip reaches the end
+                    if (scrollTransformRef.current >= maxT) {
+                        scrollVelocityRef.current = 0;
+                        setIsAutoScrolling(false);
+                    }
+                } else if (scrollKeyHeldRef.current === 'left')  scrollVelocityRef.current =  SPEED;
+                else if   (scrollKeyHeldRef.current === 'right') scrollVelocityRef.current = -SPEED;
+                else                                             scrollVelocityRef.current *= FRICTION;
 
-                if (Math.abs(scrollVelocityRef.current) > 0.25) {
+                if (Math.abs(scrollVelocityRef.current) > 0.15) {
                     scrollTransformRef.current = Math.max(minT, Math.min(maxT, scrollTransformRef.current + scrollVelocityRef.current));
                     strip.style.transform = `translateX(${scrollTransformRef.current}px)`;
 
