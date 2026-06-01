@@ -3268,43 +3268,52 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                         );
                                                     }
 
-                                                    // Word item — render with LetterWithError for mistake logging
+                                                    // Word item — rendered exactly like normal verse view
+                                                    // Letters must be wrapped in a single inline span so they
+                                                    // flow as connected Arabic text (not as separate flex items).
                                                     const letters = parseWordIntoLetters(item.word);
+                                                    const prevFocusItem = focusWordList[i - 1];
+                                                    const nextFocusItem = focusWordList[i + 1];
+                                                    const prevWordStr = prevFocusItem?.kind === 'word' ? prevFocusItem.word : '';
+                                                    const nextWordStr = nextFocusItem?.kind === 'word' ? nextFocusItem.word : '';
                                                     return (
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
                                                             style={{ ...baseStyle, fontSize: focusFontSize, zIndex: inFocus ? 10 : 1, position: 'relative' }}
                                                         >
-                                                            {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
-                                                                const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
-                                                                const mk = studentMistakes[lk];
-                                                                const cs = letterClickStates.current[lk] || (mk ? 2 : 0);
-                                                                return (
-                                                                    <LetterWithError
-                                                                        key={lk}
-                                                                        letter={letter}
-                                                                        letterKey={lk}
-                                                                        mistake={mk}
-                                                                        isEditing={editingLetterKey === lk}
-                                                                        errorText={errorTextInput}
-                                                                        onLetterClick={readOnly ? () => {} : handleLetterClick}
-                                                                        onTextChange={setErrorTextInput}
-                                                                        onTextSubmit={handleLetterTextSubmit}
-                                                                        onTextCancel={handleLetterTextCancel}
-                                                                        showQalqalah={showQalqalah}
-                                                                        showGhunnah={showGhunnah}
-                                                                        showMadd={showMadd}
-                                                                        clickState={cs}
-                                                                        word={item.word}
-                                                                        nextWord={''}
-                                                                        prevWord={''}
-                                                                        letterIndex={li}
-                                                                        isLastWordInVerse={false}
-                                                                        isLastLetterOfWord={li === letters.length - 1}
-                                                                    />
-                                                                );
-                                                            })}
+                                                            {/* Single inline span = one flex child; letters inside flow as inline Arabic text */}
+                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
+                                                                {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
+                                                                    const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
+                                                                    const mk = studentMistakes[lk];
+                                                                    const cs = letterClickStates.current[lk] || (mk ? 2 : 0);
+                                                                    return (
+                                                                        <LetterWithError
+                                                                            key={lk}
+                                                                            letter={letter}
+                                                                            letterKey={lk}
+                                                                            mistake={mk}
+                                                                            isEditing={editingLetterKey === lk}
+                                                                            errorText={errorTextInput}
+                                                                            onLetterClick={readOnly ? () => {} : handleLetterClick}
+                                                                            onTextChange={setErrorTextInput}
+                                                                            onTextSubmit={handleLetterTextSubmit}
+                                                                            onTextCancel={handleLetterTextCancel}
+                                                                            showQalqalah={showQalqalah}
+                                                                            showGhunnah={showGhunnah}
+                                                                            showMadd={showMadd}
+                                                                            clickState={cs}
+                                                                            word={item.word}
+                                                                            nextWord={nextWordStr}
+                                                                            prevWord={prevWordStr}
+                                                                            letterIndex={li}
+                                                                            isLastWordInVerse={false}
+                                                                            isLastLetterOfWord={li === letters.length - 1}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </span>
                                                         </div>
                                                     );
                                                 })}
