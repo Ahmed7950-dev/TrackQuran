@@ -3130,66 +3130,59 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
-                                // ── Carousel constants ────────────────────────────────────────────
-                                const SLOT_W   = 220;   // px per word slot
-                                const FADE_N   = 2;     // faded word count on each side
+                                // ── Carousel layout uses vw units so it fills the full container ──
+                                const FADE_N     = 2;
+                                const totalSlots = focusWordCount + 2 * FADE_N; // 7 for 3-word focus
+                                const slotVw     = 100 / totalSlots;            // vw per slot
 
-                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, focusWordList.length - focusWordCount));
-                                const viewportW  = (focusWordCount + 2 * FADE_N) * SLOT_W;
-                                // translateX positions word[clampedIdx] at FADE_N slots from the left
-                                const translateX = (FADE_N - clampedIdx) * SLOT_W;
+                                const total      = focusWordList.length;
+                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
+
+                                // row-reverse puts word[0] on the RIGHT (correct Arabic reading order).
+                                // Formula: position word[clampedIdx] at the rightmost focus slot.
+                                const translateXVw = (FADE_N + focusWordCount - total + clampedIdx) * slotVw;
 
                                 const focusFontSize = focusWordCount === 1 ? '14rem'
                                                     : focusWordCount === 2 ? '12rem'
                                                     : '10.5rem';
 
-                                // Per-word visual weight based on distance from focus zone
+                                // Opacity / scale fade based on distance from focus zone
                                 const getOpacity = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    if (d === 1) return 0.32;
-                                    if (d === 2) return 0.10;
-                                    return 0;
+                                    return d === 1 ? 0.30 : d === 2 ? 0.09 : 0;
                                 };
                                 const getScale = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    if (d === 1) return 0.72;
-                                    if (d === 2) return 0.58;
-                                    return 0.5;
+                                    return d === 1 ? 0.70 : d === 2 ? 0.56 : 0.5;
                                 };
 
                                 // Verse label
                                 const fw = focusWordList[clampedIdx];
-                                const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, focusWordList.length - 1)];
+                                const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, total - 1)];
                                 const verseLabel = fw
                                     ? (lw && (lw.surah !== fw.surah || lw.ayah !== fw.ayah))
                                         ? `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} ${fw.ayah} – ${lw.ayah}`
                                         : `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} : ${fw.ayah}`
                                     : '';
 
-                                const atStart = clampedIdx === 0;
-                                const atEnd   = clampedIdx >= focusWordList.length - focusWordCount;
-
                                 return (
-                                    <div dir="ltr" className="flex flex-col items-center justify-center min-h-[50vh] py-10 select-none bg-white dark:bg-gray-800">
+                                    <div dir="ltr" className="flex flex-col items-center justify-center min-h-[60vh] py-10 select-none bg-white dark:bg-gray-800">
                                         {/* Verse indicator */}
                                         <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{verseLabel}</p>
 
-                                        {/* ── Sliding carousel ── */}
-                                        <div style={{ width: `${viewportW}px`, maxWidth: '100vw', overflow: 'hidden', position: 'relative' }}>
-                                            {/* Fade masks on the edges */}
-                                            <div style={{ position: 'absolute', top: 0, left: 0, width: `${FADE_N * SLOT_W}px`, height: '100%', background: 'linear-gradient(to right, var(--tw-bg-opacity,1) 0%, transparent 100%)', pointerEvents: 'none', zIndex: 1 }} className="bg-white dark:bg-gray-800" />
-                                            <div style={{ position: 'absolute', top: 0, right: 0, width: `${FADE_N * SLOT_W}px`, height: '100%', background: 'linear-gradient(to left, var(--tw-bg-opacity,1) 0%, transparent 100%)', pointerEvents: 'none', zIndex: 1 }} className="bg-white dark:bg-gray-800" />
-
-                                            {/* Sliding word row */}
+                                        {/* ── Sliding carousel ──────────────────────────────── */}
+                                        {/* overflow:hidden clips the long row horizontally;
+                                            generous lineHeight + padding handle tall Arabic diacritics */}
+                                        <div style={{ width: '100%', overflow: 'hidden' }}>
                                             <div
                                                 style={{
                                                     display: 'flex',
-                                                    flexDirection: 'row',
-                                                    transform: `translateX(${translateX}px)`,
+                                                    flexDirection: 'row-reverse', // word[0] rightmost = natural Arabic order
+                                                    transform: `translateX(${translateXVw}vw)`,
                                                     transition: 'transform 0.38s cubic-bezier(0.35, 0.0, 0.25, 1.0)',
                                                     willChange: 'transform',
                                                 }}
@@ -3199,13 +3192,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                         key={`fw-${w.surah}:${w.ayah}:${w.wordIdx}`}
                                                         className="font-quranic text-slate-900 dark:text-slate-100"
                                                         style={{
-                                                            width: `${SLOT_W}px`,
+                                                            width: `${slotVw}vw`,
                                                             flexShrink: 0,
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
                                                             fontSize: focusFontSize,
-                                                            lineHeight: 1.4,
+                                                            lineHeight: 2.0,      // tall enough for all diacritics
+                                                            paddingTop: '0.5rem',
+                                                            paddingBottom: '0.5rem',
                                                             opacity: getOpacity(i),
                                                             transform: `scale(${getScale(i)})`,
                                                             transition: 'opacity 0.38s ease, transform 0.38s ease',
@@ -3218,40 +3213,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             </div>
                                         </div>
 
-                                        {/* ── Controls row ── */}
-                                        <div className="mt-10 flex items-center gap-8">
-                                            {/* Go back (right arrow) */}
-                                            <button
-                                                onClick={() => setFocusWordIndex(prev => Math.max(0, prev - 1))}
-                                                disabled={atStart}
-                                                className={`w-11 h-11 rounded-full flex items-center justify-center text-2xl font-light border transition-all duration-200 ${atStart ? 'opacity-20 cursor-not-allowed border-transparent' : 'border-slate-200 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-slate-500 dark:text-slate-400'}`}
-                                                title="Previous word (→)"
-                                            >›</button>
-
-                                            {/* Progress */}
-                                            <div className="flex flex-col items-center gap-1.5">
-                                                <div className="w-52 h-1 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-violet-500 rounded-full"
-                                                        style={{
-                                                            width: focusWordList.length > 0 ? `${Math.min(((clampedIdx + focusWordCount) / focusWordList.length) * 100, 100)}%` : '0%',
-                                                            transition: 'width 0.3s ease',
-                                                        }}
-                                                    />
-                                                </div>
-                                                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tabular-nums">
-                                                    {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, focusWordList.length)} / {focusWordList.length}
-                                                </p>
-                                                <p className="text-[9px] text-slate-300 dark:text-slate-600 tracking-wide">← next · → back</p>
+                                        {/* ── Progress bar ───────────────────────────────── */}
+                                        <div className="mt-10 flex flex-col items-center gap-1.5">
+                                            <div className="w-52 h-1 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-violet-500 rounded-full"
+                                                    style={{
+                                                        width: total > 0 ? `${Math.min(((clampedIdx + focusWordCount) / total) * 100, 100)}%` : '0%',
+                                                        transition: 'width 0.3s ease',
+                                                    }}
+                                                />
                                             </div>
-
-                                            {/* Advance (left arrow) */}
-                                            <button
-                                                onClick={() => setFocusWordIndex(prev => Math.min(prev + 1, Math.max(0, focusWordList.length - focusWordCount)))}
-                                                disabled={atEnd}
-                                                className={`w-11 h-11 rounded-full flex items-center justify-center text-2xl font-light border transition-all duration-200 ${atEnd ? 'opacity-20 cursor-not-allowed border-transparent' : 'border-slate-200 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-slate-500 dark:text-slate-400'}`}
-                                                title="Next word (←)"
-                                            >‹</button>
+                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tabular-nums">
+                                                {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, total)} / {total}
+                                            </p>
+                                            <p className="text-[9px] text-slate-300 dark:text-slate-600 tracking-wide">← next · → back</p>
                                         </div>
                                     </div>
                                 );
