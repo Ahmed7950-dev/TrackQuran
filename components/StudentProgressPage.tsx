@@ -1310,7 +1310,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
-    const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(1);
+    const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(3);
     const [focusWordIndex, setFocusWordIndex] = useState(0);
     const tajweedMenuRef = useRef<HTMLDivElement>(null);
 
@@ -3130,66 +3130,129 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
-                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, focusWordList.length - focusWordCount));
-                                const visibleWords = focusWordList.slice(clampedIdx, clampedIdx + focusWordCount);
-                                const firstWord = visibleWords[0];
-                                const lastWord = visibleWords[visibleWords.length - 1];
-                                const atStart = clampedIdx === 0;
-                                const atEnd = clampedIdx >= focusWordList.length - focusWordCount;
-                                const verseLabel = firstWord
-                                    ? (lastWord && (lastWord.surah !== firstWord.surah || lastWord.ayah !== firstWord.ayah))
-                                        ? `${QURAN_METADATA[firstWord.surah - 1]?.transliteratedName ?? ''} ${firstWord.ayah} – ${lastWord.ayah}`
-                                        : `${QURAN_METADATA[firstWord?.surah - 1]?.transliteratedName ?? ''} : ${firstWord.ayah}`
-                                    : '';
-                                return (
-                                    <div dir="rtl" className="flex flex-col items-center justify-center min-h-[50vh] px-4 py-8 select-none">
-                                        {/* Verse indicator */}
-                                        <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-wide uppercase">{verseLabel}</p>
+                                // ── Carousel constants ────────────────────────────────────────────
+                                const SLOT_W   = 280;   // px per word slot
+                                const FADE_N   = 2;     // faded word count on each side
 
-                                        {/* Word strip */}
-                                        <div className="flex items-center gap-6 w-full justify-center">
-                                            {/* Right arrow (go back) */}
+                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, focusWordList.length - focusWordCount));
+                                const viewportW  = (focusWordCount + 2 * FADE_N) * SLOT_W;
+                                // translateX positions word[clampedIdx] at FADE_N slots from the left
+                                const translateX = (FADE_N - clampedIdx) * SLOT_W;
+
+                                // 4× the default text-4xl (2.25rem) = 9rem; scale down for more words
+                                const focusFontSize = focusWordCount === 1 ? '9rem'
+                                                    : focusWordCount === 2 ? '7rem'
+                                                    : '5.5rem';
+
+                                // Per-word visual weight based on distance from focus zone
+                                const getOpacity = (i: number) => {
+                                    const rel = i - clampedIdx;
+                                    if (rel >= 0 && rel < focusWordCount) return 1;
+                                    const d = rel < 0 ? -rel : rel - focusWordCount + 1;
+                                    if (d === 1) return 0.32;
+                                    if (d === 2) return 0.10;
+                                    return 0;
+                                };
+                                const getScale = (i: number) => {
+                                    const rel = i - clampedIdx;
+                                    if (rel >= 0 && rel < focusWordCount) return 1;
+                                    const d = rel < 0 ? -rel : rel - focusWordCount + 1;
+                                    if (d === 1) return 0.72;
+                                    if (d === 2) return 0.58;
+                                    return 0.5;
+                                };
+
+                                // Verse label
+                                const fw = focusWordList[clampedIdx];
+                                const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, focusWordList.length - 1)];
+                                const verseLabel = fw
+                                    ? (lw && (lw.surah !== fw.surah || lw.ayah !== fw.ayah))
+                                        ? `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} ${fw.ayah} – ${lw.ayah}`
+                                        : `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} : ${fw.ayah}`
+                                    : '';
+
+                                const atStart = clampedIdx === 0;
+                                const atEnd   = clampedIdx >= focusWordList.length - focusWordCount;
+
+                                return (
+                                    <div dir="ltr" className="flex flex-col items-center justify-center min-h-[50vh] py-10 select-none bg-white dark:bg-gray-800">
+                                        {/* Verse indicator */}
+                                        <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{verseLabel}</p>
+
+                                        {/* ── Sliding carousel ── */}
+                                        <div style={{ width: `${viewportW}px`, maxWidth: '100vw', overflow: 'hidden', position: 'relative' }}>
+                                            {/* Fade masks on the edges */}
+                                            <div style={{ position: 'absolute', top: 0, left: 0, width: `${FADE_N * SLOT_W}px`, height: '100%', background: 'linear-gradient(to right, var(--tw-bg-opacity,1) 0%, transparent 100%)', pointerEvents: 'none', zIndex: 1 }} className="bg-white dark:bg-gray-800" />
+                                            <div style={{ position: 'absolute', top: 0, right: 0, width: `${FADE_N * SLOT_W}px`, height: '100%', background: 'linear-gradient(to left, var(--tw-bg-opacity,1) 0%, transparent 100%)', pointerEvents: 'none', zIndex: 1 }} className="bg-white dark:bg-gray-800" />
+
+                                            {/* Sliding word row */}
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'row',
+                                                    transform: `translateX(${translateX}px)`,
+                                                    transition: 'transform 0.38s cubic-bezier(0.35, 0.0, 0.25, 1.0)',
+                                                    willChange: 'transform',
+                                                }}
+                                            >
+                                                {focusWordList.map((w, i) => (
+                                                    <div
+                                                        key={`fw-${w.surah}:${w.ayah}:${w.wordIdx}`}
+                                                        className="font-quranic text-slate-900 dark:text-slate-100"
+                                                        style={{
+                                                            width: `${SLOT_W}px`,
+                                                            flexShrink: 0,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontSize: focusFontSize,
+                                                            lineHeight: 1.9,
+                                                            opacity: getOpacity(i),
+                                                            transform: `scale(${getScale(i)})`,
+                                                            transition: 'opacity 0.38s ease, transform 0.38s ease',
+                                                            userSelect: 'none',
+                                                        }}
+                                                    >
+                                                        {w.word}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* ── Controls row ── */}
+                                        <div className="mt-10 flex items-center gap-8">
+                                            {/* Go back (right arrow) */}
                                             <button
                                                 onClick={() => setFocusWordIndex(prev => Math.max(0, prev - 1))}
                                                 disabled={atStart}
-                                                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-light transition-all ${atStart ? 'opacity-20 cursor-not-allowed' : 'bg-slate-100 dark:bg-gray-700 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-slate-600 dark:text-slate-300'}`}
+                                                className={`w-11 h-11 rounded-full flex items-center justify-center text-2xl font-light border transition-all duration-200 ${atStart ? 'opacity-20 cursor-not-allowed border-transparent' : 'border-slate-200 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-slate-500 dark:text-slate-400'}`}
                                                 title="Previous word (→)"
                                             >›</button>
 
-                                            {/* Words display */}
-                                            <div className="flex-1 flex items-center justify-center gap-6 flex-wrap">
-                                                {visibleWords.map((w, i) => (
-                                                    <span
-                                                        key={`${w.surah}:${w.ayah}:${w.wordIdx}:${i}`}
-                                                        className="font-quranic text-slate-900 dark:text-slate-100"
-                                                        style={{ fontSize: focusWordCount === 1 ? '5rem' : focusWordCount === 2 ? '4rem' : '3rem', lineHeight: 1.8 }}
-                                                    >
-                                                        {w.word}
-                                                    </span>
-                                                ))}
+                                            {/* Progress */}
+                                            <div className="flex flex-col items-center gap-1.5">
+                                                <div className="w-52 h-1 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-violet-500 rounded-full"
+                                                        style={{
+                                                            width: focusWordList.length > 0 ? `${Math.min(((clampedIdx + focusWordCount) / focusWordList.length) * 100, 100)}%` : '0%',
+                                                            transition: 'width 0.3s ease',
+                                                        }}
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tabular-nums">
+                                                    {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, focusWordList.length)} / {focusWordList.length}
+                                                </p>
+                                                <p className="text-[9px] text-slate-300 dark:text-slate-600 tracking-wide">← next · → back</p>
                                             </div>
 
-                                            {/* Left arrow (advance forward) */}
+                                            {/* Advance (left arrow) */}
                                             <button
                                                 onClick={() => setFocusWordIndex(prev => Math.min(prev + 1, Math.max(0, focusWordList.length - focusWordCount)))}
                                                 disabled={atEnd}
-                                                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-light transition-all ${atEnd ? 'opacity-20 cursor-not-allowed' : 'bg-slate-100 dark:bg-gray-700 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-slate-600 dark:text-slate-300'}`}
+                                                className={`w-11 h-11 rounded-full flex items-center justify-center text-2xl font-light border transition-all duration-200 ${atEnd ? 'opacity-20 cursor-not-allowed border-transparent' : 'border-slate-200 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-slate-500 dark:text-slate-400'}`}
                                                 title="Next word (←)"
                                             >‹</button>
-                                        </div>
-
-                                        {/* Progress bar + counter */}
-                                        <div className="mt-10 flex flex-col items-center gap-2">
-                                            <div className="w-56 h-1.5 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-violet-500 rounded-full transition-all duration-200"
-                                                    style={{ width: focusWordList.length > 0 ? `${Math.min(((clampedIdx + focusWordCount) / focusWordList.length) * 100, 100)}%` : '0%' }}
-                                                />
-                                            </div>
-                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                                                {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, focusWordList.length)} / {focusWordList.length}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">← next &nbsp;·&nbsp; → back</p>
                                         </div>
                                     </div>
                                 );
