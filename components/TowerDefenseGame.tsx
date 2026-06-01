@@ -202,8 +202,9 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             bilalWalk.current  = removeWhiteBg(w);
             bilalFight.current = removeWhiteBg(f);
             bilalReady.current = true;
+            console.log('[TowerDefense] ✓ Bilal sprites loaded');
           })
-          .catch(() => console.warn('Bilal sprites missing.')),
+          .catch((e) => console.warn('[TowerDefense] ✗ Bilal sprites FAILED:', e)),
 
         // Background
         load('/sprites/battle-bg.png')
@@ -252,6 +253,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
     },
     spawnBilalSoldier() {
       if (gs.current.winner) return;
+      console.log('[TowerDefense] spawnBilalSoldier called, bilalReady=', bilalReady.current);
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
@@ -640,13 +642,28 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             rr(ctx, bx, by, barW, barH, 2); ctx.stroke();
           }
 
+          // ── "BILAL" label above the sprite ─────────────────────────────
+          if (isBilal && !dying) {
+            ctx.save();
+            ctx.font = 'bold 11px system-ui,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = '#fbbf24';
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = 4;
+            ctx.fillText('★ BILAL', s.x, drawY - 12);
+            ctx.restore();
+          }
+
           ctx.globalAlpha = 1;
 
         } else {
           // Procedural fallback soldier
-          const isP   = s.side === 'player';
-          const bodyC = isP ? '#2563eb' : '#dc2626';
-          const darkC = isP ? '#1e3a8a' : '#991b1b';
+          const isP    = s.side === 'player';
+          const isBilalFallback = !!s.isBilal;
+          // Bilal gets gold even in fallback so it's visually distinct
+          const bodyC = isBilalFallback ? '#d97706' : (isP ? '#2563eb' : '#dc2626');
+          const darkC = isBilalFallback ? '#92400e' : (isP ? '#1e3a8a' : '#991b1b');
           const bob   = Math.sin(s.frame * 0.22) * 1.8;
           const baseY = s.y + bob;
           ctx.globalAlpha = dying ? (s.dying % 3 === 0 ? 0.25 : 1) : 1;
