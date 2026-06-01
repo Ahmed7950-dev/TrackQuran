@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react
 
 export interface TowerDefenseRef {
   spawnPlayerSoldier: () => void;
+  spawnBilalSoldier:  () => void;
   spawnEnemySoldier: () => void;
   reset: () => void;
 }
@@ -17,6 +18,11 @@ const SPRITE_W     = SPRITE_SIZE;
 const SPRITE_H     = SPRITE_SIZE;
 const HAMZAH_FOOT_RATIO = 0.88; // feet at 88% of sprite height (Hamzah / player)
 const ALBERT_FOOT_RATIO = 0.75; // feet at 75% of sprite height (Albert / enemy)
+const BILAL_FOOT_RATIO  = 0.88; // feet ratio for Bilal (same sheet layout as Hamzah)
+
+// Bilal stats — spawned after 3 consecutive correct answers
+const BILAL_MAX_HP  = 5;   // tougher than a regular soldier (SOL_MAX_HP = 3)
+const BILAL_DAMAGE  = 1.5; // damage dealt per hit (regular = 1)
 
 // ─── Game constants ─────────────────────────────────────────────────────────────
 const CANVAS_H     = 270;
@@ -44,6 +50,7 @@ interface Soldier {
   hp: number; maxHp: number;
   fightingWith: number | null;
   frame: number; dying: number;
+  isBilal?: boolean;  // true → use Bilal sprites + boosted stats
 }
 interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -120,6 +127,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const albertFight  = useRef<HTMLCanvasElement | null>(null);
   const albertReady  = useRef(false);
 
+  // ── Character sprites — Bilal (special player / left side) ────────────────
+  const bilalWalk    = useRef<HTMLCanvasElement | null>(null);
+  const bilalFight   = useRef<HTMLCanvasElement | null>(null);
+  const bilalReady   = useRef(false);
+
   // ── Background & tent images ───────────────────────────────────────────────
   const bgImg          = useRef<HTMLImageElement | null>(null);
   const playerTentCvs  = useRef<HTMLCanvasElement | null>(null);
@@ -183,6 +195,16 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           })
           .catch(() => console.warn('Albert sprites missing.')),
 
+        // Bilal (special player / left)
+        Promise.all([load('/sprites/Bilal-walk.png'), load('/sprites/Bilal-attack.png')])
+          .then(([w, f]) => {
+            if (cancelled) return;
+            bilalWalk.current  = removeWhiteBg(w);
+            bilalFight.current = removeWhiteBg(f);
+            bilalReady.current = true;
+          })
+          .catch(() => console.warn('Bilal sprites missing.')),
+
         // Background
         load('/sprites/battle-bg.png')
           .then(bg => { if (!cancelled) { bgImg.current = bg; bgReady.current = true; } })
@@ -226,6 +248,17 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         y: GROUND_Y - 2 - Math.random() * 6,
         hp: SOL_MAX_HP, maxHp: SOL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
+      });
+    },
+    spawnBilalSoldier() {
+      if (gs.current.winner) return;
+      gs.current.soldiers.push({
+        id: gs.current.nextId++, side: 'player',
+        x: LEFT_ANCHOR + 35,
+        y: GROUND_Y - 2 - Math.random() * 6,
+        hp: BILAL_MAX_HP, maxHp: BILAL_MAX_HP,
+        fightingWith: null, frame: 0, dying: 0,
+        isBilal: true,
       });
     },
     spawnEnemySoldier() {
@@ -313,7 +346,10 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         for (const s of state.soldiers) {
           if (s.dying > 0 || s.fightingWith === null || deadIds.has(s.id)) continue;
           s.frame++;
-          if (s.frame % 32 === 0) dmgMap.set(s.fightingWith, (dmgMap.get(s.fightingWith) ?? 0) + 1);
+          if (s.frame % 32 === 0) {
+            const dmg = s.isBilal ? BILAL_DAMAGE : 1;
+            dmgMap.set(s.fightingWith, (dmgMap.get(s.fightingWith) ?? 0) + dmg);
+          }
         }
         for (const s of state.soldiers) {
           if (deadIds.has(s.id) || s.dying > 0) continue;
@@ -517,11 +553,21 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         const fighting   = s.fightingWith !== null;
         const dying      = s.dying > 0;
         const isPlayer   = s.side === 'player';
-        // Pick sprite sheet based on which character this soldier is
-        const spriteReady = isPlayer ? hamzahReady.current : albertReady.current;
-        const sheet = isPlayer
-          ? (fighting ? hamzahFight.current : hamzahWalk.current)
-          : (fighting ? albertFight.current : albertWalk.current);
+        const isBilal    = !!s.isBilal;
+
+        // Pick sprite sheet: Bilal > Hamzah for player side, Albert for enemy
+        let spriteReady: boolean;
+        let sheet: HTMLCanvasElement | null;
+        if (isBilal) {
+          spriteReady = bilalReady.current;
+          sheet = fighting ? bilalFight.current : bilalWalk.current;
+        } else if (isPlayer) {
+          spriteReady = hamzahReady.current;
+          sheet = fighting ? hamzahFight.current : hamzahWalk.current;
+        } else {
+          spriteReady = albertReady.current;
+          sheet = fighting ? albertFight.current : albertWalk.current;
+        }
 
         if (spriteReady && sheet) {
           const frameIdx  = Math.floor(s.frame / ANIM_TICK) % TOTAL_FRAMES;
@@ -530,25 +576,41 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           const fw  = sheet.width  / SHEET_COLS;
           const fh  = sheet.height / SHEET_ROWS;
           // Per-character foot ratio so each sprite aligns to its shadow
-          const footRatio = isPlayer ? HAMZAH_FOOT_RATIO : ALBERT_FOOT_RATIO;
-          const drawY = s.y - SPRITE_H * footRatio;
-          const drawX = s.x - SPRITE_W / 2;
+          const footRatio = isBilal ? BILAL_FOOT_RATIO : (isPlayer ? HAMZAH_FOOT_RATIO : ALBERT_FOOT_RATIO);
+          // Bilal is drawn 15% bigger to look more imposing
+          const scale  = isBilal ? 1.15 : 1;
+          const drawW  = SPRITE_W * scale;
+          const drawH  = SPRITE_H * scale;
+          const drawY = s.y - drawH * footRatio;
+          const drawX = s.x - drawW / 2;
 
           ctx.globalAlpha = dying ? (s.dying % 3 === 0 ? 0.25 : 1) : 1;
 
+          // Bilal golden aura glow
+          if (isBilal && !dying) {
+            ctx.save();
+            ctx.shadowColor = '#fbbf24';
+            ctx.shadowBlur  = 18 + 6 * Math.sin(tick * 0.08);
+            ctx.fillStyle   = 'rgba(251,191,36,0.18)';
+            ctx.beginPath();
+            ctx.ellipse(s.x, s.y - drawH * 0.4, drawW * 0.4, drawH * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
           // Ground shadow
           ctx.fillStyle = 'rgba(0,0,0,0.22)';
-          ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, SPRITE_W * 0.38, 4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, drawW * 0.38, 4, 0, 0, Math.PI * 2); ctx.fill();
 
           ctx.save();
-          if (isPlayer) {
-            // Hamzah faces right → player walks right → draw as-is
-            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, SPRITE_W, SPRITE_H);
+          if (isPlayer || isBilal) {
+            // Hamzah / Bilal face right → player walks right → draw as-is
+            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, drawW, drawH);
           } else {
             // Albert faces right → enemy walks left → flip horizontally around s.x
             ctx.translate(s.x, drawY);
             ctx.scale(-1, 1);
-            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, -SPRITE_W / 2, 0, SPRITE_W, SPRITE_H);
+            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, -drawW / 2, 0, drawW, drawH);
           }
           ctx.restore();
 

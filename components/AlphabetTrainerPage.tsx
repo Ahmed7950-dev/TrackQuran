@@ -67,7 +67,8 @@ const AlphabetTrainerPage: React.FC = () => {
     emoji: '🌟', text: 'Amazing!', phase: 'hidden',
   });
   const [shaking, setShaking] = useState(false);
-  const gameRef = useRef<TowerDefenseRef>(null);
+  const gameRef            = useRef<TowerDefenseRef>(null);
+  const consecutiveCorrect = useRef(0);  // streak counter — Bilal spawns on every 3rd in a row
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(priorities));
@@ -157,6 +158,7 @@ const AlphabetTrainerPage: React.FC = () => {
     if (unique === 0) return;
     const q = buildQueue(priorities);
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
+    consecutiveCorrect.current = 0;
     gameRef.current?.reset();
   };
 
@@ -171,7 +173,13 @@ const AlphabetTrainerPage: React.FC = () => {
   const handleCorrect = () => {
     if (celebrating) return;
     setRestartMsg('');
-    gameRef.current?.spawnPlayerSoldier();
+    consecutiveCorrect.current += 1;
+    if (consecutiveCorrect.current >= 3) {
+      consecutiveCorrect.current = 0;
+      gameRef.current?.spawnBilalSoldier();
+    } else {
+      gameRef.current?.spawnPlayerSoldier();
+    }
     if (childMode) {
       setCelebrating(true);
       celebrate(() => { setCelebrating(false); advancePos(); });
@@ -182,6 +190,7 @@ const AlphabetTrainerPage: React.FC = () => {
 
   const handleWrong = () => {
     if (celebrating) return;
+    consecutiveCorrect.current = 0;  // reset streak on wrong answer
     if (childMode) {
       setShaking(true);
       setRestartMsg(t('alphabetTrainer.restartChild'));
