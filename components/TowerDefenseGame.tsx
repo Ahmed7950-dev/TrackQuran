@@ -109,10 +109,15 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 }>(({ onGameOver }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // ── Character sprites ──────────────────────────────────────────────────────
-  const walkSprite   = useRef<HTMLCanvasElement | null>(null);
-  const fightSprite  = useRef<HTMLCanvasElement | null>(null);
-  const spritesReady = useRef(false);
+  // ── Character sprites — Hamzah (player / left side) ───────────────────────
+  const hamzahWalk   = useRef<HTMLCanvasElement | null>(null);
+  const hamzahFight  = useRef<HTMLCanvasElement | null>(null);
+  const hamzahReady  = useRef(false);
+
+  // ── Character sprites — Albert (enemy / right side) ───────────────────────
+  const albertWalk   = useRef<HTMLCanvasElement | null>(null);
+  const albertFight  = useRef<HTMLCanvasElement | null>(null);
+  const albertReady  = useRef(false);
 
   // ── Background & tent images ───────────────────────────────────────────────
   const bgImg          = useRef<HTMLImageElement | null>(null);
@@ -152,17 +157,31 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       });
 
     (async () => {
-      // Character sprites
+      // Hamzah sprites (player / left side)
       try {
         const [wImg, fImg] = await Promise.all([
           load('/sprites/hamzah-walk.png'),
           load('/sprites/hamzah-fight.png'),
         ]);
-        if (cancelled) return;
-        walkSprite.current  = removeWhiteBg(wImg);
-        fightSprite.current = removeWhiteBg(fImg);
-        spritesReady.current = true;
-      } catch (e) { console.warn('Character sprites missing — fallback drawing active.', e); }
+        if (!cancelled) {
+          hamzahWalk.current  = removeWhiteBg(wImg);
+          hamzahFight.current = removeWhiteBg(fImg);
+          hamzahReady.current = true;
+        }
+      } catch (e) { console.warn('Hamzah sprites missing — fallback drawing active.', e); }
+
+      // Albert sprites (enemy / right side)
+      try {
+        const [wImg, fImg] = await Promise.all([
+          load('/sprites/Albert-walk.png'),
+          load('/sprites/Albert-attack.png'),
+        ]);
+        if (!cancelled) {
+          albertWalk.current  = removeWhiteBg(wImg);
+          albertFight.current = removeWhiteBg(fImg);
+          albertReady.current = true;
+        }
+      } catch (e) { console.warn('Albert sprites missing — fallback drawing active.', e); }
 
       // Background & tent images (non-blocking — each fails independently)
       try {
@@ -464,11 +483,16 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
       // ── Soldiers ────────────────────────────────────────────────────────────
       const drawSoldier = (s: Soldier) => {
-        const fighting = s.fightingWith !== null;
-        const dying    = s.dying > 0;
-        const sheet    = fighting ? fightSprite.current : walkSprite.current;
+        const fighting   = s.fightingWith !== null;
+        const dying      = s.dying > 0;
+        const isPlayer   = s.side === 'player';
+        // Pick sprite sheet based on which character this soldier is
+        const spriteReady = isPlayer ? hamzahReady.current : albertReady.current;
+        const sheet = isPlayer
+          ? (fighting ? hamzahFight.current : hamzahWalk.current)
+          : (fighting ? albertFight.current : albertWalk.current);
 
-        if (spritesReady.current && sheet) {
+        if (spriteReady && sheet) {
           const frameIdx = Math.floor(s.frame / ANIM_TICK) % TOTAL_FRAMES;
           const col = frameIdx % SHEET_COLS;
           const row = Math.floor(frameIdx / SHEET_COLS);
@@ -484,11 +508,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, SPRITE_W * 0.38, 4, 0, 0, Math.PI * 2); ctx.fill();
 
           ctx.save();
-          if (s.side === 'player') {
-            // Sprite faces right → player walks right → as-is
+          if (isPlayer) {
+            // Hamzah faces right → player walks right → draw as-is
             ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, SPRITE_W, SPRITE_H);
           } else {
-            // Enemy walks left → flip horizontally
+            // Albert faces right → enemy walks left → flip horizontally
             ctx.translate(s.x + SPRITE_W / 2, drawY);
             ctx.scale(-1, 1);
             ctx.drawImage(sheet, col * fw, row * fh, fw, fh, -SPRITE_W / 2, 0, SPRITE_W, SPRITE_H);
