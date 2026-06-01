@@ -440,10 +440,20 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
         if (imgCvs && dw > 0 && dh > 0) {
           const yOffset = isPlayer ? PLAYER_TENT_Y_OFFSET : 0;
+          const drawY   = GROUND_Y - dh + yOffset;
           // Draw tent image: centred on cx, bottom flush with GROUND_Y (+ optional offset)
-          ctx.drawImage(imgCvs, cx - dw / 2, GROUND_Y - dh + yOffset, dw, dh);
+          // Player tent is flipped horizontally so it faces into the battlefield
+          if (isPlayer) {
+            ctx.save();
+            ctx.translate(cx + dw / 2, drawY);
+            ctx.scale(-1, 1);
+            ctx.drawImage(imgCvs, 0, 0, dw, dh);
+            ctx.restore();
+          } else {
+            ctx.drawImage(imgCvs, cx - dw / 2, drawY, dw, dh);
+          }
           // HP bar above the image
-          drawHpBar(cx, GROUND_Y - dh + yOffset, hp);
+          drawHpBar(cx, drawY, hp);
         } else {
           drawProceduralTent(tx, side, hp, shake);
         }
