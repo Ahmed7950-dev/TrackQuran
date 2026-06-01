@@ -15,7 +15,8 @@ const ANIM_TICK    = 3;   // advance one frame every N game ticks
 const SPRITE_SIZE  = 92;  // square — source frames are 1:1 so keep aspect
 const SPRITE_W     = SPRITE_SIZE;
 const SPRITE_H     = SPRITE_SIZE;
-const FOOT_RATIO   = 0.88;
+const HAMZAH_FOOT_RATIO = 0.88; // feet at 88% of sprite height (Hamzah / player)
+const ALBERT_FOOT_RATIO = 0.75; // feet at 75% of sprite height (Albert / enemy)
 
 // ─── Game constants ─────────────────────────────────────────────────────────────
 const CANVAS_H     = 270;
@@ -493,12 +494,14 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           : (fighting ? albertFight.current : albertWalk.current);
 
         if (spriteReady && sheet) {
-          const frameIdx = Math.floor(s.frame / ANIM_TICK) % TOTAL_FRAMES;
+          const frameIdx  = Math.floor(s.frame / ANIM_TICK) % TOTAL_FRAMES;
           const col = frameIdx % SHEET_COLS;
           const row = Math.floor(frameIdx / SHEET_COLS);
           const fw  = sheet.width  / SHEET_COLS;
           const fh  = sheet.height / SHEET_ROWS;
-          const drawY = s.y - SPRITE_H * FOOT_RATIO;
+          // Per-character foot ratio so each sprite aligns to its shadow
+          const footRatio = isPlayer ? HAMZAH_FOOT_RATIO : ALBERT_FOOT_RATIO;
+          const drawY = s.y - SPRITE_H * footRatio;
           const drawX = s.x - SPRITE_W / 2;
 
           ctx.globalAlpha = dying ? (s.dying % 3 === 0 ? 0.25 : 1) : 1;
@@ -519,16 +522,32 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           }
           ctx.restore();
 
-          // HP pips when damaged
-          if (s.hp < s.maxHp && !dying) {
-            for (let i = 0; i < s.maxHp; i++) {
-              ctx.fillStyle = i < s.hp ? '#22c55e' : '#ef4444';
-              ctx.beginPath();
-              ctx.arc(s.x - (s.maxHp - 1) * 5.5 + i * 11, s.y - SPRITE_H * FOOT_RATIO - 8, 4, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.5; ctx.stroke();
+          // ── Soldier HP bar (always visible above head) ──────────────────
+          if (!dying) {
+            const barW = 44, barH = 5;
+            const bx   = s.x - barW / 2;
+            const by   = drawY - 9;
+            const hpPct = s.hp / s.maxHp;
+            const hpColor = hpPct > 0.6 ? '#22c55e' : hpPct > 0.3 ? '#f59e0b' : '#ef4444';
+            // Track shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            rr(ctx, bx - 1, by - 1, barW + 2, barH + 2, 3); ctx.fill();
+            // Track
+            ctx.fillStyle = '#1e293b';
+            rr(ctx, bx, by, barW, barH, 2); ctx.fill();
+            // Fill
+            if (hpPct > 0) {
+              ctx.fillStyle = hpColor;
+              rr(ctx, bx, by, barW * hpPct, barH, 2); ctx.fill();
+              // Shine
+              ctx.fillStyle = 'rgba(255,255,255,0.28)';
+              rr(ctx, bx, by, barW * hpPct, barH / 2, 2); ctx.fill();
             }
+            // Border
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 0.5;
+            rr(ctx, bx, by, barW, barH, 2); ctx.stroke();
           }
+
           ctx.globalAlpha = 1;
 
         } else {
