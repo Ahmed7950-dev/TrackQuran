@@ -1312,9 +1312,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [focusMode, setFocusMode] = useState(false);
     const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(3);
     const [focusWordIndex, setFocusWordIndex] = useState(0);
-    const [focusDisplayPos, setFocusDisplayPos] = useState(0); // float, drives smooth drag animation
-    const focusKeyHeldRef   = useRef<'fwd'|'back'|null>(null);
-    const focusRafRef       = useRef<number>(0);
+    const [focusDisplayPos, setFocusDisplayPos] = useState(0); // float, drives smooth slider animation
+    const focusTargetRef = useRef(0);   // integer target; RAF lerps displayPos toward this
+    const focusRafRef    = useRef<number>(0);
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1675,50 +1675,41 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Focus-mode drag animation via requestAnimationFrame ─────────────────
     useEffect(() => {
         if (!focusMode) return;
-        const maxIdx = () => Math.max(0, focusWordList.length - focusWordCount);
+        const max = Math.max(0, focusWordList.length - focusWordCount);
 
-        // RAF loop: lerp focusDisplayPos toward focusWordIndex when idle,
-        // or advance at constant speed while a key is held.
+        // RAF loop: slowly lerp focusDisplayPos toward focusTargetRef (slow slider feel)
         const loop = () => {
             setFocusDisplayPos(prev => {
-                const max = maxIdx();
-                if (focusKeyHeldRef.current === 'fwd') {
-                    const next = Math.min(prev + 0.09, max);
-                    setFocusWordIndex(Math.round(next));
-                    return next;
-                }
-                if (focusKeyHeldRef.current === 'back') {
-                    const next = Math.max(prev - 0.09, 0);
-                    setFocusWordIndex(Math.round(next));
-                    return next;
-                }
-                // Spring-snap to nearest integer when key released
-                const target = Math.round(prev);
-                const snapped = prev + (target - prev) * 0.18;
-                if (Math.abs(snapped - target) < 0.005) return target;
-                setFocusWordIndex(Math.round(snapped));
-                return snapped;
+                const target = Math.max(0, Math.min(focusTargetRef.current, max));
+                const diff   = target - prev;
+                if (Math.abs(diff) < 0.002) return target;
+                return prev + diff * 0.055; // slow smooth slide (~1 second per word)
             });
             focusRafRef.current = requestAnimationFrame(loop);
         };
         focusRafRef.current = requestAnimationFrame(loop);
 
+        // Each keydown (including OS key-repeat while held) advances target by 1
         const onKeyDown = (e: KeyboardEvent) => {
             const t = e.target as HTMLElement;
             if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
-            if (e.key === 'ArrowLeft')  { e.preventDefault(); focusKeyHeldRef.current = 'fwd'; }
-            if (e.key === 'ArrowRight') { e.preventDefault(); focusKeyHeldRef.current = 'back'; }
-        };
-        const onKeyUp = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') focusKeyHeldRef.current = null;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const next = Math.min(focusTargetRef.current + 1, max);
+                focusTargetRef.current = next;
+                setFocusWordIndex(next);
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const next = Math.max(focusTargetRef.current - 1, 0);
+                focusTargetRef.current = next;
+                setFocusWordIndex(next);
+            }
         };
         window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('keyup',   onKeyUp);
         return () => {
             cancelAnimationFrame(focusRafRef.current);
             window.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('keyup',   onKeyUp);
-            focusKeyHeldRef.current = null;
         };
     }, [focusMode, focusWordList, focusWordCount]);
 
@@ -3179,27 +3170,33 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 const slotVw     = 100 / totalSlots;
 
                                 const total      = focusWordList.length;
-                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
 
-                                // Use focusDisplayPos (float) for translateX so dragging is smooth
+                                // displayPos is the smooth float driven by the RAF lerp
                                 const displayPos   = Math.max(0, Math.min(focusDisplayPos, total - focusWordCount));
+                                // clampedIdx tracks the nearest integer for z-index / verse label
+                                const clampedIdx = Math.round(displayPos);
                                 const translateXVw = (displayPos - FADE_N) * slotVw;
 
                                 const focusFontSize = focusWordCount === 1 ? '14rem'
                                                     : focusWordCount === 2 ? '12rem'
                                                     : '10.5rem';
 
+                                // Use float displayPos so opacity/scale fade smoothly as the slider moves
                                 const getOpacity = (i: number) => {
-                                    const rel = i - clampedIdx;
+                                    const rel = i - displayPos;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.28 : 0;
+                                    if (d <= 0) return 1;
+                                    if (d >= 1.2) return 0;
+                                    return Math.max(0, 1 - d * (1 / 0.7)) * 0.28 + Math.max(0, 1 - d) * 0.72;
                                 };
                                 const getScale = (i: number) => {
-                                    const rel = i - clampedIdx;
+                                    const rel = i - displayPos;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.68 : 0.5;
+                                    if (d <= 0) return 1;
+                                    if (d >= 1.2) return 0.5;
+                                    return 1 - Math.min(d, 1) * 0.32;
                                 };
 
                                 // Verse label from first focused word item
