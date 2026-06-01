@@ -3138,9 +3138,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 const total      = focusWordList.length;
                                 const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
 
-                                // row-reverse puts word[0] on the RIGHT (correct Arabic reading order).
-                                // Formula: position word[clampedIdx] at the rightmost focus slot.
-                                const translateXVw = (FADE_N + focusWordCount - total + clampedIdx) * slotVw;
+                                // row-reverse anchors word[0] at the container's RIGHT edge (correct Arabic order).
+                                // In row-reverse, word[i] sits at (W - (i+1)*S) from the left, where W = totalSlots*S.
+                                // To place word[clampedIdx] at the rightmost focus slot (index FADE_N+focusWordCount-1):
+                                //   W-(clampedIdx+1)*S + tx = (FADE_N+focusWordCount-1)*S
+                                //   tx = (clampedIdx - FADE_N) * S  ← simple!
+                                const translateXVw = (clampedIdx - FADE_N) * slotVw;
 
                                 const focusFontSize = focusWordCount === 1 ? '14rem'
                                                     : focusWordCount === 2 ? '12rem'
