@@ -1310,8 +1310,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
+    const [currentAyah, setCurrentAyah] = useState(1);
+    const currentAyahRef        = useRef(1);
     const carouselContainerRef  = useRef<HTMLDivElement>(null);
     const carouselStripRef      = useRef<HTMLDivElement>(null);
+    const verseBarRef           = useRef<HTMLDivElement>(null);
+    const verseFirstWordEls     = useRef<Map<number, HTMLDivElement>>(new Map());
     const scrollKeyHeldRef      = useRef<'left' | 'right' | null>(null);
     const scrollVelocityRef     = useRef(0);
     const scrollTransformRef    = useRef(0);          // current translateX in px (imperative)
@@ -1555,9 +1559,76 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         win.document.close();
     }, [student.id, student.name, teacherNote]);
 
-    // Keep refs in sync so the RAf loop always reads current values without stale closures
+    // Keep refs in sync so the RAF loop always reads current values without stale closures
     useEffect(() => { isAutoScrollingRef.current = isAutoScrolling; }, [isAutoScrolling]);
     useEffect(() => { scrollSpeedRef.current = scrollSpeed; }, [scrollSpeed]);
+
+    // Navigate carousel to the first word of a given ayah
+    const scrollToAyah = useCallback((targetAyah: number) => {
+        const el        = verseFirstWordEls.current.get(targetAyah);
+        const container = carouselContainerRef.current;
+        const strip     = carouselStripRef.current;
+        if (!el || !container || !strip) return;
+        const containerW = container.offsetWidth;
+        const minT = -(Math.max(0, strip.offsetWidth - containerW));
+        const maxT = 0;
+        const targetT = Math.max(minT, Math.min(maxT, containerW / 2 - (el.offsetLeft + el.offsetWidth / 2)));
+        scrollTransformRef.current = targetT;
+        scrollVelocityRef.current  = 0;
+        strip.style.transform = `translateX(${targetT}px)`;
+        setCurrentAyah(targetAyah);
+        currentAyahRef.current = targetAyah;
+        if (progressBarFillRef.current && minT !== 0) {
+            const pct = (targetT - minT) / (maxT - minT);
+            progressBarFillRef.current.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+        }
+    }, []);
+
+    type FocusItem =
+        | { kind: 'word';   word: string; surah: number; ayah: number; wordIdx: number }
+        | { kind: 'marker'; surah: number; ayah: number };
+
+    const focusWordList = useMemo<FocusItem[]>(() => {
+        const list: FocusItem[] = [];
+        verses.forEach(verse => {
+            const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+            const words = verse.text_uthmani.replace(/ْ/g, 'ہ').split(' ').filter(w => w.trim());
+            words.forEach((word, wordIdx) => {
+                list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
+            });
+            // Insert verse-end marker so ayah number appears between verses
+            list.push({ kind: 'marker', surah: surahNum, ayah: ayahNum });
+        });
+        return list;
+    }, [verses]);
+
+    // Reset carousel to start when focusWordList changes (new surah loaded)
+    useEffect(() => {
+        if (!focusMode) return;
+        verseFirstWordEls.current.clear();
+        const strip     = carouselStripRef.current;
+        const container = carouselContainerRef.current;
+        // Defer one frame so new DOM is fully laid out
+        const id = requestAnimationFrame(() => {
+            if (!strip || !container) return;
+            const minT = -(Math.max(0, strip.offsetWidth - container.offsetWidth));
+            scrollTransformRef.current = minT;
+            scrollVelocityRef.current  = 0;
+            strip.style.transform = `translateX(${minT}px)`;
+            if (progressBarFillRef.current) progressBarFillRef.current.style.width = '0%';
+            setCurrentAyah(1);
+            currentAyahRef.current = 1;
+        });
+        return () => cancelAnimationFrame(id);
+    }, [focusWordList, focusMode]);
+
+    // Keep the active verse number visible in the verse bar
+    useEffect(() => {
+        if (!focusMode || !verseBarRef.current) return;
+        const bar = verseBarRef.current;
+        const btn = bar.querySelector<HTMLElement>(`[data-versenum="${currentAyah}"]`);
+        btn?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }, [currentAyah, focusMode]);
 
     useEffect(() => {
         const handleManualInteraction = () => { if (isAutoScrolling) setIsAutoScrolling(false); };
@@ -1661,26 +1732,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // ── Flat word list for focus/word-by-word mode ──────────────────────────
-    // FocusItem: either a word or a verse-end marker (shows ayah number between verses)
-    type FocusItem =
-        | { kind: 'word';   word: string; surah: number; ayah: number; wordIdx: number }
-        | { kind: 'marker'; surah: number; ayah: number };
-
-    const focusWordList = useMemo<FocusItem[]>(() => {
-        const list: FocusItem[] = [];
-        verses.forEach(verse => {
-            const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-            const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ').filter(w => w.trim());
-            words.forEach((word, wordIdx) => {
-                list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
-            });
-            // Insert verse-end marker so ayah number appears between verses
-            list.push({ kind: 'marker', surah: surahNum, ayah: ayahNum });
-        });
-        return list;
-    }, [verses]);
-
     // ── Focus-mode: RAF momentum scroll driven by arrow keys ─────────────────
     useEffect(() => {
         if (!focusMode) return;
@@ -1688,6 +1739,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const FRICTION = 0.87; // velocity decay per frame on key release
         let animId: number;
         let initialized = false;
+        let frameCount  = 0;
 
         const loop = () => {
             const strip     = carouselStripRef.current;
@@ -1705,10 +1757,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
 
                 if (isAutoScrollingRef.current) {
-                    // Auto-scroll: constant velocity toward the end (0), scaled by scrollSpeed
-                    // speed 1 → 0.3 px/frame, speed 100 → 10 px/frame
                     scrollVelocityRef.current = 0.3 + (scrollSpeedRef.current / 100) * 9.7;
-                    // Stop auto-scroll when strip reaches the end
                     if (scrollTransformRef.current >= maxT) {
                         scrollVelocityRef.current = 0;
                         setIsAutoScrolling(false);
@@ -1721,10 +1770,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     scrollTransformRef.current = Math.max(minT, Math.min(maxT, scrollTransformRef.current + scrollVelocityRef.current));
                     strip.style.transform = `translateX(${scrollTransformRef.current}px)`;
 
-                    // Update progress bar imperatively (no React re-render needed)
                     if (progressBarFillRef.current && minT !== 0) {
                         const pct = (scrollTransformRef.current - minT) / (maxT - minT);
                         progressBarFillRef.current.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+                    }
+                }
+
+                // Throttled: detect which verse is at the center every ~15 frames
+                frameCount++;
+                if (frameCount % 15 === 0 && verseFirstWordEls.current.size > 0) {
+                    const centerX = -scrollTransformRef.current + containerW / 2;
+                    let closestAyah = currentAyahRef.current;
+                    let closestDist = Infinity;
+                    verseFirstWordEls.current.forEach((el, ayah) => {
+                        const dist = Math.abs(el.offsetLeft + el.offsetWidth / 2 - centerX);
+                        if (dist < closestDist) { closestDist = dist; closestAyah = ayah; }
+                    });
+                    if (closestAyah !== currentAyahRef.current) {
+                        currentAyahRef.current = closestAyah;
+                        setCurrentAyah(closestAyah);
                     }
                 }
             }
@@ -3205,6 +3269,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         {/* Surah label */}
                                         <p className="text-center text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{surahLabel}</p>
 
+                                        {/* ── Verse number bar ── */}
+                                        <div
+                                            ref={verseBarRef}
+                                            className="flex overflow-x-auto gap-1.5 px-6 pb-4 justify-center"
+                                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                        >
+                                            {Array.from({ length: selectedSurahInfo?.numberOfAyahs ?? 0 }, (_, i) => i + 1).map(ayah => (
+                                                <button
+                                                    key={ayah}
+                                                    data-versenum={ayah}
+                                                    onClick={() => scrollToAyah(ayah)}
+                                                    className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-mono transition-colors duration-200 ${currentAyah === ayah ? 'bg-violet-600 text-white shadow-sm scale-110' : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                                >
+                                                    {toEasternArabicNumerals(ayah)}
+                                                </button>
+                                            ))}
+                                        </div>
+
                                         {/* ── Free-scroll carousel — auto-width, RAF-driven ── */}
                                         <div
                                             ref={carouselContainerRef}
@@ -3248,6 +3330,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     return (
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
+                                                            ref={item.wordIdx === 0 ? (el) => {
+                                                                if (el) verseFirstWordEls.current.set(item.ayah, el);
+                                                                else verseFirstWordEls.current.delete(item.ayah);
+                                                            } : undefined}
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
                                                             style={{ ...slotStyle, fontSize: '10.5rem', lineHeight: 2.2 }}
                                                         >
