@@ -34,6 +34,7 @@ const LEFT_ANCHOR  = 80;
 // Target display heights for tent images (widths computed from natural aspect ratio)
 const PLAYER_TENT_TARGET_H = 145;
 const ENEMY_TENT_TARGET_H  = 165;
+const PLAYER_TENT_Y_OFFSET = 30;  // positive = lower the player tent toward the ground
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 interface Soldier {
@@ -438,10 +439,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         const cx        = tx + ox;
 
         if (imgCvs && dw > 0 && dh > 0) {
-          // Draw tent image: centred on cx, bottom flush with GROUND_Y
-          ctx.drawImage(imgCvs, cx - dw / 2, GROUND_Y - dh, dw, dh);
+          const yOffset = isPlayer ? PLAYER_TENT_Y_OFFSET : 0;
+          // Draw tent image: centred on cx, bottom flush with GROUND_Y (+ optional offset)
+          ctx.drawImage(imgCvs, cx - dw / 2, GROUND_Y - dh + yOffset, dw, dh);
           // HP bar above the image
-          drawHpBar(cx, GROUND_Y - dh, hp);
+          drawHpBar(cx, GROUND_Y - dh + yOffset, hp);
         } else {
           drawProceduralTent(tx, side, hp, shake);
         }
