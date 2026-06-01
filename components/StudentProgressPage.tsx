@@ -1312,9 +1312,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [focusMode, setFocusMode] = useState(false);
     const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(3);
     const [focusWordIndex, setFocusWordIndex] = useState(0);
-    const [focusDisplayPos, setFocusDisplayPos] = useState(0); // float, drives smooth slider animation
-    const focusTargetRef = useRef(0);   // integer target; RAF lerps displayPos toward this
-    const focusRafRef    = useRef<number>(0);
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1672,45 +1669,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return list;
     }, [verses]);
 
-    // ── Focus-mode drag animation via requestAnimationFrame ─────────────────
+    // ── Focus-mode keyboard navigation ───────────────────────────────────────
     useEffect(() => {
         if (!focusMode) return;
         const max = Math.max(0, focusWordList.length - focusWordCount);
-
-        // RAF loop: slowly lerp focusDisplayPos toward focusTargetRef (slow slider feel)
-        const loop = () => {
-            setFocusDisplayPos(prev => {
-                const target = Math.max(0, Math.min(focusTargetRef.current, max));
-                const diff   = target - prev;
-                if (Math.abs(diff) < 0.002) return target;
-                return prev + diff * 0.055; // slow smooth slide (~1 second per word)
-            });
-            focusRafRef.current = requestAnimationFrame(loop);
-        };
-        focusRafRef.current = requestAnimationFrame(loop);
-
-        // Each keydown (including OS key-repeat while held) advances target by 1
         const onKeyDown = (e: KeyboardEvent) => {
             const t = e.target as HTMLElement;
             if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
-            if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const next = Math.min(focusTargetRef.current + 1, max);
-                focusTargetRef.current = next;
-                setFocusWordIndex(next);
-            }
-            if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const next = Math.max(focusTargetRef.current - 1, 0);
-                focusTargetRef.current = next;
-                setFocusWordIndex(next);
-            }
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); setFocusWordIndex(p => Math.min(p + 1, max)); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); setFocusWordIndex(p => Math.max(p - 1, 0)); }
         };
         window.addEventListener('keydown', onKeyDown);
-        return () => {
-            cancelAnimationFrame(focusRafRef.current);
-            window.removeEventListener('keydown', onKeyDown);
-        };
+        return () => window.removeEventListener('keydown', onKeyDown);
     }, [focusMode, focusWordList, focusWordCount]);
 
     // surahStatuses based on reading (recitation non-revision) achievements
@@ -3070,7 +3040,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 {/* Focus / word-by-word mode toggle */}
                                 <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-md px-1 py-0.5 h-7">
                                     <button
-                                        onClick={() => { setFocusMode(p => !p); setFocusWordIndex(0); setFocusDisplayPos(0); }}
+                                        onClick={() => { setFocusMode(p => !p); setFocusWordIndex(0); setFocusWordIndex(0); }}
                                         title={focusMode ? 'Exit focus mode' : 'Focus mode — word by word'}
                                         className={`h-5 px-2 flex items-center justify-center rounded text-[10px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
                                     >
@@ -3082,7 +3052,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             {([1, 2, 3] as const).map(n => (
                                                 <button
                                                     key={n}
-                                                    onClick={() => { setFocusWordCount(n); setFocusWordIndex(0); setFocusDisplayPos(0); }}
+                                                    onClick={() => { setFocusWordCount(n); setFocusWordIndex(0); setFocusWordIndex(0); }}
                                                     className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors ${focusWordCount === n ? 'bg-violet-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-gray-600'}`}
                                                     title={`Show ${n} word${n > 1 ? 's' : ''} at a time`}
                                                 >
@@ -3170,33 +3140,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 const slotVw     = 100 / totalSlots;
 
                                 const total      = focusWordList.length;
-
-                                // displayPos is the smooth float driven by the RAF lerp
-                                const displayPos   = Math.max(0, Math.min(focusDisplayPos, total - focusWordCount));
-                                // clampedIdx tracks the nearest integer for z-index / verse label
-                                const clampedIdx = Math.round(displayPos);
-                                const translateXVw = (displayPos - FADE_N) * slotVw;
+                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
+                                const translateXVw = (clampedIdx - FADE_N) * slotVw;
 
                                 const focusFontSize = focusWordCount === 1 ? '14rem'
                                                     : focusWordCount === 2 ? '12rem'
                                                     : '10.5rem';
 
-                                // Use float displayPos so opacity/scale fade smoothly as the slider moves
                                 const getOpacity = (i: number) => {
-                                    const rel = i - displayPos;
+                                    const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    if (d <= 0) return 1;
-                                    if (d >= 1.2) return 0;
-                                    return Math.max(0, 1 - d * (1 / 0.7)) * 0.28 + Math.max(0, 1 - d) * 0.72;
+                                    return d === 1 ? 0.28 : 0;
                                 };
                                 const getScale = (i: number) => {
-                                    const rel = i - displayPos;
+                                    const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    if (d <= 0) return 1;
-                                    if (d >= 1.2) return 0.5;
-                                    return 1 - Math.min(d, 1) * 0.32;
+                                    return d === 1 ? 0.68 : 0.5;
                                 };
 
                                 // Verse label from first focused word item
@@ -3223,7 +3184,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     display: 'flex',
                                                     flexDirection: 'row-reverse',
                                                     transform: `translateX(${translateXVw}vw)`,
-                                                    // no CSS transition — smooth motion driven by RAF focusDisplayPos
+                                                    transition: 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                                                     willChange: 'transform',
                                                 }}
                                             >
