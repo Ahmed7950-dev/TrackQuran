@@ -1310,11 +1310,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
-    const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(3);
-    const [focusWordIndex, setFocusWordIndex] = useState(0);
-    const [carouselTransformPx, setCarouselTransformPx] = useState(0);
-    const carouselContainerRef = useRef<HTMLDivElement>(null);
-    const carouselSlotEls      = useRef<(HTMLDivElement | null)[]>([]);
+    const carouselContainerRef  = useRef<HTMLDivElement>(null);
+    const carouselStripRef      = useRef<HTMLDivElement>(null);
+    const scrollKeyHeldRef      = useRef<'left' | 'right' | null>(null);
+    const scrollVelocityRef     = useRef(0);
+    const scrollTransformRef    = useRef(0);          // current translateX in px (imperative)
+    const progressBarFillRef    = useRef<HTMLDivElement>(null);
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1672,37 +1673,68 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return list;
     }, [verses]);
 
-    // ── Focus-mode keyboard navigation ───────────────────────────────────────
+    // ── Focus-mode: RAF momentum scroll driven by arrow keys ─────────────────
     useEffect(() => {
         if (!focusMode) return;
-        const max = Math.max(0, focusWordList.length - focusWordCount);
+        const SPEED    = 22;   // px per frame while key is held
+        const FRICTION = 0.87; // velocity decay per frame on key release
+        let animId: number;
+        let initialized = false;
+
+        const loop = () => {
+            const strip     = carouselStripRef.current;
+            const container = carouselContainerRef.current;
+            if (strip && container) {
+                const stripW     = strip.offsetWidth;   // max-content width (all words)
+                const containerW = container.offsetWidth;
+                const minT = -(Math.max(0, stripW - containerW)); // word[0] on right
+                const maxT = 0;                                    // last word on left
+
+                if (!initialized) {
+                    scrollTransformRef.current = minT;
+                    strip.style.transform = `translateX(${minT}px)`;
+                    initialized = true;
+                }
+
+                if      (scrollKeyHeldRef.current === 'left')  scrollVelocityRef.current =  SPEED;
+                else if (scrollKeyHeldRef.current === 'right') scrollVelocityRef.current = -SPEED;
+                else                                           scrollVelocityRef.current *= FRICTION;
+
+                if (Math.abs(scrollVelocityRef.current) > 0.25) {
+                    scrollTransformRef.current = Math.max(minT, Math.min(maxT, scrollTransformRef.current + scrollVelocityRef.current));
+                    strip.style.transform = `translateX(${scrollTransformRef.current}px)`;
+
+                    // Update progress bar imperatively (no React re-render needed)
+                    if (progressBarFillRef.current && minT !== 0) {
+                        const pct = (scrollTransformRef.current - minT) / (maxT - minT);
+                        progressBarFillRef.current.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+                    }
+                }
+            }
+            animId = requestAnimationFrame(loop);
+        };
+        animId = requestAnimationFrame(loop);
+
         const onKeyDown = (e: KeyboardEvent) => {
             const t = e.target as HTMLElement;
             if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
-            if (e.key === 'ArrowLeft')  { e.preventDefault(); setFocusWordIndex(p => Math.min(p + 1, max)); }
-            if (e.key === 'ArrowRight') { e.preventDefault(); setFocusWordIndex(p => Math.max(p - 1, 0)); }
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); scrollKeyHeldRef.current = 'left';  }
+            if (e.key === 'ArrowRight') { e.preventDefault(); scrollKeyHeldRef.current = 'right'; }
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [focusMode, focusWordList, focusWordCount]);
+        const onKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') scrollKeyHeldRef.current = null;
+        };
 
-    // ── Carousel transform: measure actual DOM positions so auto-width words center correctly ──
-    useLayoutEffect(() => {
-        if (!focusMode) return;
-        const container = carouselContainerRef.current;
-        if (!container) return;
-        const total = focusWordList.length;
-        const clamped = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
-        const focusEl   = carouselSlotEls.current[clamped];
-        const lastEl    = carouselSlotEls.current[Math.min(clamped + focusWordCount - 1, total - 1)] ?? focusEl;
-        if (!focusEl || !lastEl) return;
-        // In row-reverse flex: higher offsetLeft = visually to the right.
-        // focusEl (lower DOM index) is on the RIGHT; lastEl is on the LEFT.
-        const groupRight = focusEl.offsetLeft + focusEl.offsetWidth;
-        const groupLeft  = lastEl.offsetLeft;
-        const groupCenter = (groupLeft + groupRight) / 2;
-        setCarouselTransformPx(container.offsetWidth / 2 - groupCenter);
-    }, [focusMode, focusWordIndex, focusWordCount, focusWordList]);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup',   onKeyUp);
+        return () => {
+            cancelAnimationFrame(animId);
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup',   onKeyUp);
+            scrollKeyHeldRef.current  = null;
+            scrollVelocityRef.current = 0;
+        };
+    }, [focusMode]);
 
     // surahStatuses based on reading (recitation non-revision) achievements
     const surahStatuses = useMemo<SurahStatus[]>(() => {
@@ -3059,30 +3091,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             {/* ── Right-side compact controls ── */}
                             <div className="flex items-center gap-1.5">
                                 {/* Focus / word-by-word mode toggle */}
-                                <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-md px-1 py-0.5 h-7">
-                                    <button
-                                        onClick={() => { setFocusMode(p => !p); setFocusWordIndex(0); setFocusWordIndex(0); }}
-                                        title={focusMode ? 'Exit focus mode' : 'Focus mode — word by word'}
-                                        className={`h-5 px-2 flex items-center justify-center rounded text-[10px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
-                                    >
-                                        🔍
-                                    </button>
-                                    {focusMode && (
-                                        <>
-                                            <div className="w-px h-4 bg-slate-300 dark:bg-gray-600" />
-                                            {([1, 2, 3] as const).map(n => (
-                                                <button
-                                                    key={n}
-                                                    onClick={() => { setFocusWordCount(n); setFocusWordIndex(0); setFocusWordIndex(0); }}
-                                                    className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors ${focusWordCount === n ? 'bg-violet-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-gray-600'}`}
-                                                    title={`Show ${n} word${n > 1 ? 's' : ''} at a time`}
-                                                >
-                                                    {n}
-                                                </button>
-                                            ))}
-                                        </>
-                                    )}
-                                </div>
+                                <button
+                                    onClick={() => setFocusMode(p => !p)}
+                                    title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
+                                    className={`h-7 px-2.5 flex items-center justify-center rounded-md text-[11px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                >
+                                    🔍
+                                </button>
 
                                 {/* ── "Tools" combined dropdown ── */}
                                 <div className="relative" ref={toolsMenuRef}>
@@ -3155,83 +3170,52 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
-                                const total      = focusWordList.length;
-                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
-
-                                // Fixed font sizes (user-specified) — containers auto-size to fit
-                                const focusFontSize = focusWordCount === 1 ? '14rem'
-                                                    : focusWordCount === 2 ? '12rem'
-                                                    : '10.5rem';
-
-                                // Fade only the immediately adjacent word on each side
-                                const getOpacity = (i: number) => {
-                                    const rel = i - clampedIdx;
-                                    if (rel >= 0 && rel < focusWordCount) return 1;
-                                    const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.25 : 0;
-                                };
-
-                                // Verse label
-                                const fw = focusWordList[clampedIdx];
-                                const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, total - 1)];
-                                const fwSurah = fw?.surah ?? 0;
-                                const fwAyah  = fw?.ayah  ?? 0;
-                                const lwAyah  = lw?.ayah  ?? fwAyah;
-                                const verseLabel = fw
-                                    ? (lwAyah !== fwAyah
-                                        ? `${QURAN_METADATA[fwSurah - 1]?.transliteratedName ?? ''} ${fwAyah} – ${lwAyah}`
-                                        : `${QURAN_METADATA[fwSurah - 1]?.transliteratedName ?? ''} : ${fwAyah}`)
+                                const surahLabel = selectedSurahInfo
+                                    ? `${selectedSurahInfo.transliteratedName}`
                                     : '';
-
+                                const slotStyle: React.CSSProperties = {
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '0.5rem 2.5vw',
+                                    userSelect: 'none',
+                                    overflow: 'visible',
+                                    position: 'relative',
+                                };
                                 return (
-                                    <div dir="ltr" className="flex flex-col items-center justify-center min-h-[60vh] py-10 select-none bg-white dark:bg-gray-800">
-                                        {/* Verse indicator */}
-                                        <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{verseLabel}</p>
+                                    <div dir="ltr" className="flex flex-col justify-center min-h-[60vh] py-10 select-none bg-white dark:bg-gray-800">
+                                        {/* Surah label */}
+                                        <p className="text-center text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{surahLabel}</p>
 
-                                        {/* ── Sliding carousel — auto-width slots, px transform from DOM measurement ── */}
-                                        <div ref={carouselContainerRef} style={{ width: '100%', overflow: 'hidden' }}>
+                                        {/* ── Free-scroll carousel — auto-width, RAF-driven ── */}
+                                        <div
+                                            ref={carouselContainerRef}
+                                            style={{
+                                                width: '100%',
+                                                overflow: 'hidden',
+                                                // Fade edges to indicate more content
+                                                WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
+                                                maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
+                                            }}
+                                        >
+                                            {/* Strip — transform is set imperatively by the RAF loop */}
                                             <div
+                                                ref={carouselStripRef}
                                                 style={{
                                                     display: 'flex',
                                                     flexDirection: 'row-reverse',
-                                                    transform: `translateX(${carouselTransformPx}px)`,
-                                                    transition: 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                                                    width: 'max-content',
                                                     willChange: 'transform',
                                                 }}
                                             >
                                                 {focusWordList.map((item, i) => {
-                                                    const inFocus = i >= clampedIdx && i < clampedIdx + focusWordCount;
-                                                    const opacity = getOpacity(i);
-                                                    // Auto-width slot: no fixed width — container expands to fit any word
-                                                    const slotStyle: React.CSSProperties = {
-                                                        flexShrink: 0,
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        padding: '0.5rem 2vw',
-                                                        opacity,
-                                                        transition: 'opacity 0.38s ease',
-                                                        userSelect: 'none',
-                                                        overflow: 'visible',
-                                                        zIndex: inFocus ? 10 : 1,
-                                                        position: 'relative',
-                                                    };
-
                                                     if (item.kind === 'marker') {
                                                         return (
-                                                            <div
-                                                                key={`fm-${item.surah}:${item.ayah}`}
-                                                                ref={el => { carouselSlotEls.current[i] = el; }}
-                                                                style={slotStyle}
-                                                            >
+                                                            <div key={`fm-${item.surah}:${item.ayah}`} style={slotStyle}>
                                                                 <span
-                                                                    className="font-quranic text-slate-500 dark:text-slate-400 flex items-center justify-center rounded-full border-2 border-current"
-                                                                    style={{
-                                                                        fontSize: inFocus ? '2.5rem' : '1.5rem',
-                                                                        width:  inFocus ? '4rem' : '2.8rem',
-                                                                        height: inFocus ? '4rem' : '2.8rem',
-                                                                        transition: 'font-size 0.38s ease, width 0.38s ease, height 0.38s ease',
-                                                                    }}
+                                                                    className="font-quranic text-slate-400 dark:text-slate-500 flex items-center justify-center rounded-full border-2 border-current"
+                                                                    style={{ fontSize: '2.5rem', width: '4rem', height: '4rem' }}
                                                                 >
                                                                     {toEasternArabicNumerals(item.ayah)}
                                                                 </span>
@@ -3239,7 +3223,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                         );
                                                     }
 
-                                                    // Word item — auto-width container, same font for all words
                                                     const letters = parseWordIntoLetters(item.word);
                                                     const prevFocusItem = focusWordList[i - 1];
                                                     const nextFocusItem = focusWordList[i + 1];
@@ -3248,9 +3231,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     return (
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
-                                                            ref={el => { carouselSlotEls.current[i] = el; }}
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
-                                                            style={{ ...slotStyle, fontSize: focusFontSize }}
+                                                            style={{ ...slotStyle, fontSize: '10.5rem', lineHeight: 2.2 }}
                                                         >
                                                             <span className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
@@ -3289,21 +3271,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             </div>
                                         </div>
 
-                                        {/* ── Progress bar ── */}
+                                        {/* ── Progress bar (updated imperatively) ── */}
                                         <div className="mt-10 flex flex-col items-center gap-1.5">
                                             <div className="w-52 h-1 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-violet-500 rounded-full"
-                                                    style={{
-                                                        width: total > 0 ? `${Math.min(((clampedIdx + focusWordCount) / total) * 100, 100)}%` : '0%',
-                                                        transition: 'width 0.3s ease',
-                                                    }}
-                                                />
+                                                <div ref={progressBarFillRef} className="h-full bg-violet-500 rounded-full" style={{ width: '0%' }} />
                                             </div>
-                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tabular-nums">
-                                                {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, total)} / {total}
-                                            </p>
-                                            <p className="text-[9px] text-slate-300 dark:text-slate-600 tracking-wide">← next · → back</p>
+                                            <p className="text-[9px] text-slate-300 dark:text-slate-600 tracking-wide">← scroll · →</p>
                                         </div>
                                     </div>
                                 );
