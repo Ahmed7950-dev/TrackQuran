@@ -1592,7 +1592,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const list: FocusItem[] = [];
         verses.forEach(verse => {
             const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-            const words = verse.text_uthmani.replace(/ْ/g, 'ہ').split(' ').filter(w => w.trim());
+            const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ').filter(w => w.trim());
             words.forEach((word, wordIdx) => {
                 list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
             });
@@ -3269,22 +3269,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         {/* Surah label */}
                                         <p className="text-center text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{surahLabel}</p>
 
-                                        {/* ── Verse number bar ── */}
-                                        <div
-                                            ref={verseBarRef}
-                                            className="flex overflow-x-auto gap-1.5 px-6 pb-4 justify-center"
-                                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                                        >
-                                            {Array.from({ length: selectedSurahInfo?.numberOfAyahs ?? 0 }, (_, i) => i + 1).map(ayah => (
-                                                <button
-                                                    key={ayah}
-                                                    data-versenum={ayah}
-                                                    onClick={() => scrollToAyah(ayah)}
-                                                    className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-mono transition-colors duration-200 ${currentAyah === ayah ? 'bg-violet-600 text-white shadow-sm scale-110' : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
-                                                >
-                                                    {toEasternArabicNumerals(ayah)}
-                                                </button>
-                                            ))}
+                                        {/* ── Verse navigation bar ── */}
+                                        <div className="px-4 pb-5">
+                                            <div
+                                                ref={verseBarRef}
+                                                className="flex overflow-x-auto gap-1 py-1 px-2"
+                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                            >
+                                                {Array.from({ length: selectedSurahInfo?.numberOfAyahs ?? 0 }, (_, i) => i + 1).map(ayah => (
+                                                    <button
+                                                        key={ayah}
+                                                        data-versenum={ayah}
+                                                        onClick={() => scrollToAyah(ayah)}
+                                                        className={`flex-shrink-0 min-w-[2rem] h-8 px-2 rounded-lg text-[11px] font-semibold transition-all duration-200 ${
+                                                            currentAyah === ayah
+                                                                ? 'bg-violet-600 text-white shadow-md scale-110 ring-2 ring-violet-300 dark:ring-violet-700'
+                                                                : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:text-violet-700 dark:hover:text-violet-300'
+                                                        }`}
+                                                    >
+                                                        {ayah}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-1 tracking-wide">Verse {currentAyah} of {selectedSurahInfo?.numberOfAyahs ?? '—'}</p>
                                         </div>
 
                                         {/* ── Free-scroll carousel — auto-width, RAF-driven ── */}
