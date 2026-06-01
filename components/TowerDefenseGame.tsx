@@ -16,7 +16,7 @@ const SPRITE_SIZE  = 92;  // square — source frames are 1:1 so keep aspect
 const SPRITE_W     = SPRITE_SIZE;
 const SPRITE_H     = SPRITE_SIZE;
 const HAMZAH_FOOT_RATIO = 0.88; // feet at 88% of sprite height (Hamzah / player)
-const ALBERT_FOOT_RATIO = 0.55; // feet at 55% of sprite height (Albert / enemy)
+const ALBERT_FOOT_RATIO = 0.75; // feet at 75% of sprite height (Albert / enemy)
 
 // ─── Game constants ─────────────────────────────────────────────────────────────
 const CANVAS_H     = 270;
@@ -515,8 +515,8 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             // Hamzah faces right → player walks right → draw as-is
             ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, SPRITE_W, SPRITE_H);
           } else {
-            // Albert faces right → enemy walks left → flip horizontally
-            ctx.translate(s.x + SPRITE_W / 2, drawY);
+            // Albert faces right → enemy walks left → flip horizontally around s.x
+            ctx.translate(s.x, drawY);
             ctx.scale(-1, 1);
             ctx.drawImage(sheet, col * fw, row * fh, fw, fh, -SPRITE_W / 2, 0, SPRITE_W, SPRITE_H);
           }
