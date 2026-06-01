@@ -1647,14 +1647,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, []);
 
     // ── Flat word list for focus/word-by-word mode ──────────────────────────
-    const focusWordList = useMemo<{ word: string; surah: number; ayah: number; wordIdx: number }[]>(() => {
-        const list: { word: string; surah: number; ayah: number; wordIdx: number }[] = [];
+    // FocusItem: either a word or a verse-end marker (shows ayah number between verses)
+    type FocusItem =
+        | { kind: 'word';   word: string; surah: number; ayah: number; wordIdx: number }
+        | { kind: 'marker'; surah: number; ayah: number };
+
+    const focusWordList = useMemo<FocusItem[]>(() => {
+        const list: FocusItem[] = [];
         verses.forEach(verse => {
             const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
             const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ').filter(w => w.trim());
             words.forEach((word, wordIdx) => {
-                list.push({ word, surah: surahNum, ayah: ayahNum, wordIdx });
+                list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
             });
+            // Insert verse-end marker so ayah number appears between verses
+            list.push({ kind: 'marker', surah: surahNum, ayah: ayahNum });
         });
         return list;
     }, [verses]);
@@ -3130,46 +3137,46 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
-                                // ── Carousel layout uses vw units so it fills the full container ──
-                                const FADE_N     = 2;
-                                const totalSlots = focusWordCount + 2 * FADE_N; // 7 for 3-word focus
-                                const slotVw     = 100 / totalSlots;            // vw per slot
+                                // ── Carousel layout ───────────────────────────────────────────────
+                                // FADE_N=1: only 1 faded word per side → larger slot = less overlap
+                                const FADE_N     = 1;
+                                const totalSlots = focusWordCount + 2 * FADE_N;
+                                const slotVw     = 100 / totalSlots;
 
                                 const total      = focusWordList.length;
                                 const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
 
-                                // row-reverse anchors word[0] at the container's RIGHT edge (correct Arabic order).
-                                // In row-reverse, word[i] sits at (W - (i+1)*S) from the left, where W = totalSlots*S.
-                                // To place word[clampedIdx] at the rightmost focus slot (index FADE_N+focusWordCount-1):
-                                //   W-(clampedIdx+1)*S + tx = (FADE_N+focusWordCount-1)*S
-                                //   tx = (clampedIdx - FADE_N) * S  ← simple!
+                                // row-reverse: word[0] anchors at container right edge (Arabic RTL order).
+                                // tx = (clampedIdx - FADE_N) * slotVw keeps focus zone centred.
                                 const translateXVw = (clampedIdx - FADE_N) * slotVw;
 
                                 const focusFontSize = focusWordCount === 1 ? '14rem'
                                                     : focusWordCount === 2 ? '12rem'
                                                     : '10.5rem';
 
-                                // Opacity / scale fade based on distance from focus zone
                                 const getOpacity = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.30 : d === 2 ? 0.09 : 0;
+                                    return d === 1 ? 0.28 : 0;
                                 };
                                 const getScale = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.70 : d === 2 ? 0.56 : 0.5;
+                                    return d === 1 ? 0.68 : 0.5;
                                 };
 
-                                // Verse label
+                                // Verse label from first focused word item
                                 const fw = focusWordList[clampedIdx];
                                 const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, total - 1)];
+                                const fwSurah = fw ? (fw.kind === 'word' ? fw.surah : fw.surah) : 0;
+                                const fwAyah  = fw ? (fw.kind === 'word' ? fw.ayah  : fw.ayah)  : 0;
+                                const lwAyah  = lw ? (lw.kind === 'word' ? lw.ayah  : lw.ayah)  : fwAyah;
                                 const verseLabel = fw
-                                    ? (lw && (lw.surah !== fw.surah || lw.ayah !== fw.ayah))
-                                        ? `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} ${fw.ayah} – ${lw.ayah}`
-                                        : `${QURAN_METADATA[fw.surah - 1]?.transliteratedName ?? ''} : ${fw.ayah}`
+                                    ? (lwAyah !== fwAyah
+                                        ? `${QURAN_METADATA[fwSurah - 1]?.transliteratedName ?? ''} ${fwAyah} – ${lwAyah}`
+                                        : `${QURAN_METADATA[fwSurah - 1]?.transliteratedName ?? ''} : ${fwAyah}`)
                                     : '';
 
                                 return (
@@ -3177,46 +3184,73 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         {/* Verse indicator */}
                                         <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{verseLabel}</p>
 
-                                        {/* ── Sliding carousel ──────────────────────────────── */}
-                                        {/* overflow:hidden clips the long row horizontally;
-                                            generous lineHeight + padding handle tall Arabic diacritics */}
+                                        {/* ── Sliding carousel ── */}
                                         <div style={{ width: '100%', overflow: 'hidden' }}>
                                             <div
                                                 style={{
                                                     display: 'flex',
-                                                    flexDirection: 'row-reverse', // word[0] rightmost = natural Arabic order
+                                                    flexDirection: 'row-reverse',
                                                     transform: `translateX(${translateXVw}vw)`,
                                                     transition: 'transform 0.38s cubic-bezier(0.35, 0.0, 0.25, 1.0)',
                                                     willChange: 'transform',
                                                 }}
                                             >
-                                                {focusWordList.map((w, i) => (
-                                                    <div
-                                                        key={`fw-${w.surah}:${w.ayah}:${w.wordIdx}`}
-                                                        className="font-quranic text-slate-900 dark:text-slate-100"
-                                                        style={{
-                                                            width: `${slotVw}vw`,
-                                                            flexShrink: 0,
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            fontSize: focusFontSize,
-                                                            lineHeight: 2.0,      // tall enough for all diacritics
-                                                            paddingTop: '0.5rem',
-                                                            paddingBottom: '0.5rem',
-                                                            opacity: getOpacity(i),
-                                                            transform: `scale(${getScale(i)})`,
-                                                            transition: 'opacity 0.38s ease, transform 0.38s ease',
-                                                            userSelect: 'none',
-                                                        }}
-                                                    >
-                                                        {w.word}
-                                                    </div>
-                                                ))}
+                                                {focusWordList.map((item, i) => {
+                                                    const inFocus = i >= clampedIdx && i < clampedIdx + focusWordCount;
+                                                    const opacity  = getOpacity(i);
+                                                    const scale    = getScale(i);
+                                                    const baseStyle: React.CSSProperties = {
+                                                        width: `${slotVw}vw`,
+                                                        flexShrink: 0,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        lineHeight: 2.0,
+                                                        paddingTop: '0.5rem',
+                                                        paddingBottom: '0.5rem',
+                                                        opacity,
+                                                        transform: `scale(${scale})`,
+                                                        transition: 'opacity 0.38s ease, transform 0.38s ease',
+                                                        userSelect: 'none',
+                                                        overflow: 'visible',
+                                                    };
+
+                                                    if (item.kind === 'marker') {
+                                                        return (
+                                                            <div
+                                                                key={`fm-${item.surah}:${item.ayah}`}
+                                                                style={baseStyle}
+                                                            >
+                                                                {/* Verse-end number circle */}
+                                                                <span
+                                                                    className="font-quranic text-slate-500 dark:text-slate-400 flex items-center justify-center rounded-full border-2 border-current"
+                                                                    style={{
+                                                                        fontSize: inFocus ? '2.5rem' : '1.5rem',
+                                                                        width:  inFocus ? '4rem' : '2.8rem',
+                                                                        height: inFocus ? '4rem' : '2.8rem',
+                                                                        transition: 'font-size 0.38s ease, width 0.38s ease, height 0.38s ease',
+                                                                    }}
+                                                                >
+                                                                    {toEasternArabicNumerals(item.ayah)}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <div
+                                                            key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
+                                                            className="font-quranic text-slate-900 dark:text-slate-100"
+                                                            style={{ ...baseStyle, fontSize: focusFontSize }}
+                                                        >
+                                                            {item.word}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 
-                                        {/* ── Progress bar ───────────────────────────────── */}
+                                        {/* ── Progress bar ── */}
                                         <div className="mt-10 flex flex-col items-center gap-1.5">
                                             <div className="w-52 h-1 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                                 <div
