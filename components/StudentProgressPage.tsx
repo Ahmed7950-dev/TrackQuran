@@ -3143,21 +3143,31 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
                                 const translateXVw = (clampedIdx - FADE_N) * slotVw;
 
-                                const focusFontSize = focusWordCount === 1 ? '14rem'
-                                                    : focusWordCount === 2 ? '12rem'
-                                                    : '10.5rem';
+                                // Max vw font size per word-count mode (for short/avg words)
+                                const maxFontVw = focusWordCount === 1 ? 20 : focusWordCount === 2 ? 14 : 10;
+
+                                // Count base Arabic letters (strip diacritics) to size each word dynamically
+                                const baseLetterCount = (word: string) =>
+                                    [...word].filter(c => {
+                                        const cp = c.codePointAt(0)!;
+                                        return (cp >= 0x0621 && cp <= 0x063A) || (cp >= 0x0641 && cp <= 0x064A) ||
+                                               (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
+                                    }).length;
+
+                                // Returns font-size string: fitted so the word fills ≤95% of its slotVw
+                                // Arabic letter ≈ 0.62em wide → fontSize = slotVw * (1/0.62) / letterCount
+                                const getFontSizeVw = (word: string, focus: boolean): string => {
+                                    if (!focus) return `${Math.max(maxFontVw * 0.28, 2.5)}vw`;
+                                    const len = Math.max(baseLetterCount(word), 1);
+                                    const fittedVw = (slotVw * 1.52) / len;
+                                    return `${Math.min(maxFontVw, fittedVw)}vw`;
+                                };
 
                                 const getOpacity = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
                                     const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.28 : 0;
-                                };
-                                const getScale = (i: number) => {
-                                    const rel = i - clampedIdx;
-                                    if (rel >= 0 && rel < focusWordCount) return 1;
-                                    const d = rel < 0 ? -rel : rel - focusWordCount + 1;
-                                    return d === 1 ? 0.68 : 0.5;
+                                    return d === 1 ? 0.25 : 0;
                                 };
 
                                 // Verse label from first focused word item
@@ -3191,19 +3201,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                 {focusWordList.map((item, i) => {
                                                     const inFocus = i >= clampedIdx && i < clampedIdx + focusWordCount;
                                                     const opacity  = getOpacity(i);
-                                                    const scale    = getScale(i);
                                                     const baseStyle: React.CSSProperties = {
                                                         width: `${slotVw}vw`,
                                                         flexShrink: 0,
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        lineHeight: 2.0,
+                                                        lineHeight: 2.2,
                                                         paddingTop: '0.5rem',
                                                         paddingBottom: '0.5rem',
                                                         opacity,
-                                                        transform: `scale(${scale})`,
-                                                        transition: 'opacity 0.38s ease, transform 0.38s ease',
+                                                        transition: 'opacity 0.38s ease',
                                                         userSelect: 'none',
                                                         overflow: 'visible',
                                                     };
@@ -3238,7 +3246,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
-                                                            style={{ ...baseStyle, fontSize: focusFontSize, zIndex: inFocus ? 10 : 1, position: 'relative' }}
+                                                            style={{ ...baseStyle, fontSize: getFontSizeVw(item.word, inFocus), zIndex: inFocus ? 10 : 1, position: 'relative' }}
                                                         >
                                                             {/* Single inline span = one flex child; letters inside flow as inline Arabic text */}
                                                             <span className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
