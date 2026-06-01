@@ -128,6 +128,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const ptW = useRef(0); const ptH = useRef(PLAYER_TENT_TARGET_H);
   const etW = useRef(0); const etH = useRef(ENEMY_TENT_TARGET_H);
   const bgReady        = useRef(false);
+  const loadingComplete = useRef(false); // true once ALL asset loads settle
 
   const makeGS = (): GS => ({
     soldiers: [], particles: [],
@@ -158,55 +159,58 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       });
 
     (async () => {
-      // Hamzah sprites (player / left side)
-      try {
-        const [wImg, fImg] = await Promise.all([
-          load('/sprites/hamzah-walk.png'),
-          load('/sprites/hamzah-fight.png'),
-        ]);
-        if (!cancelled) {
-          hamzahWalk.current  = removeWhiteBg(wImg);
-          hamzahFight.current = removeWhiteBg(fImg);
-          hamzahReady.current = true;
-        }
-      } catch (e) { console.warn('Hamzah sprites missing — fallback drawing active.', e); }
+      // Load ALL assets in parallel — game stays on loading screen until every
+      // attempt settles (success or failure), then flips to the real render in one frame.
+      await Promise.allSettled([
 
-      // Albert sprites (enemy / right side)
-      try {
-        const [wImg, fImg] = await Promise.all([
-          load('/sprites/Albert-walk.png'),
-          load('/sprites/Albert-attack.png'),
-        ]);
-        if (!cancelled) {
-          albertWalk.current  = removeWhiteBg(wImg);
-          albertFight.current = removeWhiteBg(fImg);
-          albertReady.current = true;
-        }
-      } catch (e) { console.warn('Albert sprites missing — fallback drawing active.', e); }
+        // Hamzah (player / left)
+        Promise.all([load('/sprites/hamzah-walk.png'), load('/sprites/hamzah-fight.png')])
+          .then(([w, f]) => {
+            if (cancelled) return;
+            hamzahWalk.current  = removeWhiteBg(w);
+            hamzahFight.current = removeWhiteBg(f);
+            hamzahReady.current = true;
+          })
+          .catch(() => console.warn('Hamzah sprites missing.')),
 
-      // Background & tent images (non-blocking — each fails independently)
-      try {
-        const bg = await load('/sprites/battle-bg.png');
-        if (!cancelled) { bgImg.current = bg; bgReady.current = true; }
-      } catch { console.warn('battle-bg.png not found — procedural background active.'); }
+        // Albert (enemy / right)
+        Promise.all([load('/sprites/Albert-walk.png'), load('/sprites/Albert-attack.png')])
+          .then(([w, f]) => {
+            if (cancelled) return;
+            albertWalk.current  = removeWhiteBg(w);
+            albertFight.current = removeWhiteBg(f);
+            albertReady.current = true;
+          })
+          .catch(() => console.warn('Albert sprites missing.')),
 
-      try {
-        const pt = await load('/sprites/tent-player.png');
-        if (!cancelled) {
-          playerTentCvs.current = removeWhiteBg(pt);
-          ptH.current = PLAYER_TENT_TARGET_H;
-          ptW.current = (pt.naturalWidth / pt.naturalHeight) * PLAYER_TENT_TARGET_H;
-        }
-      } catch { console.warn('tent-player.png not found — procedural tent active.'); }
+        // Background
+        load('/sprites/battle-bg.png')
+          .then(bg => { if (!cancelled) { bgImg.current = bg; bgReady.current = true; } })
+          .catch(() => console.warn('battle-bg.png missing.')),
 
-      try {
-        const et = await load('/sprites/tent-enemy.png');
-        if (!cancelled) {
-          enemyTentCvs.current = removeWhiteBg(et);
-          etH.current = ENEMY_TENT_TARGET_H;
-          etW.current = (et.naturalWidth / et.naturalHeight) * ENEMY_TENT_TARGET_H;
-        }
-      } catch { console.warn('tent-enemy.png not found — procedural tent active.'); }
+        // Player tent
+        load('/sprites/tent-player.png')
+          .then(pt => {
+            if (cancelled) return;
+            playerTentCvs.current = removeWhiteBg(pt);
+            ptH.current = PLAYER_TENT_TARGET_H;
+            ptW.current = (pt.naturalWidth / pt.naturalHeight) * PLAYER_TENT_TARGET_H;
+          })
+          .catch(() => console.warn('tent-player.png missing.')),
+
+        // Enemy tent
+        load('/sprites/tent-enemy.png')
+          .then(et => {
+            if (cancelled) return;
+            enemyTentCvs.current = removeWhiteBg(et);
+            etH.current = ENEMY_TENT_TARGET_H;
+            etW.current = (et.naturalWidth / et.naturalHeight) * ENEMY_TENT_TARGET_H;
+          })
+          .catch(() => console.warn('tent-enemy.png missing.')),
+
+      ]);
+
+      if (!cancelled) loadingComplete.current = true;
     })();
 
     return () => { cancelled = true; };
@@ -268,6 +272,32 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
       const LEFT_X  = LEFT_ANCHOR;
       const RIGHT_X = cw - LEFT_ANCHOR;
+
+      // ── LOADING SCREEN — show until all assets have settled ────────────────
+      if (!loadingComplete.current) {
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        // Desert-toned dark background
+        const loadBg = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+        loadBg.addColorStop(0, '#2d1a0a');
+        loadBg.addColorStop(1, '#1a0d04');
+        ctx.fillStyle = loadBg;
+        ctx.fillRect(0, 0, cw, CANVAS_H);
+        // Pulsing sword icon
+        const pulse = 0.75 + 0.25 * Math.sin(tick * 0.08);
+        ctx.font = `${Math.round(32 * pulse)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚔️', cw / 2, CANVAS_H / 2 - 18);
+        // Loading text
+        const dots = '.'.repeat(1 + (Math.floor(tick / 18) % 3));
+        ctx.font = 'bold 14px system-ui, sans-serif';
+        ctx.fillStyle = `rgba(255,200,100,${pulse})`;
+        ctx.fillText(`Loading${dots}`, cw / 2, CANVAS_H / 2 + 18);
+        ctx.restore();
+        animId = requestAnimationFrame(loop);
+        return;
+      }
 
       // ── UPDATE ──────────────────────────────────────────────────────────────
       if (!state.winner) {
