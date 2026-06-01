@@ -1735,7 +1735,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Focus-mode: RAF momentum scroll driven by arrow keys ─────────────────
     useEffect(() => {
         if (!focusMode) return;
-        const SPEED    = 22;   // px per frame while key is held
+        const SPEED    = 10;   // px per frame while key is held
         const FRICTION = 0.87; // velocity decay per frame on key release
         let animId: number;
         let initialized = false;
