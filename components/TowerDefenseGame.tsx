@@ -7,14 +7,15 @@ export interface TowerDefenseRef {
 }
 
 // ─── Sprite sheet config ───────────────────────────────────────────────────────
-// Both sheets are 5 columns × 5 rows = 25 frames, character faces LEFT
+// Both sheets are 5 columns × 5 rows = 25 frames, character faces RIGHT
 const SHEET_COLS   = 5;
 const SHEET_ROWS   = 5;
 const TOTAL_FRAMES = SHEET_COLS * SHEET_ROWS; // 25
-const ANIM_TICK    = 3;   // advance one sprite frame every N game ticks
-const SPRITE_W     = 85;  // on-canvas display width  (px)
-const SPRITE_H     = 105; // on-canvas display height (px)
-const FOOT_RATIO   = 0.90; // feet are at this fraction of sprite height
+const ANIM_TICK    = 3;    // advance one sprite frame every N game ticks
+const SPRITE_SIZE  = 92;   // square draw size — source frames are square so keep 1:1
+const SPRITE_W     = SPRITE_SIZE;
+const SPRITE_H     = SPRITE_SIZE;
+const FOOT_RATIO   = 0.88; // feet are at this fraction of sprite height
 
 // ─── Game constants ────────────────────────────────────────────────────────────
 const CANVAS_H    = 270;
@@ -513,13 +514,13 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           ctx.save();
 
           if (s.side === 'player') {
-            // Sprite faces left → player (walks right) needs horizontal flip
+            // Sprite faces right → player walks right → draw as-is
+            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, SPRITE_W, SPRITE_H);
+          } else {
+            // Sprite faces right → enemy walks left → flip horizontally
             ctx.translate(s.x + SPRITE_W / 2, drawY);
             ctx.scale(-1, 1);
-            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, 0, 0, SPRITE_W, SPRITE_H);
-          } else {
-            // Enemy walks left → sprite faces left → draw as-is
-            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, SPRITE_W, SPRITE_H);
+            ctx.drawImage(sheet, col * fw, row * fh, fw, fh, -SPRITE_W / 2, 0, SPRITE_W, SPRITE_H);
           }
 
           ctx.restore();
