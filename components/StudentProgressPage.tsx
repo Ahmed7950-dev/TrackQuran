@@ -1308,6 +1308,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showGhunnah, setShowGhunnah] = useState(false);
     const [showMadd, setShowMadd] = useState(false);
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
+    // ── Focus / word-by-word reading mode ───────────────────────────────────
+    const [focusMode, setFocusMode] = useState(false);
+    const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(1);
+    const [focusWordIndex, setFocusWordIndex] = useState(0);
     const tajweedMenuRef = useRef<HTMLDivElement>(null);
 
     // ── Teacher's Notes popup ────────────────────────────────────────────────
@@ -1642,6 +1646,37 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
+    // ── Flat word list for focus/word-by-word mode ──────────────────────────
+    const focusWordList = useMemo<{ word: string; surah: number; ayah: number; wordIdx: number }[]>(() => {
+        const list: { word: string; surah: number; ayah: number; wordIdx: number }[] = [];
+        verses.forEach(verse => {
+            const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
+            const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ').filter(w => w.trim());
+            words.forEach((word, wordIdx) => {
+                list.push({ word, surah: surahNum, ayah: ayahNum, wordIdx });
+            });
+        });
+        return list;
+    }, [verses]);
+
+    // ── Focus-mode arrow key navigation ─────────────────────────────────────
+    useEffect(() => {
+        if (!focusMode) return;
+        const handleFocusKey = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setFocusWordIndex(prev => Math.min(prev + 1, Math.max(0, focusWordList.length - focusWordCount)));
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                setFocusWordIndex(prev => Math.max(0, prev - 1));
+            }
+        };
+        window.addEventListener('keydown', handleFocusKey);
+        return () => window.removeEventListener('keydown', handleFocusKey);
+    }, [focusMode, focusWordList, focusWordCount]);
+
     // surahStatuses based on reading (recitation non-revision) achievements
     const surahStatuses = useMemo<SurahStatus[]>(() => {
         const readingAchs = recitationAchievements.filter(a => !a.isRevision);
@@ -1667,6 +1702,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             };
         });
     }, [recitationAchievements]);
+
 
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status']) => {
         if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
@@ -2995,6 +3031,31 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
                             {/* Tajweed colour toggles — combined dropdown */}
                             <div className="flex items-center gap-1.5">
+                                {/* Focus / word-by-word mode toggle */}
+                                <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-md px-1 py-0.5 h-7">
+                                    <button
+                                        onClick={() => { setFocusMode(p => !p); setFocusWordIndex(0); }}
+                                        title={focusMode ? 'Exit focus mode' : 'Focus mode — word by word'}
+                                        className={`h-5 px-2 flex items-center justify-center rounded text-[10px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                    >
+                                        🔍
+                                    </button>
+                                    {focusMode && (
+                                        <>
+                                            <div className="w-px h-4 bg-slate-300 dark:bg-gray-600" />
+                                            {([1, 2, 3] as const).map(n => (
+                                                <button
+                                                    key={n}
+                                                    onClick={() => { setFocusWordCount(n); setFocusWordIndex(0); }}
+                                                    className={`w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-colors ${focusWordCount === n ? 'bg-violet-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-gray-600'}`}
+                                                    title={`Show ${n} word${n > 1 ? 's' : ''} at a time`}
+                                                >
+                                                    {n}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
                                 {/* Translation toggle */}
                                 <button onClick={() => setShowTranslation(prev => !prev)} className={`w-8 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors duration-200 px-2 ${showTranslation ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-200 text-slate-700 hover:bg-teal-100'}`} aria-pressed={showTranslation} title={t('liveSession.toggleTranslation')}>T</button>
 
@@ -3066,11 +3127,80 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
                 <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
                     <div>
+                        {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
+                        {focusMode ? (
+                            (() => {
+                                const clampedIdx = Math.min(focusWordIndex, Math.max(0, focusWordList.length - focusWordCount));
+                                const visibleWords = focusWordList.slice(clampedIdx, clampedIdx + focusWordCount);
+                                const firstWord = visibleWords[0];
+                                const lastWord = visibleWords[visibleWords.length - 1];
+                                const atStart = clampedIdx === 0;
+                                const atEnd = clampedIdx >= focusWordList.length - focusWordCount;
+                                const verseLabel = firstWord
+                                    ? (lastWord && (lastWord.surah !== firstWord.surah || lastWord.ayah !== firstWord.ayah))
+                                        ? `${QURAN_METADATA[firstWord.surah - 1]?.transliteratedName ?? ''} ${firstWord.ayah} – ${lastWord.ayah}`
+                                        : `${QURAN_METADATA[firstWord?.surah - 1]?.transliteratedName ?? ''} : ${firstWord.ayah}`
+                                    : '';
+                                return (
+                                    <div dir="rtl" className="flex flex-col items-center justify-center min-h-[50vh] px-4 py-8 select-none">
+                                        {/* Verse indicator */}
+                                        <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-wide uppercase">{verseLabel}</p>
+
+                                        {/* Word strip */}
+                                        <div className="flex items-center gap-6 w-full justify-center">
+                                            {/* Right arrow (go back) */}
+                                            <button
+                                                onClick={() => setFocusWordIndex(prev => Math.max(0, prev - 1))}
+                                                disabled={atStart}
+                                                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-light transition-all ${atStart ? 'opacity-20 cursor-not-allowed' : 'bg-slate-100 dark:bg-gray-700 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-slate-600 dark:text-slate-300'}`}
+                                                title="Previous word (→)"
+                                            >›</button>
+
+                                            {/* Words display */}
+                                            <div className="flex-1 flex items-center justify-center gap-6 flex-wrap">
+                                                {visibleWords.map((w, i) => (
+                                                    <span
+                                                        key={`${w.surah}:${w.ayah}:${w.wordIdx}:${i}`}
+                                                        className="font-quranic text-slate-900 dark:text-slate-100"
+                                                        style={{ fontSize: focusWordCount === 1 ? '5rem' : focusWordCount === 2 ? '4rem' : '3rem', lineHeight: 1.8 }}
+                                                    >
+                                                        {w.word}
+                                                    </span>
+                                                ))}
+                                            </div>
+
+                                            {/* Left arrow (advance forward) */}
+                                            <button
+                                                onClick={() => setFocusWordIndex(prev => Math.min(prev + 1, Math.max(0, focusWordList.length - focusWordCount)))}
+                                                disabled={atEnd}
+                                                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-2xl font-light transition-all ${atEnd ? 'opacity-20 cursor-not-allowed' : 'bg-slate-100 dark:bg-gray-700 hover:bg-violet-100 dark:hover:bg-violet-900/40 text-slate-600 dark:text-slate-300'}`}
+                                                title="Next word (←)"
+                                            >‹</button>
+                                        </div>
+
+                                        {/* Progress bar + counter */}
+                                        <div className="mt-10 flex flex-col items-center gap-2">
+                                            <div className="w-56 h-1.5 bg-slate-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-violet-500 rounded-full transition-all duration-200"
+                                                    style={{ width: focusWordList.length > 0 ? `${Math.min(((clampedIdx + focusWordCount) / focusWordList.length) * 100, 100)}%` : '0%' }}
+                                                />
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                                {clampedIdx + 1}–{Math.min(clampedIdx + focusWordCount, focusWordList.length)} / {focusWordList.length}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">← next &nbsp;·&nbsp; → back</p>
+                                        </div>
+                                    </div>
+                                );
+                            })()
+                        ) : (
+                        <>
                         <div className="text-center pt-12 pb-8 px-2"><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></div>
                         {showTranslation && isTranslationLoading && <div className="text-center my-4 p-3 bg-slate-100 dark:bg-gray-700 rounded-lg mx-6 sm:mx-12"><p className="text-slate-600 dark:text-slate-300 animate-pulse font-semibold">{t('liveSession.loadingTranslation')}</p></div>}
                         {showTranslation && translationError && <div className="text-center my-4 p-3 bg-red-100 text-red-700 rounded-lg mx-6 sm:mx-12"><p className="font-semibold">{translationError}</p></div>}
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
-                        {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>}
+                        {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>}
                         {renderSurahContent()}
                         {/* Pagination Controls */}
                         {!isLoading && !error && verses.length > 0 && (
@@ -3107,6 +3237,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     </svg>
                                 </button>
                             </div>
+                        )}
+                        </>
                         )}
                     </div>
                 </div>
