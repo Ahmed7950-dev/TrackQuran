@@ -3131,7 +3131,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {focusMode ? (
                             (() => {
                                 // ── Carousel constants ────────────────────────────────────────────
-                                const SLOT_W   = 280;   // px per word slot
+                                const SLOT_W   = 220;   // px per word slot
                                 const FADE_N   = 2;     // faded word count on each side
 
                                 const clampedIdx = Math.min(focusWordIndex, Math.max(0, focusWordList.length - focusWordCount));
@@ -3139,10 +3139,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 // translateX positions word[clampedIdx] at FADE_N slots from the left
                                 const translateX = (FADE_N - clampedIdx) * SLOT_W;
 
-                                // 4× the default text-4xl (2.25rem) = 9rem; scale down for more words
-                                const focusFontSize = focusWordCount === 1 ? '9rem'
-                                                    : focusWordCount === 2 ? '7rem'
-                                                    : '5.5rem';
+                                const focusFontSize = focusWordCount === 1 ? '14rem'
+                                                    : focusWordCount === 2 ? '12rem'
+                                                    : '10.5rem';
 
                                 // Per-word visual weight based on distance from focus zone
                                 const getOpacity = (i: number) => {
@@ -3206,7 +3205,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
                                                             fontSize: focusFontSize,
-                                                            lineHeight: 1.9,
+                                                            lineHeight: 1.4,
                                                             opacity: getOpacity(i),
                                                             transform: `scale(${getScale(i)})`,
                                                             transition: 'opacity 0.38s ease, transform 0.38s ease',
