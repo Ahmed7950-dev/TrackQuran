@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
@@ -1312,6 +1312,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [focusMode, setFocusMode] = useState(false);
     const [focusWordCount, setFocusWordCount] = useState<1 | 2 | 3>(3);
     const [focusWordIndex, setFocusWordIndex] = useState(0);
+    const [carouselTransformPx, setCarouselTransformPx] = useState(0);
+    const carouselContainerRef = useRef<HTMLDivElement>(null);
+    const carouselSlotEls      = useRef<(HTMLDivElement | null)[]>([]);
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1682,6 +1685,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [focusMode, focusWordList, focusWordCount]);
+
+    // ── Carousel transform: measure actual DOM positions so auto-width words center correctly ──
+    useLayoutEffect(() => {
+        if (!focusMode) return;
+        const container = carouselContainerRef.current;
+        if (!container) return;
+        const total = focusWordList.length;
+        const clamped = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
+        const focusEl   = carouselSlotEls.current[clamped];
+        const lastEl    = carouselSlotEls.current[Math.min(clamped + focusWordCount - 1, total - 1)] ?? focusEl;
+        if (!focusEl || !lastEl) return;
+        // In row-reverse flex: higher offsetLeft = visually to the right.
+        // focusEl (lower DOM index) is on the RIGHT; lastEl is on the LEFT.
+        const groupRight = focusEl.offsetLeft + focusEl.offsetWidth;
+        const groupLeft  = lastEl.offsetLeft;
+        const groupCenter = (groupLeft + groupRight) / 2;
+        setCarouselTransformPx(container.offsetWidth / 2 - groupCenter);
+    }, [focusMode, focusWordIndex, focusWordCount, focusWordList]);
 
     // surahStatuses based on reading (recitation non-revision) achievements
     const surahStatuses = useMemo<SurahStatus[]>(() => {
@@ -3134,35 +3155,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
-                                // ── Carousel layout ───────────────────────────────────────────────
-                                const FADE_N     = 1;
-                                const totalSlots = focusWordCount + 2 * FADE_N;
-                                const slotVw     = 100 / totalSlots;
-
                                 const total      = focusWordList.length;
                                 const clampedIdx = Math.min(focusWordIndex, Math.max(0, total - focusWordCount));
-                                const translateXVw = (clampedIdx - FADE_N) * slotVw;
 
-                                // Max vw font size per word-count mode (for short/avg words)
-                                const maxFontVw = focusWordCount === 1 ? 20 : focusWordCount === 2 ? 14 : 10;
+                                // Fixed font sizes (user-specified) — containers auto-size to fit
+                                const focusFontSize = focusWordCount === 1 ? '14rem'
+                                                    : focusWordCount === 2 ? '12rem'
+                                                    : '10.5rem';
 
-                                // Count base Arabic letters (strip diacritics) to size each word dynamically
-                                const baseLetterCount = (word: string) =>
-                                    [...word].filter(c => {
-                                        const cp = c.codePointAt(0)!;
-                                        return (cp >= 0x0621 && cp <= 0x063A) || (cp >= 0x0641 && cp <= 0x064A) ||
-                                               (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
-                                    }).length;
-
-                                // Returns font-size string: fitted so the word fills ≤95% of its slotVw
-                                // Arabic letter ≈ 0.62em wide → fontSize = slotVw * (1/0.62) / letterCount
-                                const getFontSizeVw = (word: string, focus: boolean): string => {
-                                    if (!focus) return `${Math.max(maxFontVw * 0.28, 2.5)}vw`;
-                                    const len = Math.max(baseLetterCount(word), 1);
-                                    const fittedVw = (slotVw * 1.52) / len;
-                                    return `${Math.min(maxFontVw, fittedVw)}vw`;
-                                };
-
+                                // Fade only the immediately adjacent word on each side
                                 const getOpacity = (i: number) => {
                                     const rel = i - clampedIdx;
                                     if (rel >= 0 && rel < focusWordCount) return 1;
@@ -3170,12 +3171,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     return d === 1 ? 0.25 : 0;
                                 };
 
-                                // Verse label from first focused word item
+                                // Verse label
                                 const fw = focusWordList[clampedIdx];
                                 const lw = focusWordList[Math.min(clampedIdx + focusWordCount - 1, total - 1)];
-                                const fwSurah = fw ? (fw.kind === 'word' ? fw.surah : fw.surah) : 0;
-                                const fwAyah  = fw ? (fw.kind === 'word' ? fw.ayah  : fw.ayah)  : 0;
-                                const lwAyah  = lw ? (lw.kind === 'word' ? lw.ayah  : lw.ayah)  : fwAyah;
+                                const fwSurah = fw?.surah ?? 0;
+                                const fwAyah  = fw?.ayah  ?? 0;
+                                const lwAyah  = lw?.ayah  ?? fwAyah;
                                 const verseLabel = fw
                                     ? (lwAyah !== fwAyah
                                         ? `${QURAN_METADATA[fwSurah - 1]?.transliteratedName ?? ''} ${fwAyah} – ${lwAyah}`
@@ -3187,38 +3188,42 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         {/* Verse indicator */}
                                         <p className="text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{verseLabel}</p>
 
-                                        {/* ── Sliding carousel ── */}
-                                        <div style={{ width: '100%', overflow: 'hidden' }}>
+                                        {/* ── Sliding carousel — auto-width slots, px transform from DOM measurement ── */}
+                                        <div ref={carouselContainerRef} style={{ width: '100%', overflow: 'hidden' }}>
                                             <div
                                                 style={{
                                                     display: 'flex',
                                                     flexDirection: 'row-reverse',
-                                                    transform: `translateX(${translateXVw}vw)`,
+                                                    transform: `translateX(${carouselTransformPx}px)`,
                                                     transition: 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                                                     willChange: 'transform',
                                                 }}
                                             >
                                                 {focusWordList.map((item, i) => {
                                                     const inFocus = i >= clampedIdx && i < clampedIdx + focusWordCount;
-                                                    const opacity  = getOpacity(i);
-                                                    const baseStyle: React.CSSProperties = {
-                                                        width: `${slotVw}vw`,
+                                                    const opacity = getOpacity(i);
+                                                    // Auto-width slot: no fixed width — container expands to fit any word
+                                                    const slotStyle: React.CSSProperties = {
                                                         flexShrink: 0,
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        lineHeight: 2.2,
-                                                        paddingTop: '0.5rem',
-                                                        paddingBottom: '0.5rem',
+                                                        padding: '0.5rem 2vw',
                                                         opacity,
                                                         transition: 'opacity 0.38s ease',
                                                         userSelect: 'none',
                                                         overflow: 'visible',
+                                                        zIndex: inFocus ? 10 : 1,
+                                                        position: 'relative',
                                                     };
 
                                                     if (item.kind === 'marker') {
                                                         return (
-                                                            <div key={`fm-${item.surah}:${item.ayah}`} style={{ ...baseStyle, zIndex: inFocus ? 10 : 1, position: 'relative' }}>
+                                                            <div
+                                                                key={`fm-${item.surah}:${item.ayah}`}
+                                                                ref={el => { carouselSlotEls.current[i] = el; }}
+                                                                style={slotStyle}
+                                                            >
                                                                 <span
                                                                     className="font-quranic text-slate-500 dark:text-slate-400 flex items-center justify-center rounded-full border-2 border-current"
                                                                     style={{
@@ -3234,9 +3239,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                         );
                                                     }
 
-                                                    // Word item — rendered exactly like normal verse view
-                                                    // Letters must be wrapped in a single inline span so they
-                                                    // flow as connected Arabic text (not as separate flex items).
+                                                    // Word item — auto-width container, same font for all words
                                                     const letters = parseWordIntoLetters(item.word);
                                                     const prevFocusItem = focusWordList[i - 1];
                                                     const nextFocusItem = focusWordList[i + 1];
@@ -3245,10 +3248,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     return (
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
+                                                            ref={el => { carouselSlotEls.current[i] = el; }}
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
-                                                            style={{ ...baseStyle, fontSize: getFontSizeVw(item.word, inFocus), zIndex: inFocus ? 10 : 1, position: 'relative' }}
+                                                            style={{ ...slotStyle, fontSize: focusFontSize }}
                                                         >
-                                                            {/* Single inline span = one flex child; letters inside flow as inline Arabic text */}
                                                             <span className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
                                                                     const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
