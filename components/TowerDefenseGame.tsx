@@ -395,7 +395,9 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   // Computed display dimensions (set after load, from natural aspect ratio)
   const ptW = useRef(0); const ptH = useRef(PLAYER_TENT_TARGET_H);
   const etW = useRef(0); const etH = useRef(ENEMY_TENT_TARGET_H);
-  const bgReady        = useRef(false);
+  const bgReady         = useRef(false);
+  const bgNatW          = useRef(0);   // natural px width  of battle-bg
+  const bgNatH          = useRef(0);   // natural px height of battle-bg
   const loadingComplete = useRef(false); // true once ALL asset loads settle
 
   const makeGS = (): GS => ({
@@ -418,8 +420,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const audioRef        = useRef<GameAudio | null>(null);
   const musicStarted    = useRef(false);
   const musicEnabledRef = useRef(true);
-  const [musicOn, setMusicOn] = useState(true);
-  const prevWinner      = useRef<'player' | 'enemy' | null>(null);
+  const [musicOn,   setMusicOn]   = useState(true);
+  const canvasHRef  = useRef(CANVAS_H);          // live canvas logical height (px)
+  const [cssH, setCssH] = useState(CANVAS_H);    // drives the CSS height of the canvas
+  const bgResized   = useRef(false);             // have we resized for the bg image yet?
+  const prevWinner  = useRef<'player' | 'enemy' | null>(null);
 
   // ── Load all assets ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -481,7 +486,14 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
         // Background
         load('/sprites/battle-bg.png')
-          .then(bg => { if (!cancelled) { bgImg.current = bg; bgReady.current = true; } })
+          .then(bg => {
+            if (!cancelled) {
+              bgImg.current  = bg;
+              bgNatW.current = bg.naturalWidth;
+              bgNatH.current = bg.naturalHeight;
+              bgReady.current = true;
+            }
+          })
           .catch(() => console.warn('battle-bg.png missing.')),
 
         // Player tent
@@ -526,7 +538,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: GROUND_Y - 2 - Math.random() * 6,
+        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
         hp: SOL_MAX_HP, maxHp: SOL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
       });
@@ -537,7 +549,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: GROUND_Y - 2 - Math.random() * 6,
+        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
         hp: BILAL_MAX_HP, maxHp: BILAL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
         isBilal: true,
@@ -549,7 +561,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: GROUND_Y - 2 - Math.random() * 6,
+        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
         hp: JAFAR_MAX_HP, maxHp: JAFAR_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
         isJafar: true,
@@ -562,7 +574,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'enemy',
         x: cw - LEFT_ANCHOR - 35,
-        y: GROUND_Y - 2 - Math.random() * 6,
+        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
         hp: SOL_MAX_HP, maxHp: SOL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
       });
@@ -584,8 +596,17 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
     const resize = () => {
       const r = canvas.getBoundingClientRect();
       if (r.width > 0) {
-        canvas.width  = r.width  * devicePixelRatio;
-        canvas.height = CANVAS_H * devicePixelRatio;
+        // Height = width × (bgNaturalH / bgNaturalW) so bg fills canvas at
+        // its natural aspect ratio; fall back to CANVAS_H if bg not yet loaded.
+        const newH = bgNatW.current > 0
+          ? Math.round(r.width * bgNatH.current / bgNatW.current)
+          : CANVAS_H;
+        canvas.width  = r.width * devicePixelRatio;
+        canvas.height = newH    * devicePixelRatio;
+        if (canvasHRef.current !== newH) {
+          canvasHRef.current = newH;
+          setCssH(newH);
+        }
       }
     };
     resize();
@@ -599,9 +620,18 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       tick++;
       const state  = gs.current;
       const dpr    = devicePixelRatio;
-      const cw     = canvas.width / dpr;
+      const cw     = canvas.width  / dpr;
+      const ch     = canvas.height / dpr;   // actual logical height this frame
+      const groundY = ch - 32;              // ground line — replaces module-level GROUND_Y
       const ctx    = canvas.getContext('2d');
       if (!ctx) { animId = requestAnimationFrame(loop); return; }
+
+      // Once the bg image is available, re-run resize so the canvas height
+      // matches the image's natural aspect ratio.
+      if (bgReady.current && !bgResized.current) {
+        bgResized.current = true;
+        resize();
+      }
 
       const LEFT_X  = LEFT_ANCHOR;
       const RIGHT_X = cw - LEFT_ANCHOR;
@@ -611,22 +641,22 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         ctx.save();
         ctx.scale(dpr, dpr);
         // Desert-toned dark background
-        const loadBg = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+        const loadBg = ctx.createLinearGradient(0, 0, 0, ch);
         loadBg.addColorStop(0, '#2d1a0a');
         loadBg.addColorStop(1, '#1a0d04');
         ctx.fillStyle = loadBg;
-        ctx.fillRect(0, 0, cw, CANVAS_H);
+        ctx.fillRect(0, 0, cw, ch);
         // Pulsing sword icon
         const pulse = 0.75 + 0.25 * Math.sin(tick * 0.08);
         ctx.font = `${Math.round(32 * pulse)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('⚔️', cw / 2, CANVAS_H / 2 - 18);
+        ctx.fillText('⚔️', cw / 2, ch / 2 - 18);
         // Loading text
         const dots = '.'.repeat(1 + (Math.floor(tick / 18) % 3));
         ctx.font = 'bold 14px system-ui, sans-serif';
         ctx.fillStyle = `rgba(255,200,100,${pulse})`;
-        ctx.fillText(`Loading${dots}`, cw / 2, CANVAS_H / 2 + 18);
+        ctx.fillText(`Loading${dots}`, cw / 2, ch / 2 + 18);
         ctx.restore();
         animId = requestAnimationFrame(loop);
         return;
@@ -691,12 +721,12 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             if (isP) {
               state.enemyHp    = Math.max(0, state.enemyHp  - TENT_DMG);
               state.shakeRight = 22;
-              burst(state.particles, tentX, GROUND_Y - 50, 24,
+              burst(state.particles, tentX, groundY - 50, 24,
                 ['#fbbf24','#f59e0b','#ef4444','#fff','#ff6600'], 5);
             } else {
               state.playerHp  = Math.max(0, state.playerHp - TENT_DMG);
               state.shakeLeft = 22;
-              burst(state.particles, tentX, GROUND_Y - 50, 24,
+              burst(state.particles, tentX, groundY - 50, 24,
                 ['#fbbf24','#f59e0b','#3b82f6','#fff','#ff6600'], 5);
             }
             audioRef.current?.tentHit();
@@ -757,41 +787,32 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
       // ── Background ──────────────────────────────────────────────────────────
       if (bgReady.current && bgImg.current) {
-        // Always show the full image height — scale to fit CANVAS_H,
-        // then crop the sides only if the image is wider than the canvas.
-        const img        = bgImg.current;
-        const canvAspect = cw / CANVAS_H;
-        const imgAspect  = img.naturalWidth / img.naturalHeight;
-        // Source rect: full height, width cropped to canvas aspect (or full width if image is narrow)
-        const sh = img.naturalHeight;
-        const sw = imgAspect > canvAspect
-          ? img.naturalHeight * canvAspect   // image wider → crop sides
-          : img.naturalWidth;                // image narrower → use all width
-        const sx = (img.naturalWidth - sw) / 2;
-        ctx.drawImage(img, sx, 0, sw, sh, 0, 0, cw, CANVAS_H);
+        // Canvas is sized to exactly match the bg image's aspect ratio,
+        // so just draw it to fill the full canvas — no cropping, no squash.
+        ctx.drawImage(bgImg.current, 0, 0, cw, ch);
       } else {
         // Procedural fallback sky
-        const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+        const sky = ctx.createLinearGradient(0, 0, 0, groundY);
         sky.addColorStop(0, '#6bb8d4'); sky.addColorStop(1, '#c8e8f8');
-        ctx.fillStyle = sky; ctx.fillRect(0, 0, cw, CANVAS_H);
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, cw, ch);
         // Stars
         for (const st of state.stars) {
           const a = 0.35 + 0.35 * Math.sin(tick * st.speed + st.phase);
           ctx.fillStyle = `rgba(255,255,255,${a})`;
-          ctx.beginPath(); ctx.arc(st.x * cw, st.y * CANVAS_H, st.r, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(st.x * cw, st.y * ch, st.r, 0, Math.PI * 2); ctx.fill();
         }
         // Sun
         ctx.fillStyle = 'rgba(255,235,80,0.9)';
         ctx.beginPath(); ctx.arc(cw / 2, 26, 14, 0, Math.PI * 2); ctx.fill();
         // Ground
-        const grassGrad = ctx.createLinearGradient(0, GROUND_Y - 6, 0, CANVAS_H);
+        const grassGrad = ctx.createLinearGradient(0, groundY - 6, 0, ch);
         grassGrad.addColorStop(0, '#5db832'); grassGrad.addColorStop(1, '#3d8a18');
-        ctx.fillStyle = grassGrad; ctx.fillRect(0, GROUND_Y - 6, cw, CANVAS_H - GROUND_Y + 6);
+        ctx.fillStyle = grassGrad; ctx.fillRect(0, groundY - 6, cw, ch - groundY + 6);
         // Path
-        const pathGrad = ctx.createLinearGradient(0, GROUND_Y - 10, 0, GROUND_Y + 4);
+        const pathGrad = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 4);
         pathGrad.addColorStop(0, '#c8a05a'); pathGrad.addColorStop(1, '#a07a38');
         ctx.fillStyle = pathGrad;
-        ctx.fillRect(LEFT_X + 32, GROUND_Y - 10, RIGHT_X - LEFT_X - 64, 10);
+        ctx.fillRect(LEFT_X + 32, groundY - 10, RIGHT_X - LEFT_X - 64, 10);
       }
 
       // ── HP bar helper ────────────────────────────────────────────────────────
@@ -832,33 +853,33 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         const accentC = isP ? '#60a5fa' : '#f87171';
 
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.beginPath(); ctx.ellipse(x, GROUND_Y + 4, 36, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x, groundY + 4, 36, 7, 0, 0, Math.PI * 2); ctx.fill();
 
         const tentG = ctx.createLinearGradient(x-30, 0, x+30, 0);
         tentG.addColorStop(0, darkC); tentG.addColorStop(0.4, bodyC); tentG.addColorStop(1, lightC);
         ctx.beginPath();
-        ctx.moveTo(x - 30, GROUND_Y - 9); ctx.lineTo(x, GROUND_Y - 84); ctx.lineTo(x + 30, GROUND_Y - 9);
+        ctx.moveTo(x - 30, groundY - 9); ctx.lineTo(x, groundY - 84); ctx.lineTo(x + 30, groundY - 9);
         ctx.closePath(); ctx.fillStyle = tentG; ctx.fill();
         ctx.strokeStyle = darkC; ctx.lineWidth = 2; ctx.stroke();
 
         ctx.fillStyle = darkC;
-        ctx.beginPath(); ctx.arc(x, GROUND_Y - 17, 12, Math.PI, 0);
-        ctx.lineTo(x + 12, GROUND_Y - 7); ctx.lineTo(x - 12, GROUND_Y - 7);
+        ctx.beginPath(); ctx.arc(x, groundY - 17, 12, Math.PI, 0);
+        ctx.lineTo(x + 12, groundY - 7); ctx.lineTo(x - 12, groundY - 7);
         ctx.closePath(); ctx.fill();
 
         // Flag
         ctx.strokeStyle = '#8d7452'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(x, GROUND_Y - 84); ctx.lineTo(x, GROUND_Y - 104); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, groundY - 84); ctx.lineTo(x, groundY - 104); ctx.stroke();
         const fw = Math.sin(tick * 0.07 + (isP ? 0 : Math.PI)) * 3;
         const fd = isP ? 1 : -1;
         ctx.fillStyle = accentC;
         ctx.beginPath();
-        ctx.moveTo(x, GROUND_Y - 103);
-        ctx.quadraticCurveTo(x + fd*11, GROUND_Y-96+fw, x + fd*19, GROUND_Y-91+fw*.5);
-        ctx.quadraticCurveTo(x + fd*11, GROUND_Y-86+fw, x, GROUND_Y-83);
+        ctx.moveTo(x, groundY - 103);
+        ctx.quadraticCurveTo(x + fd*11, groundY-96+fw, x + fd*19, groundY-91+fw*.5);
+        ctx.quadraticCurveTo(x + fd*11, groundY-86+fw, x, groundY-83);
         ctx.closePath(); ctx.fill();
 
-        drawHpBar(x, GROUND_Y - 84, hp);
+        drawHpBar(x, groundY - 84, hp);
       };
 
       // ── Tent drawing: image or fallback ──────────────────────────────────────
@@ -873,8 +894,8 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
         if (imgCvs && dw > 0 && dh > 0) {
           const yOffset = isPlayer ? PLAYER_TENT_Y_OFFSET : 0;
-          const drawY   = GROUND_Y - dh + yOffset;
-          // Draw tent image: centred on cx, bottom flush with GROUND_Y (+ optional offset)
+          const drawY   = groundY - dh + yOffset;
+          // Draw tent image: centred on cx, bottom flush with groundY (+ optional offset)
           // Player tent is flipped horizontally so it faces into the battlefield
           if (isPlayer) {
             ctx.save();
@@ -1048,14 +1069,14 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       if (state.winner) {
         const wf = Math.min(state.winFrame, 30) / 30;
         ctx.fillStyle = `rgba(0,0,0,${0.52 * wf})`;
-        ctx.fillRect(0, 0, cw, CANVAS_H);
+        ctx.fillRect(0, 0, cw, ch);
 
         if (wf > 0.5) {
           const isPlayerWin = state.winner === 'player';
           const a  = (wf - 0.5) * 2;
           const sc = 0.6 + 0.4 * a;
           ctx.save();
-          ctx.translate(cw / 2, CANVAS_H / 2);
+          ctx.translate(cw / 2, ch / 2);
           ctx.scale(sc, sc);
           ctx.globalAlpha = a;
 
@@ -1089,7 +1110,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       <canvas
         ref={canvasRef}
         style={{
-          width: '100%', height: `${CANVAS_H}px`,
+          width: '100%', height: `${cssH}px`,
           display: 'block', borderRadius: 0,
           borderTop: '2px solid rgba(180,100,20,0.3)',
           borderBottom: '2px solid rgba(180,100,20,0.3)',
