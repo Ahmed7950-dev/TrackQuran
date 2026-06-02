@@ -104,13 +104,49 @@ function burst(ps: Particle[], x: number, y: number, count: number, colors: stri
 
 // ─── Audio Engine ────────────────────────────────────────────────────────────
 class GameAudio {
+  // ── Web Audio API (for procedural SFX: tent-hit, death, victory, defeat) ──
   private ctx:    AudioContext | null = null;
   private master: GainNode    | null = null;
-  private bgLoop: ReturnType<typeof setTimeout> | null = null;
-  private musicPlaying = false;
+
+  // ── File-based audio ──────────────────────────────────────────────────────
+  // Background music — loops the MP3 file
+  private bgmEl: HTMLAudioElement | null = null;
+  private bgmFadeTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Sword-clash pool — 3 instances so overlapping hits don't cut each other off
+  private clashPool: HTMLAudioElement[] = [];
+  private clashIdx  = 0;
   private lastClash = 0;
 
-  // Lazy AudioContext — created only after first user gesture
+  // Jafar spawn roar
+  private jafarEl: HTMLAudioElement | null = null;
+
+  private musicPlaying = false;
+
+  constructor() {
+    try {
+      // Background music — looping
+      this.bgmEl = new Audio('/audio/Background_music.mp3');
+      this.bgmEl.loop    = true;
+      this.bgmEl.volume  = 0.40;
+      this.bgmEl.preload = 'auto';
+
+      // Clash pool
+      for (let i = 0; i < 3; i++) {
+        const a = new Audio('/audio/Swords_clashing.mp3');
+        a.volume  = 0.55;
+        a.preload = 'auto';
+        this.clashPool.push(a);
+      }
+
+      // Jafar roar
+      this.jafarEl = new Audio('/audio/Jaafar_respawn.mp3');
+      this.jafarEl.volume  = 0.85;
+      this.jafarEl.preload = 'auto';
+    } catch { /* ignore — audio not supported */ }
+  }
+
+  // ── Lazy Web Audio context (for procedural SFX only) ─────────────────────
   private ac(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -129,7 +165,7 @@ class GameAudio {
     return this.master;
   }
 
-  // ── Primitive synth helpers ────────────────────────────────────────────────
+  // ── Primitive synth helpers (used only for procedural SFX) ────────────────
   private tone(
     freq: number, type: OscillatorType, dur: number,
     vol: number, t?: number, freqEnd?: number,
@@ -164,10 +200,22 @@ class GameAudio {
   }
 
   // ── Sound effects ──────────────────────────────────────────────────────────
+
+  /** Swords clashing — plays from the MP3 pool, throttled to 130 ms */
   clash() {
     const now = Date.now();
     if (now - this.lastClash < 130) return;
     this.lastClash = now;
+    if (this.clashPool.length > 0) {
+      try {
+        const a = this.clashPool[this.clashIdx % this.clashPool.length];
+        this.clashIdx++;
+        a.currentTime = 0;
+        a.play().catch(() => {});
+      } catch { /* ignore */ }
+      return;
+    }
+    // Procedural fallback
     this.noise(0.13, 0.32, 4500, 2.5);
     this.tone(1320, 'square', 0.14, 0.10);
     this.tone(880,  'square', 0.17, 0.07);
@@ -186,7 +234,16 @@ class GameAudio {
     this.tone(659, 'triangle', 0.11, 0.15, t + 0.14);
   }
 
+  /** Jafar spawn roar — plays from MP3 file */
   spawnJafar() {
+    if (this.jafarEl) {
+      try {
+        this.jafarEl.currentTime = 0;
+        this.jafarEl.play().catch(() => {});
+      } catch { /* ignore */ }
+      return;
+    }
+    // Procedural fallback
     const c = this.ac(); const t = c.currentTime;
     this.tone(82,  'sawtooth', 0.35, 0.40, t);
     this.tone(165, 'triangle', 0.18, 0.28, t + 0.06);
@@ -208,7 +265,6 @@ class GameAudio {
 
   victory() {
     const c = this.ac(); const t = c.currentTime;
-    // D major chord arpeggiated up
     [[293.66,0],[369.99,0.18],[440,0.36],[587.33,0.54],[587.33,0.82]].forEach(([f,dt]) =>
       this.tone(f as number, 'triangle', 0.55, 0.32, t + (dt as number))
     );
@@ -221,86 +277,23 @@ class GameAudio {
     );
   }
 
-  // ── Background music — Maqam Hijaz loop ───────────────────────────────────
-  // D Hijaz scale: D Eb F# G A Bb C D
-  private scheduleLoop() {
-    if (!this.musicPlaying) return;
-    const c   = this.ac();
-    const now = c.currentTime + 0.05;
-    const BPM = 108;
-    const b   = 60 / BPM;      // one beat ≈ 0.556 s
-    const BEATS = 16;
-
-    // Hz values: D3 Eb3 F#3 G3 A3 Bb3 C4 D4
-    const S = [146.83, 155.56, 185.00, 196.00, 220.00, 233.08, 261.63, 293.66];
-
-    // Melody: [noteIdx, startBeat, durationBeats]
-    const mel: [number,number,number][] = [
-      [4,0,1],[3,1,.5],[2,1.5,.5],[3,2,1],[1,3,1],
-      [0,4,1.5],[1,5.5,.5],[2,6,.5],[3,6.5,.5],
-      [4,7,1],[5,8,.5],[4,8.5,.5],[3,9,1],
-      [2,10,.5],[1,10.5,.5],[0,11,2],
-      [4,13,.5],[5,13.5,.5],[4,14,1],[3,15,1],
-    ];
-
-    mel.forEach(([ni, sb, db]) => {
-      const t   = now + sb * b;
-      const dur = db * b * 0.82;
-      this.melNote(S[ni] * 2, dur, 0.09, t);   // melody (one octave up)
-      this.melNote(S[ni],     dur, 0.04, t);   // octave drone below
-    });
-
-    // Bass hits on beats 0, 4, 8, 12
-    [0,4,8,12].forEach(beat => this.tone(S[0]/2, 'sine', b*0.88, 0.16, now + beat*b));
-
-    // Percussion
-    for (let i = 0; i < BEATS; i++) {
-      const t = now + i * b;
-      if (i % 4 === 0) {
-        // Kick drum
-        try {
-          const oc = this.ac(); const osc = oc.createOscillator(); const g = oc.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(110, t);
-          osc.frequency.exponentialRampToValueAtTime(28, t + 0.28);
-          g.gain.setValueAtTime(0.26, t);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
-          osc.connect(g); g.connect(this.mg());
-          osc.start(t); osc.stop(t + 0.36);
-        } catch { /* ignore */ }
-      } else if (i % 2 === 0) {
-        this.noise(0.06, 0.08, 7000, 4, t);   // hi-hat on every other beat
-      } else {
-        this.noise(0.04, 0.05, 3500, 3, t);   // light off-beat tap
-      }
-    }
-
-    this.bgLoop = setTimeout(
-      () => this.scheduleLoop(),
-      (BEATS * b - 0.25) * 1000,
-    );
-  }
-
-  private melNote(freq: number, dur: number, vol: number, t: number) {
-    try {
-      const c = this.ac();
-      const osc = c.createOscillator(); const g = c.createGain();
-      const filt = c.createBiquadFilter();
-      filt.type = 'lowpass'; filt.frequency.value = 1600;
-      osc.type = 'triangle'; osc.frequency.value = freq;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(vol, t + 0.025);
-      g.gain.setValueAtTime(vol * 0.75, t + dur * 0.65);
-      g.gain.linearRampToValueAtTime(0, t + dur);
-      osc.connect(filt); filt.connect(g); g.connect(this.mg());
-      osc.start(t); osc.stop(t + dur + 0.05);
-    } catch { /* ignore */ }
-  }
+  // ── Background music — MP3 file, looping ─────────────────────────────────
 
   startMusic() {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
-    this.scheduleLoop();
+    if (this.bgmEl) {
+      try {
+        // Cancel any in-progress fade, restore volume
+        if (this.bgmFadeTimer !== null) {
+          clearInterval(this.bgmFadeTimer);
+          this.bgmFadeTimer = null;
+        }
+        this.bgmEl.volume     = 0.40;
+        this.bgmEl.currentTime = 0;
+        this.bgmEl.play().catch(() => {});
+      } catch { /* ignore */ }
+    }
   }
 
   /** Toggle music on/off. Returns the new playing state. */
@@ -311,18 +304,39 @@ class GameAudio {
 
   stopMusic(fade = true) {
     this.musicPlaying = false;
-    if (this.bgLoop !== null) { clearTimeout(this.bgLoop); this.bgLoop = null; }
-    if (fade && this.master && this.ctx) {
-      const t = this.ctx.currentTime;
-      this.master.gain.setValueAtTime(this.master.gain.value, t);
-      this.master.gain.linearRampToValueAtTime(0, t + 1.2);
+    if (this.bgmEl && !this.bgmEl.paused) {
+      if (this.bgmFadeTimer !== null) { clearInterval(this.bgmFadeTimer); this.bgmFadeTimer = null; }
+      if (fade) {
+        const startVol = this.bgmEl.volume;
+        const steps    = 20;
+        let   step     = 0;
+        const el       = this.bgmEl;
+        this.bgmFadeTimer = setInterval(() => {
+          step++;
+          el.volume = Math.max(0, startVol * (1 - step / steps));
+          if (step >= steps) {
+            clearInterval(this.bgmFadeTimer!);
+            this.bgmFadeTimer = null;
+            el.pause();
+            el.currentTime = 0;
+            el.volume = startVol; // restore for next play
+          }
+        }, 60);
+      } else {
+        this.bgmEl.pause();
+        this.bgmEl.currentTime = 0;
+      }
     }
   }
 
   destroy() {
     this.stopMusic(false);
+    if (this.bgmFadeTimer !== null) { clearInterval(this.bgmFadeTimer); this.bgmFadeTimer = null; }
     try { this.ctx?.close(); } catch { /* ignore */ }
     this.ctx = null; this.master = null;
+    this.bgmEl = null;
+    this.clashPool = [];
+    this.jafarEl = null;
   }
 }
 
