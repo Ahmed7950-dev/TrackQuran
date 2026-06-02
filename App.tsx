@@ -18,6 +18,7 @@ import StudentViewOnlyPage from './components/StudentViewOnlyPage';
 import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
+import QaedahPage from './components/QaedahPage';
 import SharedReportPage from './components/SharedReportPage';
 import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
@@ -418,7 +419,7 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportBackup = () => {
@@ -1171,7 +1172,7 @@ const App: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => setIsToolsMenuOpen(o => !o)}
-                    className={`tools-menu-btn flex items-center gap-1 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' || activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                    className={`tools-menu-btn flex items-center gap-1 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' || activeTab === 'alphabetTrainer' || activeTab === 'qaedah' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
                   >
                     Tools
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${isToolsMenuOpen ? 'rotate-180' : ''}`}>
@@ -1191,6 +1192,12 @@ const App: React.FC = () => {
                         className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'alphabetTrainer' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
                       >
                         <span>🔤</span> {t('header.alphabetTrainer')}
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('qaedah'); setIsToolsMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'qaedah' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                      >
+                        <span>📖</span> Qaedah
                       </button>
                     </div>
                   )}
@@ -1335,6 +1342,7 @@ const App: React.FC = () => {
               </button>
               <button onClick={() => { setActiveTab('lettersTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔡 {t('header.lettersTrainer')}</button>
               <button onClick={() => { setActiveTab('alphabetTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔤 {t('header.alphabetTrainer')}</button>
+              <button onClick={() => { setActiveTab('qaedah'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'qaedah' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>📖 Qaedah</button>
               <button onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.tajweed')}</button>
               <div className="mx-5 my-1 border-t border-slate-100 dark:border-gray-700" />
               <button onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); setIsMobileNavOpen(false); }} className="flex items-center gap-3 px-5 py-3 text-sm font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</button>
@@ -1355,6 +1363,8 @@ const App: React.FC = () => {
           <LettersTrainerPage />
         ) : activeTab === 'alphabetTrainer' ? (
           <AlphabetTrainerPage />
+        ) : activeTab === 'qaedah' ? (
+          <QaedahPage />
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
         ) : activeTab === 'tajweed' ? (
