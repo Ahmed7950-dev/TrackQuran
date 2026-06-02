@@ -3,7 +3,8 @@ import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react
 export interface TowerDefenseRef {
   spawnPlayerSoldier: () => void;
   spawnBilalSoldier:  () => void;
-  spawnEnemySoldier: () => void;
+  spawnJafarSoldier:  () => void;
+  spawnEnemySoldier:  () => void;
   reset: () => void;
 }
 
@@ -18,11 +19,16 @@ const SPRITE_W     = SPRITE_SIZE;
 const SPRITE_H     = SPRITE_SIZE;
 const HAMZAH_FOOT_RATIO = 0.88; // feet at 88% of sprite height (Hamzah / player)
 const ALBERT_FOOT_RATIO = 0.75; // feet at 75% of sprite height (Albert / enemy)
-const BILAL_FOOT_RATIO  = 0.88; // feet ratio for Bilal (same sheet layout as Hamzah)
+const BILAL_FOOT_RATIO  = 0.88; // feet ratio for Bilal
+const JAFAR_FOOT_RATIO  = 0.88; // feet ratio for Jafar
 
 // Bilal stats — spawned after 3 consecutive correct answers
 const BILAL_MAX_HP  = 5;   // tougher than a regular soldier (SOL_MAX_HP = 3)
-const BILAL_DAMAGE  = 1.5; // damage dealt per hit (regular = 1)
+const BILAL_DAMAGE  = 1.5; // damage per hit — kills 1.5 enemies
+
+// Jafar stats — spawned after 6 consecutive correct answers
+const JAFAR_MAX_HP  = 8;   // much tougher than Bilal
+const JAFAR_DAMAGE  = 2.5; // damage per hit — kills 2.5 enemies
 
 // ─── Game constants ─────────────────────────────────────────────────────────────
 const CANVAS_H     = 270;
@@ -51,6 +57,7 @@ interface Soldier {
   fightingWith: number | null;
   frame: number; dying: number;
   isBilal?: boolean;  // true → use Bilal sprites + boosted stats
+  isJafar?: boolean;  // true → use Jafar sprites + elite stats
 }
 interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -132,6 +139,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const bilalFight   = useRef<HTMLCanvasElement | null>(null);
   const bilalReady   = useRef(false);
 
+  // ── Character sprites — Jafar (elite player / left side) ──────────────────
+  const jafarWalk    = useRef<HTMLCanvasElement | null>(null);
+  const jafarFight   = useRef<HTMLCanvasElement | null>(null);
+  const jafarReady   = useRef(false);
+
   // ── Background & tent images ───────────────────────────────────────────────
   const bgImg          = useRef<HTMLImageElement | null>(null);
   const playerTentCvs  = useRef<HTMLCanvasElement | null>(null);
@@ -206,6 +218,17 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           })
           .catch((e) => console.warn('[TowerDefense] ✗ Bilal sprites FAILED:', e)),
 
+        // Jafar (elite player / left)
+        Promise.all([load('/sprites/Jafar-walk.png'), load('/sprites/Jafar-attack.png')])
+          .then(([w, f]) => {
+            if (cancelled) return;
+            jafarWalk.current  = removeWhiteBg(w);
+            jafarFight.current = removeWhiteBg(f);
+            jafarReady.current = true;
+            console.log('[TowerDefense] ✓ Jafar sprites loaded');
+          })
+          .catch((e) => console.warn('[TowerDefense] ✗ Jafar sprites FAILED:', e)),
+
         // Background
         load('/sprites/battle-bg.png')
           .then(bg => { if (!cancelled) { bgImg.current = bg; bgReady.current = true; } })
@@ -261,6 +284,18 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         hp: BILAL_MAX_HP, maxHp: BILAL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
         isBilal: true,
+      });
+    },
+    spawnJafarSoldier() {
+      if (gs.current.winner) return;
+      console.log('[TowerDefense] spawnJafarSoldier called, jafarReady=', jafarReady.current);
+      gs.current.soldiers.push({
+        id: gs.current.nextId++, side: 'player',
+        x: LEFT_ANCHOR + 35,
+        y: GROUND_Y - 2 - Math.random() * 6,
+        hp: JAFAR_MAX_HP, maxHp: JAFAR_MAX_HP,
+        fightingWith: null, frame: 0, dying: 0,
+        isJafar: true,
       });
     },
     spawnEnemySoldier() {
@@ -349,7 +384,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           if (s.dying > 0 || s.fightingWith === null || deadIds.has(s.id)) continue;
           s.frame++;
           if (s.frame % 32 === 0) {
-            const dmg = s.isBilal ? BILAL_DAMAGE : 1;
+            const dmg = s.isJafar ? JAFAR_DAMAGE : s.isBilal ? BILAL_DAMAGE : 1;
             dmgMap.set(s.fightingWith, (dmgMap.get(s.fightingWith) ?? 0) + dmg);
           }
         }
@@ -556,11 +591,15 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         const dying      = s.dying > 0;
         const isPlayer   = s.side === 'player';
         const isBilal    = !!s.isBilal;
+        const isJafar    = !!s.isJafar;
 
-        // Pick sprite sheet: Bilal > Hamzah for player side, Albert for enemy
+        // Pick sprite sheet: Jafar > Bilal > Hamzah for player side, Albert for enemy
         let spriteReady: boolean;
         let sheet: HTMLCanvasElement | null;
-        if (isBilal) {
+        if (isJafar) {
+          spriteReady = jafarReady.current;
+          sheet = fighting ? jafarFight.current : jafarWalk.current;
+        } else if (isBilal) {
           spriteReady = bilalReady.current;
           sheet = fighting ? bilalFight.current : bilalWalk.current;
         } else if (isPlayer) {
@@ -578,9 +617,9 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           const fw  = sheet.width  / SHEET_COLS;
           const fh  = sheet.height / SHEET_ROWS;
           // Per-character foot ratio so each sprite aligns to its shadow
-          const footRatio = isBilal ? BILAL_FOOT_RATIO : (isPlayer ? HAMZAH_FOOT_RATIO : ALBERT_FOOT_RATIO);
-          // Bilal is drawn 15% bigger to look more imposing
-          const scale  = isBilal ? 1.15 : 1;
+          const footRatio = isJafar ? JAFAR_FOOT_RATIO : isBilal ? BILAL_FOOT_RATIO : (isPlayer ? HAMZAH_FOOT_RATIO : ALBERT_FOOT_RATIO);
+          // Elite characters are drawn bigger to look more imposing
+          const scale  = isJafar ? 1.30 : isBilal ? 1.15 : 1;
           const drawW  = SPRITE_W * scale;
           const drawH  = SPRITE_H * scale;
           const drawY = s.y - drawH * footRatio;
@@ -588,12 +627,14 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
           ctx.globalAlpha = dying ? (s.dying % 3 === 0 ? 0.25 : 1) : 1;
 
-          // Bilal golden aura glow
-          if (isBilal && !dying) {
+          // Aura glow — gold for Bilal, crimson for Jafar
+          if ((isBilal || isJafar) && !dying) {
             ctx.save();
-            ctx.shadowColor = '#fbbf24';
-            ctx.shadowBlur  = 18 + 6 * Math.sin(tick * 0.08);
-            ctx.fillStyle   = 'rgba(251,191,36,0.18)';
+            const auraColor  = isJafar ? '#ef4444' : '#fbbf24';
+            const auraFill   = isJafar ? 'rgba(239,68,68,0.18)' : 'rgba(251,191,36,0.18)';
+            ctx.shadowColor  = auraColor;
+            ctx.shadowBlur   = (isJafar ? 26 : 18) + 6 * Math.sin(tick * 0.08);
+            ctx.fillStyle    = auraFill;
             ctx.beginPath();
             ctx.ellipse(s.x, s.y - drawH * 0.4, drawW * 0.4, drawH * 0.45, 0, 0, Math.PI * 2);
             ctx.fill();
@@ -605,8 +646,8 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, drawW * 0.38, 4, 0, 0, Math.PI * 2); ctx.fill();
 
           ctx.save();
-          if (isPlayer || isBilal) {
-            // Hamzah / Bilal face right → player walks right → draw as-is
+          if (isPlayer || isBilal || isJafar) {
+            // Hamzah / Bilal / Jafar face right → player walks right → draw as-is
             ctx.drawImage(sheet, col * fw, row * fh, fw, fh, drawX, drawY, drawW, drawH);
           } else {
             // Albert faces right → enemy walks left → flip horizontally around s.x
@@ -642,16 +683,16 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             rr(ctx, bx, by, barW, barH, 2); ctx.stroke();
           }
 
-          // ── "BILAL" label above the sprite ─────────────────────────────
-          if (isBilal && !dying) {
+          // ── Character label above the sprite ───────────────────────────
+          if ((isBilal || isJafar) && !dying) {
             ctx.save();
-            ctx.font = 'bold 11px system-ui,sans-serif';
+            ctx.font = `bold ${isJafar ? 13 : 11}px system-ui,sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
-            ctx.fillStyle = '#fbbf24';
+            ctx.fillStyle = isJafar ? '#f87171' : '#fbbf24';
             ctx.shadowColor = 'rgba(0,0,0,0.9)';
             ctx.shadowBlur = 4;
-            ctx.fillText('★ BILAL', s.x, drawY - 12);
+            ctx.fillText(isJafar ? '⚔️ JAFAR' : '★ BILAL', s.x, drawY - 12);
             ctx.restore();
           }
 
@@ -661,9 +702,10 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           // Procedural fallback soldier
           const isP    = s.side === 'player';
           const isBilalFallback = !!s.isBilal;
-          // Bilal gets gold even in fallback so it's visually distinct
-          const bodyC = isBilalFallback ? '#d97706' : (isP ? '#2563eb' : '#dc2626');
-          const darkC = isBilalFallback ? '#92400e' : (isP ? '#1e3a8a' : '#991b1b');
+          const isJafarFallback = !!s.isJafar;
+          // Elite characters get distinct colours even in fallback
+          const bodyC = isJafarFallback ? '#b91c1c' : isBilalFallback ? '#d97706' : (isP ? '#2563eb' : '#dc2626');
+          const darkC = isJafarFallback ? '#7f1d1d' : isBilalFallback ? '#92400e' : (isP ? '#1e3a8a' : '#991b1b');
           const bob   = Math.sin(s.frame * 0.22) * 1.8;
           const baseY = s.y + bob;
           ctx.globalAlpha = dying ? (s.dying % 3 === 0 ? 0.25 : 1) : 1;

@@ -174,9 +174,14 @@ const AlphabetTrainerPage: React.FC = () => {
     if (celebrating) return;
     setRestartMsg('');
     consecutiveCorrect.current += 1;
-    console.log('[AlphabetTrainer] streak:', consecutiveCorrect.current);
-    if (consecutiveCorrect.current >= 3) {
+    const streak = consecutiveCorrect.current;
+    console.log('[AlphabetTrainer] streak:', streak);
+    if (streak >= 6) {
       consecutiveCorrect.current = 0;
+      console.log('[AlphabetTrainer] ⚔️ Spawning JAFAR!');
+      gameRef.current?.spawnJafarSoldier();
+    } else if (streak === 3) {
+      // Don't reset — keep counting toward 6 for Jafar
       console.log('[AlphabetTrainer] 🔥 Spawning BILAL!');
       gameRef.current?.spawnBilalSoldier();
     } else {
