@@ -400,6 +400,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
   const streakRef = useRef(0);  // current streak, set by parent via setStreak()
 
+  // ── Portrait images for HUD at top of canvas ──────────────────────────────
+  const portraitHamzah = useRef<HTMLImageElement | null>(null);
+  const portraitBilal  = useRef<HTMLImageElement | null>(null);
+  const portraitJafar  = useRef<HTMLImageElement | null>(null);
+
   // ── Background & tent images ───────────────────────────────────────────────
   const bgImg          = useRef<HTMLImageElement | null>(null);
   const playerTentCvs  = useRef<HTMLCanvasElement | null>(null);
@@ -497,6 +502,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             console.log('[TowerDefense] ✓ Jafar sprites loaded');
           })
           .catch((e) => console.warn('[TowerDefense] ✗ Jafar sprites FAILED:', e)),
+
+        // Portrait HUD images
+        load('/sprites/portrait-hamzah.png').then(i => { if (!cancelled) portraitHamzah.current = i; }).catch(() => {}),
+        load('/sprites/portrait-bilal.png') .then(i => { if (!cancelled) portraitBilal.current  = i; }).catch(() => {}),
+        load('/sprites/portrait-jafar.png') .then(i => { if (!cancelled) portraitJafar.current  = i; }).catch(() => {}),
 
         // Background
         load('/sprites/battle-bg.png')
@@ -1084,6 +1094,93 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r * a, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
+
+      // ── Portrait roster HUD — pinned to top of canvas ─────────────────────
+      {
+        const streak       = streakRef.current;
+        const nextSpecial  = streak < 3 ? 'bilal' : 'jafar';
+        const tierProgress = streak < 3 ? streak : streak - 3; // 0-2
+
+        const portDefs: { key: string; img: HTMLImageElement | null; label: string; ring: string; fallC: string }[] = [
+          { key: 'hamzah', img: portraitHamzah.current, label: 'HAMZAH', ring: '#fbbf24', fallC: '#64748b' },
+          { key: 'bilal',  img: portraitBilal.current,  label: 'BILAL',  ring: '#fbbf24', fallC: '#d97706' },
+          { key: 'jafar',  img: portraitJafar.current,  label: 'JAFAR',  ring: '#ef4444', fallC: '#b91c1c' },
+        ];
+
+        // Semi-transparent dark strip at the very top
+        ctx.fillStyle = 'rgba(0,0,0,0.38)';
+        ctx.fillRect(0, 0, cw, 72);
+
+        const pSpacing = 64;
+        const pCentreY = 33;        // portrait circle centre Y (px from top)
+        const pStartX  = cw / 2 - pSpacing;
+
+        portDefs.forEach(({ key, img, label, ring, fallC }, idx) => {
+          const isTarget = key === nextSpecial;
+          const isBase   = key === 'hamzah';
+          const size     = isTarget ? 50 : isBase ? 34 : 42;
+          const px       = pStartX + idx * pSpacing;
+
+          ctx.save();
+
+          // Glow ring for the active target
+          if (isTarget) {
+            const pulse = 0.65 + 0.35 * Math.sin(tick * 0.09);
+            ctx.strokeStyle = ring;
+            ctx.lineWidth   = 3;
+            ctx.shadowColor = ring;
+            ctx.shadowBlur  = Math.round(16 * pulse);
+            ctx.beginPath(); ctx.arc(px, pCentreY, size / 2 + 3, 0, Math.PI * 2); ctx.stroke();
+            ctx.shadowBlur  = 0;
+          } else {
+            // Subtle ring for non-targets
+            ctx.strokeStyle = 'rgba(148,163,184,0.3)';
+            ctx.lineWidth   = 1.5;
+            ctx.beginPath(); ctx.arc(px, pCentreY, size / 2 + 1, 0, Math.PI * 2); ctx.stroke();
+          }
+
+          // Circular clip for portrait
+          ctx.globalAlpha = isBase ? 0.45 : 1;
+          ctx.beginPath(); ctx.arc(px, pCentreY, size / 2, 0, Math.PI * 2); ctx.clip();
+          if (img) {
+            ctx.drawImage(img, px - size / 2, pCentreY - size / 2, size, size);
+          } else {
+            // Fallback solid-colour circle with initial
+            ctx.fillStyle = fallC; ctx.fill();
+            ctx.font = `bold ${Math.round(size * 0.4)}px system-ui,sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label[0], px, pCentreY);
+          }
+          ctx.restore();
+          ctx.globalAlpha = 1;
+
+          // Label below portrait
+          ctx.save();
+          ctx.font         = 'bold 8px system-ui,sans-serif';
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle    = isTarget ? (key === 'jafar' ? '#fca5a5' : '#fde68a')
+                           : isBase   ? 'rgba(148,163,184,0.4)' : 'rgba(148,163,184,0.7)';
+          ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+          ctx.shadowBlur   = 3;
+          ctx.fillText(label, px, pCentreY + size / 2 + 4);
+          ctx.shadowBlur   = 0;
+          ctx.restore();
+
+          // Progress pips under the target label
+          if (isTarget) {
+            const pipY = pCentreY + size / 2 + 16;
+            const gap  = 9;
+            for (let i = 0; i < 3; i++) {
+              ctx.fillStyle = i < tierProgress ? ring : 'rgba(100,116,139,0.35)';
+              ctx.beginPath();
+              ctx.arc(px - gap + i * gap, pipY, 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        });
+      }
 
       // ── Winner overlay ──────────────────────────────────────────────────────
       if (state.winner) {
