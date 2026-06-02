@@ -757,8 +757,22 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
       // ── Background ──────────────────────────────────────────────────────────
       if (bgReady.current && bgImg.current) {
-        // Stretch the image to fill the entire canvas
-        ctx.drawImage(bgImg.current, 0, 0, cw, CANVAS_H);
+        // "Cover" — fill the canvas while preserving the image's aspect ratio,
+        // cropping equally from both sides / top-bottom as needed.
+        const img        = bgImg.current;
+        const imgAspect  = img.naturalWidth / img.naturalHeight;
+        const canvAspect = cw / CANVAS_H;
+        let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+        if (imgAspect > canvAspect) {
+          // Image is wider relative to canvas → crop left/right
+          sw = img.naturalHeight * canvAspect;
+          sx = (img.naturalWidth - sw) / 2;
+        } else {
+          // Image is taller relative to canvas → crop top/bottom
+          sh = img.naturalWidth / canvAspect;
+          sy = (img.naturalHeight - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, CANVAS_H);
       } else {
         // Procedural fallback sky
         const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
