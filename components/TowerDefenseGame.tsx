@@ -98,6 +98,224 @@ function burst(ps: Particle[], x: number, y: number, count: number, colors: stri
   }
 }
 
+// ─── Audio Engine ────────────────────────────────────────────────────────────
+class GameAudio {
+  private ctx:    AudioContext | null = null;
+  private master: GainNode    | null = null;
+  private bgLoop: ReturnType<typeof setTimeout> | null = null;
+  private musicPlaying = false;
+  private lastClash = 0;
+
+  // Lazy AudioContext — created only after first user gesture
+  private ac(): AudioContext {
+    if (!this.ctx || this.ctx.state === 'closed') {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  }
+
+  private mg(): GainNode {
+    const c = this.ac();
+    if (!this.master) {
+      this.master = c.createGain();
+      this.master.gain.value = 0.42;
+      this.master.connect(c.destination);
+    }
+    return this.master;
+  }
+
+  // ── Primitive synth helpers ────────────────────────────────────────────────
+  private tone(
+    freq: number, type: OscillatorType, dur: number,
+    vol: number, t?: number, freqEnd?: number,
+  ) {
+    try {
+      const c = this.ac(); const now = t ?? c.currentTime;
+      const osc = c.createOscillator(); const g = c.createGain();
+      osc.type = type; osc.frequency.setValueAtTime(freq, now);
+      if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, now + dur);
+      g.gain.setValueAtTime(vol, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(g); g.connect(this.mg());
+      osc.start(now); osc.stop(now + dur + 0.05);
+    } catch { /* ignore */ }
+  }
+
+  private noise(dur: number, vol: number, fc: number, q: number, t?: number) {
+    try {
+      const c = this.ac(); const now = t ?? c.currentTime;
+      const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = c.createBufferSource(); src.buffer = buf;
+      const f = c.createBiquadFilter();
+      f.type = 'bandpass'; f.frequency.value = fc; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(vol, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      src.connect(f); f.connect(g); g.connect(this.mg());
+      src.start(now);
+    } catch { /* ignore */ }
+  }
+
+  // ── Sound effects ──────────────────────────────────────────────────────────
+  clash() {
+    const now = Date.now();
+    if (now - this.lastClash < 130) return;
+    this.lastClash = now;
+    this.noise(0.13, 0.32, 4500, 2.5);
+    this.tone(1320, 'square', 0.14, 0.10);
+    this.tone(880,  'square', 0.17, 0.07);
+  }
+
+  spawnNormal() {
+    const c = this.ac(); const t = c.currentTime;
+    this.tone(330, 'sine', 0.07, 0.16, t);
+    this.tone(494, 'sine', 0.07, 0.12, t + 0.07);
+  }
+
+  spawnBilal() {
+    const c = this.ac(); const t = c.currentTime;
+    this.tone(330, 'triangle', 0.09, 0.22, t);
+    this.tone(494, 'triangle', 0.09, 0.18, t + 0.07);
+    this.tone(659, 'triangle', 0.11, 0.15, t + 0.14);
+  }
+
+  spawnJafar() {
+    const c = this.ac(); const t = c.currentTime;
+    this.tone(82,  'sawtooth', 0.35, 0.40, t);
+    this.tone(165, 'triangle', 0.18, 0.28, t + 0.06);
+    this.tone(330, 'triangle', 0.14, 0.20, t + 0.13);
+    this.tone(659, 'sine',     0.10, 0.16, t + 0.20);
+    this.noise(0.20, 0.22, 200, 3, t);
+  }
+
+  tentHit() {
+    const c = this.ac(); const t = c.currentTime;
+    this.tone(120, 'sine', 0.38, 0.50, t, 25);
+    this.noise(0.10, 0.18, 220, 2, t);
+  }
+
+  death() {
+    const c = this.ac(); const t = c.currentTime;
+    this.tone(380, 'sawtooth', 0.40, 0.16, t, 70);
+  }
+
+  victory() {
+    const c = this.ac(); const t = c.currentTime;
+    // D major chord arpeggiated up
+    [[293.66,0],[369.99,0.18],[440,0.36],[587.33,0.54],[587.33,0.82]].forEach(([f,dt]) =>
+      this.tone(f as number, 'triangle', 0.55, 0.32, t + (dt as number))
+    );
+  }
+
+  defeat() {
+    const c = this.ac(); const t = c.currentTime;
+    [[293.66,0],[261.63,0.22],[220,0.44],[174.61,0.68]].forEach(([f,dt]) =>
+      this.tone(f as number, 'sawtooth', 0.58, 0.20, t + (dt as number))
+    );
+  }
+
+  // ── Background music — Maqam Hijaz loop ───────────────────────────────────
+  // D Hijaz scale: D Eb F# G A Bb C D
+  private scheduleLoop() {
+    if (!this.musicPlaying) return;
+    const c   = this.ac();
+    const now = c.currentTime + 0.05;
+    const BPM = 108;
+    const b   = 60 / BPM;      // one beat ≈ 0.556 s
+    const BEATS = 16;
+
+    // Hz values: D3 Eb3 F#3 G3 A3 Bb3 C4 D4
+    const S = [146.83, 155.56, 185.00, 196.00, 220.00, 233.08, 261.63, 293.66];
+
+    // Melody: [noteIdx, startBeat, durationBeats]
+    const mel: [number,number,number][] = [
+      [4,0,1],[3,1,.5],[2,1.5,.5],[3,2,1],[1,3,1],
+      [0,4,1.5],[1,5.5,.5],[2,6,.5],[3,6.5,.5],
+      [4,7,1],[5,8,.5],[4,8.5,.5],[3,9,1],
+      [2,10,.5],[1,10.5,.5],[0,11,2],
+      [4,13,.5],[5,13.5,.5],[4,14,1],[3,15,1],
+    ];
+
+    mel.forEach(([ni, sb, db]) => {
+      const t   = now + sb * b;
+      const dur = db * b * 0.82;
+      this.melNote(S[ni] * 2, dur, 0.09, t);   // melody (one octave up)
+      this.melNote(S[ni],     dur, 0.04, t);   // octave drone below
+    });
+
+    // Bass hits on beats 0, 4, 8, 12
+    [0,4,8,12].forEach(beat => this.tone(S[0]/2, 'sine', b*0.88, 0.16, now + beat*b));
+
+    // Percussion
+    for (let i = 0; i < BEATS; i++) {
+      const t = now + i * b;
+      if (i % 4 === 0) {
+        // Kick drum
+        try {
+          const oc = this.ac(); const osc = oc.createOscillator(); const g = oc.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(110, t);
+          osc.frequency.exponentialRampToValueAtTime(28, t + 0.28);
+          g.gain.setValueAtTime(0.26, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+          osc.connect(g); g.connect(this.mg());
+          osc.start(t); osc.stop(t + 0.36);
+        } catch { /* ignore */ }
+      } else if (i % 2 === 0) {
+        this.noise(0.06, 0.08, 7000, 4, t);   // hi-hat on every other beat
+      } else {
+        this.noise(0.04, 0.05, 3500, 3, t);   // light off-beat tap
+      }
+    }
+
+    this.bgLoop = setTimeout(
+      () => this.scheduleLoop(),
+      (BEATS * b - 0.25) * 1000,
+    );
+  }
+
+  private melNote(freq: number, dur: number, vol: number, t: number) {
+    try {
+      const c = this.ac();
+      const osc = c.createOscillator(); const g = c.createGain();
+      const filt = c.createBiquadFilter();
+      filt.type = 'lowpass'; filt.frequency.value = 1600;
+      osc.type = 'triangle'; osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.025);
+      g.gain.setValueAtTime(vol * 0.75, t + dur * 0.65);
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      osc.connect(filt); filt.connect(g); g.connect(this.mg());
+      osc.start(t); osc.stop(t + dur + 0.05);
+    } catch { /* ignore */ }
+  }
+
+  startMusic() {
+    if (this.musicPlaying) return;
+    this.musicPlaying = true;
+    this.scheduleLoop();
+  }
+
+  stopMusic(fade = true) {
+    this.musicPlaying = false;
+    if (this.bgLoop !== null) { clearTimeout(this.bgLoop); this.bgLoop = null; }
+    if (fade && this.master && this.ctx) {
+      const t = this.ctx.currentTime;
+      this.master.gain.setValueAtTime(this.master.gain.value, t);
+      this.master.gain.linearRampToValueAtTime(0, t + 1.2);
+    }
+  }
+
+  destroy() {
+    this.stopMusic(false);
+    try { this.ctx?.close(); } catch { /* ignore */ }
+    this.ctx = null; this.master = null;
+  }
+}
+
 /**
  * Draw source image/canvas onto an offscreen canvas removing near-white pixels.
  * Works for both transparent PNGs and white-background PNGs.
@@ -170,6 +388,10 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const gs    = useRef<GS>(makeGS());
   const cbRef = useRef(onGameOver);
   cbRef.current = onGameOver;
+
+  const audioRef       = useRef<GameAudio | null>(null);
+  const musicStarted   = useRef(false);
+  const prevWinner     = useRef<'player' | 'enemy' | null>(null);
 
   // ── Load all assets ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -262,10 +484,17 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Audio engine lifecycle ─────────────────────────────────────────────────
+  useEffect(() => {
+    audioRef.current = new GameAudio();
+    return () => { audioRef.current?.destroy(); audioRef.current = null; };
+  }, []);
+
   // ── Imperative API ─────────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     spawnPlayerSoldier() {
       if (gs.current.winner) return;
+      audioRef.current?.spawnNormal();
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
@@ -276,7 +505,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
     },
     spawnBilalSoldier() {
       if (gs.current.winner) return;
-      console.log('[TowerDefense] spawnBilalSoldier called, bilalReady=', bilalReady.current);
+      audioRef.current?.spawnBilal();
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
@@ -288,7 +517,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
     },
     spawnJafarSoldier() {
       if (gs.current.winner) return;
-      console.log('[TowerDefense] spawnJafarSoldier called, jafarReady=', jafarReady.current);
+      audioRef.current?.spawnJafar();
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
@@ -310,7 +539,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         fightingWith: null, frame: 0, dying: 0,
       });
     },
-    reset() { gs.current = makeGS(); },
+    reset() {
+      gs.current = makeGS();
+      musicStarted.current = false;
+      audioRef.current?.stopMusic(false);
+    },
   }));
 
   // ── Canvas setup & game loop ───────────────────────────────────────────────
@@ -369,6 +602,12 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         return;
       }
 
+      // ── Start background music on first real game frame ───────────────────
+      if (!musicStarted.current) {
+        musicStarted.current = true;
+        audioRef.current?.startMusic();
+      }
+
       // ── UPDATE ──────────────────────────────────────────────────────────────
       if (!state.winner) {
         if (state.shakeLeft  > 0) state.shakeLeft--;
@@ -383,6 +622,8 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         for (const s of state.soldiers) {
           if (s.dying > 0 || s.fightingWith === null || deadIds.has(s.id)) continue;
           s.frame++;
+          // Frame 1 = first fight tick → sword clash sound
+          if (s.frame === 1 && s.side === 'player') audioRef.current?.clash();
           if (s.frame % 32 === 0) {
             const dmg = s.isJafar ? JAFAR_DAMAGE : s.isBilal ? BILAL_DAMAGE : 1;
             dmgMap.set(s.fightingWith, (dmgMap.get(s.fightingWith) ?? 0) + dmg);
@@ -397,6 +638,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
               s.dying = DEATH_TICKS; s.fightingWith = null;
               burst(state.particles, s.x, s.y - 40, 12,
                 s.side === 'player' ? ['#93c5fd','#3b82f6','#fff'] : ['#fca5a5','#ef4444','#fff'], 3);
+              audioRef.current?.death();
             }
           }
         }
@@ -417,16 +659,24 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             state.enemyHp = Math.max(0, state.enemyHp - TENT_DMG);
             state.shakeRight = 22;
             burst(state.particles, RIGHT_X, GROUND_Y - 60, 18, ['#fbbf24','#f59e0b','#ef4444','#fff'], 4);
+            audioRef.current?.tentHit();
             freshDead.add(s.id);
-            if (state.enemyHp <= 0) { state.winner = 'player'; cbRef.current?.('player'); }
+            if (state.enemyHp <= 0) {
+              state.winner = 'player'; cbRef.current?.('player');
+              audioRef.current?.stopMusic(); audioRef.current?.victory();
+            }
             continue;
           }
           if (s.side === 'enemy' && s.x <= LEFT_X + 30) {
             state.playerHp = Math.max(0, state.playerHp - TENT_DMG);
             state.shakeLeft  = 22;
             burst(state.particles, LEFT_X, GROUND_Y - 60, 18, ['#fbbf24','#f59e0b','#3b82f6','#fff'], 4);
+            audioRef.current?.tentHit();
             freshDead.add(s.id);
-            if (state.playerHp <= 0) { state.winner = 'enemy'; cbRef.current?.('enemy'); }
+            if (state.playerHp <= 0) {
+              state.winner = 'enemy'; cbRef.current?.('enemy');
+              audioRef.current?.stopMusic(); audioRef.current?.defeat();
+            }
             continue;
           }
           for (const opp of state.soldiers) {
