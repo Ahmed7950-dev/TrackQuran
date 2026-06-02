@@ -221,6 +221,18 @@ class GameAudio {
     this.tone(880,  'square', 0.17, 0.07);
   }
 
+  /**
+   * Called every game frame. When hasFights turns false, immediately stop
+   * any still-playing clash audio so the long MP3 doesn't bleed past fights.
+   */
+  setClashActive(hasFights: boolean) {
+    if (!hasFights) {
+      for (const a of this.clashPool) {
+        try { if (!a.paused) { a.pause(); a.currentTime = 0; } } catch { /* ignore */ }
+      }
+    }
+  }
+
   spawnNormal() {
     const c = this.ac(); const t = c.currentTime;
     this.tone(330, 'sine', 0.07, 0.16, t);
@@ -783,6 +795,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           return p.life > 0;
         });
       }
+
+      // Stop clash audio immediately when no soldiers are fighting
+      audioRef.current?.setClashActive(
+        !state.winner && state.soldiers.some(s => s.fightingWith !== null && s.dying === 0),
+      );
 
       // ── DRAW ────────────────────────────────────────────────────────────────
       ctx.save();
