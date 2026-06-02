@@ -122,13 +122,19 @@ class GameAudio {
   private jafarEl: HTMLAudioElement | null = null;
 
   private musicPlaying = false;
+  private bgmVolume    = 0.40;   // current desired BGM level (0–1)
+
+  setBgmVolume(vol: number) {
+    this.bgmVolume = vol;
+    if (this.bgmEl) this.bgmEl.volume = vol;
+  }
 
   constructor() {
     try {
       // Background music — looping
       this.bgmEl = new Audio('/audio/Background_music.mp3');
       this.bgmEl.loop    = true;
-      this.bgmEl.volume  = 0.40;
+      this.bgmEl.volume  = this.bgmVolume;
       this.bgmEl.preload = 'auto';
 
       // Clash pool
@@ -301,7 +307,7 @@ class GameAudio {
           clearInterval(this.bgmFadeTimer);
           this.bgmFadeTimer = null;
         }
-        this.bgmEl.volume     = 0.40;
+        this.bgmEl.volume     = this.bgmVolume;
         this.bgmEl.currentTime = 0;
         this.bgmEl.play().catch(() => {});
       } catch { /* ignore */ }
@@ -331,7 +337,7 @@ class GameAudio {
             this.bgmFadeTimer = null;
             el.pause();
             el.currentTime = 0;
-            el.volume = startVol; // restore for next play
+            el.volume = this.bgmVolume; // restore for next play
           }
         }, 60);
       } else {
@@ -437,7 +443,8 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const audioRef        = useRef<GameAudio | null>(null);
   const musicStarted    = useRef(false);
   const musicEnabledRef = useRef(true);
-  const [musicOn,   setMusicOn]   = useState(true);
+  const [musicOn,       setMusicOn]       = useState(true);
+  const [musicVolume,   setMusicVolume]   = useState(0.40);
   const canvasHRef   = useRef(CANVAS_H);
   const groundFracRef = useRef(0.87);                         // ground-line at 87% of canvas height
   const groundYRef   = useRef(Math.round(CANVAS_H * 0.87));  // live ground-line y (px)
@@ -1234,28 +1241,56 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           boxShadow: '0 6px 28px rgba(0,0,0,0.18)',
         }}
       />
-      {/* Music toggle button — top-right corner of canvas */}
-      <button
-        onClick={() => {
-          const nowOn = audioRef.current?.toggleMusic() ?? false;
-          musicEnabledRef.current = nowOn;
-          setMusicOn(nowOn);
-        }}
-        title={musicOn ? 'Mute music' : 'Unmute music'}
+      {/* Music controls — top-right corner of canvas */}
+      <div
         style={{
           position: 'absolute', top: 8, right: 8,
+          display: 'flex', alignItems: 'center', gap: 6,
           background: 'rgba(0,0,0,0.55)',
           border: '1px solid rgba(255,255,255,0.22)',
-          borderRadius: 8, color: 'white',
-          fontSize: 17, lineHeight: 1,
-          padding: '5px 9px',
-          cursor: 'pointer', zIndex: 10,
+          borderRadius: 10, color: 'white',
+          padding: '4px 8px 4px 10px',
           backdropFilter: 'blur(4px)',
+          zIndex: 10,
           userSelect: 'none',
         }}
       >
-        {musicOn ? '🔊' : '🔇'}
-      </button>
+        {/* Volume slider — only shown when music is on */}
+        {musicOn && (
+          <input
+            type="range"
+            min={0} max={1} step={0.05}
+            value={musicVolume}
+            onChange={e => {
+              const v = parseFloat(e.target.value);
+              setMusicVolume(v);
+              audioRef.current?.setBgmVolume(v);
+            }}
+            title="Music volume"
+            style={{
+              width: 64, cursor: 'pointer',
+              accentColor: 'rgba(255,255,255,0.85)',
+              verticalAlign: 'middle',
+            }}
+          />
+        )}
+        {/* Mute / unmute toggle */}
+        <button
+          onClick={() => {
+            const nowOn = audioRef.current?.toggleMusic() ?? false;
+            musicEnabledRef.current = nowOn;
+            setMusicOn(nowOn);
+          }}
+          title={musicOn ? 'Mute music' : 'Unmute music'}
+          style={{
+            background: 'none', border: 'none',
+            color: 'white', fontSize: 17, lineHeight: 1,
+            padding: '1px 2px', cursor: 'pointer',
+          }}
+        >
+          {musicOn ? (musicVolume === 0 ? '🔈' : musicVolume < 0.5 ? '🔉' : '🔊') : '🔇'}
+        </button>
+      </div>
     </div>
   );
 });

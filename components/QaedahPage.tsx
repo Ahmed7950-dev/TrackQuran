@@ -62,6 +62,19 @@ const QaedahPage: React.FC = () => {
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);
 
+  // Hidden tutor shortcut: press R to spawn an enemy soldier (child mode only)
+  useEffect(() => {
+    if (!childMode || view !== 'challenge') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        gameRef.current?.spawnEnemySoldier();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [childMode, view]);
+
   // ── CSS keyframes ────────────────────────────────────────────────────────
   useEffect(() => {
     const id = 'qd-styles';
