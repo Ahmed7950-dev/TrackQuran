@@ -421,10 +421,12 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const musicStarted    = useRef(false);
   const musicEnabledRef = useRef(true);
   const [musicOn,   setMusicOn]   = useState(true);
-  const canvasHRef  = useRef(CANVAS_H);                        // live canvas logical height (px)
-  const groundYRef  = useRef(Math.round(CANVAS_H * 0.55));    // live ground-line y (px)
-  const [cssH, setCssH] = useState(CANVAS_H);                 // drives the CSS height of the canvas
-  const bgResized   = useRef(false);                          // have we resized for the bg image yet?
+  const canvasHRef   = useRef(CANVAS_H);
+  const [groundFrac, setGroundFrac] = useState(0.55);         // 0–1 fraction for ground-line position
+  const groundFracRef = useRef(0.55);                         // same value, readable in RAF loop
+  const groundYRef   = useRef(Math.round(CANVAS_H * 0.55));  // live ground-line y (px)
+  const [cssH, setCssH] = useState(CANVAS_H);
+  const bgResized    = useRef(false);
   const prevWinner  = useRef<'player' | 'enemy' | null>(null);
 
   // ── Load all assets ────────────────────────────────────────────────────────
@@ -606,7 +608,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         canvas.height = newH    * devicePixelRatio;
         if (canvasHRef.current !== newH) {
           canvasHRef.current = newH;
-          groundYRef.current = Math.round(newH * 0.55);
+          groundYRef.current = Math.round(newH * groundFracRef.current);
           setCssH(newH);
         }
       }
@@ -624,7 +626,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       const dpr    = devicePixelRatio;
       const cw     = canvas.width  / dpr;
       const ch     = canvas.height / dpr;   // actual logical height this frame
-      const groundY = Math.round(ch * 0.55); // ground line — 55% down the canvas
+      const groundY = Math.round(ch * groundFracRef.current);
       const ctx    = canvas.getContext('2d');
       if (!ctx) { animId = requestAnimationFrame(loop); return; }
 
@@ -1141,6 +1143,37 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       >
         {musicOn ? '🔊' : '🔇'}
       </button>
+
+      {/* ── TEMP: ground-line position tuner ── */}
+      <div style={{
+        position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(4px)',
+        border: '1px solid rgba(255,255,255,0.22)', borderRadius: 10,
+        padding: '4px 10px', zIndex: 10, userSelect: 'none',
+      }}>
+        <button
+          onClick={() => {
+            const next = Math.max(0.10, parseFloat((groundFracRef.current - 0.01).toFixed(2)));
+            groundFracRef.current = next;
+            groundYRef.current = Math.round(canvasHRef.current * next);
+            setGroundFrac(next);
+          }}
+          style={{ background: 'none', border: 'none', color: 'white', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+        >▲</button>
+        <span style={{ color: '#fde68a', fontWeight: 700, fontSize: 13, minWidth: 44, textAlign: 'center' }}>
+          {Math.round(groundFrac * 100)}%
+        </span>
+        <button
+          onClick={() => {
+            const next = Math.min(0.95, parseFloat((groundFracRef.current + 0.01).toFixed(2)));
+            groundFracRef.current = next;
+            groundYRef.current = Math.round(canvasHRef.current * next);
+            setGroundFrac(next);
+          }}
+          style={{ background: 'none', border: 'none', color: 'white', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+        >▼</button>
+      </div>
     </div>
   );
 });
