@@ -324,6 +324,22 @@ const AlphabetTrainerPage: React.FC = () => {
         {LETTERS.map((letter, i) => {
           const p  = priorities[i];
           const cc = CHILD_CARD_COLORS[i % CHILD_CARD_COLORS.length];
+          // Dot row — 3 slots; filled dots = chosen priority level
+          const dotRow = (dotFill: string, dotEmpty: string) => (
+            <div className="flex gap-[3px] mt-1.5">
+              {[1, 2, 3].map(d => (
+                <div
+                  key={d}
+                  style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: d <= p ? dotFill : dotEmpty,
+                    flexShrink: 0,
+                  }}
+                />
+              ))}
+            </div>
+          );
+
           return childMode ? (
             <button
               key={i}
@@ -335,24 +351,23 @@ const AlphabetTrainerPage: React.FC = () => {
                 outline: p > 0 ? `3px solid ${CHILD_PRIORITY_OUTLINES[p]}` : 'none',
                 outlineOffset: '1px',
               }}
-              className="aspect-square rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
+              className="rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
             >
-              <span style={{ fontFamily: 'Amiri, serif', fontSize: '2.5rem', lineHeight: 1 }}>
+              <span style={{ fontFamily: 'Amiri, serif', fontSize: 'clamp(3.5rem, 17vw, 7.5rem)', lineHeight: 1 }}>
                 {getLetterInForm(letter, letterForm)}
               </span>
-              {/* For non-connectors in a "same shape" form, show which form it equals */}
               {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-                <span style={{ fontSize: '0.55rem', opacity: 0.55, marginTop: 1 }}>
+                <span style={{ fontSize: '0.55rem', opacity: 0.5, marginTop: 2 }}>
                   ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
                 </span>
               )}
-              <span className="text-xs mt-0.5" style={{ letterSpacing: 2, minHeight: 14 }}>{'★'.repeat(p)}</span>
+              {dotRow(CHILD_PRIORITY_OUTLINES[p] || 'rgba(148,163,184,0.5)', 'rgba(148,163,184,0.22)')}
             </button>
           ) : (
             <button
               key={i}
               onClick={() => handleLetterClick(i)}
-              className={`aspect-square rounded-xl border flex flex-col items-center justify-center cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
+              className={`rounded-xl border flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
                 p === 0 ? 'bg-slate-100 dark:bg-gray-700/60 border-slate-200 dark:border-gray-600' :
                 p === 1 ? 'bg-amber-50  dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
                 p === 2 ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600' :
@@ -360,23 +375,22 @@ const AlphabetTrainerPage: React.FC = () => {
               }`}
             >
               <span
-                style={{ fontFamily: 'Amiri, serif', fontSize: '2.2rem', lineHeight: 1 }}
+                style={{ fontFamily: 'Amiri, serif', fontSize: 'clamp(3.2rem, 15vw, 6.6rem)', lineHeight: 1 }}
                 className={
                   p === 0 ? 'text-slate-500 dark:text-slate-400' :
                   p === 3 ? 'text-amber-800 dark:text-amber-200' :
                             'text-amber-700 dark:text-amber-300'
                 }
               >{getLetterInForm(letter, letterForm)}</span>
-              {/* Badge for non-connectors whose shape is identical to another form */}
               {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-                <span className="text-[8px] text-slate-400 dark:text-slate-500" style={{ marginTop: 1 }}>
+                <span className="text-[8px] text-slate-400 dark:text-slate-500" style={{ marginTop: 2 }}>
                   ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
                 </span>
               )}
-              <span
-                className={`text-xs mt-0.5 ${p > 0 ? 'text-amber-500 dark:text-amber-400' : ''}`}
-                style={{ letterSpacing: 2, minHeight: 14 }}
-              >{'★'.repeat(p)}</span>
+              {dotRow(
+                p === 3 ? '#d97706' : p === 2 ? '#f59e0b' : '#fbbf24',
+                'rgba(148,163,184,0.22)',
+              )}
             </button>
           );
         })}
