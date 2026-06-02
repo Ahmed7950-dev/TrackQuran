@@ -421,9 +421,10 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const musicStarted    = useRef(false);
   const musicEnabledRef = useRef(true);
   const [musicOn,   setMusicOn]   = useState(true);
-  const canvasHRef  = useRef(CANVAS_H);          // live canvas logical height (px)
-  const [cssH, setCssH] = useState(CANVAS_H);    // drives the CSS height of the canvas
-  const bgResized   = useRef(false);             // have we resized for the bg image yet?
+  const canvasHRef  = useRef(CANVAS_H);                        // live canvas logical height (px)
+  const groundYRef  = useRef(Math.round(CANVAS_H * 0.70));    // live ground-line y (px)
+  const [cssH, setCssH] = useState(CANVAS_H);                 // drives the CSS height of the canvas
+  const bgResized   = useRef(false);                          // have we resized for the bg image yet?
   const prevWinner  = useRef<'player' | 'enemy' | null>(null);
 
   // ── Load all assets ────────────────────────────────────────────────────────
@@ -538,7 +539,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
+        y: groundYRef.current - 2 - Math.random() * 6,
         hp: SOL_MAX_HP, maxHp: SOL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
       });
@@ -549,7 +550,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
+        y: groundYRef.current - 2 - Math.random() * 6,
         hp: BILAL_MAX_HP, maxHp: BILAL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
         isBilal: true,
@@ -561,7 +562,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'player',
         x: LEFT_ANCHOR + 35,
-        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
+        y: groundYRef.current - 2 - Math.random() * 6,
         hp: JAFAR_MAX_HP, maxHp: JAFAR_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
         isJafar: true,
@@ -574,7 +575,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       gs.current.soldiers.push({
         id: gs.current.nextId++, side: 'enemy',
         x: cw - LEFT_ANCHOR - 35,
-        y: canvasHRef.current - 32 - 2 - Math.random() * 6,
+        y: groundYRef.current - 2 - Math.random() * 6,
         hp: SOL_MAX_HP, maxHp: SOL_MAX_HP,
         fightingWith: null, frame: 0, dying: 0,
       });
@@ -605,6 +606,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         canvas.height = newH    * devicePixelRatio;
         if (canvasHRef.current !== newH) {
           canvasHRef.current = newH;
+          groundYRef.current = Math.round(newH * 0.70);
           setCssH(newH);
         }
       }
@@ -622,7 +624,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       const dpr    = devicePixelRatio;
       const cw     = canvas.width  / dpr;
       const ch     = canvas.height / dpr;   // actual logical height this frame
-      const groundY = ch - 32;              // ground line — replaces module-level GROUND_Y
+      const groundY = Math.round(ch * 0.70); // ground line — 70% down the canvas
       const ctx    = canvas.getContext('2d');
       if (!ctx) { animId = requestAnimationFrame(loop); return; }
 
