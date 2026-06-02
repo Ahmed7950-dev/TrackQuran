@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 
 export interface TowerDefenseRef {
   spawnPlayerSoldier: () => void;
@@ -36,7 +36,9 @@ const CANVAS_H     = 270;
 const TENT_MAX_HP  = 100;
 const SOL_MAX_HP   = 3;
 const FIGHT_RANGE  = 70;
-const WALK_SPEED   = 0.38;
+const WALK_SPEED          = 0.38;
+const JAFAR_SPEED_MULT    = 1.6;   // Jafar walks 60 % faster than normal soldiers
+const CASTLE_ATTACK_TICKS = 32;    // animation frames the soldier plays before the bomb goes off
 const TENT_DMG     = 25;
 const DEATH_TICKS  = 18;
 const GROUND_Y     = CANVAS_H - 32;
@@ -57,8 +59,9 @@ interface Soldier {
   hp: number; maxHp: number;
   fightingWith: number | null;
   frame: number; dying: number;
-  isBilal?: boolean;  // true → use Bilal sprites + boosted stats
-  isJafar?: boolean;  // true → use Jafar sprites + elite stats
+  isBilal?: boolean;      // true → use Bilal sprites + boosted stats
+  isJafar?: boolean;      // true → use Jafar sprites + elite stats
+  castleAttack?: number;  // > 0 → playing castle-bomb animation before exploding
 }
 interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -300,6 +303,12 @@ class GameAudio {
     this.scheduleLoop();
   }
 
+  /** Toggle music on/off. Returns the new playing state. */
+  toggleMusic(): boolean {
+    if (this.musicPlaying) { this.stopMusic(true); return false; }
+    else { this.startMusic(); return true; }
+  }
+
   stopMusic(fade = true) {
     this.musicPlaying = false;
     if (this.bgLoop !== null) { clearTimeout(this.bgLoop); this.bgLoop = null; }
@@ -363,11 +372,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const jafarFight   = useRef<HTMLCanvasElement | null>(null);
   const jafarReady   = useRef(false);
 
-  // ── Warrior portraits (roster bar) ────────────────────────────────────────
-  const portraitHamzah = useRef<HTMLCanvasElement | null>(null);
-  const portraitBilal  = useRef<HTMLCanvasElement | null>(null);
-  const portraitJafar  = useRef<HTMLCanvasElement | null>(null);
-  const streakRef      = useRef(0);  // current streak, set by parent via setStreak()
+  const streakRef = useRef(0);  // current streak, set by parent via setStreak()
 
   // ── Background & tent images ───────────────────────────────────────────────
   const bgImg          = useRef<HTMLImageElement | null>(null);
@@ -396,9 +401,11 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const cbRef = useRef(onGameOver);
   cbRef.current = onGameOver;
 
-  const audioRef       = useRef<GameAudio | null>(null);
-  const musicStarted   = useRef(false);
-  const prevWinner     = useRef<'player' | 'enemy' | null>(null);
+  const audioRef        = useRef<GameAudio | null>(null);
+  const musicStarted    = useRef(false);
+  const musicEnabledRef = useRef(true);
+  const [musicOn, setMusicOn] = useState(true);
+  const prevWinner      = useRef<'player' | 'enemy' | null>(null);
 
   // ── Load all assets ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -457,11 +464,6 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
             console.log('[TowerDefense] ✓ Jafar sprites loaded');
           })
           .catch((e) => console.warn('[TowerDefense] ✗ Jafar sprites FAILED:', e)),
-
-        // Warrior portraits
-        load('/sprites/portrait-hamzah.png').then(i => { if (!cancelled) portraitHamzah.current = removeWhiteBg(i); }).catch(() => {}),
-        load('/sprites/portrait-bilal.png') .then(i => { if (!cancelled) portraitBilal.current  = removeWhiteBg(i); }).catch(() => {}),
-        load('/sprites/portrait-jafar.png') .then(i => { if (!cancelled) portraitJafar.current  = removeWhiteBg(i); }).catch(() => {}),
 
         // Background
         load('/sprites/battle-bg.png')
@@ -619,7 +621,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       // ── Start background music on first real game frame ───────────────────
       if (!musicStarted.current) {
         musicStarted.current = true;
-        audioRef.current?.startMusic();
+        if (musicEnabledRef.current) audioRef.current?.startMusic();
       }
 
       // ── UPDATE ──────────────────────────────────────────────────────────────
@@ -664,37 +666,57 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         }
         state.soldiers = state.soldiers.filter(s => !deadIds.has(s.id));
 
-        const freshDead = new Set<number>();
+        // ── Castle-bomb: soldiers planted at the gate count down then explode ─
         for (const s of state.soldiers) {
-          if (s.fightingWith !== null || s.dying > 0) continue;
-          s.x += WALK_SPEED * (s.side === 'player' ? 1 : -1);
+          if (!s.castleAttack) continue;
+          s.castleAttack--;
           s.frame++;
-          if (s.side === 'player' && s.x >= RIGHT_X - 30) {
-            state.enemyHp = Math.max(0, state.enemyHp - TENT_DMG);
-            state.shakeRight = 22;
-            burst(state.particles, RIGHT_X, GROUND_Y - 60, 18, ['#fbbf24','#f59e0b','#ef4444','#fff'], 4);
+          if (s.castleAttack === 0) {
+            const isP   = s.side === 'player';
+            const tentX = isP ? RIGHT_X : LEFT_X;
+            if (isP) {
+              state.enemyHp    = Math.max(0, state.enemyHp  - TENT_DMG);
+              state.shakeRight = 22;
+              burst(state.particles, tentX, GROUND_Y - 50, 24,
+                ['#fbbf24','#f59e0b','#ef4444','#fff','#ff6600'], 5);
+            } else {
+              state.playerHp  = Math.max(0, state.playerHp - TENT_DMG);
+              state.shakeLeft = 22;
+              burst(state.particles, tentX, GROUND_Y - 50, 24,
+                ['#fbbf24','#f59e0b','#3b82f6','#fff','#ff6600'], 5);
+            }
             audioRef.current?.tentHit();
-            freshDead.add(s.id);
-            if (state.enemyHp <= 0) {
+            s.dying = DEATH_TICKS;
+            if (isP && state.enemyHp <= 0 && !state.winner) {
               state.winner = 'player'; cbRef.current?.('player');
               audioRef.current?.stopMusic(); audioRef.current?.victory();
-            }
-            continue;
-          }
-          if (s.side === 'enemy' && s.x <= LEFT_X + 30) {
-            state.playerHp = Math.max(0, state.playerHp - TENT_DMG);
-            state.shakeLeft  = 22;
-            burst(state.particles, LEFT_X, GROUND_Y - 60, 18, ['#fbbf24','#f59e0b','#3b82f6','#fff'], 4);
-            audioRef.current?.tentHit();
-            freshDead.add(s.id);
-            if (state.playerHp <= 0) {
+            } else if (!isP && state.playerHp <= 0 && !state.winner) {
               state.winner = 'enemy'; cbRef.current?.('enemy');
               audioRef.current?.stopMusic(); audioRef.current?.defeat();
             }
+          }
+        }
+
+        const freshDead = new Set<number>();
+        for (const s of state.soldiers) {
+          // Skip: already engaged, dying, or performing castle-bomb animation
+          if (s.fightingWith !== null || s.dying > 0 || s.castleAttack) continue;
+          const walkSpeed = s.isJafar ? WALK_SPEED * JAFAR_SPEED_MULT : WALK_SPEED;
+          s.x += walkSpeed * (s.side === 'player' ? 1 : -1);
+          s.frame++;
+          if (s.side === 'player' && s.x >= RIGHT_X - 30) {
+            // Pin soldier at gate and start attack animation
+            s.x = RIGHT_X - 30;
+            s.castleAttack = CASTLE_ATTACK_TICKS;
+            continue;
+          }
+          if (s.side === 'enemy' && s.x <= LEFT_X + 30) {
+            s.x = LEFT_X + 30;
+            s.castleAttack = CASTLE_ATTACK_TICKS;
             continue;
           }
           for (const opp of state.soldiers) {
-            if (opp.side === s.side || opp.fightingWith !== null || freshDead.has(opp.id) || opp.dying > 0) continue;
+            if (opp.side === s.side || opp.fightingWith !== null || freshDead.has(opp.id) || opp.dying > 0 || opp.castleAttack) continue;
             if (Math.abs(s.x - opp.x) < FIGHT_RANGE) {
               s.fightingWith = opp.id; opp.fightingWith = s.id;
               s.frame = opp.frame = 0; break;
@@ -851,7 +873,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
       // ── Soldiers ────────────────────────────────────────────────────────────
       const drawSoldier = (s: Soldier) => {
-        const fighting   = s.fightingWith !== null;
+        const fighting   = s.fightingWith !== null || !!s.castleAttack;
         const dying      = s.dying > 0;
         const isPlayer   = s.side === 'player';
         const isBilal    = !!s.isBilal;
@@ -998,107 +1020,6 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       }
       ctx.globalAlpha = 1;
 
-      // ── Warrior roster bar ──────────────────────────────────────────────────
-      if (!state.winner) {
-        const streak  = streakRef.current;
-        // Which character spawns on the NEXT correct answer?
-        // streak 2 → next is Bilal (3), streak 5 → next is Jafar (6), else Hamzah
-        const nextChar = streak === 5 ? 'jafar' : streak === 2 ? 'bilal' : 'hamzah';
-        // Progress within current tier: 0–2 count toward Bilal, 3–5 count toward Jafar
-        const tierProgress = streak <= 2 ? streak : streak - 3;      // 0-2
-        const tierTarget   = 3;                                        // always 3 steps per tier
-
-        const portraits = [
-          { img: portraitHamzah.current, label: 'HAMZAH', key: 'hamzah', dmg: '×1'   },
-          { img: portraitBilal.current,  label: 'BILAL',  key: 'bilal',  dmg: '×1.5' },
-          { img: portraitJafar.current,  label: 'JAFAR',  key: 'jafar',  dmg: '×2.5' },
-        ];
-
-        const SIZE   = 52;     // portrait circle diameter
-        const PAD    = 14;     // gap between circles
-        const totalW = portraits.length * SIZE + (portraits.length - 1) * PAD;
-        const startX = (cw - totalW) / 2;
-        const baseY  = CANVAS_H - SIZE - 14;
-
-        portraits.forEach(({ img, label, key, dmg }, idx) => {
-          const cx = startX + idx * (SIZE + PAD) + SIZE / 2;
-          const cy = baseY + SIZE / 2;
-          const isNext    = key === nextChar;
-          const isPast    = (key === 'hamzah' && streak >= 3) ||
-                            (key === 'bilal'  && streak >= 6);
-
-          ctx.save();
-
-          // Glowing ring for the next character
-          if (isNext) {
-            const pulse = 0.6 + 0.4 * Math.sin(tick * 0.12);
-            ctx.shadowColor = key === 'jafar' ? '#ef4444' : '#fbbf24';
-            ctx.shadowBlur  = 18 * pulse;
-            ctx.strokeStyle = key === 'jafar' ? `rgba(239,68,68,${0.7+0.3*pulse})` : `rgba(251,191,36,${0.7+0.3*pulse})`;
-            ctx.lineWidth   = 3.5;
-            ctx.beginPath(); ctx.arc(cx, cy, SIZE / 2 + 4, 0, Math.PI * 2); ctx.stroke();
-            ctx.shadowBlur  = 0;
-          }
-
-          // Circular clip for portrait
-          ctx.beginPath(); ctx.arc(cx, cy, SIZE / 2, 0, Math.PI * 2); ctx.clip();
-
-          // Dark background plate
-          ctx.fillStyle = isPast ? 'rgba(15,23,42,0.55)' : 'rgba(15,23,42,0.82)';
-          ctx.fillRect(cx - SIZE / 2, cy - SIZE / 2, SIZE, SIZE);
-
-          // Portrait image
-          if (img) {
-            ctx.globalAlpha = isPast ? 0.35 : 1;
-            ctx.drawImage(img, cx - SIZE / 2, cy - SIZE / 2, SIZE, SIZE);
-            ctx.globalAlpha = 1;
-          }
-
-          // Greyscale tint overlay for "already passed" tier
-          if (isPast) {
-            ctx.fillStyle = 'rgba(0,0,0,0.45)';
-            ctx.fillRect(cx - SIZE / 2, cy - SIZE / 2, SIZE, SIZE);
-          }
-
-          ctx.restore();
-
-          // Border ring (thin, always visible)
-          ctx.beginPath(); ctx.arc(cx, cy, SIZE / 2, 0, Math.PI * 2);
-          ctx.strokeStyle = isPast ? 'rgba(100,116,139,0.5)' :
-                            isNext ? 'transparent' : 'rgba(148,163,184,0.7)';
-          ctx.lineWidth = 1.5; ctx.stroke();
-
-          // Name label below
-          ctx.font = `bold ${isNext ? 10 : 9}px system-ui,sans-serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          ctx.fillStyle = isPast ? 'rgba(100,116,139,0.7)' :
-                          isNext ? (key === 'jafar' ? '#fca5a5' : '#fde68a') : 'rgba(203,213,225,0.9)';
-          ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
-          ctx.fillText(label, cx, baseY + SIZE + 4);
-          ctx.shadowBlur = 0;
-
-          // Damage label
-          ctx.font = '8px system-ui,sans-serif';
-          ctx.fillStyle = isPast ? 'rgba(100,116,139,0.5)' : 'rgba(148,163,184,0.7)';
-          ctx.fillText(dmg, cx, baseY + SIZE + 15);
-        });
-
-        // Progress pip bar under the highlighted character
-        const nextIdx   = nextChar === 'jafar' ? 2 : nextChar === 'bilal' ? 1 : 0;
-        const pipCx     = startX + nextIdx * (SIZE + PAD) + SIZE / 2;
-        const pipY      = baseY - 10;
-        const pipW      = 6; const pipGap = 4;
-        const pipTotalW = tierTarget * pipW + (tierTarget - 1) * pipGap;
-        for (let p = 0; p < tierTarget; p++) {
-          const px = pipCx - pipTotalW / 2 + p * (pipW + pipGap);
-          const filled = p < tierProgress;
-          ctx.fillStyle = filled
-            ? (nextChar === 'jafar' ? '#ef4444' : '#fbbf24')
-            : 'rgba(100,116,139,0.45)';
-          rr(ctx, px, pipY, pipW, 3, 1.5); ctx.fill();
-        }
-      }
-
       // ── Winner overlay ──────────────────────────────────────────────────────
       if (state.winner) {
         const wf = Math.min(state.winFrame, 30) / 30;
@@ -1140,16 +1061,40 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        width: '100%', height: `${CANVAS_H}px`,
-        display: 'block', borderRadius: 0,
-        borderTop: '2px solid rgba(180,100,20,0.3)',
-        borderBottom: '2px solid rgba(180,100,20,0.3)',
-        boxShadow: '0 6px 28px rgba(0,0,0,0.18)',
-      }}
-    />
+    <div style={{ position: 'relative', display: 'block' }}>
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: '100%', height: `${CANVAS_H}px`,
+          display: 'block', borderRadius: 0,
+          borderTop: '2px solid rgba(180,100,20,0.3)',
+          borderBottom: '2px solid rgba(180,100,20,0.3)',
+          boxShadow: '0 6px 28px rgba(0,0,0,0.18)',
+        }}
+      />
+      {/* Music toggle button — top-right corner of canvas */}
+      <button
+        onClick={() => {
+          const nowOn = audioRef.current?.toggleMusic() ?? false;
+          musicEnabledRef.current = nowOn;
+          setMusicOn(nowOn);
+        }}
+        title={musicOn ? 'Mute music' : 'Unmute music'}
+        style={{
+          position: 'absolute', top: 8, right: 8,
+          background: 'rgba(0,0,0,0.55)',
+          border: '1px solid rgba(255,255,255,0.22)',
+          borderRadius: 8, color: 'white',
+          fontSize: 17, lineHeight: 1,
+          padding: '5px 9px',
+          cursor: 'pointer', zIndex: 10,
+          backdropFilter: 'blur(4px)',
+          userSelect: 'none',
+        }}
+      >
+        {musicOn ? '🔊' : '🔇'}
+      </button>
+    </div>
   );
 });
 

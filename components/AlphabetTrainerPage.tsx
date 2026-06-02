@@ -69,6 +69,7 @@ const AlphabetTrainerPage: React.FC = () => {
   const [shaking, setShaking] = useState(false);
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);  // streak counter — Bilal spawns on every 3rd in a row
+  const [displayStreak, setDisplayStreak] = useState(0); // mirrors streak for portrait bar UI
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(priorities));
@@ -159,6 +160,7 @@ const AlphabetTrainerPage: React.FC = () => {
     const q = buildQueue(priorities);
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
     consecutiveCorrect.current = 0;
+    setDisplayStreak(0);
     gameRef.current?.setStreak(0);
     gameRef.current?.reset();
   };
@@ -182,14 +184,17 @@ const AlphabetTrainerPage: React.FC = () => {
       console.log('[AlphabetTrainer] ⚔️ Spawning JAFAR!');
       gameRef.current?.spawnJafarSoldier();
       gameRef.current?.setStreak(0);
+      setDisplayStreak(0);
     } else if (streak === 3) {
       // Don't reset — keep counting toward 6 for Jafar
       console.log('[AlphabetTrainer] 🔥 Spawning BILAL!');
       gameRef.current?.spawnBilalSoldier();
       gameRef.current?.setStreak(streak);
+      setDisplayStreak(streak);
     } else {
       gameRef.current?.spawnPlayerSoldier();
       gameRef.current?.setStreak(streak);
+      setDisplayStreak(streak);
     }
     if (childMode) {
       setCelebrating(true);
@@ -202,6 +207,7 @@ const AlphabetTrainerPage: React.FC = () => {
   const handleWrong = () => {
     if (celebrating) return;
     consecutiveCorrect.current = 0;  // reset streak on wrong answer
+    setDisplayStreak(0);
     gameRef.current?.setStreak(0);
     if (childMode) {
       setShaking(true);
@@ -407,14 +413,72 @@ const AlphabetTrainerPage: React.FC = () => {
       {/* Battle arena — full viewport width, children mode only */}
       {childMode && (
         <div className="w-full mt-3 pb-6">
-          <div className="flex items-center gap-2 mb-2 px-4">
-            <span className="text-sm font-extrabold text-indigo-500 tracking-wide">⚔️ Battle Arena</span>
-            <span className="text-xs text-indigo-300 font-semibold">— get letters right to send your soldiers!</span>
-          </div>
+
+          {/* Warrior portrait roster — shows which special soldier is coming next */}
+          {(() => {
+            // streak < 3 → working toward Bilal; streak 3-5 → working toward Jafar
+            const nextSpecial  = displayStreak < 3 ? 'bilal' : 'jafar';
+            const tierProgress = displayStreak < 3 ? displayStreak : displayStreak - 3; // 0-2
+            const warriors = [
+              { key: 'hamzah', src: '/sprites/portrait-hamzah.png', label: 'HAMZAH', dmg: '×1'   },
+              { key: 'bilal',  src: '/sprites/portrait-bilal.png',  label: 'BILAL',  dmg: '×1.5' },
+              { key: 'jafar',  src: '/sprites/portrait-jafar.png',  label: 'JAFAR',  dmg: '×2.5' },
+            ];
+            return (
+              <div className="flex items-end justify-center gap-5 mb-3 px-4">
+                {warriors.map(({ key, src, label, dmg }) => {
+                  const isTarget = key === nextSpecial;
+                  const isBase   = key === 'hamzah';
+                  const ringColor = key === 'jafar' ? '#ef4444' : '#fbbf24';
+                  return (
+                    <div key={key} className="flex flex-col items-center gap-0.5">
+                      <div
+                        className="rounded-full overflow-hidden transition-all duration-300"
+                        style={{
+                          width:  isTarget ? 56 : isBase ? 38 : 44,
+                          height: isTarget ? 56 : isBase ? 38 : 44,
+                          boxShadow: isTarget
+                            ? `0 0 0 3px ${ringColor}, 0 0 16px ${ringColor}99`
+                            : '0 0 0 1.5px rgba(148,163,184,0.35)',
+                          filter: isBase ? 'grayscale(40%) brightness(0.75)' : 'none',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <img
+                          src={src} alt={label}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
+                      <span
+                        className="text-[9px] font-bold mt-0.5"
+                        style={{ color: isTarget ? (key === 'jafar' ? '#fca5a5' : '#fde68a') : isBase ? 'rgba(148,163,184,0.5)' : 'rgba(148,163,184,0.8)' }}
+                      >{label}</span>
+                      <span className="text-[8px]" style={{ color: 'rgba(100,116,139,0.65)' }}>{dmg}</span>
+                      {/* Progress pips under the active target */}
+                      {isTarget && (
+                        <div className="flex gap-1 mt-0.5">
+                          {[0, 1, 2].map(i => (
+                            <div
+                              key={i}
+                              className="rounded-full transition-all duration-300"
+                              style={{
+                                width: 6, height: 6,
+                                background: i < tierProgress
+                                  ? ringColor
+                                  : 'rgba(100,116,139,0.3)',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           <TowerDefenseGame ref={gameRef} />
-          <p className="text-center mt-2 text-xs font-bold text-indigo-400 px-4">
-            🪖 Answer correctly → your soldier marches! 🏰 Defeat the enemy tent to win!
-          </p>
         </div>
       )}
     </>
