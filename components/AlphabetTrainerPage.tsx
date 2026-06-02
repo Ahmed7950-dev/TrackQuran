@@ -29,6 +29,35 @@ const PRAISE = [
 const CONFETTI_COLORS = ['#ff6b9d','#ffd93d','#6bcb77','#4d96ff','#ff9a3c','#c77dff','#ff595e','#6af2f0'];
 const STORAGE_KEY = 'alphabet_trainer_priorities';
 
+// ─── Letter-form (positional shape) support ────────────────────────────────
+type LetterForm = 'isolated' | 'initial' | 'medial' | 'final';
+
+// These letters do NOT connect to the following letter, so they only have
+// 2 distinct visual shapes: isolated ≡ initial, and final ≡ medial.
+const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+
+/**
+ * Wraps a base Arabic letter with Unicode ZWJ / ZWNJ to force the correct
+ * contextual glyph (isolated / initial / medial / final).
+ *  ZWJ  = U+200D  → forces joining on that side
+ *  ZWNJ = U+200C  → forces non-joining (used for isolated)
+ */
+function getLetterInForm(letter: string, form: LetterForm): string {
+  switch (form) {
+    case 'initial': return `${letter}‍`;
+    case 'medial':  return `‍${letter}‍`;
+    case 'final':   return `‍${letter}`;
+    default:        return `‌${letter}‌`;  // isolated (explicit non-join)
+  }
+}
+
+const FORM_CONFIG: { form: LetterForm; labelAr: string; labelEn: string }[] = [
+  { form: 'isolated', labelAr: 'مُفرَد',   labelEn: 'Isolated'  },
+  { form: 'initial',  labelAr: 'أَوَّل',    labelEn: 'Beginning' },
+  { form: 'medial',   labelAr: 'وَسَط',     labelEn: 'Middle'    },
+  { form: 'final',    labelAr: 'آخِر',      labelEn: 'End'       },
+];
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -67,6 +96,7 @@ const AlphabetTrainerPage: React.FC = () => {
     emoji: '🌟', text: 'Amazing!', phase: 'hidden',
   });
   const [shaking, setShaking] = useState(false);
+  const [letterForm, setLetterForm] = useState<LetterForm>('isolated');
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);  // streak counter — Bilal spawns on every 3rd in a row
 
@@ -246,6 +276,49 @@ const AlphabetTrainerPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Letter-form selector ──────────────────────────────────────────── */}
+      <div className="mb-5">
+        <p className={`text-center text-xs mb-2 ${childMode ? 'font-bold text-indigo-600' : 'text-slate-400 dark:text-slate-500'}`}>
+          Letter shape / شَكل الحَرف
+        </p>
+        <div className="flex gap-2 justify-center flex-wrap">
+          {FORM_CONFIG.map(({ form, labelAr, labelEn }) => {
+            const active = letterForm === form;
+            return (
+              <button
+                key={form}
+                onClick={() => setLetterForm(form)}
+                className={`flex flex-col items-center px-3 py-1.5 rounded-xl border-2 transition-all duration-150 select-none ${
+                  active
+                    ? (childMode
+                        ? 'bg-indigo-500 border-indigo-400 text-white shadow-md shadow-indigo-200'
+                        : 'bg-teal-600 dark:bg-amber-600 border-teal-500 dark:border-amber-500 text-white')
+                    : (childMode
+                        ? 'bg-white border-indigo-200 text-indigo-700 hover:border-indigo-400'
+                        : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400')
+                }`}
+              >
+                <span style={{ fontFamily: 'Amiri, serif', fontSize: '1.25rem', lineHeight: 1.1 }}>
+                  {getLetterInForm('ب', form)}
+                </span>
+                <span className="text-[10px] font-bold mt-0.5" style={{ fontFamily: 'Amiri, serif' }}>{labelAr}</span>
+                <span className={`text-[9px] ${active ? 'opacity-80' : 'opacity-60'}`}>{labelEn}</span>
+              </button>
+            );
+          })}
+        </div>
+        {/* Note about non-connecting letters when a connected form is chosen */}
+        {(letterForm === 'initial' || letterForm === 'medial') && (
+          <p className="text-center text-[10px] mt-2 text-slate-400 dark:text-slate-500">
+            <span className="font-semibold" style={{ fontFamily: 'Amiri, serif', fontSize: '0.85rem' }}>
+              ا و ر ز د ذ
+            </span>
+            {' '}only have 2 shapes — shown as{' '}
+            <span className="font-semibold">{letterForm === 'initial' ? 'Isolated' : 'End'}</span>
+          </p>
+        )}
+      </div>
+
       {/* Letter Grid — 5 columns, RTL order */}
       <div className="grid grid-cols-5 gap-2 mb-6" style={{ direction: 'rtl' }}>
         {LETTERS.map((letter, i) => {
@@ -264,8 +337,16 @@ const AlphabetTrainerPage: React.FC = () => {
               }}
               className="aspect-square rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
             >
-              <span style={{ fontFamily: 'Amiri, serif', fontSize: '2.5rem', lineHeight: 1 }}>{letter}</span>
-              <span className="text-xs mt-1" style={{ letterSpacing: 2, minHeight: 14 }}>{'★'.repeat(p)}</span>
+              <span style={{ fontFamily: 'Amiri, serif', fontSize: '2.5rem', lineHeight: 1 }}>
+                {getLetterInForm(letter, letterForm)}
+              </span>
+              {/* For non-connectors in a "same shape" form, show which form it equals */}
+              {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
+                <span style={{ fontSize: '0.55rem', opacity: 0.55, marginTop: 1 }}>
+                  ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
+                </span>
+              )}
+              <span className="text-xs mt-0.5" style={{ letterSpacing: 2, minHeight: 14 }}>{'★'.repeat(p)}</span>
             </button>
           ) : (
             <button
@@ -285,9 +366,15 @@ const AlphabetTrainerPage: React.FC = () => {
                   p === 3 ? 'text-amber-800 dark:text-amber-200' :
                             'text-amber-700 dark:text-amber-300'
                 }
-              >{letter}</span>
+              >{getLetterInForm(letter, letterForm)}</span>
+              {/* Badge for non-connectors whose shape is identical to another form */}
+              {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
+                <span className="text-[8px] text-slate-400 dark:text-slate-500" style={{ marginTop: 1 }}>
+                  ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
+                </span>
+              )}
               <span
-                className={`text-xs mt-1 ${p > 0 ? 'text-amber-500 dark:text-amber-400' : ''}`}
+                className={`text-xs mt-0.5 ${p > 0 ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 style={{ letterSpacing: 2, minHeight: 14 }}
               >{'★'.repeat(p)}</span>
             </button>
@@ -356,11 +443,29 @@ const AlphabetTrainerPage: React.FC = () => {
           </span>
         </div>
 
+        {/* Active form badge */}
+        <div className="flex justify-center mb-4">
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+            childMode
+              ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+              : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-600'
+          }`}>
+            <span style={{ fontFamily: 'Amiri, serif', fontSize: '1rem', lineHeight: 1 }}>
+              {getLetterInForm('ب', letterForm)}
+            </span>
+            <span style={{ fontFamily: 'Amiri, serif' }}>
+              {FORM_CONFIG.find(f => f.form === letterForm)?.labelAr}
+            </span>
+            <span className="opacity-60">·</span>
+            <span>{FORM_CONFIG.find(f => f.form === letterForm)?.labelEn}</span>
+          </div>
+        </div>
+
         {/* Letter card */}
         <div className="flex justify-center mb-10">
           <div
-            key={`${pos}-${letter}`}
-            className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'at-shake' : ''} ${childMode ? 'at-card-kid border-4 border-indigo-200 shadow-xl' : 'at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'}`}
+            key={`${pos}-${letter}-${letterForm}`}
+            className={`flex flex-col items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'at-shake' : ''} ${childMode ? 'at-card-kid border-4 border-indigo-200 shadow-xl' : 'at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'}`}
             style={{ width: 'min(240px,70vw)', height: 'min(240px,70vw)' }}
           >
             <span
@@ -371,7 +476,15 @@ const AlphabetTrainerPage: React.FC = () => {
                 color: childMode ? '#3c4a8a' : undefined,
               }}
               className={childMode ? '' : 'text-slate-700 dark:text-slate-200'}
-            >{letter}</span>
+            >{getLetterInForm(letter, letterForm)}</span>
+            {/* Subtle non-connector note inside card */}
+            {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
+              <span className={`text-xs mt-2 px-2 py-0.5 rounded-full ${
+                childMode ? 'text-indigo-400 bg-indigo-50' : 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-gray-700'
+              }`}>
+                ≡ {letterForm === 'initial' ? 'Isolated' : 'End'}
+              </span>
+            )}
           </div>
         </div>
 
