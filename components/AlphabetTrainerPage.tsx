@@ -298,10 +298,10 @@ const AlphabetTrainerPage: React.FC = () => {
                         : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400')
                 }`}
               >
-                <span style={{ fontFamily: 'Amiri, serif', fontSize: '1.25rem', lineHeight: 1.1 }}>
+                <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1.25rem', lineHeight: 1.1 }}>
                   {getLetterInForm('ب', form)}
                 </span>
-                <span className="text-[10px] font-bold mt-0.5" style={{ fontFamily: 'Amiri, serif' }}>{labelAr}</span>
+                <span className="text-[10px] font-bold mt-0.5" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{labelAr}</span>
                 <span className={`text-[9px] ${active ? 'opacity-80' : 'opacity-60'}`}>{labelEn}</span>
               </button>
             );
@@ -310,7 +310,7 @@ const AlphabetTrainerPage: React.FC = () => {
         {/* Note about non-connecting letters when a connected form is chosen */}
         {(letterForm === 'initial' || letterForm === 'medial') && (
           <p className="text-center text-[10px] mt-2 text-slate-400 dark:text-slate-500">
-            <span className="font-semibold" style={{ fontFamily: 'Amiri, serif', fontSize: '0.85rem' }}>
+            <span className="font-semibold" style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '0.85rem' }}>
               ا و ر ز د ذ
             </span>
             {' '}only have 2 shapes — shown as{' '}
@@ -353,7 +353,7 @@ const AlphabetTrainerPage: React.FC = () => {
               }}
               className="rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
             >
-              <span style={{ fontFamily: 'Amiri, serif', fontSize: 'clamp(3.5rem, 17vw, 7.5rem)', lineHeight: 1 }}>
+              <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.8rem, 14vw, 6rem)', lineHeight: 1 }}>
                 {getLetterInForm(letter, letterForm)}
               </span>
               {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
@@ -375,7 +375,7 @@ const AlphabetTrainerPage: React.FC = () => {
               }`}
             >
               <span
-                style={{ fontFamily: 'Amiri, serif', fontSize: 'clamp(3.2rem, 15vw, 6.6rem)', lineHeight: 1 }}
+                style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.6rem, 13vw, 5.8rem)', lineHeight: 1 }}
                 className={
                   p === 0 ? 'text-slate-500 dark:text-slate-400' :
                   p === 3 ? 'text-amber-800 dark:text-amber-200' :
@@ -464,10 +464,10 @@ const AlphabetTrainerPage: React.FC = () => {
               ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
               : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-600'
           }`}>
-            <span style={{ fontFamily: 'Amiri, serif', fontSize: '1rem', lineHeight: 1 }}>
+            <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1rem', lineHeight: 1 }}>
               {getLetterInForm('ب', letterForm)}
             </span>
-            <span style={{ fontFamily: 'Amiri, serif' }}>
+            <span style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>
               {FORM_CONFIG.find(f => f.form === letterForm)?.labelAr}
             </span>
             <span className="opacity-60">·</span>
@@ -484,8 +484,8 @@ const AlphabetTrainerPage: React.FC = () => {
           >
             <span
               style={{
-                fontFamily: 'Amiri, serif',
-                fontSize: 'clamp(5rem,18vw,8rem)',
+                fontFamily: "'Hafs', 'Amiri', serif",
+                fontSize: 'clamp(4.5rem,16vw,7rem)',
                 lineHeight: 1,
                 color: childMode ? '#3c4a8a' : undefined,
               }}
@@ -552,7 +552,7 @@ const AlphabetTrainerPage: React.FC = () => {
         {childMode ? '🏆' : '✓'}
       </div>
       <h2 className={`mb-2 font-bold ${childMode ? 'text-4xl font-extrabold text-pink-500' : 'text-3xl text-amber-600 dark:text-amber-400'}`}
-        style={childMode ? {} : { fontFamily: 'Amiri, serif' }}
+        style={childMode ? {} : { fontFamily: "'Hafs', 'Amiri', serif" }}
       >
         {childMode ? t('alphabetTrainer.winTitleChild') : t('alphabetTrainer.winTitleAdult')}
       </h2>
