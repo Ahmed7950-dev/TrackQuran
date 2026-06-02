@@ -422,7 +422,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
   const musicEnabledRef = useRef(true);
   const [musicOn,   setMusicOn]   = useState(true);
   const canvasHRef  = useRef(CANVAS_H);                        // live canvas logical height (px)
-  const groundYRef  = useRef(Math.round(CANVAS_H * 0.70));    // live ground-line y (px)
+  const groundYRef  = useRef(Math.round(CANVAS_H * 0.55));    // live ground-line y (px)
   const [cssH, setCssH] = useState(CANVAS_H);                 // drives the CSS height of the canvas
   const bgResized   = useRef(false);                          // have we resized for the bg image yet?
   const prevWinner  = useRef<'player' | 'enemy' | null>(null);
@@ -606,7 +606,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
         canvas.height = newH    * devicePixelRatio;
         if (canvasHRef.current !== newH) {
           canvasHRef.current = newH;
-          groundYRef.current = Math.round(newH * 0.70);
+          groundYRef.current = Math.round(newH * 0.55);
           setCssH(newH);
         }
       }
@@ -624,7 +624,7 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
       const dpr    = devicePixelRatio;
       const cw     = canvas.width  / dpr;
       const ch     = canvas.height / dpr;   // actual logical height this frame
-      const groundY = Math.round(ch * 0.70); // ground line — 70% down the canvas
+      const groundY = Math.round(ch * 0.55); // ground line — 55% down the canvas
       const ctx    = canvas.getContext('2d');
       if (!ctx) { animId = requestAnimationFrame(loop); return; }
 
