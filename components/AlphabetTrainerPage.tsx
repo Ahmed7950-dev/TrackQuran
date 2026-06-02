@@ -159,6 +159,7 @@ const AlphabetTrainerPage: React.FC = () => {
     const q = buildQueue(priorities);
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
     consecutiveCorrect.current = 0;
+    gameRef.current?.setStreak(0);
     gameRef.current?.reset();
   };
 
@@ -180,12 +181,15 @@ const AlphabetTrainerPage: React.FC = () => {
       consecutiveCorrect.current = 0;
       console.log('[AlphabetTrainer] ⚔️ Spawning JAFAR!');
       gameRef.current?.spawnJafarSoldier();
+      gameRef.current?.setStreak(0);
     } else if (streak === 3) {
       // Don't reset — keep counting toward 6 for Jafar
       console.log('[AlphabetTrainer] 🔥 Spawning BILAL!');
       gameRef.current?.spawnBilalSoldier();
+      gameRef.current?.setStreak(streak);
     } else {
       gameRef.current?.spawnPlayerSoldier();
+      gameRef.current?.setStreak(streak);
     }
     if (childMode) {
       setCelebrating(true);
@@ -198,6 +202,7 @@ const AlphabetTrainerPage: React.FC = () => {
   const handleWrong = () => {
     if (celebrating) return;
     consecutiveCorrect.current = 0;  // reset streak on wrong answer
+    gameRef.current?.setStreak(0);
     if (childMode) {
       setShaking(true);
       setRestartMsg(t('alphabetTrainer.restartChild'));
