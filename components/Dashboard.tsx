@@ -72,7 +72,13 @@ const BirthdayBanner: React.FC<{ dob: string, name: string }> = ({ dob, name }) 
 };
 
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate' }> = ({ student, onSelect, quranMetadata, viewMode }) => {
+const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; label: string; strip: string; text: string }> = {
+  1: { emoji: '🥇', label: '1st Place', strip: 'bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 dark:from-yellow-500 dark:to-amber-500', text: 'text-yellow-900 dark:text-yellow-950' },
+  2: { emoji: '🥈', label: '2nd Place', strip: 'bg-gradient-to-r from-slate-300 via-slate-400 to-slate-300 dark:from-slate-500 dark:to-slate-400', text: 'text-slate-800 dark:text-slate-900' },
+  3: { emoji: '🥉', label: '3rd Place', strip: 'bg-gradient-to-r from-orange-400 via-amber-600 to-orange-500 dark:from-orange-500 dark:to-amber-600', text: 'text-orange-950 dark:text-orange-950' },
+};
+
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null }> = ({ student, onSelect, quranMetadata, viewMode, rank }) => {
     const { t, language } = useI18n();
 
     const { isInactive, daysSinceLastActivity } = useMemo(() => {
@@ -196,6 +202,14 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 }
             `}
         >
+            {/* Rank badge strip — shown when a top-3 rank is provided */}
+            {rank && (
+              <div className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold tracking-wide shadow-inner ${RANK_CONFIG[rank].strip} ${RANK_CONFIG[rank].text}`}>
+                <span className="text-base leading-none">{RANK_CONFIG[rank].emoji}</span>
+                <span>{RANK_CONFIG[rank].label} in Group</span>
+              </div>
+            )}
+
             {/* Top Section */}
             <div className={`p-4 ${isInactive 
                 ? 'bg-slate-50 dark:bg-gray-800/50' 
@@ -360,11 +374,12 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         case SortCriteria.FewestMistakes: {
           const getMistakeRate = (s: Student) => {
             const rp = getRecitedPagesSet(s);
+            if (rp.size === 0) return Infinity; // 0-page students always sink to the bottom
             const valid = Object.entries(s.mistakes || {}).filter(([key]) => {
               const [su, ay] = key.split(':').map(Number);
               return !isNaN(su) && !isNaN(ay) && rp.has(getPageOfAyah(su, ay));
             });
-            return rp.size > 0 ? valid.length / rp.size : 0;
+            return valid.length / rp.size;
           };
           return getMistakeRate(a) - getMistakeRate(b);
         }
@@ -496,20 +511,20 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
-          {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
+          {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
-          {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
+          {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
-          {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map(student => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} />
+          {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>
