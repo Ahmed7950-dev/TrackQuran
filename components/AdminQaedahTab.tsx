@@ -364,10 +364,10 @@ const AdminQaedahTab: React.FC = () => {
                 ref={wordInputRef}
                 value={newWord}
                 onChange={e => setNewWord(e.target.value)}
-                placeholder="Type a word in Arabic…"
+                placeholder="اكتب كلمة…"
                 dir="rtl"
-                style={HAFS}
-                className="flex-1 px-3 py-2 text-base rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.5 }}
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
               <button
                 type="submit"
@@ -389,9 +389,9 @@ const AdminQaedahTab: React.FC = () => {
                   onChange={e => setBulkText(e.target.value)}
                   rows={5}
                   dir="rtl"
-                  style={HAFS}
+                  style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.7 }}
                   placeholder={'بَ، تَ، ثَ\nجَ، حَ، خَ'}
-                  className="w-full px-3 py-2 text-lg rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-y"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-y"
                 />
                 <div className="flex gap-2">
                   <button
@@ -431,8 +431,8 @@ const AdminQaedahTab: React.FC = () => {
                           value={editWordText}
                           onChange={e => setEditWordText(e.target.value)}
                           dir="rtl"
-                          style={HAFS}
-                          className="w-full px-2 py-1 text-lg rounded border border-slate-300 dark:border-gray-500 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 text-center"
+                          style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.5 }}
+                          className="w-full px-2 py-1 rounded border border-slate-300 dark:border-gray-500 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 text-center"
                         />
                         <div className="flex gap-1">
                           <button onClick={() => handleSaveEditWord(w.id)} disabled={savingWord}
