@@ -51,6 +51,7 @@ const AdminQaedahTab: React.FC = () => {
   const [bulkText,     setBulkText]     = useState('');
   const [bulkAdding,   setBulkAdding]   = useState(false);
   const [showBulk,     setShowBulk]     = useState(false);
+  const [bulkMode,     setBulkMode]     = useState<'1word' | '2words'>('1word');
 
   // Edit word inline
   const [editWordId,   setEditWordId]   = useState<string | null>(null);
@@ -153,8 +154,26 @@ const AdminQaedahTab: React.FC = () => {
   // ── Bulk add words ─────────────────────────────────────────────────────────
   const handleBulkAdd = async () => {
     if (!bulkText.trim() || !selectedTopic) return;
-    // Split by newline, comma, or Arabic comma ، — trim & dedupe blanks
-    const raw = bulkText.split(/[\n،,]+/).map(w => w.trim()).filter(Boolean);
+    let raw: string[];
+    if (bulkMode === '2words') {
+      // Split by newline/comma first, then within each chunk group every 2
+      // space-separated words into one entry (2-word short phrases)
+      raw = bulkText
+        .split(/[\n،,]+/)
+        .flatMap(chunk => {
+          const words = chunk.trim().split(/\s+/).filter(Boolean);
+          if (words.length <= 1) return words;
+          const pairs: string[] = [];
+          for (let i = 0; i < words.length; i += 2) {
+            pairs.push(words.slice(i, i + 2).join(' '));
+          }
+          return pairs;
+        })
+        .filter(Boolean);
+    } else {
+      // 1-word mode: split by newline, comma, AND spaces — each token is one entry
+      raw = bulkText.split(/[\n،,\s]+/).map(w => w.trim()).filter(Boolean);
+    }
     if (raw.length === 0) return;
     setBulkAdding(true);
     const count = await createQaedahWordsBulk(selectedTopic.id, raw);
@@ -381,9 +400,27 @@ const AdminQaedahTab: React.FC = () => {
             {/* Bulk add panel */}
             {showBulk && (
               <div className="bg-slate-50 dark:bg-gray-900 rounded-xl border border-slate-200 dark:border-gray-700 p-4 space-y-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Paste multiple words — separate by newline, comma (,) or Arabic comma (،)
-                </p>
+                {/* 1-word / 2-word toggle */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Entry size:</span>
+                  <div className="flex rounded-lg border border-slate-200 dark:border-gray-600 overflow-hidden text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setBulkMode('1word')}
+                      className={`px-3 py-1.5 transition-colors ${bulkMode === '1word' ? 'bg-teal-600 text-white' : 'bg-white dark:bg-gray-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700'}`}
+                    >1 word</button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkMode('2words')}
+                      className={`px-3 py-1.5 transition-colors border-l border-slate-200 dark:border-gray-600 ${bulkMode === '2words' ? 'bg-teal-600 text-white' : 'bg-white dark:bg-gray-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700'}`}
+                    >2 words</button>
+                  </div>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    {bulkMode === '1word'
+                      ? 'Each space, comma or newline = new entry'
+                      : 'Every 2 space-separated words = one entry; commas/newlines also split'}
+                  </span>
+                </div>
                 <textarea
                   value={bulkText}
                   onChange={e => setBulkText(e.target.value)}
