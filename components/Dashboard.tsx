@@ -72,10 +72,10 @@ const BirthdayBanner: React.FC<{ dob: string, name: string }> = ({ dob, name }) 
 };
 
 
-const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; label: string; strip: string; text: string }> = {
-  1: { emoji: '🥇', label: '1st Place', strip: 'bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 dark:from-yellow-500 dark:to-amber-500', text: 'text-yellow-900 dark:text-yellow-950' },
-  2: { emoji: '🥈', label: '2nd Place', strip: 'bg-gradient-to-r from-slate-300 via-slate-400 to-slate-300 dark:from-slate-500 dark:to-slate-400', text: 'text-slate-800 dark:text-slate-900' },
-  3: { emoji: '🥉', label: '3rd Place', strip: 'bg-gradient-to-r from-orange-400 via-amber-600 to-orange-500 dark:from-orange-500 dark:to-amber-600', text: 'text-orange-950 dark:text-orange-950' },
+const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; short: string; badge: string }> = {
+  1: { emoji: '🥇', short: '1st', badge: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 ring-1 ring-yellow-300 dark:ring-yellow-700' },
+  2: { emoji: '🥈', short: '2nd', badge: 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 ring-1 ring-slate-300 dark:ring-slate-600' },
+  3: { emoji: '🥉', short: '3rd', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-700' },
 };
 
 const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null }> = ({ student, onSelect, quranMetadata, viewMode, rank }) => {
@@ -202,14 +202,6 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 }
             `}
         >
-            {/* Rank badge strip — shown when a top-3 rank is provided */}
-            {rank && (
-              <div className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold tracking-wide shadow-inner ${RANK_CONFIG[rank].strip} ${RANK_CONFIG[rank].text}`}>
-                <span className="text-base leading-none">{RANK_CONFIG[rank].emoji}</span>
-                <span>{RANK_CONFIG[rank].label} in Group</span>
-              </div>
-            )}
-
             {/* Top Section */}
             <div className={`p-4 ${isInactive 
                 ? 'bg-slate-50 dark:bg-gray-800/50' 
@@ -217,8 +209,14 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
             }`}>
                  <div className="flex justify-between items-start">
                     <div className="flex-grow">
-                        <div className="flex items-baseline gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
+                            {rank && (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${RANK_CONFIG[rank].badge}`}>
+                                <span>{RANK_CONFIG[rank].emoji}</span>
+                                <span>{RANK_CONFIG[rank].short}</span>
+                              </span>
+                            )}
                             {viewMode === 'points' ? (
                               <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
                             ) : (
