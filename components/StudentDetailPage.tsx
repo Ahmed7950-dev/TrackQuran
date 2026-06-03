@@ -97,12 +97,28 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const attendanceData = useMemo(() => {
         // FIX: Add explicit type to fix type inference issue with generic function.
         const attendance: AttendanceRecord[] = filterByTimePeriod(student.attendance, timePeriod);
+
+        // Days that have an explicit attendance record (any status).
+        const explicitDateStrings = new Set(attendance.map(a => new Date(a.date).toDateString()));
+
+        // Any day with a recitation or memorization achievement counts as an implicit
+        // "Present" — unless that day already has an explicit attendance record, which
+        // could mark it as Absent or Rescheduled and takes precedence.
+        const implicitPresentCount = [
+            ...(filterByTimePeriod(student.recitationAchievements, timePeriod) as RecitationAchievement[]),
+            ...(filterByTimePeriod(student.memorizationAchievements, timePeriod) as MemorizationAchievement[]),
+        ].reduce((seen, ach) => {
+            const ds = new Date(ach.date).toDateString();
+            if (!explicitDateStrings.has(ds) && !seen.has(ds)) seen.add(ds);
+            return seen;
+        }, new Set<string>()).size;
+
         return {
-            present: attendance.filter(a => a.status === AttendanceStatus.Present).length,
+            present: attendance.filter(a => a.status === AttendanceStatus.Present).length + implicitPresentCount,
             absent: attendance.filter(a => a.status === AttendanceStatus.Absent).length,
             rescheduled: attendance.filter(a => a.status === AttendanceStatus.Rescheduled).length,
         };
-    }, [student.attendance, timePeriod]);
+    }, [student.attendance, student.recitationAchievements, student.memorizationAchievements, timePeriod]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const { rank: readingRank, totalInGroup: readingTotal, pagesToNext: readingPagesToNext, nextStudentName: readingNextStudentName } = useMemo(() => 
