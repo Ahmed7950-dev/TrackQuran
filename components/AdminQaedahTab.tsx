@@ -11,10 +11,18 @@ import {
   createQaedahWord,
   createQaedahWordsBulk,
   updateQaedahWord,
+  updateQaedahWordsLevel,
   deleteQaedahWord,
 } from '../services/qaedahService';
 
 const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
+
+// Level colours — shared by admin and (via QaedahPage) by tutors
+export const LEVEL_COLOR: Record<1|2|3, { bg: string; text: string; ring: string; label: string }> = {
+  1: { bg: 'bg-teal-100 dark:bg-teal-900/40',   text: 'text-teal-700 dark:text-teal-300',  ring: 'ring-teal-400',  label: 'Level 1' },
+  2: { bg: 'bg-amber-100 dark:bg-amber-900/40',  text: 'text-amber-700 dark:text-amber-300', ring: 'ring-amber-400', label: 'Level 2' },
+  3: { bg: 'bg-rose-100 dark:bg-rose-900/40',    text: 'text-rose-700 dark:text-rose-300',   ring: 'ring-rose-400',  label: 'Level 3' },
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -44,22 +52,30 @@ const AdminQaedahTab: React.FC = () => {
   const [wordsLoading, setWordsLoading] = useState(false);
 
   // Add single word
-  const [newWord,    setNewWord]    = useState('');
-  const [addingWord, setAddingWord] = useState(false);
+  const [newWord,      setNewWord]      = useState('');
+  const [newWordLevel, setNewWordLevel] = useState<1|2|3>(1);
+  const [addingWord,   setAddingWord]   = useState(false);
 
   // Bulk add words (textarea)
   const [bulkText,     setBulkText]     = useState('');
+  const [bulkLevel,    setBulkLevel]    = useState<1|2|3>(1);
   const [bulkAdding,   setBulkAdding]   = useState(false);
   const [showBulk,     setShowBulk]     = useState(false);
   const [bulkMode,     setBulkMode]     = useState<'1word' | '2words'>('1word');
 
   // Edit word inline
-  const [editWordId,   setEditWordId]   = useState<string | null>(null);
-  const [editWordText, setEditWordText] = useState('');
-  const [savingWord,   setSavingWord]   = useState(false);
+  const [editWordId,    setEditWordId]    = useState<string | null>(null);
+  const [editWordText,  setEditWordText]  = useState('');
+  const [editWordLevel, setEditWordLevel] = useState<1|2|3>(1);
+  const [savingWord,    setSavingWord]    = useState(false);
 
   // Delete word confirm
   const [deletingWordId, setDeletingWordId] = useState<string | null>(null);
+
+  // Select-mode — bulk level assignment
+  const [selectMode,     setSelectMode]     = useState(false);
+  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(new Set());
+  const [assigningLevel, setAssigningLevel] = useState(false);
 
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,6 +103,8 @@ const AdminQaedahTab: React.FC = () => {
     setNewWord('');
     setBulkText('');
     setShowBulk(false);
+    setSelectMode(false);
+    setSelectedIds(new Set());
     loadWords(topic.id);
   };
 
@@ -142,7 +160,7 @@ const AdminQaedahTab: React.FC = () => {
     e.preventDefault();
     if (!newWord.trim() || !selectedTopic) return;
     setAddingWord(true);
-    const created = await createQaedahWord({ topicId: selectedTopic.id, word: newWord.trim() });
+    const created = await createQaedahWord({ topicId: selectedTopic.id, word: newWord.trim(), level: newWordLevel });
     if (created) {
       setWords(prev => [...prev, created]);
       setNewWord('');
@@ -176,7 +194,7 @@ const AdminQaedahTab: React.FC = () => {
     }
     if (raw.length === 0) return;
     setBulkAdding(true);
-    const count = await createQaedahWordsBulk(selectedTopic.id, raw);
+    const count = await createQaedahWordsBulk(selectedTopic.id, raw, bulkLevel);
     if (count > 0) {
       await loadWords(selectedTopic.id);
       setBulkText('');
@@ -189,11 +207,46 @@ const AdminQaedahTab: React.FC = () => {
   const handleSaveEditWord = async (id: string) => {
     if (!editWordText.trim()) return;
     setSavingWord(true);
-    const ok = await updateQaedahWord(id, editWordText.trim());
-    if (ok) setWords(prev => prev.map(w => w.id === id ? { ...w, word: editWordText.trim() } : w));
+    const [okWord] = await Promise.all([
+      updateQaedahWord(id, editWordText.trim()),
+      updateQaedahWordsLevel([id], editWordLevel),
+    ]);
+    if (okWord) setWords(prev => prev.map(w => w.id === id ? { ...w, word: editWordText.trim(), level: editWordLevel } : w));
     setEditWordId(null);
     setSavingWord(false);
   };
+
+  // ── Bulk assign level to selected words ───────────────────────────────────
+  const handleAssignLevel = async (level: 1|2|3) => {
+    if (selectedIds.size === 0) return;
+    setAssigningLevel(true);
+    const ids = Array.from(selectedIds);
+    const ok = await updateQaedahWordsLevel(ids, level);
+    if (ok) {
+      setWords(prev => prev.map(w => selectedIds.has(w.id) ? { ...w, level } : w));
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    }
+    setAssigningLevel(false);
+  };
+
+  // ── Level picker (reusable inline component) ───────────────────────────────
+  const LevelPicker = ({ value, onChange }: { value: 1|2|3; onChange: (l: 1|2|3) => void }) => (
+    <div className="flex rounded-lg border border-slate-200 dark:border-gray-600 overflow-hidden text-xs font-bold flex-shrink-0">
+      {([1,2,3] as const).map(l => (
+        <button key={l} type="button" onClick={() => onChange(l)}
+          className={`px-2.5 py-1.5 transition-colors ${l > 1 ? 'border-l border-slate-200 dark:border-gray-600' : ''} ${
+            value === l
+              ? l === 1 ? 'bg-teal-600 text-white'
+              : l === 2 ? 'bg-amber-500 text-white'
+              : 'bg-rose-500 text-white'
+              : 'bg-white dark:bg-gray-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700'
+          }`}>
+          L{l}
+        </button>
+      ))}
+    </div>
+  );
 
   // ── Delete word ────────────────────────────────────────────────────────────
   const handleDeleteWord = async (id: string) => {
@@ -359,7 +412,7 @@ const AdminQaedahTab: React.FC = () => {
         ) : (
           <div className="space-y-4">
             {/* Words header */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <div>
                 <h3 className="font-bold text-slate-700 dark:text-slate-200">{selectedTopic.titleEn}</h3>
                 {selectedTopic.titleAr && (
@@ -370,6 +423,16 @@ const AdminQaedahTab: React.FC = () => {
                 {words.length} word{words.length !== 1 ? 's' : ''}
               </span>
               <button
+                onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()); }}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                  selectMode
+                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                    : 'border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {selectMode ? `✓ ${selectedIds.size} selected` : '☑ Select'}
+              </button>
+              <button
                 onClick={() => setShowBulk(b => !b)}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-teal-300 dark:border-teal-600 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
               >
@@ -377,8 +440,33 @@ const AdminQaedahTab: React.FC = () => {
               </button>
             </div>
 
+            {/* Selection action bar */}
+            {selectMode && (
+              <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-xl px-4 py-2.5 flex-wrap">
+                <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                  {selectedIds.size === 0 ? 'Click cards to select' : `${selectedIds.size} word${selectedIds.size !== 1 ? 's' : ''} selected`}
+                </span>
+                <span className="text-xs text-slate-400 mx-1">→ Assign to:</span>
+                {([1,2,3] as const).map(l => (
+                  <button key={l} onClick={() => handleAssignLevel(l)}
+                    disabled={selectedIds.size === 0 || assigningLevel}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold disabled:opacity-40 transition-colors ${
+                      l === 1 ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                      : l === 2 ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                      : 'bg-rose-500 hover:bg-rose-600 text-white'
+                    }`}>
+                    {assigningLevel ? '…' : `Level ${l}`}
+                  </button>
+                ))}
+                <button onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+                  className="ml-auto text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium">
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {/* Single word add form */}
-            <form onSubmit={handleAddWord} className="flex gap-2">
+            <form onSubmit={handleAddWord} className="flex gap-2 items-center">
               <input
                 ref={wordInputRef}
                 value={newWord}
@@ -388,6 +476,7 @@ const AdminQaedahTab: React.FC = () => {
                 style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.5 }}
                 className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
+              <LevelPicker value={newWordLevel} onChange={setNewWordLevel} />
               <button
                 type="submit"
                 disabled={!newWord.trim() || addingWord}
@@ -430,11 +519,13 @@ const AdminQaedahTab: React.FC = () => {
                   placeholder={'بَ، تَ، ثَ\nجَ، حَ، خَ'}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-y"
                 />
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Level:</span>
+                  <LevelPicker value={bulkLevel} onChange={setBulkLevel} />
                   <button
                     onClick={handleBulkAdd}
                     disabled={!bulkText.trim() || bulkAdding}
-                    className="px-5 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                    className="px-5 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors ml-2"
                   >
                     {bulkAdding ? 'Adding…' : `⚡ Add All`}
                   </button>
@@ -455,10 +546,27 @@ const AdminQaedahTab: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                {words.map(w => (
+                {words.map(w => {
+                  const lc = LEVEL_COLOR[w.level];
+                  const isSelected = selectedIds.has(w.id);
+                  return (
                   <div
                     key={w.id}
-                    className="group relative bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden"
+                    onClick={() => {
+                      if (!selectMode) return;
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        next.has(w.id) ? next.delete(w.id) : next.add(w.id);
+                        return next;
+                      });
+                    }}
+                    className={`group relative bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden transition-all ${
+                      selectMode ? 'cursor-pointer' : ''
+                    } ${
+                      isSelected
+                        ? 'border-indigo-400 ring-2 ring-indigo-400'
+                        : 'border-slate-200 dark:border-gray-700'
+                    }`}
                   >
                     {editWordId === w.id ? (
                       /* Inline edit */
@@ -471,6 +579,9 @@ const AdminQaedahTab: React.FC = () => {
                           style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.5 }}
                           className="w-full px-2 py-1 rounded border border-slate-300 dark:border-gray-500 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500 text-center"
                         />
+                        <div className="flex justify-center">
+                          <LevelPicker value={editWordLevel} onChange={setEditWordLevel} />
+                        </div>
                         <div className="flex gap-1">
                           <button onClick={() => handleSaveEditWord(w.id)} disabled={savingWord}
                             className="flex-1 py-1 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-semibold rounded">
@@ -496,37 +607,52 @@ const AdminQaedahTab: React.FC = () => {
                     ) : (
                       /* Normal display */
                       <>
+                        {/* Level badge */}
+                        <div className={`absolute top-1 left-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${lc.bg} ${lc.text}`}>
+                          L{w.level}
+                        </div>
+                        {/* Select checkbox */}
+                        {selectMode && (
+                          <div className={`absolute top-1 right-1 w-4 h-4 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300 dark:border-gray-500 bg-white dark:bg-gray-700'
+                          }`}>
+                            {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                          </div>
+                        )}
                         <div
-                          className="flex items-center justify-center py-3 px-2"
+                          className="flex items-center justify-center py-3 px-2 pt-5"
                           style={{ ...HAFS, fontSize: 'clamp(1.4rem, 4vw, 2rem)', lineHeight: 1.4, direction: 'rtl', minHeight: 64 }}
                         >
                           {w.word}
                         </div>
-                        {/* Action overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 bg-white/80 dark:bg-gray-800/80 backdrop-blur-[1px] transition-opacity">
-                          <button
-                            onClick={() => { setEditWordId(w.id); setEditWordText(w.word); }}
-                            className="p-1.5 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-600 hover:bg-teal-100 transition-colors"
-                            title="Edit"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => setDeletingWordId(w.id)}
-                            className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-500 hover:bg-red-100 transition-colors"
-                            title="Delete"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                            </svg>
-                          </button>
-                        </div>
+                        {/* Action overlay — hidden in select mode */}
+                        {!selectMode && (
+                          <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 bg-white/80 dark:bg-gray-800/80 backdrop-blur-[1px] transition-opacity">
+                            <button
+                              onClick={() => { setEditWordId(w.id); setEditWordText(w.word); setEditWordLevel(w.level); }}
+                              className="p-1.5 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-600 hover:bg-teal-100 transition-colors"
+                              title="Edit"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setDeletingWordId(w.id)}
+                              className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-500 hover:bg-red-100 transition-colors"
+                              title="Delete"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

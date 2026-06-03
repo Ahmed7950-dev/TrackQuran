@@ -46,8 +46,9 @@ const QaedahPage: React.FC = () => {
   const [wordsLoading, setWordsLoading] = useState(false);
 
   // ── UI state ─────────────────────────────────────────────────────────────
-  const [view,       setView]       = useState<View>('list');
-  const [childMode,  setChildMode]  = useState(false);
+  const [view,        setView]        = useState<View>('list');
+  const [childMode,   setChildMode]   = useState(false);
+  const [levelFilter, setLevelFilter] = useState<'all' | 1 | 2 | 3>('all');
 
   // ── Challenge state ───────────────────────────────────────────────────────
   const [queue,       setQueue]      = useState<string[]>([]);
@@ -109,6 +110,7 @@ const QaedahPage: React.FC = () => {
   const selectTopic = async (topic: QaedahTopic) => {
     setSelectedTopic(topic);
     setWordsLoading(true);
+    setLevelFilter('all');
     const w = await listQaedahWords(topic.id);
     setWords(w);
     setWordsLoading(false);
@@ -161,8 +163,9 @@ const QaedahPage: React.FC = () => {
 
   // ── Start challenge ───────────────────────────────────────────────────────
   const handleStart = () => {
-    if (words.length === 0) return;
-    const q = shuffle(words.map(w => w.word));
+    const filtered = levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter);
+    if (filtered.length === 0) return;
+    const q = shuffle(filtered.map(w => w.word));
     setQueue(q);
     setPos(0);
     setRestartMsg('');
@@ -347,6 +350,38 @@ const QaedahPage: React.FC = () => {
         </div>
       ) : (
         <>
+          {/* Level filter */}
+          {(() => {
+            const counts: Record<'all'|1|2|3, number> = {
+              all: words.length,
+              1: words.filter(w => w.level === 1).length,
+              2: words.filter(w => w.level === 2).length,
+              3: words.filter(w => w.level === 3).length,
+            };
+            const levels: Array<{ key: 'all'|1|2|3; label: string; activeClass: string }> = [
+              { key: 'all', label: 'All',     activeClass: 'bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-900' },
+              { key: 1,     label: 'Level 1', activeClass: 'bg-teal-600 text-white' },
+              { key: 2,     label: 'Level 2', activeClass: 'bg-amber-500 text-white' },
+              { key: 3,     label: 'Level 3', activeClass: 'bg-rose-500 text-white' },
+            ];
+            return (
+              <div className="flex gap-2 flex-wrap mb-4">
+                {levels.map(({ key, label, activeClass }) => (
+                  counts[key] > 0 && (
+                    <button key={key} onClick={() => setLevelFilter(key)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors border ${
+                        levelFilter === key
+                          ? activeClass + ' border-transparent'
+                          : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-slate-400'
+                      }`}>
+                      {label} <span className="opacity-70 text-xs">({counts[key]})</span>
+                    </button>
+                  )
+                ))}
+              </div>
+            );
+          })()}
+
           {/* Word grid — Hafs font, large */}
           <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-8">
             {words.map(w => (
@@ -361,18 +396,24 @@ const QaedahPage: React.FC = () => {
           </div>
 
           {/* Start button */}
-          <div className="flex justify-center">
-            <button
-              onClick={handleStart}
-              className={`px-10 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg ${
-                childMode
-                  ? 'bg-orange-400 hover:bg-orange-500 text-white shadow-orange-200'
-                  : 'bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
-              }`}
-            >
-              ⚔️ Start Challenge — {words.length} words
-            </button>
-          </div>
+          {(() => {
+            const count = levelFilter === 'all' ? words.length : words.filter(w => w.level === levelFilter).length;
+            return (
+              <div className="flex justify-center">
+                <button
+                  onClick={handleStart}
+                  disabled={count === 0}
+                  className={`px-10 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 ${
+                    childMode
+                      ? 'bg-orange-400 hover:bg-orange-500 text-white shadow-orange-200'
+                      : 'bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  ⚔️ Start Challenge — {count} word{count !== 1 ? 's' : ''}
+                </button>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

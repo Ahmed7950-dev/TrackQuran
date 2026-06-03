@@ -15,6 +15,7 @@ export interface QaedahWord {
   id: string;
   topicId: string;
   word: string;
+  level: 1 | 2 | 3;
   orderIndex: number;
   createdAt: string;
 }
@@ -34,6 +35,7 @@ interface WordRow {
   id: string;
   topic_id: string;
   word: string;
+  level: number;
   order_index: number;
   created_at: string;
 }
@@ -54,6 +56,7 @@ function rowToWord(r: WordRow): QaedahWord {
     id:         r.id,
     topicId:    r.topic_id,
     word:       r.word,
+    level:      (r.level === 2 ? 2 : r.level === 3 ? 3 : 1) as 1 | 2 | 3,
     orderIndex: r.order_index,
     createdAt:  r.created_at,
   };
@@ -129,6 +132,7 @@ export async function listQaedahWords(topicId: string): Promise<QaedahWord[]> {
 export async function createQaedahWord(input: {
   topicId: string;
   word: string;
+  level?: 1 | 2 | 3;
 }): Promise<QaedahWord | null> {
   const { data: maxRow } = await supabase
     .from('qaedah_words')
@@ -141,7 +145,7 @@ export async function createQaedahWord(input: {
 
   const { data, error } = await supabase
     .from('qaedah_words')
-    .insert({ topic_id: input.topicId, word: input.word, order_index: nextOrder })
+    .insert({ topic_id: input.topicId, word: input.word, level: input.level ?? 1, order_index: nextOrder })
     .select()
     .single();
   if (error) { console.error('createQaedahWord:', error); return null; }
@@ -151,6 +155,7 @@ export async function createQaedahWord(input: {
 export async function createQaedahWordsBulk(
   topicId: string,
   words: string[],
+  level: 1 | 2 | 3 = 1,
 ): Promise<number> {
   if (words.length === 0) return 0;
 
@@ -163,7 +168,7 @@ export async function createQaedahWordsBulk(
     .maybeSingle();
   let nextOrder = ((maxRow?.order_index as number | undefined) ?? 0) + 1;
 
-  const rows = words.map(w => ({ topic_id: topicId, word: w, order_index: nextOrder++ }));
+  const rows = words.map(w => ({ topic_id: topicId, word: w, level, order_index: nextOrder++ }));
   const { error, data } = await supabase.from('qaedah_words').insert(rows).select();
   if (error) { console.error('createQaedahWordsBulk:', error); return 0; }
   return (data ?? []).length;
@@ -172,6 +177,17 @@ export async function createQaedahWordsBulk(
 export async function updateQaedahWord(id: string, word: string): Promise<boolean> {
   const { error } = await supabase.from('qaedah_words').update({ word }).eq('id', id);
   if (error) console.error('updateQaedahWord:', error);
+  return !error;
+}
+
+/** Assign a level to one or more existing words in one DB call. */
+export async function updateQaedahWordsLevel(
+  ids: string[],
+  level: 1 | 2 | 3,
+): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const { error } = await supabase.from('qaedah_words').update({ level }).in('id', ids);
+  if (error) console.error('updateQaedahWordsLevel:', error);
   return !error;
 }
 
