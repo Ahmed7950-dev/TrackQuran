@@ -7,6 +7,18 @@ import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
 import HonorBoardModal from './HonorBoardModal';
 
+/** Returns days since last activity, or null if the student has no records at all. */
+const getDaysSinceLastActivity = (s: Student): number | null => {
+  const allDates = [
+    ...s.recitationAchievements.map(a => new Date(a.date).getTime()),
+    ...s.memorizationAchievements.map(a => new Date(a.date).getTime()),
+    ...s.attendance.map(a => new Date(a.date).getTime()),
+  ];
+  if (allDates.length === 0) return null;
+  const lastActivityTime = Math.max(...allDates);
+  return Math.ceil(Math.abs(Date.now() - lastActivityTime) / (1000 * 60 * 60 * 24));
+};
+
 /** Returns age in years, or null if no dob is available. */
 const getAge = (dob?: string): number | null => {
   if (!dob) return null;
@@ -82,25 +94,8 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     const { t, language } = useI18n();
 
     const { isInactive, daysSinceLastActivity } = useMemo(() => {
-        const allDates = [
-            ...student.recitationAchievements.map(a => new Date(a.date).getTime()),
-            ...student.memorizationAchievements.map(a => new Date(a.date).getTime()),
-            ...student.attendance.map(a => new Date(a.date).getTime()),
-        ];
-
-        if (allDates.length === 0) {
-            return { isInactive: false, daysSinceLastActivity: null };
-        }
-
-        const lastActivityTime = Math.max(...allDates);
-        const today = new Date().getTime();
-        const diffTime = Math.abs(today - lastActivityTime);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        return {
-            isInactive: diffDays > 14,
-            daysSinceLastActivity: diffDays,
-        };
+        const days = getDaysSinceLastActivity(student);
+        return { isInactive: days !== null && days > 14, daysSinceLastActivity: days };
     }, [student]);
 
     // Get page counts
@@ -370,16 +365,21 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         case SortCriteria.Age:
           return (getAge(a.dob) ?? 0) - (getAge(b.dob) ?? 0);
         case SortCriteria.FewestMistakes: {
-          const getMistakeRate = (s: Student) => {
+          const getSortKey = (s: Student): number => {
+            // Inactive students sink to the very bottom
+            const days = getDaysSinceLastActivity(s);
+            if (days !== null && days > 14) return 2e9;
+            // Students with 0 pages read sit just above inactive
             const rp = getRecitedPagesSet(s);
-            if (rp.size === 0) return Infinity; // 0-page students always sink to the bottom
+            if (rp.size === 0) return 1e9;
+            // Everyone else: sort ascending by mistakes-per-page
             const valid = Object.entries(s.mistakes || {}).filter(([key]) => {
               const [su, ay] = key.split(':').map(Number);
               return !isNaN(su) && !isNaN(ay) && rp.has(getPageOfAyah(su, ay));
             });
             return valid.length / rp.size;
           };
-          return getMistakeRate(a) - getMistakeRate(b);
+          return getSortKey(a) - getSortKey(b);
         }
         default:
           return 0;
