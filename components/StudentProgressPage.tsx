@@ -2596,13 +2596,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
             setClickStateUpdateTrigger(prev => prev + 1); // Force re-render to remove yellow color
         } else if (currentState === 2 && mistake) {
-            // Second click on marked letter: turn yellow and remove mistake/annotation
-            const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
-            onClearMistake(student.id, surah, ayah, wordIndex, letterIndex);
+            // First click on a confirmed mistake: show yellow (pending re-mark or removal).
+            // Do NOT delete from DB yet — the mistake survives a page close/reopen.
+            // Deletion only happens on the next click (state 1 → 0 branch calls onClearMistake).
             letterClickStates.current[letterKey] = 1;
-            setEditingLetterKey(null);
+            setEditingLetterKey(letterKey); // open text input so user can re-mark
             setErrorTextInput('');
-            setClickStateUpdateTrigger(prev => prev + 1); // Force re-render to show yellow color
+            setClickStateUpdateTrigger(prev => prev + 1);
         }
     }, [studentMistakes, student.id, onClearMistake]);
     
