@@ -594,7 +594,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
             {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
-        {selectedStudentId && !preSelectedStudentId && (
+        {selectedStudentId && students.length > 0 && (
           <button onClick={handleMark} disabled={marking}
             className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 disabled:opacity-50 ${isCompleted ? 'bg-green-600 text-white hover:bg-red-600' : 'bg-teal-600 text-white hover:bg-teal-700'}`}>
             {marking ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
