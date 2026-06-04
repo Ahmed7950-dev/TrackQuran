@@ -7,10 +7,10 @@ type Achievement = RecitationAchievement | MemorizationAchievement;
 interface ProgressChartProps {
   achievements: Achievement[];
   type: 'reading' | 'memorization';
-  maxPages: number;
+  maxPages?: number; // optional — auto-computed from data when omitted
 }
 
-const ProgressChart: React.FC<ProgressChartProps> = ({ achievements, type, maxPages }) => {
+const ProgressChart: React.FC<ProgressChartProps> = ({ achievements, type, maxPages: maxPagesProp }) => {
   const { t, language } = useI18n();
   // If there's not enough data to draw a line, show a message.
   if (achievements.length < 2) {
@@ -32,7 +32,14 @@ const ProgressChart: React.FC<ProgressChartProps> = ({ achievements, type, maxPa
       pagesInSession: ach.pagesCompleted,
     };
   });
-  
+
+  // Auto-compute maxPages from actual data so 1-page sessions still look good.
+  // Add 30% headroom above the highest session, minimum axis of 5.
+  const maxPagesInData = dataPoints.length > 0
+    ? Math.max(...dataPoints.map(d => d.pagesInSession))
+    : 5;
+  const maxPages = maxPagesProp ?? Math.max(5, Math.ceil(maxPagesInData * 1.3));
+
   // 2. Chart dimensions
   const width = 800;
   const height = 300;

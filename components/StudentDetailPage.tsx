@@ -776,9 +776,9 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     <ModernToggle value={chartView} onChange={setChartView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
                 </div>
                 {chartView === 'reading' ? (
-                     <ProgressChart achievements={student.recitationAchievements} type="reading" maxPages={20} />
+                     <ProgressChart achievements={student.recitationAchievements} type="reading" />
                 ) : (
-                    <ProgressChart achievements={student.memorizationAchievements} type="memorization" maxPages={20} />
+                    <ProgressChart achievements={student.memorizationAchievements} type="memorization" />
                 )}
             </div>
 

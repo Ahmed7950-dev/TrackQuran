@@ -1321,7 +1321,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         )}
       </header>
 
-      <main className="container mx-auto flex-grow px-3 sm:px-6 lg:px-8 py-6" dir="ltr">
+      <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
         {portalTab === 'about' ? (
           <AboutUsPage />
         ) : (

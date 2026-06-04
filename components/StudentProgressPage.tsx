@@ -1287,6 +1287,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
     const [tadabburMode, setTadabburMode] = useState(false);
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
+    /** Tutor-side toggle: show / hide student Tadabbur notes during a live session */
+    const [showStudentNotes, setShowStudentNotes] = useState(true);
     const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
     const [editingNoteText, setEditingNoteText] = useState('');
     const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
@@ -2839,14 +2841,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const existingNote = verseNotes[noteKey] ?? '';
             const isEditingThisNote = editingNoteKey === noteKey;
             const isSavingThisNote = savingNoteKey === noteKey;
-            // Show note area when tadabbur mode is on (student writing) OR a note already exists (visible to all)
-            const showNoteArea = !!notesStudentId && (tadabburMode || !!existingNote);
+            // readOnly (student portal): show when tadabbur mode is on OR a note already exists.
+            // Tutor live session: show only when showStudentNotes is enabled and a note exists.
+            const showNoteArea = !!notesStudentId && (
+              readOnly
+                ? (tadabburMode || !!existingNote)
+                : (showStudentNotes && !!existingNote)
+            );
 
             const noteSection = showNoteArea ? (
                 <div dir="ltr" className="mt-3 font-sans text-left" data-tadabbur="true">
                     {isEditingThisNote ? (
-                        /* ── Edit mode ── */
-                        <div className="flex flex-col gap-2">
+                        /* ── Edit mode: auto-saves on blur, no Save button needed ── */
+                        <div className="flex flex-col gap-1.5">
                             <textarea
                                 value={editingNoteText}
                                 onChange={e => setEditingNoteText(e.target.value)}
@@ -2854,34 +2861,26 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 autoFocus
                                 placeholder="اكتب تأملك في هذه الآية... / Write your reflection on this verse..."
                                 className="w-full p-3 text-sm border-2 border-emerald-400 dark:border-emerald-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 resize-none transition"
-                                onKeyDown={e => { if (e.key === 'Escape') { setEditingNoteKey(null); setEditingNoteText(''); } }}
+                                onKeyDown={e => {
+                                    if (e.key === 'Escape') { setEditingNoteKey(null); setEditingNoteText(''); }
+                                }}
+                                onBlur={() => handleSaveNote(surahNum, ayahNum, editingNoteText)}
                             />
-                            <div className="flex gap-2 justify-end items-center">
-                                <span className="text-[10px] text-slate-400 mr-auto">Esc to cancel</span>
-                                <button
-                                    onClick={() => { setEditingNoteKey(null); setEditingNoteText(''); }}
-                                    className="px-3 py-1.5 text-xs rounded-lg bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-600 transition font-medium"
-                                >Cancel</button>
-                                <button
-                                    onClick={() => handleSaveNote(surahNum, ayahNum, editingNoteText)}
-                                    disabled={isSavingThisNote}
-                                    className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition font-medium flex items-center gap-1.5"
-                                >
-                                    {isSavingThisNote
-                                        ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
-                                        : '💾 Save'}
-                                </button>
-                            </div>
+                            <span className="text-[10px] text-slate-400">
+                                {isSavingThisNote
+                                    ? <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 border-2 border-slate-300 border-t-emerald-500 rounded-full animate-spin" />Saving…</span>
+                                    : 'Saves automatically · Esc to discard'}
+                            </span>
                         </div>
                     ) : existingNote ? (
-                        /* ── Note exists: show it ── */
+                        /* ── Note exists: show it; student can click anywhere to edit ── */
                         <div
                             className={`group relative p-3 rounded-xl border text-sm leading-relaxed whitespace-pre-wrap
                                 bg-emerald-50 dark:bg-emerald-900/20
                                 border-emerald-200 dark:border-emerald-800
                                 text-slate-700 dark:text-slate-300
-                                ${readOnly && tadabburMode ? 'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 transition-all' : ''}`}
-                            onClick={readOnly && tadabburMode
+                                ${readOnly ? 'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 transition-all' : ''}`}
+                            onClick={readOnly
                                 ? () => { setEditingNoteKey(noteKey); setEditingNoteText(existingNote); }
                                 : undefined}
                         >
@@ -2891,7 +2890,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </span>
                                 <p>{existingNote}</p>
                             </div>
-                            {readOnly && tadabburMode && (
+                            {readOnly && (
                                 <span className="absolute top-2 end-2 text-[10px] text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                     Edit ✏️
                                 </span>
@@ -2903,7 +2902,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             )}
                         </div>
                     ) : tadabburMode ? (
-                        /* ── Tadabbur mode ON, no note yet: add prompt ── */
+                        /* ── Tadabbur mode ON, no note yet: open edit immediately ── */
                         <button
                             onClick={() => { setEditingNoteKey(noteKey); setEditingNoteText(''); }}
                             className="w-full text-left text-xs text-emerald-600 dark:text-emerald-400 py-2 px-3 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/10 transition-all font-medium"
@@ -3068,13 +3067,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div className="flex items-center gap-2 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
-                        <div className="flex items-center gap-1.5 flex-shrink-0 bg-slate-100 dark:bg-gray-700/60 rounded-full px-2 py-1 h-10" dir="ltr">
-                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 select-none">Speed</span>
+                        <div className="flex items-center gap-0.5 flex-shrink-0 bg-slate-100 dark:bg-gray-700/60 rounded-full px-1.5 py-0.5 h-7" dir="ltr">
+                            <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none mr-0.5">🔊</span>
                             {[0.5, 0.75, 1, 1.25, 1.5].map(s => (
                                 <button
                                     key={s}
                                     onClick={() => setReadOnlySpeed(s)}
-                                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
+                                    className={`px-1 py-0.5 rounded-full text-[9px] font-bold transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
                                 >
                                     {s}×
                                 </button>
@@ -3222,6 +3221,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                 <button onClick={() => { openTeacherNoteWindow(); setShowToolsMenu(false); }} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${teacherNote ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
                                                     <span className="text-base">🗒️</span> Teacher's Notes
                                                 </button>
+                                                {notesStudentId && (
+                                                    <button onClick={() => setShowStudentNotes(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showStudentNotes ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
+                                                        <span className="text-base">✍️</span> Student Notes
+                                                    </button>
+                                                )}
                                             </>)}
 
                                             {/* Tadabbur */}
