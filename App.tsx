@@ -625,15 +625,21 @@ const App: React.FC = () => {
     
     const studentMistakes = student.mistakes || {};
     
-    if (letterIndex !== undefined && errorType && errorText) {
-      // New letter-based mistake with error type and text
+    if (letterIndex !== undefined) {
+      // Letter-based mistake (new format)
       const newStudentMistakes = { ...studentMistakes };
-      newStudentMistakes[key] = { 
-        level: 1, 
-        date: new Date().toISOString(),
-        errorType,
-        errorText
-      };
+      if (errorType) {
+        // Colored mistake: red (reading) or green (tajweed), comment optional
+        newStudentMistakes[key] = {
+          level: 1,
+          date: new Date().toISOString(),
+          errorType,
+          ...(errorText?.trim() ? { errorText: errorText.trim() } : {}),
+        };
+      } else {
+        // No errorType = yellow acknowledged marker (persists across page reloads)
+        newStudentMistakes[key] = { level: 1, date: new Date().toISOString() };
+      }
       const updatedStudent = { ...student, mistakes: newStudentMistakes };
       handleUpdateStudent(updatedStudent);
       return;

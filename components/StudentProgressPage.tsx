@@ -2573,38 +2573,42 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     
 
     const handleLetterClick = useCallback((letterKey: string) => {
-        
+
         const mistake = studentMistakes[letterKey];
         const currentState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
-        
+
         if (currentState === 0) {
-            // First click on unmarked letter: show yellow and open text input
-            letterClickStates.current[letterKey] = 1;
+            // ── 1st click: immediately mark red/green + open comment input ──
+            letterClickStates.current[letterKey] = 2;
             setEditingLetterKey(letterKey);
             setErrorTextInput('');
-            
+            // Save to DB right away with current errorType (comment is optional, added later)
+            const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
+            onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, errorType, '');
+            setClickStateUpdateTrigger(prev => prev + 1);
+
+        } else if (currentState === 2) {
+            // ── 2nd click: turn yellow, remove comment, persist yellow to DB ──
+            letterClickStates.current[letterKey] = 1;
+            setEditingLetterKey(null);
+            setErrorTextInput('');
+            const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
+            // Save with no errorType so it renders yellow and survives page close/reopen
+            onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, undefined, undefined);
+            setClickStateUpdateTrigger(prev => prev + 1);
+
         } else if (currentState === 1) {
-            // Second click on yellow (pending): remove error and close input
-            // This happens when user clicks the letter again without entering text
+            // ── 3rd click: remove entirely ──
             letterClickStates.current[letterKey] = 0;
             setEditingLetterKey(null);
             setErrorTextInput('');
-            // Remove the mistake if it exists
             if (mistake) {
                 const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
                 onClearMistake(student.id, surah, ayah, wordIndex, letterIndex);
             }
-            setClickStateUpdateTrigger(prev => prev + 1); // Force re-render to remove yellow color
-        } else if (currentState === 2 && mistake) {
-            // First click on a confirmed mistake: show yellow (pending re-mark or removal).
-            // Do NOT delete from DB yet — the mistake survives a page close/reopen.
-            // Deletion only happens on the next click (state 1 → 0 branch calls onClearMistake).
-            letterClickStates.current[letterKey] = 1;
-            setEditingLetterKey(letterKey); // open text input so user can re-mark
-            setErrorTextInput('');
             setClickStateUpdateTrigger(prev => prev + 1);
         }
-    }, [studentMistakes, student.id, onClearMistake]);
+    }, [studentMistakes, student.id, onClearMistake, onCycleMistakeLevel, errorType]);
     
     const handleLetterTextSubmit = useCallback((letterKey: string, text: string) => {
         const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
