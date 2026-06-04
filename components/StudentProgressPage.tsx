@@ -1303,7 +1303,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
-    const [fontSize, setFontSize] = useState(4);
+    // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
+    const [fontSize, setFontSize] = useState(() =>
+        typeof window !== 'undefined' && window.innerWidth >= 768 ? 7 : 4
+    );
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
     const [showQalqalah, setShowQalqalah] = useState(false);
