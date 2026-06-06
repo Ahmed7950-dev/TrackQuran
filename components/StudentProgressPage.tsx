@@ -1577,7 +1577,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const containerW = container.offsetWidth;
         const minT = -(Math.max(0, strip.offsetWidth - containerW));
         const maxT = 0;
-        const targetT = Math.max(minT, Math.min(maxT, containerW / 2 - (el.offsetLeft + el.offsetWidth / 2)));
+        // Use getBoundingClientRect to get position relative to the strip regardless
+        // of offsetParent — the diff cancels out the current translateX transform.
+        const elLeftInStrip = el.getBoundingClientRect().left - strip.getBoundingClientRect().left;
+        const targetT = Math.max(minT, Math.min(maxT, containerW / 2 - (elLeftInStrip + el.offsetWidth / 2)));
         scrollTransformRef.current = targetT;
         scrollVelocityRef.current  = 0;
         strip.style.transform = `translateX(${targetT}px)`;
@@ -1610,7 +1613,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Reset carousel to start when focusWordList changes (new surah loaded)
     useEffect(() => {
         if (!focusMode) return;
-        verseFirstWordEls.current.clear();
+        // Note: verseFirstWordEls is kept up-to-date by inline ref callbacks on
+        // every render — no manual clear needed here (clearing would briefly empty
+        // the map before the next re-render repopulates it, causing missed clicks).
         const strip     = carouselStripRef.current;
         const container = carouselContainerRef.current;
         // Defer one frame so new DOM is fully laid out
@@ -3256,6 +3261,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </form>
                         </div>
                     </div>
+                    {/* ── Verse navigation bar — shown in sticky toolbar during focus mode ── */}
+                    {focusMode && (
+                        <div className="border-t border-slate-100 dark:border-gray-700 mt-2 pt-2">
+                            <div
+                                ref={verseBarRef}
+                                className="flex overflow-x-auto gap-1 py-0.5 px-1"
+                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                            >
+                                {Array.from({ length: selectedSurahInfo?.numberOfAyahs ?? 0 }, (_, i) => i + 1).map(ayah => (
+                                    <button
+                                        key={ayah}
+                                        data-versenum={ayah}
+                                        onClick={() => scrollToAyah(ayah)}
+                                        className={`flex-shrink-0 min-w-[2rem] h-7 px-2 rounded-lg text-[11px] font-semibold transition-all duration-200 ${
+                                            currentAyah === ayah
+                                                ? 'bg-violet-600 text-white shadow-md scale-110 ring-2 ring-violet-300 dark:ring-violet-700'
+                                                : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:text-violet-700 dark:hover:text-violet-300'
+                                        }`}
+                                    >
+                                        {ayah}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-0.5 tracking-wide">Verse {currentAyah} of {selectedSurahInfo?.numberOfAyahs ?? '—'}</p>
+                        </div>
+                    )}
                 </div>
                 <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
                     <div>
@@ -3279,31 +3310,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <div dir="ltr" className="flex flex-col justify-center min-h-[60vh] py-10 select-none bg-white dark:bg-gray-800">
                                         {/* Surah label */}
                                         <p className="text-center text-xs font-semibold text-violet-500 dark:text-violet-400 mb-6 tracking-widest uppercase">{surahLabel}</p>
-
-                                        {/* ── Verse navigation bar ── */}
-                                        <div className="px-4 pb-5">
-                                            <div
-                                                ref={verseBarRef}
-                                                className="flex overflow-x-auto gap-1 py-1 px-2"
-                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                                            >
-                                                {Array.from({ length: selectedSurahInfo?.numberOfAyahs ?? 0 }, (_, i) => i + 1).map(ayah => (
-                                                    <button
-                                                        key={ayah}
-                                                        data-versenum={ayah}
-                                                        onClick={() => scrollToAyah(ayah)}
-                                                        className={`flex-shrink-0 min-w-[2rem] h-8 px-2 rounded-lg text-[11px] font-semibold transition-all duration-200 ${
-                                                            currentAyah === ayah
-                                                                ? 'bg-violet-600 text-white shadow-md scale-110 ring-2 ring-violet-300 dark:ring-violet-700'
-                                                                : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:text-violet-700 dark:hover:text-violet-300'
-                                                        }`}
-                                                    >
-                                                        {ayah}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <p className="text-center text-[9px] text-slate-300 dark:text-slate-600 mt-1 tracking-wide">Verse {currentAyah} of {selectedSurahInfo?.numberOfAyahs ?? '—'}</p>
-                                        </div>
 
                                         {/* ── Free-scroll carousel — auto-width, RAF-driven ── */}
                                         <div
