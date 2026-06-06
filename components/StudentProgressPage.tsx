@@ -1182,7 +1182,8 @@ type SurahStatus = {
     name: string; // The Arabic name
     transliteratedName: string;
     englishName: string;
-    status: 'completed' | 'in-progress' | 'not-started';
+    status: 'completed' | 'in-progress' | 'not-started';    // reading/recitation
+    memStatus: 'completed' | 'in-progress' | 'not-started'; // memorization (hifdh)
 };
 
 const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, type: 'reading' | 'memorization' }> = ({ surahStatuses, title, type }) => {
@@ -1203,12 +1204,13 @@ const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, 
         <div className="mt-4">
             <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{title}</h4>
             <div className="flex flex-wrap gap-1">
-                {surahStatuses.map(({ id, transliteratedName, status }) => {
+                {surahStatuses.map(({ id, transliteratedName, status, memStatus }) => {
+                    const effectiveStatus = type === 'memorization' ? memStatus : status;
                     const statusClass = {
                         'completed': colors[type].completed,
                         'in-progress': colors[type].inProgress,
                         'not-started': colors[type].notStarted
-                    }[status];
+                    }[effectiveStatus];
                     return (
                         <div key={id} className="relative group flex-grow" style={{ minWidth: '0.5%' }}>
                             <div
@@ -1827,50 +1829,72 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         };
     }, [focusMode]);
 
-    // surahStatuses based on reading (recitation non-revision) achievements
+    // surahStatuses based on reading (recitation non-revision) + memorization achievements
     const surahStatuses = useMemo<SurahStatus[]>(() => {
         const readingAchs = recitationAchievements.filter(a => !a.isRevision);
-        return QURAN_METADATA.map(surah => {
-            const surahId = surah.number;
-            let status: 'completed' | 'in-progress' | 'not-started' = 'not-started';
+        const memAchs     = memorizationAchievements.filter(a => !a.isRevision);
 
-            for (const range of readingAchs) {
+        const getSurahAchStatus = (
+            surahId: number,
+            totalAyahs: number,
+            achs: typeof readingAchs
+        ): 'completed' | 'in-progress' | 'not-started' => {
+            let result: 'completed' | 'in-progress' | 'not-started' = 'not-started';
+            for (const range of achs) {
                 if (surahId > range.startSurah && surahId < range.endSurah) {
-                    status = 'completed'; break;
+                    return 'completed';
                 }
                 if (surahId === range.startSurah || surahId === range.endSurah) {
-                    if (range.startSurah === surahId && range.endSurah === surahId && range.startAyah === 1 && range.endAyah === surah.numberOfAyahs) {
-                         status = 'completed'; break;
-                    } else {
-                         status = 'in-progress';
+                    if (range.startSurah === surahId && range.endSurah === surahId &&
+                        range.startAyah === 1 && range.endAyah === totalAyahs) {
+                        return 'completed';
                     }
+                    result = 'in-progress';
                 }
             }
-            return {
-                id: surah.number, name: surah.name, transliteratedName: surah.transliteratedName,
-                englishName: surah.englishName, status
-            };
-        });
-    }, [recitationAchievements]);
+            return result;
+        };
+
+        return QURAN_METADATA.map(surah => ({
+            id: surah.number,
+            name: surah.name,
+            transliteratedName: surah.transliteratedName,
+            englishName: surah.englishName,
+            status:    getSurahAchStatus(surah.number, surah.numberOfAyahs, readingAchs),
+            memStatus: getSurahAchStatus(surah.number, surah.numberOfAyahs, memAchs),
+        }));
+    }, [recitationAchievements, memorizationAchievements]);
 
 
-    const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status']) => {
+    // Returns pill colour based on read + memorization status combined:
+    //   both logged     → purple/violet  (fully mastered)
+    //   memorized only  → sky/blue
+    //   read only       → teal (completed) / amber (in-progress)
+    //   neither         → grey
+    const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
         if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
-        const defaultClass = 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
-        switch (status) {
-            case 'completed': return 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900';
-            case 'in-progress': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900';
-            default: return defaultClass;
-        }
+        const hasRead = status !== 'not-started';
+        const hasMem  = memStatus !== 'not-started';
+        if (hasRead && hasMem)
+            return 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900';
+        if (hasMem)
+            return 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900';
+        if (status === 'completed')
+            return 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900';
+        if (status === 'in-progress')
+            return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900';
+        return 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
     };
 
-    const getDividerClass = (surahId: number, status: SurahStatus['status']) => {
+    const getDividerClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
         if (surahId === selectedSurahId) return 'bg-white/40 dark:bg-white/40';
-        switch (status) {
-            case 'completed': return 'bg-teal-300 dark:bg-teal-700';
-            case 'in-progress': return 'bg-amber-300 dark:bg-amber-700';
-            default: return 'bg-slate-300 dark:bg-gray-600';
-        }
+        const hasRead = status !== 'not-started';
+        const hasMem  = memStatus !== 'not-started';
+        if (hasRead && hasMem) return 'bg-violet-300 dark:bg-violet-700';
+        if (hasMem)            return 'bg-sky-300 dark:bg-sky-700';
+        if (status === 'completed')   return 'bg-teal-300 dark:bg-teal-700';
+        if (status === 'in-progress') return 'bg-amber-300 dark:bg-amber-700';
+        return 'bg-slate-300 dark:bg-gray-600';
     };
 
     const toEasternArabicNumerals = (num: number): string => {
@@ -3129,9 +3153,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     id={`surah-nav-${surahStatuses[0].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[0].id)}
-                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status)}`}>
+                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[0].id}</span>
-                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status)}`} />
+                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[0].transliteratedName}</span>
                                 </button>
                             )}
@@ -3139,11 +3163,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             {/* Surahs 2–113 — scrollable */}
                             <div className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
                                 <div className="flex items-center gap-2 pb-0.5">
-                                    {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status }) => (
+                                    {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status, memStatus }) => (
                                         <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
-                                            className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status)}`}>
+                                            className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
                                             <span className="font-mono text-xs">{id}</span>
-                                            <div className={`w-px h-4 ${getDividerClass(id, status)}`} />
+                                            <div className={`w-px h-4 ${getDividerClass(id, status, memStatus)}`} />
                                             <span className="tracking-wide">{transliteratedName}</span>
                                         </button>
                                     ))}
@@ -3155,9 +3179,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     id={`surah-nav-${surahStatuses[surahStatuses.length - 1].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[surahStatuses.length - 1].id)}
-                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status)}`}>
+                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[surahStatuses.length - 1].id}</span>
-                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status)}`} />
+                                    <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[surahStatuses.length - 1].transliteratedName}</span>
                                 </button>
                             )}
