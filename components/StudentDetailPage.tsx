@@ -681,49 +681,51 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 />
             )}
 
-            {/* ── Add New Achievement — compact tab strip ── */}
-            {!readOnly && <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 pt-4 pb-1 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t('studentDetail.addNewAchievement')}</span>
-                </div>
-                <div className="flex overflow-x-auto px-3 pb-3 gap-2 pt-2">
-                    {/* Reading / Hifdh */}
-                    <button
-                        onClick={() => setActiveModal('recitation')}
-                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-50 dark:bg-teal-900/25 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/50 hover:border-teal-400 dark:hover:border-teal-500 transition-all font-medium text-sm group"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                        </svg>
-                        {t('studentDetail.readingHifdh')}
-                    </button>
+            {/* ── Add New Achievement — centered icon tabs ── */}
+            {!readOnly && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm px-4 py-5">
+                    <div className="flex justify-center gap-3">
 
-                    {/* Tafsir */}
-                    <button
-                        onClick={() => setActiveModal('tafsir')}
-                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/25 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all font-medium text-sm"
-                    >
-                        <span className="material-symbols-outlined text-base leading-none flex-shrink-0" style={{ fontVariationSettings: "'FILL' 1", fontSize: '16px' }}>
-                            cognition
-                        </span>
-                        {t('studentDetail.tafsir')}
-                    </button>
+                        {/* Reading / Hifdh */}
+                        <button
+                            onClick={() => setActiveModal('recitation')}
+                            className="group flex flex-col items-center gap-2.5 w-28 py-4 rounded-2xl border border-teal-100 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-900/10 hover:bg-teal-50 dark:hover:bg-teal-900/25 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-sm transition-all duration-200"
+                        >
+                            <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-300 group-hover:scale-110 transition-transform duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                </svg>
+                            </div>
+                            <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 leading-tight text-center">{t('studentDetail.readingHifdh')}</span>
+                        </button>
 
-                    {/* Attendance */}
-                    <button
-                        onClick={() => setActiveModal('attendance')}
-                        className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-400 dark:hover:border-amber-500 transition-all font-medium text-sm"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" />
-                        </svg>
-                        {t('studentDetail.attendance')}
-                    </button>
+                        {/* Tafsir */}
+                        <button
+                            onClick={() => setActiveModal('tafsir')}
+                            className="group flex flex-col items-center gap-2.5 w-28 py-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/25 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm transition-all duration-200"
+                        >
+                            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-300 group-hover:scale-110 transition-transform duration-200">
+                                <span className="material-symbols-outlined leading-none" style={{ fontVariationSettings: "'FILL' 1", fontSize: '20px' }}>cognition</span>
+                            </div>
+                            <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 leading-tight text-center">{t('studentDetail.tafsir')}</span>
+                        </button>
+
+                        {/* Attendance */}
+                        <button
+                            onClick={() => setActiveModal('attendance')}
+                            className="group flex flex-col items-center gap-2.5 w-28 py-4 rounded-2xl border border-amber-100 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-50 dark:hover:bg-amber-900/25 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-sm transition-all duration-200"
+                        >
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-300 group-hover:scale-110 transition-transform duration-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" />
+                                </svg>
+                            </div>
+                            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 leading-tight text-center">{t('studentDetail.attendance')}</span>
+                        </button>
+
+                    </div>
                 </div>
-            </div>}
+            )}
 
             {/* ── Progress Calendar (full-width) ── */}
             <ProgressCalendar />
