@@ -292,39 +292,49 @@ const ToolsSidebar: React.FC<{
   const [expanded, setExpanded] = React.useState(false);
   return (
     <div
-      className="hidden md:block fixed left-0 z-[35] select-none no-print"
-      style={{ top: '65px' }}
+      className="hidden md:flex fixed left-0 z-[35] select-none no-print flex-col"
+      style={{ top: '65px', bottom: 0 }}
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
     >
       <div
-        className={`flex flex-col gap-0.5 bg-white dark:bg-gray-800 shadow-xl rounded-r-2xl py-2 border border-l-0 border-slate-200 dark:border-gray-700 overflow-hidden transition-[width] duration-200 ease-in-out ${expanded ? 'w-48' : 'w-11'}`}
+        className={`flex flex-col flex-1 bg-white dark:bg-gray-800 shadow-xl rounded-tr-2xl border border-l-0 border-b-0 border-slate-200 dark:border-gray-700 overflow-hidden transition-[width] duration-200 ease-in-out ${expanded ? 'w-48' : 'w-11'}`}
       >
-        {items.map(item => {
-          const isActive = activeTab === item.tab;
-          return (
-            <button
-              key={item.tab}
-              onClick={() => onSelect(item.tab === activeTab ? 'main' : item.tab)}
-              title={!expanded ? item.label : undefined}
-              className={`relative flex items-center gap-3 px-3 py-2.5 whitespace-nowrap transition-colors text-left w-full ${
-                isActive
-                  ? 'text-teal-600 dark:text-orange-400 bg-teal-50 dark:bg-orange-900/20 font-medium'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 hover:bg-slate-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              <span className="text-base leading-none flex-shrink-0 w-5 text-center">{item.icon}</span>
-              <span className={`text-sm overflow-hidden transition-opacity duration-150 ${expanded ? 'opacity-100 delay-75' : 'opacity-0'}`}>
-                {item.label}
-              </span>
-              {(item.badge ?? 0) > 0 && (
-                <span className={`absolute flex items-center justify-center min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold ${expanded ? 'right-2 top-1/2 -translate-y-1/2' : 'top-0.5 right-0.5'}`}>
-                  {item.badge}
+        {/* Nav items */}
+        <div className="flex flex-col gap-1 pt-3">
+          {items.map(item => {
+            const isActive = activeTab === item.tab;
+            return (
+              <button
+                key={item.tab}
+                onClick={() => onSelect(item.tab === activeTab ? 'main' : item.tab)}
+                title={!expanded ? item.label : undefined}
+                className={`relative flex items-center gap-3 px-3 py-3 whitespace-nowrap transition-colors text-left w-full ${
+                  isActive
+                    ? 'text-teal-600 dark:text-orange-400 bg-teal-50 dark:bg-orange-900/20 font-medium'
+                    : 'text-slate-400 dark:text-slate-500 hover:text-teal-600 dark:hover:text-orange-400 hover:bg-slate-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {/* Dot indicator */}
+                <span className={`flex-shrink-0 w-5 flex items-center justify-center`}>
+                  <span className={`rounded-full transition-all duration-200 ${
+                    isActive
+                      ? 'w-2.5 h-2.5 bg-teal-500 dark:bg-orange-400 shadow-sm'
+                      : 'w-2 h-2 bg-slate-300 dark:bg-slate-600 group-hover:bg-teal-400'
+                  }`} />
                 </span>
-              )}
-            </button>
-          );
-        })}
+                <span className={`text-sm overflow-hidden transition-opacity duration-150 ${expanded ? 'opacity-100 delay-75' : 'opacity-0'}`}>
+                  {item.label}
+                </span>
+                {(item.badge ?? 0) > 0 && (
+                  <span className={`absolute flex items-center justify-center min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold ${expanded ? 'right-2 top-1/2 -translate-y-1/2' : 'top-1 right-1'}`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
