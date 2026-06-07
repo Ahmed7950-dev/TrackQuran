@@ -835,7 +835,11 @@ const App: React.FC = () => {
   };
 
   const handleBack = () => {
-    if (sessionStudentId) {
+    // If the user navigated to a tool page from the sidebar, go back to the
+    // student page rather than all the way back to the dashboard.
+    if (activeTab !== 'main') {
+      setActiveTab('main');
+    } else if (sessionStudentId) {
       setSessionStudentId(null);
     } else if (currentStudentView === 'mistakes') {
       setCurrentStudentView('details');
@@ -1211,6 +1215,18 @@ const App: React.FC = () => {
                 >{t('header.aboutUs')}</button>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                 <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
+                <button
+                    onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'calendar' ? 'main' : 'calendar'); }}
+                    className={`relative text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
+                >
+                  Calendar
+                  {pendingBookingCount > 0 && (
+                    <span className="absolute -top-1.5 -end-3 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                      {pendingBookingCount}
+                    </span>
+                  )}
+                </button>
                 {/* Switch to Arabic */}
                 <button
                     onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); }}
@@ -1359,11 +1375,10 @@ const App: React.FC = () => {
       {(!!selectedStudent || !!sessionStudent) && activeTab === 'main' && (
         <ToolsSidebar
           items={[
-            { tab: 'calendar',        icon: '📅', label: 'Calendar',                  badge: pendingBookingCount },
-            { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer')                              },
-            { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer')                             },
-            { tab: 'qaedah',          icon: '📖', label: 'Qaedah'                                                },
-            { tab: 'tajweed',         icon: '⚖️', label: t('header.tajweed')                                     },
+            { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer') },
+            { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer') },
+            { tab: 'qaedah',          icon: '📖', label: 'Qaedah'                   },
+            { tab: 'tajweed',         icon: '⚖️', label: t('header.tajweed')         },
           ]}
           activeTab={activeTab}
           onSelect={(tab) => { setCurrentStudentView('details'); setActiveTab(tab); }}
