@@ -282,6 +282,54 @@ const LandingPageWithAuth: React.FC = () => {
   );
 };
 
+// ── Hover-expandable left sidebar (student detail / progress pages only) ────
+interface SidebarItem { tab: string; icon: string; label: string; badge?: number; }
+const ToolsSidebar: React.FC<{
+  items: SidebarItem[];
+  activeTab: string;
+  onSelect: (tab: string) => void;
+}> = ({ items, activeTab, onSelect }) => {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <div
+      className="hidden md:block fixed left-0 z-[35] select-none no-print"
+      style={{ top: '65px' }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
+      <div
+        className={`flex flex-col gap-0.5 bg-white dark:bg-gray-800 shadow-xl rounded-r-2xl py-2 border border-l-0 border-slate-200 dark:border-gray-700 overflow-hidden transition-[width] duration-200 ease-in-out ${expanded ? 'w-48' : 'w-11'}`}
+      >
+        {items.map(item => {
+          const isActive = activeTab === item.tab;
+          return (
+            <button
+              key={item.tab}
+              onClick={() => onSelect(item.tab === activeTab ? 'main' : item.tab)}
+              title={!expanded ? item.label : undefined}
+              className={`relative flex items-center gap-3 px-3 py-2.5 whitespace-nowrap transition-colors text-left w-full ${
+                isActive
+                  ? 'text-teal-600 dark:text-orange-400 bg-teal-50 dark:bg-orange-900/20 font-medium'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 hover:bg-slate-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              <span className="text-base leading-none flex-shrink-0 w-5 text-center">{item.icon}</span>
+              <span className={`text-sm overflow-hidden transition-opacity duration-150 ${expanded ? 'opacity-100 delay-75' : 'opacity-0'}`}>
+                {item.label}
+              </span>
+              {(item.badge ?? 0) > 0 && (
+                <span className={`absolute flex items-center justify-center min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold ${expanded ? 'right-2 top-1/2 -translate-y-1/2' : 'top-0.5 right-0.5'}`}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   // ── Google Calendar OAuth2 callback — must be checked first ────────────────
   if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
@@ -355,7 +403,6 @@ const App: React.FC = () => {
   const [isUserMenuOpen,           setIsUserMenuOpen]           = useState(false);
   const [isFontMenuOpen,           setIsFontMenuOpen]           = useState(false);
   const [isContactSupportOpen,     setIsContactSupportOpen]     = useState(false);
-  const [isToolsMenuOpen,          setIsToolsMenuOpen]          = useState(false);
   const [isMobileNavOpen,          setIsMobileNavOpen]          = useState(false);
   const [gcalToken,                setGcalToken]                = useState<string | null>(() => getStoredToken());
   const [availabilitySlots,        setAvailabilitySlots]        = useState<AvailabilitySlot[]>([]);
@@ -520,17 +567,6 @@ const App: React.FC = () => {
     };
   }, [isFontMenuOpen]);
 
-  useEffect(() => {
-    if (!isToolsMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Element;
-      if (!target.closest('.tools-menu-btn') && !target.closest('.tools-menu-dropdown')) {
-        setIsToolsMenuOpen(false);
-      }
-    };
-    const tid = setTimeout(() => document.addEventListener('click', handler, true), 0);
-    return () => { clearTimeout(tid); document.removeEventListener('click', handler, true); };
-  }, [isToolsMenuOpen]);
 
   const handleSaveTajweedRules = (updatedRules: string[]) => {
     if (currentUser?.role !== 'teacher') return;
@@ -830,14 +866,6 @@ const App: React.FC = () => {
                     >{t('header.aboutUs')}</button>
                     <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                     <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
-                    <button
-                        onClick={() => setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer')}
-                        className={`text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                    >{t('header.lettersTrainer')}</button>
-                    <button
-                        onClick={() => setActiveTab(t => t === 'alphabetTrainer' ? 'main' : 'alphabetTrainer')}
-                        className={`text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                    >{t('header.alphabetTrainer')}</button>
                 </nav>
                 <div className="flex items-center gap-4">
                     {/* Mobile hamburger — student view */}
@@ -914,6 +942,17 @@ const App: React.FC = () => {
             </div>
           )}
           </header>
+          {/* Left tools sidebar — only on student progress page (desktop) */}
+          {activeTab === 'main' && (
+            <ToolsSidebar
+              items={[
+                { tab: 'lettersTrainer', icon: '🔡', label: t('header.lettersTrainer') },
+                { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer') },
+              ]}
+              activeTab={activeTab}
+              onSelect={(tab) => setActiveTab(tab)}
+            />
+          )}
           <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
               {activeTab === 'lettersTrainer' ? (
                 <LettersTrainerPage />
@@ -1162,56 +1201,6 @@ const App: React.FC = () => {
                 >{t('header.aboutUs')}</button>
                 <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
                 <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
-                <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
-                <button
-                    onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'calendar' ? 'main' : 'calendar'); }}
-                    className={`relative text-sm font-medium transition-colors ${activeTab === 'calendar' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >
-                  Calendar
-                  {pendingBookingCount > 0 && (
-                    <span className="absolute -top-1.5 -end-3 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                      {pendingBookingCount}
-                    </span>
-                  )}
-                </button>
-                {/* Tools dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setIsToolsMenuOpen(o => !o)}
-                    className={`tools-menu-btn flex items-center gap-1 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' || activeTab === 'alphabetTrainer' || activeTab === 'qaedah' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                  >
-                    Tools
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${isToolsMenuOpen ? 'rotate-180' : ''}`}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  </button>
-                  {isToolsMenuOpen && (
-                    <div className="tools-menu-dropdown absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 z-50 py-1 overflow-hidden">
-                      <button
-                        onClick={() => { setActiveTab('lettersTrainer'); setIsToolsMenuOpen(false); }}
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'lettersTrainer' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                      >
-                        <span>🔡</span> {t('header.lettersTrainer')}
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('alphabetTrainer'); setIsToolsMenuOpen(false); }}
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'alphabetTrainer' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                      >
-                        <span>🔤</span> {t('header.alphabetTrainer')}
-                      </button>
-                      <button
-                        onClick={() => { setActiveTab('qaedah'); setIsToolsMenuOpen(false); }}
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${activeTab === 'qaedah' ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                      >
-                        <span>📖</span> Qaedah
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button
-                    onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); }}
-                    className={`text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >{t('header.tajweed')}</button>
                 {/* Switch to Arabic */}
                 <button
                     onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); }}
@@ -1356,6 +1345,20 @@ const App: React.FC = () => {
           </div>
         )}
       </header>
+      {/* Left tools sidebar — only on student detail / progress pages (desktop) */}
+      {(!!selectedStudent || !!sessionStudent) && activeTab === 'main' && (
+        <ToolsSidebar
+          items={[
+            { tab: 'calendar',        icon: '📅', label: 'Calendar',                  badge: pendingBookingCount },
+            { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer')                              },
+            { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer')                             },
+            { tab: 'qaedah',          icon: '📖', label: 'Qaedah'                                                },
+            { tab: 'tajweed',         icon: '⚖️', label: t('header.tajweed')                                     },
+          ]}
+          activeTab={activeTab}
+          onSelect={(tab) => { setCurrentStudentView('details'); setActiveTab(tab); }}
+        />
+      )}
       <main className={`flex-grow ${sessionStudent ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
         {activeTab === 'accountSettings' ? (
           <AccountSettingsPage
