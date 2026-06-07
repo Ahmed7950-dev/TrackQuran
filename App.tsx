@@ -288,12 +288,13 @@ const ToolsSidebar: React.FC<{
   items: SidebarItem[];
   activeTab: string;
   onSelect: (tab: string) => void;
-}> = ({ items, activeTab, onSelect }) => {
+  headerHeight: number;
+}> = ({ items, activeTab, onSelect, headerHeight }) => {
   const [expanded, setExpanded] = React.useState(false);
   return (
     <div
       className="hidden md:flex fixed left-0 z-[35] select-none no-print flex-col"
-      style={{ top: '65px', bottom: 0 }}
+      style={{ top: headerHeight, bottom: 0 }}
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
     >
@@ -478,6 +479,17 @@ const App: React.FC = () => {
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
   const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Measure the sticky header so the sidebar always starts exactly below it
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(68);
+  useEffect(() => {
+    if (!headerRef.current) return;
+    const ro = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
+    ro.observe(headerRef.current);
+    setHeaderHeight(headerRef.current.getBoundingClientRect().height);
+    return () => ro.disconnect();
+  }, [currentUser]);
 
   const handleExportBackup = () => {
     try {
@@ -868,7 +880,7 @@ const App: React.FC = () => {
 
     return (
        <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
-          <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
+          <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
                 <button onClick={() => setActiveTab('main')} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to main">
                     <Logo />
@@ -965,6 +977,7 @@ const App: React.FC = () => {
               ]}
               activeTab={activeTab}
               onSelect={(tab) => setActiveTab(tab)}
+              headerHeight={headerHeight}
             />
           )}
           <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
@@ -1194,7 +1207,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
+      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
             <button
                 onClick={() => {
@@ -1382,6 +1395,7 @@ const App: React.FC = () => {
           ]}
           activeTab={activeTab}
           onSelect={(tab) => { setCurrentStudentView('details'); setActiveTab(tab); }}
+          headerHeight={headerHeight}
         />
       )}
       <main className={`flex-grow ${sessionStudent ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
