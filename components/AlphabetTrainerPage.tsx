@@ -469,34 +469,17 @@ const AlphabetTrainerPage: React.FC = () => {
           <div className="relative w-full">
             <TowerDefenseGame ref={gameRef} />
 
-            {/* Letter card + form badge — positioned inside the canvas, top-center.
-                Starts at 76 px from top, leaving room for the portrait HUD strip (72 px).
-                pointer-events-none so clicks pass through to the canvas. */}
+            {/* Letter card — top-center of canvas, small padding from the top edge.
+                pointer-events-none so clicks pass through to the game. */}
             <div
-              className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none select-none"
-              style={{ top: 76, zIndex: 5 }}
+              className="absolute left-1/2 -translate-x-1/2 pointer-events-none select-none"
+              style={{ top: 10, zIndex: 5 }}
             >
-              {/* Active form badge */}
-              <div
-                className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100/90 text-indigo-700 border border-indigo-200 shadow-sm"
-                style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
-              >
-                <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '0.9rem', lineHeight: 1 }}>
-                  {getLetterInForm('ب', letterForm)}
-                </span>
-                <span style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>
-                  {FORM_CONFIG.find(f => f.form === letterForm)?.labelAr}
-                </span>
-                <span className="opacity-60">·</span>
-                <span>{FORM_CONFIG.find(f => f.form === letterForm)?.labelEn}</span>
-              </div>
-
-              {/* Letter card */}
               <div
                 key={`${pos}-${letter}-${letterForm}`}
-                className={`flex flex-col items-center justify-center rounded-3xl at-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'at-shake' : ''}`}
+                className={`flex items-center justify-center rounded-3xl at-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'at-shake' : ''}`}
                 style={{
-                  width: 'min(130px, 28vw)', height: 'min(130px, 28vw)',
+                  width: 'min(170px, 38vw)', height: 'min(170px, 38vw)',
                   background: 'rgba(255,255,255,0.92)',
                   backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
                 }}
@@ -504,16 +487,11 @@ const AlphabetTrainerPage: React.FC = () => {
                 <span
                   style={{
                     fontFamily: "'Hafs', 'Amiri', serif",
-                    fontSize: 'clamp(2.8rem, 10vw, 4.5rem)',
+                    fontSize: 'clamp(4rem, 14vw, 6.5rem)',
                     lineHeight: 1,
                     color: '#3c4a8a',
                   }}
                 >{getLetterInForm(letter, letterForm)}</span>
-                {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-                  <span className="text-xs mt-1 px-2 py-0.5 rounded-full text-indigo-400 bg-indigo-50/80">
-                    ≡ {letterForm === 'initial' ? 'Isolated' : 'End'}
-                  </span>
-                )}
               </div>
             </div>
           </div>
