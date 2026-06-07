@@ -1227,10 +1227,6 @@ const App: React.FC = () => {
                     </span>
                   )}
                 </button>
-                <button
-                    onClick={() => setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer')}
-                    className={`text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                >{t('header.lettersTrainer')}</button>
                 {/* Switch to Arabic */}
                 <button
                     onClick={() => { handleSelectSubject('arabic'); setSelectedStudentId(null); setSessionStudentId(null); setActiveTab('main'); }}
@@ -1379,6 +1375,7 @@ const App: React.FC = () => {
       {(!!selectedStudent || !!sessionStudent) && activeTab === 'main' && (
         <ToolsSidebar
           items={[
+            { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer')  },
             { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer') },
             { tab: 'qaedah',          icon: '📖', label: 'Qaedah'                   },
             { tab: 'tajweed',         icon: '⚖️', label: t('header.tajweed')         },
