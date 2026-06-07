@@ -12,8 +12,27 @@ interface ProgressChartProps {
 
 const ProgressChart: React.FC<ProgressChartProps> = ({ achievements, type, maxPages: maxPagesProp }) => {
   const { t, language } = useI18n();
-  // If there's not enough data to draw a line, show a message.
-  if (achievements.length < 2) {
+
+  // 1. Process data: aggregate by calendar date so multiple sessions on the
+  //    same day merge into one point (avoids near-vertical spike artifacts).
+  const dailyMap = new Map<string, number>();
+  for (const ach of achievements) {
+    // Normalise to YYYY-MM-DD so times don't fragment same-day sessions.
+    const dateKey = ach.date.slice(0, 10);
+    dailyMap.set(dateKey, (dailyMap.get(dateKey) ?? 0) + (ach.pagesCompleted ?? 0));
+  }
+
+  // Sort by date ascending and drop zero-page days (pure revision logs, etc.)
+  const dataPoints = Array.from(dailyMap.entries())
+    .filter(([, pages]) => pages > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dateKey, pages]) => ({
+      date: new Date(dateKey),
+      pagesInSession: pages,
+    }));
+
+  // Need at least 2 distinct date-points to draw a meaningful line.
+  if (dataPoints.length < 2) {
     return (
       <div className="flex items-center justify-center h-64 bg-slate-50 dark:bg-gray-700/50 rounded-lg">
         <p className="text-slate-500 dark:text-slate-400 italic">
@@ -22,16 +41,6 @@ const ProgressChart: React.FC<ProgressChartProps> = ({ achievements, type, maxPa
       </div>
     );
   }
-
-  // 1. Process data: Sort achievements by date and get pages per session.
-  const sortedAchievements = [...achievements].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  const dataPoints = sortedAchievements.map(ach => {
-    return {
-      date: new Date(ach.date),
-      pagesInSession: ach.pagesCompleted,
-    };
-  });
 
   // Auto-compute maxPages from actual data so 1-page sessions still look good.
   // Add 30% headroom above the highest session, minimum axis of 5.
