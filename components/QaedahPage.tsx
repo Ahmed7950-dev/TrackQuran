@@ -242,26 +242,13 @@ const QaedahPage: React.FC = () => {
   // ─── VIEW: LIST ───────────────────────────────────────────────────────────
   const renderList = () => (
     <div className="max-w-2xl mx-auto px-4 pb-12 pt-2">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100" style={HAFS}>
-            القاعدة النورانية
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Qaedah Nooraniyya — select a lesson to practice
-          </p>
-        </div>
-        {/* Adult / Child mode toggle */}
-        <button
-          onClick={() => setChildMode(m => !m)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${
-            childMode
-              ? 'bg-indigo-500 border-indigo-400 text-white shadow-md'
-              : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          {childMode ? '🧒 Child' : '👤 Adult'}
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100" style={HAFS}>
+          القاعدة النورانية
+        </h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Qaedah Nooraniyya — select a lesson to practice
+        </p>
       </div>
 
       {loading ? (
@@ -328,17 +315,6 @@ const QaedahPage: React.FC = () => {
             <p className="text-sm text-slate-400 dark:text-slate-500 truncate" style={HAFS}>{selectedTopic.titleAr}</p>
           )}
         </div>
-        {/* Adult / Child toggle */}
-        <button
-          onClick={() => setChildMode(m => !m)}
-          className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
-            childMode
-              ? 'bg-indigo-500 border-indigo-400 text-white'
-              : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'
-          }`}
-        >
-          {childMode ? '🧒 Child' : '👤 Adult'}
-        </button>
       </div>
 
       {wordsLoading ? (
@@ -420,94 +396,156 @@ const QaedahPage: React.FC = () => {
   );
 
   // ─── VIEW: CHALLENGE ──────────────────────────────────────────────────────
-  const renderChallenge = () => (
-    <>
-      {praiseOverlay}
-
-      {/* Constrained top section */}
-      <div className="max-w-xl mx-auto px-4 pb-4 pt-2">
-        {/* Top bar */}
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => setView('words')}
-            className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
-              childMode
-                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
-                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
-            }`}
-          >← Back</button>
-          <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
-              style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
-            />
-          </div>
-          <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
-            {pos} / {queue.length}
-          </span>
-        </div>
-
-        {/* Word card */}
-        <div className="flex justify-center mb-10">
+  const renderChallenge = () => {
+    // Shared top bar — includes Adult/Child toggle (challenge page only)
+    const topBar = (
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setView('words')}
+          className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
+            childMode
+              ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
+              : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
+          }`}
+        >← Back</button>
+        <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
           <div
-            key={`${pos}-${word}`}
-            className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'qd-shake' : ''} ${
-              childMode
-                ? 'qd-card-kid border-4 border-indigo-200 shadow-xl'
-                : 'qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'
-            }`}
-            style={{ width: 'min(260px,75vw)', height: 'min(180px,50vw)', minHeight: 120 }}
-          >
-            <span
-              style={{
-                ...HAFS,
-                fontSize: 'clamp(3rem,14vw,6rem)',
-                lineHeight: 1.2,
-                direction: 'rtl',
-                color: childMode ? '#3c4a8a' : undefined,
-              }}
-              className={childMode ? '' : 'text-slate-700 dark:text-slate-200'}
-            >{word}</span>
-          </div>
+            className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
+            style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
+          />
         </div>
-
-        {/* Correct / Wrong buttons */}
-        <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-          <button
-            onClick={handleCorrect}
-            disabled={celebrating}
-            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-              childMode
-                ? 'rounded-full bg-green-500 hover:bg-green-400 text-white shadow-md shadow-green-200'
-                : 'rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white'
-            }`}
-          >{childMode ? '✅ Yes!' : '✓ Correct'}</button>
-          <button
-            onClick={handleWrong}
-            disabled={celebrating}
-            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-              childMode
-                ? 'rounded-full bg-rose-500 hover:bg-rose-400 text-white shadow-md shadow-rose-200'
-                : 'rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white'
-            }`}
-          >{childMode ? '❌ No' : '✗ Wrong'}</button>
-        </div>
-
-        {restartMsg && (
-          <p className={`text-center mt-4 text-sm font-semibold ${childMode ? 'text-pink-500' : 'text-red-400'}`}>
-            {restartMsg}
-          </p>
-        )}
+        <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
+          {pos} / {queue.length}
+        </span>
+        {/* Adult / Child toggle — challenge page only */}
+        <button
+          onClick={() => setChildMode(m => !m)}
+          className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
+            childMode
+              ? 'bg-indigo-500 border-indigo-400 text-white shadow-sm'
+              : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-slate-400'
+          }`}
+        >
+          {childMode ? '🧒 Child' : '👤 Adult'}
+        </button>
       </div>
+    );
 
-      {/* Battle arena — child mode only */}
-      {childMode && (
-        <div className="w-full mt-3 pb-6">
-          <TowerDefenseGame ref={gameRef} />
+    // ── Child mode: canvas-first, word card overlaid, buttons below ──────────
+    if (childMode) {
+      return (
+        <>
+          {praiseOverlay}
+
+          {/* Top bar above the canvas */}
+          <div className="px-4 pt-2 pb-2">
+            {topBar}
+          </div>
+
+          {/* Battle arena — word card floated inside as an overlay */}
+          <div className="relative w-full">
+            <TowerDefenseGame ref={gameRef} />
+
+            {/* Word card overlay — top-center, small padding from canvas edge.
+                pointer-events-none so clicks pass through to the game. */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 pointer-events-none select-none"
+              style={{ top: 10, zIndex: 5 }}
+            >
+              <div
+                key={`${pos}-${word}`}
+                className={`flex items-center justify-center rounded-3xl qd-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'qd-shake' : ''}`}
+                style={{
+                  width: 'min(210px, 50vw)', height: 'min(110px, 26vw)',
+                  minHeight: 76,
+                  background: 'rgba(255,255,255,0.92)',
+                  backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                }}
+              >
+                <span
+                  style={{
+                    ...HAFS,
+                    fontSize: 'clamp(2.4rem, 9vw, 4rem)',
+                    lineHeight: 1.2,
+                    direction: 'rtl',
+                    color: '#3c4a8a',
+                  }}
+                >{word}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Correct / Wrong buttons below canvas */}
+          <div className="px-4 pt-3 pb-2 max-w-sm mx-auto w-full">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleCorrect}
+                disabled={celebrating}
+                className="py-4 rounded-full bg-green-500 hover:bg-green-400 text-white font-bold text-lg shadow-md shadow-green-200 transition-all active:scale-95 disabled:opacity-60"
+              >✅ Yes!</button>
+              <button
+                onClick={handleWrong}
+                disabled={celebrating}
+                className="py-4 rounded-full bg-rose-500 hover:bg-rose-400 text-white font-bold text-lg shadow-md shadow-rose-200 transition-all active:scale-95 disabled:opacity-60"
+              >❌ No</button>
+            </div>
+            {restartMsg && (
+              <p className="text-center mt-3 text-sm font-semibold text-pink-500">{restartMsg}</p>
+            )}
+          </div>
+        </>
+      );
+    }
+
+    // ── Adult mode — original stacked layout (no game canvas) ────────────────
+    return (
+      <>
+        {praiseOverlay}
+        <div className="max-w-xl mx-auto px-4 pb-4 pt-2">
+          <div className="flex items-center gap-3 mb-6">
+            {topBar}
+          </div>
+
+          {/* Word card */}
+          <div className="flex justify-center mb-10">
+            <div
+              key={`${pos}-${word}`}
+              className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
+              style={{ width: 'min(260px,75vw)', height: 'min(180px,50vw)', minHeight: 120 }}
+            >
+              <span
+                style={{
+                  ...HAFS,
+                  fontSize: 'clamp(3rem,14vw,6rem)',
+                  lineHeight: 1.2,
+                  direction: 'rtl',
+                }}
+                className="text-slate-700 dark:text-slate-200"
+              >{word}</span>
+            </div>
+          </div>
+
+          {/* Correct / Wrong buttons */}
+          <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
+            <button
+              onClick={handleCorrect}
+              disabled={celebrating}
+              className="py-5 rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-60"
+            >✓ Correct</button>
+            <button
+              onClick={handleWrong}
+              disabled={celebrating}
+              className="py-5 rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-60"
+            >✗ Wrong</button>
+          </div>
+
+          {restartMsg && (
+            <p className="text-center mt-4 text-sm font-semibold text-red-400">{restartMsg}</p>
+          )}
         </div>
-      )}
-    </>
-  );
+      </>
+    );
+  };
 
   // ─── VIEW: WIN ────────────────────────────────────────────────────────────
   const renderWin = () => (
