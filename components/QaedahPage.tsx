@@ -456,19 +456,21 @@ const QaedahPage: React.FC = () => {
                 key={`${pos}-${word}`}
                 className={`flex items-center justify-center rounded-3xl qd-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'qd-shake' : ''}`}
                 style={{
-                  width: 'min(210px, 50vw)', height: 'min(110px, 26vw)',
-                  minHeight: 76,
+                  width: 'min(420px, 76vw)', height: 'min(150px, 34vw)',
+                  minHeight: 100,
                   background: 'rgba(255,255,255,0.92)',
                   backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                  padding: '0 16px',
                 }}
               >
                 <span
                   style={{
                     ...HAFS,
-                    fontSize: 'clamp(2.4rem, 9vw, 4rem)',
+                    fontSize: 'clamp(3.6rem, 11vw, 6rem)',
                     lineHeight: 1.2,
                     direction: 'rtl',
                     color: '#3c4a8a',
+                    whiteSpace: 'nowrap',
                   }}
                 >{word}</span>
               </div>
