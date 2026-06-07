@@ -432,38 +432,127 @@ const AlphabetTrainerPage: React.FC = () => {
   );
 
   // ─── PRACTICE VIEW ─────────────────────────────────────────────────────────
-  const renderPractice = () => (
-    <>
-      {/* Constrained: progress bar + letter card + buttons */}
+  const renderPractice = () => {
+    // Shared top-bar element (back button + progress bar + counter)
+    const topBar = (
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => { setView('select'); setRestartMsg(''); }}
+          className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
+            childMode
+              ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
+              : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
+          }`}
+        >{t('alphabetTrainer.backBtn')}</button>
+        <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
+            style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
+          />
+        </div>
+        <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
+          {pos} / {queue.length}
+        </span>
+      </div>
+    );
+
+    // ── Child mode: canvas-first layout — letter card overlaid on the arena ──
+    if (childMode) {
+      return (
+        <>
+          {/* Top bar above the canvas */}
+          <div className="px-4 pt-2 pb-2">
+            {topBar}
+          </div>
+
+          {/* Battle arena — full width, letter card floated inside as an overlay */}
+          <div className="relative w-full">
+            <TowerDefenseGame ref={gameRef} />
+
+            {/* Letter card + form badge — positioned inside the canvas, top-center.
+                Starts at 76 px from top, leaving room for the portrait HUD strip (72 px).
+                pointer-events-none so clicks pass through to the canvas. */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none select-none"
+              style={{ top: 76, zIndex: 5 }}
+            >
+              {/* Active form badge */}
+              <div
+                className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100/90 text-indigo-700 border border-indigo-200 shadow-sm"
+                style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+              >
+                <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '0.9rem', lineHeight: 1 }}>
+                  {getLetterInForm('ب', letterForm)}
+                </span>
+                <span style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>
+                  {FORM_CONFIG.find(f => f.form === letterForm)?.labelAr}
+                </span>
+                <span className="opacity-60">·</span>
+                <span>{FORM_CONFIG.find(f => f.form === letterForm)?.labelEn}</span>
+              </div>
+
+              {/* Letter card */}
+              <div
+                key={`${pos}-${letter}-${letterForm}`}
+                className={`flex flex-col items-center justify-center rounded-3xl at-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'at-shake' : ''}`}
+                style={{
+                  width: 'min(130px, 28vw)', height: 'min(130px, 28vw)',
+                  background: 'rgba(255,255,255,0.92)',
+                  backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'Hafs', 'Amiri', serif",
+                    fontSize: 'clamp(2.8rem, 10vw, 4.5rem)',
+                    lineHeight: 1,
+                    color: '#3c4a8a',
+                  }}
+                >{getLetterInForm(letter, letterForm)}</span>
+                {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
+                  <span className="text-xs mt-1 px-2 py-0.5 rounded-full text-indigo-400 bg-indigo-50/80">
+                    ≡ {letterForm === 'initial' ? 'Isolated' : 'End'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Correct / Wrong buttons — below the canvas */}
+          <div className="px-4 pt-3 pb-2 max-w-sm mx-auto w-full">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={handleCorrect}
+                disabled={celebrating}
+                className="py-4 rounded-full bg-green-500 hover:bg-green-400 text-white font-bold text-lg shadow-md shadow-green-200 transition-all active:scale-95 disabled:opacity-60"
+              >{t('alphabetTrainer.correctChild')}</button>
+              <button
+                onClick={handleWrong}
+                disabled={celebrating}
+                className="py-4 rounded-full bg-rose-500 hover:bg-rose-400 text-white font-bold text-lg shadow-md shadow-rose-200 transition-all active:scale-95 disabled:opacity-60"
+              >{t('alphabetTrainer.wrongChild')}</button>
+            </div>
+            {restartMsg && (
+              <p className="text-center mt-3 text-sm font-semibold text-pink-500">
+                {restartMsg}
+              </p>
+            )}
+          </div>
+        </>
+      );
+    }
+
+    // ── Adult mode — original layout (no game canvas) ────────────────────────
+    return (
       <div className="max-w-xl mx-auto px-4 pb-4 pt-2">
         {/* Top bar: back + progress + count */}
         <div className="flex items-center gap-3 mb-8">
-          <button
-            onClick={() => { setView('select'); setRestartMsg(''); }}
-            className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
-              childMode
-                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
-                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400'
-            }`}
-          >{t('alphabetTrainer.backBtn')}</button>
-          <div className={`flex-1 h-3 rounded-full overflow-hidden ${childMode ? 'bg-indigo-100' : 'bg-slate-200 dark:bg-gray-700'}`}>
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${childMode ? '' : 'bg-amber-500 dark:bg-amber-400'}`}
-              style={{ width: `${pct}%`, ...(childMode ? { background: 'linear-gradient(90deg,#ff6b9d,#ffd93d,#6bcb77)' } : {}) }}
-            />
-          </div>
-          <span className={`text-sm flex-shrink-0 min-w-[3rem] text-right ${childMode ? 'font-extrabold text-blue-700' : 'text-slate-400 dark:text-slate-500'}`}>
-            {pos} / {queue.length}
-          </span>
+          {topBar}
         </div>
 
         {/* Active form badge */}
         <div className="flex justify-center mb-4">
-          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
-            childMode
-              ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
-              : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-600'
-          }`}>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-600">
             <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1rem', lineHeight: 1 }}>
               {getLetterInForm('ب', letterForm)}
             </span>
@@ -479,7 +568,7 @@ const AlphabetTrainerPage: React.FC = () => {
         <div className="flex justify-center mb-10">
           <div
             key={`${pos}-${letter}-${letterForm}`}
-            className={`flex flex-col items-center justify-center bg-white dark:bg-gray-800 rounded-3xl ${shaking ? 'at-shake' : ''} ${childMode ? 'at-card-kid border-4 border-indigo-200 shadow-xl' : 'at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md'}`}
+            className={`flex flex-col items-center justify-center bg-white dark:bg-gray-800 rounded-3xl at-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'at-shake' : ''}`}
             style={{ width: 'min(240px,70vw)', height: 'min(240px,70vw)' }}
           >
             <span
@@ -487,15 +576,11 @@ const AlphabetTrainerPage: React.FC = () => {
                 fontFamily: "'Hafs', 'Amiri', serif",
                 fontSize: 'clamp(4.5rem,16vw,7rem)',
                 lineHeight: 1,
-                color: childMode ? '#3c4a8a' : undefined,
               }}
-              className={childMode ? '' : 'text-slate-700 dark:text-slate-200'}
+              className="text-slate-700 dark:text-slate-200"
             >{getLetterInForm(letter, letterForm)}</span>
-            {/* Subtle non-connector note inside card */}
             {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-              <span className={`text-xs mt-2 px-2 py-0.5 rounded-full ${
-                childMode ? 'text-indigo-400 bg-indigo-50' : 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-gray-700'
-              }`}>
+              <span className="text-xs mt-2 px-2 py-0.5 rounded-full text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-gray-700">
                 ≡ {letterForm === 'initial' ? 'Isolated' : 'End'}
               </span>
             )}
@@ -507,39 +592,23 @@ const AlphabetTrainerPage: React.FC = () => {
           <button
             onClick={handleCorrect}
             disabled={celebrating}
-            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-              childMode
-                ? 'rounded-full bg-green-500 hover:bg-green-400 text-white shadow-md shadow-green-200'
-                : 'rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white'
-            }`}
-          >{childMode ? t('alphabetTrainer.correctChild') : t('alphabetTrainer.correct')}</button>
+            className="py-5 rounded-2xl bg-teal-600 dark:bg-teal-700 hover:bg-teal-700 dark:hover:bg-teal-600 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-60"
+          >{t('alphabetTrainer.correct')}</button>
           <button
             onClick={handleWrong}
             disabled={celebrating}
-            className={`py-5 font-bold text-lg transition-all active:scale-95 disabled:opacity-60 ${
-              childMode
-                ? 'rounded-full bg-rose-500 hover:bg-rose-400 text-white shadow-md shadow-rose-200'
-                : 'rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white'
-            }`}
-          >{childMode ? t('alphabetTrainer.wrongChild') : t('alphabetTrainer.wrong')}</button>
+            className="py-5 rounded-2xl bg-red-500 dark:bg-red-700 hover:bg-red-600 dark:hover:bg-red-600 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-60"
+          >{t('alphabetTrainer.wrong')}</button>
         </div>
 
         {restartMsg && (
-          <p className={`text-center mt-5 text-sm font-semibold ${childMode ? 'text-pink-500' : 'text-red-400'}`}>
+          <p className="text-center mt-5 text-sm font-semibold text-red-400">
             {restartMsg}
           </p>
         )}
       </div>
-
-      {/* Battle arena — full viewport width, children mode only */}
-      {childMode && (
-        <div className="w-full mt-3 pb-6">
-
-          <TowerDefenseGame ref={gameRef} />
-        </div>
-      )}
-    </>
-  );
+    );
+  };
 
   // ─── WIN VIEW ──────────────────────────────────────────────────────────────
   const renderWin = () => (

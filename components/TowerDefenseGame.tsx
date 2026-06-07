@@ -1114,13 +1114,18 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           { key: 'jafar',  img: portraitJafar.current,  label: 'JAFAR',  ring: '#ef4444', fallC: '#b91c1c' },
         ];
 
-        // Semi-transparent dark strip at the very top
-        ctx.fillStyle = 'rgba(0,0,0,0.38)';
-        ctx.fillRect(0, 0, cw, 72);
-
         const pSpacing = 64;
         const pCentreY = 33;        // portrait circle centre Y (px from top)
-        const pStartX  = cw / 2 - pSpacing;
+        const pStartX  = 36;        // left-anchored — portraits sit in the top-left corner
+
+        // Semi-transparent dark strip — covers only the portrait area (top-left)
+        const portraitStripW = pStartX + pSpacing * 2 + 44; // spans all 3 portraits + padding
+        const stripGrad = ctx.createLinearGradient(0, 0, portraitStripW, 0);
+        stripGrad.addColorStop(0,    'rgba(0,0,0,0.50)');
+        stripGrad.addColorStop(0.82, 'rgba(0,0,0,0.38)');
+        stripGrad.addColorStop(1,    'rgba(0,0,0,0)');
+        ctx.fillStyle = stripGrad;
+        ctx.fillRect(0, 0, portraitStripW, 72);
 
         portDefs.forEach(({ key, img, label, ring, fallC }, idx) => {
           const isTarget = key === nextSpecial;
