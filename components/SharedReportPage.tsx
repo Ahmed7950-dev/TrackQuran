@@ -11,6 +11,9 @@ import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
+import QaedahPage from './QaedahPage';
+import AlphabetTrainerPage from './AlphabetTrainerPage';
+import LettersTrainerPage from './LettersTrainerPage';
 import StudentProgressPage from './StudentProgressPage';
 import VerseAudioPlayer from './VerseAudioPlayer';
 
@@ -971,7 +974,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed'>('quran');
+  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1316,12 +1319,51 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 </svg>
                 Tajweed
               </button>
+              <button
+                onClick={() => setActiveTab('qaedah')}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'qaedah'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                </svg>
+                Qaedah
+              </button>
+              <button
+                onClick={() => setActiveTab('alphabetTrainer')}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'alphabetTrainer'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" />
+                </svg>
+                Alphabet
+              </button>
+              <button
+                onClick={() => setActiveTab('lettersTrainer')}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'lettersTrainer'
+                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                </svg>
+                Letters Trainer
+              </button>
             </div>
           </div>
         )}
       </header>
 
-      <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
+      <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : activeTab === 'qaedah' || activeTab === 'alphabetTrainer' || activeTab === 'lettersTrainer' ? 'w-full px-2 sm:px-4' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
         {portalTab === 'about' ? (
           <AboutUsPage />
         ) : (
@@ -1413,6 +1455,15 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             })()}
             {activeTab === 'tajweed' && (
               <TajweedPage students={[]} preSelectedStudentId={report.student_id} />
+            )}
+            {activeTab === 'qaedah' && (
+              <QaedahPage />
+            )}
+            {activeTab === 'alphabetTrainer' && (
+              <AlphabetTrainerPage />
+            )}
+            {activeTab === 'lettersTrainer' && (
+              <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} />
             )}
 
             <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">

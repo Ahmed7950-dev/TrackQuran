@@ -266,10 +266,27 @@ const EditableVerse: React.FC<{
 // Main component
 // ---------------------------------------------------------------------------
 
-const LettersTrainerPage: React.FC = () => {
+interface LettersTrainerPageProps {
+  /** When provided the trainer skips the student-selection home screen and
+   *  goes straight to this student's history view. If the student doesn't
+   *  exist yet in the local trainer data they are created automatically. */
+  preSelectedStudent?: { id: string; name: string };
+}
+
+const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent }) => {
   const { t } = useI18n();
-  const [state, setState] = useState<TrainerState>(() => loadTrainerState());
-  const [view, setView] = useState<View>({ name: 'home' });
+  const [state, setState] = useState<TrainerState>(() => {
+    const loaded = loadTrainerState();
+    if (preSelectedStudent && !loaded.students.some(s => s.id === preSelectedStudent.id)) {
+      // Auto-register the student so their trainer history is stored under
+      // the same ID used by the rest of the app.
+      return { ...loaded, students: [...loaded.students, { id: preSelectedStudent.id, name: preSelectedStudent.name }] };
+    }
+    return loaded;
+  });
+  const [view, setView] = useState<View>(() =>
+    preSelectedStudent ? { name: 'student', studentId: preSelectedStudent.id } : { name: 'home' }
+  );
   const [confirm, setConfirm] = useState<{
     title: string;
     body: string;

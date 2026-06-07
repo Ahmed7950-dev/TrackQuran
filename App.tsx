@@ -982,7 +982,7 @@ const App: React.FC = () => {
           )}
           <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
               {activeTab === 'lettersTrainer' ? (
-                <LettersTrainerPage />
+                <LettersTrainerPage preSelectedStudent={{ id: currentUser.student.id, name: currentUser.student.name }} />
               ) : activeTab === 'alphabetTrainer' ? (
                 <AlphabetTrainerPage />
               ) : activeTab === 'aboutUs' ? (
@@ -1408,7 +1408,13 @@ const App: React.FC = () => {
             onAvailabilityChange={setAvailabilitySlots}
           />
         ) : activeTab === 'lettersTrainer' ? (
-          <LettersTrainerPage />
+          <LettersTrainerPage
+            preSelectedStudent={
+              selectedStudent ? { id: selectedStudent.id, name: selectedStudent.name } :
+              sessionStudent  ? { id: sessionStudent.id,  name: sessionStudent.name  } :
+              undefined
+            }
+          />
         ) : activeTab === 'alphabetTrainer' ? (
           <AlphabetTrainerPage />
         ) : activeTab === 'qaedah' ? (
