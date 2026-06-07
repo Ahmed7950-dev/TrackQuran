@@ -95,8 +95,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const [isExportingImage, setIsExportingImage] = useState(false);
     const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'specific'>('all');
     const [specificDate, setSpecificDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [isSharing, setIsSharing] = useState(false);
-    const [shareCopied, setShareCopied] = useState(false);
     const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
     const [homeworkVerses, setHomeworkVerses] = useState<Set<string>>(new Set());
     const playChannelRef = useRef<any>(null);
@@ -114,9 +112,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         if (!student.id) return;
         getStudentCompletions(student.id).then(rows => { tajweedCompletionsRef.current = rows; });
     }, [student.id]);
-
-    // Derived — no state needed; URL is always the same UUID
-    const shareLink = activeReportId ? `${window.location.origin}/report/${activeReportId}` : null;
 
     // Serialised mistakes — used to detect real content changes without object-reference churn
     const mistakesKey = useMemo(() => JSON.stringify(student.mistakes), [student.mistakes]);
@@ -585,48 +580,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         }
     };
 
-    // ── Share handler — always upserts so the link never changes ────
-    const handleShare = async () => {
-        const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
-        if (!tid) return;
-
-        setIsSharing(true);
-        try {
-            // Always save ALL mistakes (not filtered) so the student sees everything
-            const verseList: Array<{ verse_key: string; text_uthmani: string }> =
-                (Object.values(versesWithMistakes).flat() as QuranVerse[])
-                    .map(v => ({ verse_key: v.verse_key, text_uthmani: v.text_uthmani }));
-
-            const reportId = await createOrUpdateSharedReport(tid, student.id, student.name, {
-                studentName: student.name,
-                generatedAt: new Date().toISOString(),
-                mistakes: student.mistakes || {},
-                verses: verseList,
-                homeworkVerses: [...homeworkVerses],
-                quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
-                studentProgress: {
-                    recitationAchievements: student.recitationAchievements || [],
-                    memorizationAchievements: student.memorizationAchievements || [],
-                    attendance: student.attendance || [],
-                    masteredTajweedRules: student.masteredTajweedRules || [],
-                    dob: student.dob,
-                    tafsirReviews: student.tafsirReviews || [],
-                    tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
-                },
-            });
-
-            if (reportId) {
-                setActiveReportId(reportId); // activates subscription if not already running
-                const link = `${window.location.origin}/report/${reportId}`;
-                await navigator.clipboard.writeText(link).catch(() => {});
-                setShareCopied(true);
-                setTimeout(() => setShareCopied(false), 3000);
-            }
-        } finally {
-            setIsSharing(false);
-        }
-    };
-
     // ── Homework toggle ─────────────────────────────────────────────────────────
     const handleToggleHomework = async (verseKey: string) => {
         const wasAssigned = homeworkVerses.has(verseKey);
@@ -1060,59 +1013,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         )}
                     </button>
 
-                    {/* Share button */}
-                    <button
-                        onClick={handleShare}
-                        disabled={isSharing}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
-                        title="Generate shareable link for student"
-                    >
-                        {isSharing ? (
-                            <>
-                                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span className="hidden sm:inline">Generating…</span>
-                            </>
-                        ) : shareCopied ? (
-                            <>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                    <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
-                                </svg>
-                                <span className="hidden sm:inline">Link Copied!</span>
-                            </>
-                        ) : (
-                            <>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
-                                </svg>
-                                <span className="hidden sm:inline">Share</span>
-                            </>
-                        )}
-                    </button>
                 </div>
             </div>
-
-            {/* Share link display */}
-            {shareLink && (
-                <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-teal-600 flex-shrink-0">
-                        <path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-.354-5.304.75.75 0 0 1-.353-1Z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-teal-700 font-medium truncate flex-1">{shareLink}</span>
-                    <button
-                        onClick={async () => {
-                            await navigator.clipboard.writeText(shareLink).catch(() => {});
-                            setShareCopied(true);
-                            setTimeout(() => setShareCopied(false), 3000);
-                        }}
-                        className="flex-shrink-0 px-3 py-1 bg-teal-600 text-white rounded text-xs hover:bg-teal-700 transition"
-                    >
-                        {shareCopied ? 'Copied!' : 'Copy'}
-                    </button>
-                </div>
-            )}
 
             {(Object.entries(versesWithMistakes) as [string, QuranVerse[]][])
                 // Sort surah groups: newest mistake date first

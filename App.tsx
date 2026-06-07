@@ -1426,6 +1426,7 @@ const App: React.FC = () => {
             quranMetadata={QURAN_METADATA}
             onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
             onAddStudent={() => setIsAddStudentModalOpen(true)}
+            teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined}
           />
         )}
       </main>

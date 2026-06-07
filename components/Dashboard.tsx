@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
 import { getBirthdayStatus } from '../utils';
-import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah } from '../services/dataService';
+import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
@@ -90,8 +90,49 @@ const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; short: string; badge: stri
   3: { emoji: '🥉', short: '3rd', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-700' },
 };
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null }> = ({ student, onSelect, quranMetadata, viewMode, rank }) => {
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId }) => {
     const { t, language } = useI18n();
+
+    // ── Share link ────────────────────────────────────────────────────────────
+    const [shareState, setShareState] = useState<'idle' | 'loading' | 'copied'>('idle');
+    const [shareLink, setShareLink] = useState<string | null>(null);
+
+    const handleShare = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation(); // don't open student detail page
+        if (!teacherId || shareState === 'loading') return;
+        setShareState('loading');
+        try {
+            const verseList: Array<{ verse_key: string; text_uthmani: string }> = [];
+            const reportId = await createOrUpdateSharedReport(teacherId, student.id, student.name, {
+                studentName: student.name,
+                generatedAt: new Date().toISOString(),
+                mistakes: student.mistakes || {},
+                verses: verseList,
+                homeworkVerses: [],
+                quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
+                studentProgress: {
+                    recitationAchievements: student.recitationAchievements || [],
+                    memorizationAchievements: student.memorizationAchievements || [],
+                    attendance: student.attendance || [],
+                    masteredTajweedRules: student.masteredTajweedRules || [],
+                    dob: student.dob,
+                    tafsirReviews: student.tafsirReviews || [],
+                    tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
+                },
+            });
+            if (reportId) {
+                const link = `${window.location.origin}/report/${reportId}`;
+                setShareLink(link);
+                await navigator.clipboard.writeText(link).catch(() => {});
+                setShareState('copied');
+                setTimeout(() => setShareState('idle'), 3000);
+            } else {
+                setShareState('idle');
+            }
+        } catch {
+            setShareState('idle');
+        }
+    }, [teacherId, student, shareState]);
 
     const { isInactive, daysSinceLastActivity } = useMemo(() => {
         const days = getDaysSinceLastActivity(student);
@@ -339,6 +380,41 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                         {lastAchievementText} {lastAchievement ? t('studentCard.onDate', {date: lastAchievementDate}) : ''}
                     </p>
                 </div>
+
+                {/* Share student link */}
+                {teacherId && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
+                        <button
+                            onClick={handleShare}
+                            disabled={shareState === 'loading'}
+                            className={`w-full flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                                shareState === 'copied'
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-300'
+                            }`}
+                            title="Copy student portal link"
+                        >
+                            {shareState === 'loading' ? (
+                                <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                </svg>
+                            ) : shareState === 'copied' ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd"/>
+                                </svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"/>
+                                </svg>
+                            )}
+                            {shareState === 'loading' ? 'Generating…' : shareState === 'copied' ? 'Link Copied!' : 'Copy Student Link'}
+                        </button>
+                        {shareLink && shareState !== 'idle' && (
+                            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500 truncate text-center">{shareLink}</p>
+                        )}
+                    </div>
+                )}
             </div>
              {isInactive && (
                 <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-semibold p-2 flex items-center justify-center">
@@ -355,9 +431,10 @@ interface DashboardProps {
   quranMetadata: SurahMetadata[];
   onFamilyLinks?: () => void;
   onAddStudent: () => void;
+  teacherId?: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId }) => {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
@@ -527,19 +604,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>
