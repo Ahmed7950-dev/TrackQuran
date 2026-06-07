@@ -1384,8 +1384,8 @@ const App: React.FC = () => {
           </div>
         )}
       </header>
-      {/* Left tools sidebar — only on student detail / progress pages (desktop) */}
-      {(!!selectedStudent || !!sessionStudent) && activeTab === 'main' && (
+      {/* Left tools sidebar — student detail page only (not live logging session) */}
+      {!!selectedStudent && !sessionStudent && activeTab === 'main' && (
         <ToolsSidebar
           items={[
             { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer')  },
