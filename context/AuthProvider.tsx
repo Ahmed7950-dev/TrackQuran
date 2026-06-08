@@ -57,7 +57,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let initialized = false;
     let cancelled   = false;
 
-    const resolveUser = async (session: Session) => {
+    const resolveUser = async (session: Session, ensureProfileExists = false) => {
+      if (ensureProfileExists) {
+        // Guarantee a profiles row exists before we do anything else.
+        // Critical for Google OAuth: the email signup flow calls createTeacherProfile
+        // explicitly, but OAuth bypasses that flow entirely — the first SIGNED_IN
+        // event for a new Google account would otherwise find no profiles row,
+        // causing saveStudent() to fail silently (FK / RLS violation) and the
+        // student to disappear on next page refresh.
+        const meta = session.user.user_metadata ?? {};
+        const name =
+          meta.name || meta.full_name ||
+          session.user.email?.split('@')[0] || 'Teacher';
+        await dataService.createTeacherProfile(session.user.id, name);
+      }
       const role = await fetchRole(session.user.id);
       if (!cancelled) setCurrentUser(buildTeacherUser(session, role));
     };
@@ -69,12 +82,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
         if (session) {
-          resolveUser(session).then(markDone).catch(markDone);
+          // Page refresh / tab restore — profile already exists, skip the upsert.
+          resolveUser(session, false).then(markDone).catch(markDone);
         } else {
           markDone();
         }
-      } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-        resolveUser(session).catch(console.error);
+      } else if (event === 'SIGNED_IN' && session) {
+        // Fresh sign-in (email or Google OAuth). Pass ensureProfileExists=true so
+        // first-time Google users get their profiles row created before any DB writes.
+        resolveUser(session, true).catch(console.error);
+      } else if (event === 'TOKEN_REFRESHED' && session) {
+        resolveUser(session, false).catch(console.error);
       } else if (event === 'SIGNED_OUT') {
         if (!cancelled) setCurrentUser(null);
       }

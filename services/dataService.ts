@@ -18,7 +18,12 @@ export const getTeacherProfile = async (userId: string): Promise<{ name: string;
 };
 
 export const createTeacherProfile = async (userId: string, name: string): Promise<void> => {
-  const { error } = await supabase.from('profiles').insert({ id: userId, name });
+  // Use upsert so this is safe to call on every sign-in (including Google OAuth
+  // where the profiles row may not have been created yet). ignoreDuplicates:true
+  // means an existing row is left unchanged — name / role are never overwritten.
+  const { error } = await supabase
+    .from('profiles')
+    .upsert({ id: userId, name }, { onConflict: 'id', ignoreDuplicates: true });
   if (error) console.error('createTeacherProfile:', error.message);
 };
 
