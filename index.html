@@ -7,6 +7,10 @@
     <title>LisanQuran</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Preload the primary Quranic font so it starts downloading immediately,
+         before any CSS is parsed. Eliminates the disconnected-letter flash on
+         Safari and slow connections. -->
+    <link rel="preload" href="/Fonts/Hafs.ttf" as="font" type="font/truetype" crossorigin="anonymous">
     <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Cairo:wght@400;700;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400;1,9..40,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600;1,700&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
@@ -122,58 +126,81 @@
        html[lang="ar"] body {
         font-family: 'Hafs', 'Cairo', sans-serif;
       }
-      @font-face {
-        font-family: 'KFGQPC Uthmanic Script HAFS';
-        src: url('/Fonts/KFGQPC%20Uthmanic%20Script%20HAFS.otf') format('opentype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
-      @font-face {
-        font-family: 'Amiri Regular';
-        src: url('/Fonts/Amiri-Regular.ttf') format('truetype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
+      /* ── Quranic / Arabic script fonts ────────────────────────────────────
+         font-display: block  →  browser waits (text invisible) rather than
+         showing the system fallback. System Arabic fonts have no Quranic
+         ligatures, so they render letters disconnected. Invisible-then-correct
+         is vastly better than immediately-wrong on Safari and slow connections.
+         The preload hint above ensures Hafs downloads before the block period
+         expires on any reasonable connection.
+      ── ────────────────────────────────────────────────────────────────── */
       @font-face {
         font-family: 'Hafs';
         src: url('/Fonts/Hafs.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
+      }
+      @font-face {
+        font-family: 'KFGQPC Uthmanic Script HAFS';
+        src: url('/Fonts/KFGQPC%20Uthmanic%20Script%20HAFS.otf') format('opentype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
       @font-face {
         font-family: 'Arabic';
         src: url('/Fonts/arabic.otf') format('opentype');
         font-weight: normal;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
       @font-face {
         font-family: 'Elgharib KFGQPCHafs V10';
         src: url('/Fonts/Elgharib-KFGQPCHafs.V10.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
       @font-face {
         font-family: 'Elgharib HAFSTharwatEmara';
         src: url('/Fonts/Elgharib-HAFSTharwatEmara.otf') format('opentype');
         font-weight: normal;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
       @font-face {
         font-family: 'UthmanTN v2-0';
         src: url('/Fonts/UthmanTN_v2-0.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
       @font-face {
         font-family: 'Uthmanic HAFS v22';
         src: url('/Fonts/uthmanic_hafs_v22.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: block;
+        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
+                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
+      }
+      /* UI font — swap is fine here, fallback won't look broken */
+      @font-face {
+        font-family: 'Amiri Regular';
+        src: url('/Fonts/Amiri-Regular.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
         font-display: swap;
