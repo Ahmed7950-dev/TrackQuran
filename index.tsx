@@ -3,6 +3,17 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { I18nProvider } from './context/I18nProvider';
 import { AuthProvider } from './context/AuthProvider';
+import SharedReportPage from './components/SharedReportPage';
+
+// ── Route detection — done once before any React rendering ──────────────────
+// Checking pathname here (outside any component) avoids React Rules-of-Hooks
+// violations that occur when early-returning before hook calls inside App.
+const pathname = window.location.pathname;
+
+const sharedReportId = (() => {
+  const m = pathname.match(/^\/report\/([a-f0-9-]{36})$/i);
+  return m ? m[1] : null;
+})();
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -43,14 +54,29 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <ErrorBoundary>
-    <I18nProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </I18nProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
-);
+
+// Shared report pages are public — no AuthProvider needed, and we bypass
+// App entirely to avoid any hooks-before-return issues.
+if (sharedReportId) {
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <I18nProvider>
+          <SharedReportPage reportId={sharedReportId} />
+        </I18nProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+} else {
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <I18nProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </I18nProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+}

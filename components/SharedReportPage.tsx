@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah, getReportPlays } from '../services/dataService';
+import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
 import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
 import Logo from './Logo';
@@ -987,6 +988,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
+  const [quranHomework, setQuranHomework] = useState<QuranHomework[]>([]);
+  const [homeworkModal, setHomeworkModal] = useState<QuranHomework | null>(null);
   const channelRef = useRef<any>(null);
 
   // Apply theme to document
@@ -1027,6 +1030,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         setReport(r);
         // Initialise font from teacher's saved preference stored in the report
         if (r.report_data.quranicFont) setQuranicFont(r.report_data.quranicFont);
+        // Load homework assigned to this student
+        if (r.report_data.quranHomework) setQuranHomework(r.report_data.quranHomework);
         // Load teacher's availability so student can see working hours
         if (r.teacher_id) getTeacherAvailability(r.teacher_id).then(setAvailabilitySlots);
       }
@@ -1062,6 +1067,11 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               : null
           );
         }
+      })
+      // Teacher assigned new homework → update student's homework badge in real time
+      .on('broadcast', { event: 'homework_assigned' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const hw = payload?.quranHomework as QuranHomework[] | undefined;
+        if (hw !== undefined) setQuranHomework(hw);
       })
       // Teacher removed a verse → hide it from student's page immediately (Bug 2 fix)
       .on('broadcast', { event: 'verse_removed' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -1169,12 +1179,28 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
 
           <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
 
-          {/* Student name badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
-            <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[100px] sm:max-w-none">
-              {student_name}
-            </span>
+          {/* Student name badge + homework indicator */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full">
+              <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[80px] sm:max-w-none">
+                {student_name}
+              </span>
+            </div>
+            {quranHomework.filter(hw => !hw.isDone).length > 0 && (
+              <button
+                onClick={() => setHomeworkModal(quranHomework.filter(hw => !hw.isDone)[0])}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-violet-100 dark:bg-violet-900/40 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-bold shadow-sm animate-pulse hover:animate-none hover:bg-violet-200 dark:hover:bg-violet-800/60 transition-colors"
+              >
+                📝
+                <span className="hidden sm:inline">Homework!</span>
+                {quranHomework.filter(hw => !hw.isDone).length > 1 && (
+                  <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {quranHomework.filter(hw => !hw.isDone).length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Theme toggle */}
@@ -1472,6 +1498,93 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           </>
         )}
       </main>
+
+      {/* ── Homework detail modal ─────────────────────────────────────────────── */}
+      {homeworkModal && (() => {
+        const activeHw = quranHomework.filter(hw => !hw.isDone);
+        const formatRange = (hw: QuranHomework) => {
+          const startName = QURAN_METADATA.find(s => s.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
+          const endName   = QURAN_METADATA.find(s => s.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
+          if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${startName} : ${hw.startAyah}`;
+          return `${startName} ${hw.startAyah} → ${endName} ${hw.endAyah}`;
+        };
+        return (
+          <div
+            className="fixed inset-0 bg-black/60 z-[300] flex items-end sm:items-center justify-center p-4"
+            onClick={() => setHomeworkModal(null)}
+          >
+            <div
+              className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">📝</span>
+                    <h3 className="text-lg font-bold text-white">Homework</h3>
+                  </div>
+                  {activeHw.length > 1 && (
+                    <span className="text-violet-200 text-sm">
+                      {activeHw.indexOf(homeworkModal) + 1} / {activeHw.length}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-violet-100 font-semibold text-base">{formatRange(homeworkModal)}</p>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5">
+                {homeworkModal.note ? (
+                  <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800 rounded-2xl p-4 mb-5">
+                    <p className="text-sm font-semibold text-violet-700 dark:text-violet-300 mb-1">Instructions from your teacher:</p>
+                    <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">{homeworkModal.note}</p>
+                  </div>
+                ) : (
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-5 italic">No specific instructions — practise the assigned verses.</p>
+                )}
+
+                {/* Navigate between multiple homework items */}
+                {activeHw.length > 1 && (
+                  <div className="flex gap-2 mb-4">
+                    {activeHw.map((hw, i) => (
+                      <button
+                        key={hw.id}
+                        onClick={() => setHomeworkModal(hw)}
+                        className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                          hw.id === homeworkModal.id
+                            ? 'bg-violet-600 text-white'
+                            : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'
+                        }`}
+                      >
+                        #{i + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Done button */}
+                <button
+                  onClick={() => {
+                    setQuranHomework(prev => prev.map(hw => hw.id === homeworkModal.id ? { ...hw, isDone: true } : hw));
+                    setHomeworkModal(null);
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-base shadow-lg hover:from-violet-700 hover:to-purple-700 active:scale-95 transition-all"
+                >
+                  ✅ Done!
+                </button>
+
+                <button
+                  onClick={() => setHomeworkModal(null)}
+                  className="mt-2 w-full py-2 text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

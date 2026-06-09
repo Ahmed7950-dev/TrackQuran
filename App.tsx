@@ -4,7 +4,8 @@ import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport } from './services/dataService';
+import { supabase } from './lib/supabase';
 import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
 import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
@@ -19,7 +20,6 @@ import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
 import QaedahPage from './components/QaedahPage';
-import SharedReportPage from './components/SharedReportPage';
 import AdminPanel from './components/AdminPanel';
 import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
@@ -344,13 +344,6 @@ const ToolsSidebar: React.FC<{
 const App: React.FC = () => {
   // ── Google Calendar OAuth2 callback — must be checked first ────────────────
   if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
-
-  // ── Shared report route — no auth required ──────────────────────────────────
-  const sharedReportId = (() => {
-    const m = window.location.pathname.match(/^\/report\/([a-f0-9-]{36})$/i);
-    return m ? m[1] : null;
-  })();
-  if (sharedReportId) return <SharedReportPage reportId={sharedReportId} />;
 
   // ── Arabic student portal — no auth required ─────────────────────────────────
   const arabicShareToken = (() => {
@@ -849,9 +842,9 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
-  const handleLogHomework = (studentId: string, range: { start: Progress; end: Progress }, note: string) => {
+  const handleLogHomework = async (studentId: string, range: { start: Progress; end: Progress }, note: string) => {
     const student = students.find(s => s.id === studentId);
-    if (!student) return;
+    if (!student || currentUser?.role !== 'teacher') return;
     const newHomework: QuranHomework = {
       id: `hw-${Date.now()}`,
       startSurah: range.start.surah,
@@ -862,11 +855,21 @@ const App: React.FC = () => {
       assignedAt: new Date().toISOString(),
       isDone:     false,
     };
-    const updatedStudent = {
-      ...student,
-      quranHomework: [...(student.quranHomework || []), newHomework],
-    };
+    const updatedHomework = [...(student.quranHomework || []), newHomework];
+    const updatedStudent = { ...student, quranHomework: updatedHomework };
     handleUpdateStudent(updatedStudent);
+
+    // Also push into the shared report so students see it immediately on their portal
+    const reportId = await getStudentReportId(currentUser.id, studentId);
+    if (reportId) {
+      await updateQuranHomeworkInReport(reportId, updatedHomework);
+      // Broadcast so the student's already-open portal updates live
+      supabase.channel(`report-plays-${reportId}`).send({
+        type: 'broadcast',
+        event: 'homework_assigned',
+        payload: { quranHomework: updatedHomework },
+      });
+    }
   };
 
   const handleBack = () => {

@@ -1,4 +1,5 @@
 import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework } from '../types';
+export type { QuranHomework };
 import { QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import { pageVerseList } from './quranPageData';
 import { supabase } from '../lib/supabase';
@@ -347,6 +348,7 @@ export interface SharedReportData {
   mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
   verses: Array<{ verse_key: string; text_uthmani: string }>;
   homeworkVerses?: string[];
+  quranHomework?: QuranHomework[];
   quranicFont?: string;
   studentProgress?: {
     recitationAchievements: Array<{
@@ -452,6 +454,22 @@ export const updateHomeworkVerses = async (reportId: string, homeworkVerses: str
     .update({ report_data: updated })
     .eq('id', reportId);
   if (error) console.error('updateHomeworkVerses:', error.message);
+};
+
+/** Patch only the quranHomework field of an existing shared report. */
+export const updateQuranHomeworkInReport = async (reportId: string, quranHomework: QuranHomework[]): Promise<void> => {
+  const { data } = await supabase
+    .from('shared_reports')
+    .select('report_data')
+    .eq('id', reportId)
+    .single();
+  if (!data) return;
+  const updated: SharedReportData = { ...(data.report_data as SharedReportData), quranHomework };
+  const { error } = await supabase
+    .from('shared_reports')
+    .update({ report_data: updated })
+    .eq('id', reportId);
+  if (error) console.error('updateQuranHomeworkInReport:', error.message);
 };
 
 // ============================================================
