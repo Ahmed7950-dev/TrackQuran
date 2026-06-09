@@ -31,6 +31,16 @@ interface StudentProgressPageProps {
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
   onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string) => void;
+  /**
+   * When set, immediately navigates the Quran view to this verse key ("surah:ayah").
+   * Useful for jumping to homework verses from outside the component.
+   */
+  jumpToVerseKey?: string | null;
+  /**
+   * Extra content rendered inside the student name card, next to the student name.
+   * Used by the shared report page to inject a homework badge.
+   */
+  nameCardExtra?: React.ReactNode;
   onGoBack: () => void;
   /** When true: disables all logging interactions; verse-number click plays audio instead */
   readOnly?: boolean;
@@ -1281,7 +1291,7 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1571,6 +1581,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Keep refs in sync so the RAF loop always reads current values without stale closures
     useEffect(() => { isAutoScrollingRef.current = isAutoScrolling; }, [isAutoScrolling]);
     useEffect(() => { scrollSpeedRef.current = scrollSpeed; }, [scrollSpeed]);
+
+    // External jump — navigate to a specific verse when jumpToVerseKey changes
+    useEffect(() => {
+        if (!jumpToVerseKey) return;
+        const [surahNum] = jumpToVerseKey.split(':').map(Number);
+        if (surahNum && !isNaN(surahNum)) {
+            setSelectedSurahId(surahNum);
+            setScrollToVerseKey(jumpToVerseKey);
+        }
+    }, [jumpToVerseKey]);
 
     // Navigate carousel to the first word of a given ayah
     const scrollToAyah = useCallback((targetAyah: number) => {
@@ -3094,8 +3114,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             `}</style>
             <div className="bg-white p-4 rounded-xl shadow-md border border-slate-200 dark:bg-gray-800 dark:border-gray-700">
                 <div className="flex justify-between items-start">
-                    <div className="flex-grow">
-                        <h1 className="text-2xl font-bold text-teal-800 dark:text-slate-100">{student.name}{student.dob ? ` (${t('liveSession.age', { age: getAge(student.dob) })})` : ''}</h1>
+                    <div className="flex-grow min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h1 className="text-2xl font-bold text-teal-800 dark:text-slate-100">{student.name}{student.dob ? ` (${t('liveSession.age', { age: getAge(student.dob) })})` : ''}</h1>
+                            {nameCardExtra}
+                        </div>
                         <p className="text-slate-500 dark:text-slate-400 mt-2">{t('liveSession.currentProgress')}: {studentProgress ? `${QURAN_METADATA[studentProgress.surah - 1].transliteratedName}, Ayah ${studentProgress.ayah}` : t('liveSession.notSet')}</p>
                     </div>
                      <div className="flex-shrink-0 flex items-center gap-2"><button onClick={() => onGoBack()} className="p-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg></button></div>
