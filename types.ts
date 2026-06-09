@@ -83,6 +83,18 @@ export interface Student {
   tafsirMemorizationReviews: TafsirMemorizationReview[];
   mistakes: { [key: string]: Mistake };
   teacherNote?: string;
+  quranHomework?: QuranHomework[];
+}
+
+export interface QuranHomework {
+  id: string;
+  startSurah: number;
+  startAyah: number;
+  endSurah: number;
+  endAyah: number;
+  note?: string;
+  assignedAt: string;
+  isDone: boolean;
 }
 
 // ── Tajweed lesson ──────────────────────────────────────────────────────────

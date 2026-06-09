@@ -1,4 +1,4 @@
-import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage } from '../types';
+import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework } from '../types';
 import { QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import { pageVerseList } from './quranPageData';
 import { supabase } from '../lib/supabase';
@@ -44,6 +44,7 @@ const rowToStudent = (row: any): Student => ({
   tafsirMemorizationReviews:   row.tafsir_memorization_reviews  ?? [],
   mistakes:                    row.mistakes                     ?? {},
   teacherNote:                 row.teacher_note                 ?? undefined,
+  quranHomework:               row.quran_homework               ?? [],
 });
 
 const studentToRow = (teacherId: string, s: Student) => ({
@@ -60,6 +61,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   tafsir_memorization_reviews: s.tafsirMemorizationReviews,
   mistakes:                    s.mistakes,
   teacher_note:                s.teacherNote ?? null,
+  quran_homework:              s.quranHomework ?? [],
 });
 
 export const getStudents = async (teacherId: string): Promise<Student[]> => {

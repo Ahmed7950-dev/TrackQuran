@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent } from './types';
+import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
@@ -369,6 +369,9 @@ const App: React.FC = () => {
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  // Tracks homework updates made by the student so they persist within the session
+  // without needing to expose setCurrentUser from AuthProvider.
+  const [studentHomeworkUpdates, setStudentHomeworkUpdates] = useState<QuranHomework[] | null>(null);
   const [sessionStudentId, setSessionStudentId] = useState<string | null>(null);
   const [tajweedRules, setTajweedRules] = useState<string[]>([]);
   const { currentTheme, toggleTheme } = useTheme();
@@ -846,6 +849,26 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
+  const handleLogHomework = (studentId: string, range: { start: Progress; end: Progress }, note: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    const newHomework: QuranHomework = {
+      id: `hw-${Date.now()}`,
+      startSurah: range.start.surah,
+      startAyah:  range.start.ayah,
+      endSurah:   range.end.surah,
+      endAyah:    range.end.ayah,
+      note:       note || undefined,
+      assignedAt: new Date().toISOString(),
+      isDone:     false,
+    };
+    const updatedStudent = {
+      ...student,
+      quranHomework: [...(student.quranHomework || []), newHomework],
+    };
+    handleUpdateStudent(updatedStudent);
+  };
+
   const handleBack = () => {
     // If the user navigated to a tool page from the sidebar, go back to the
     // student page rather than all the way back to the dashboard.
@@ -877,6 +900,18 @@ const App: React.FC = () => {
   if (currentUser.role === 'student') {
     const allStudentsForTeacher = getStudents(currentUser.teacherId);
     const tajweedRulesForTeacher = getTajweedRules(currentUser.teacherId);
+
+    const currentHomework = studentHomeworkUpdates ?? (currentUser.student.quranHomework || []);
+
+    const handleMarkHomeworkDone = (homeworkId: string) => {
+      const updatedHomework = currentHomework.map((hw: QuranHomework) =>
+        hw.id === homeworkId ? { ...hw, isDone: true } : hw
+      );
+      setStudentHomeworkUpdates(updatedHomework);
+      // Save to Supabase under the teacher's ID
+      const updatedStudent: Student = { ...currentUser.student, quranHomework: updatedHomework };
+      saveStudent(currentUser.teacherId, updatedStudent);
+    };
 
     return (
        <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
@@ -989,10 +1024,11 @@ const App: React.FC = () => {
                 <AboutUsPage />
               ) : (
                 <StudentViewOnlyPage
-                  student={currentUser.student}
+                  student={{ ...currentUser.student, quranHomework: currentHomework }}
                   students={allStudentsForTeacher}
                   quranMetadata={QURAN_METADATA}
                   tajweedRules={tajweedRulesForTeacher}
+                  onMarkHomeworkDone={handleMarkHomeworkDone}
                 />
               )}
           </main>
@@ -1449,6 +1485,7 @@ const App: React.FC = () => {
             onRemoveMemorizationAchievement={handleRemoveMemorizationAchievement}
             onLogTafseerRange={handleLogTafseerRange}
             onRemoveTafseerRange={handleRemoveTafseerRange}
+            onLogHomework={handleLogHomework}
             onGoBack={() => setSessionStudentId(null)}
           />
         ) : selectedStudent ? (

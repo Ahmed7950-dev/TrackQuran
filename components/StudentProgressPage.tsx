@@ -11,7 +11,7 @@ import { pageVerseList } from '../services/quranPageData';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
-type LogType = 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafseer';
+type LogType = 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafseer' | 'homework';
 
 
 interface StudentProgressPageProps {
@@ -30,6 +30,7 @@ interface StudentProgressPageProps {
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
+  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string) => void;
   onGoBack: () => void;
   /** When true: disables all logging interactions; verse-number click plays audio instead */
   readOnly?: boolean;
@@ -1280,7 +1281,7 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1294,9 +1295,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
     const [editingNoteText, setEditingNoteText] = useState('');
     const [savingNoteKey, setSavingNoteKey] = useState<string | null>(null);
-    const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | null>(null);
+    const [logTypeStep, setLogTypeStep] = useState<'type' | 'quality' | 'homework-note' | null>(null);
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
+    const [homeworkNote, setHomeworkNote] = useState<string>('');
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
     const [selectedSurahId, setSelectedSurahId] = useState<number>(studentProgress?.surah || 1);
@@ -2507,16 +2509,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         } else if (selectedLogType === 'tafseer') {
             onLogTafseerRange(student.id, pendingLogRange);
             showToast('Tafseer logged');
+        } else if (selectedLogType === 'homework') {
+            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim());
+            showToast('Homework assigned 📝');
         }
         setPendingLogRange(null);
         setLogTypeStep(null);
         setSelectedLogType(null);
+        setHomeworkNote('');
     };
 
     const cancelLogModal = () => {
         setPendingLogRange(null);
         setLogTypeStep(null);
         setSelectedLogType(null);
+        setHomeworkNote('');
     };
 
     const handleVerseNumberPressStart = (surahNum: number, ayahNum: number) => {
@@ -3541,8 +3548,40 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             <span className="text-xl">📚</span> Log Tafseer
                                         </button>
                                     )}
+
+                                    {/* ── Homework ── */}
+                                    {onLogHomework && (
+                                        <button onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setLogTypeStep('homework-note'); }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-800 dark:text-violet-200 font-semibold transition-colors">
+                                            <span className="text-xl">📝</span> Assign Homework
+                                        </button>
+                                    )}
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
+                            </>
+                        ) : logTypeStep === 'homework-note' ? (
+                            <>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
+                                    📝 Assign Homework
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                                    {QURAN_METADATA.find(s => s.number === pendingLogRange.start.surah)?.transliteratedName} {pendingLogRange.start.ayah}
+                                    {(pendingLogRange.start.surah !== pendingLogRange.end.surah || pendingLogRange.start.ayah !== pendingLogRange.end.ayah)
+                                        ? ` → ${QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} ${pendingLogRange.end.ayah}`
+                                        : ''}
+                                </p>
+                                <textarea
+                                    autoFocus
+                                    value={homeworkNote}
+                                    onChange={e => setHomeworkNote(e.target.value)}
+                                    placeholder="Write instructions for the student (optional)…"
+                                    rows={4}
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 mb-4"
+                                />
+                                <div className="flex gap-3">
+                                    <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
+                                    <button onClick={confirmLog} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>
+                                </div>
                             </>
                         ) : (
                             <>
