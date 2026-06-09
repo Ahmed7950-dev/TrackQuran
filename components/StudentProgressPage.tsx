@@ -3002,10 +3002,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const verseContainerClass = `my-4${showTranslation || showNoteArea ? '' : ' inline'}`;
             const verseContainerId = `verse-container-${verse.verse_key}`;
 
-            // Homework verse highlight
+            // Homework verse highlight — soft purple background, no border lines
             const isHwVerse = isVerseInHomeworkRange(surahNum, ayahNum, homeworkRanges);
             const hwHighlightClass = isHwVerse
-                ? ' border-l-4 border-teal-400 dark:border-teal-500 bg-teal-50/40 dark:bg-teal-900/10 rounded-r-lg pl-2'
+                ? ' bg-violet-100/70 dark:bg-violet-900/25 rounded-lg'
                 : '';
 
             if (showTranslation) {

@@ -1489,6 +1489,7 @@ const App: React.FC = () => {
             onLogTafseerRange={handleLogTafseerRange}
             onRemoveTafseerRange={handleRemoveTafseerRange}
             onLogHomework={handleLogHomework}
+            homeworkRanges={(sessionStudent.quranHomework ?? []).filter(hw => !hw.isDone)}
             onGoBack={() => setSessionStudentId(null)}
           />
         ) : selectedStudent ? (

@@ -975,7 +975,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
+  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1323,6 +1323,27 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 Quran
               </button>
               <button
+                onClick={() => setActiveTab('homework')}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'homework'
+                    ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+                Homework
+                {(() => {
+                  const activeCount = quranHomework.filter(hw => !hw.isDone).length;
+                  return activeCount > 0 ? (
+                    <span className="ml-0.5 bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {activeCount}
+                    </span>
+                  ) : null;
+                })()}
+              </button>
+              <button
                 onClick={() => setActiveTab('tajweed')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'tajweed'
@@ -1663,6 +1684,154 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             {activeTab === 'lettersTrainer' && (
               <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} />
             )}
+
+            {activeTab === 'homework' && (() => {
+              const activeHw = quranHomework.filter(hw => !hw.isDone);
+              const doneHw   = quranHomework.filter(hw =>  hw.isDone);
+
+              const fmtRange = (hw: QuranHomework) => {
+                const startName = QURAN_METADATA.find(s => s.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
+                const endName   = QURAN_METADATA.find(s => s.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
+                if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${startName} : ${hw.startAyah}`;
+                return `${startName} ${hw.startAyah} → ${endName} ${hw.endAyah}`;
+              };
+
+              return (
+                <div className="max-w-2xl mx-auto space-y-8 py-2">
+
+                  {/* ── Active homework ───────────────────────────────── */}
+                  <section>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                      <span className="text-xl">📝</span>
+                      Current Homework
+                      {activeHw.length > 0 && (
+                        <span className="bg-violet-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                          {activeHw.length}
+                        </span>
+                      )}
+                    </h2>
+
+                    {activeHw.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
+                        <p className="text-3xl mb-2">🎉</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">All caught up!</p>
+                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">No pending homework right now.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {activeHw.map((hw, idx) => (
+                          <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-100 dark:border-violet-900/40 shadow-sm overflow-hidden">
+                            {/* Purple top accent */}
+                            <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
+                            <div className="p-4 sm:p-5">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-bold text-violet-500 dark:text-violet-400 uppercase tracking-wide">
+                                      #{idx + 1}
+                                    </span>
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                      {fmtRange(hw)}
+                                    </span>
+                                  </div>
+                                  {hw.note ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2 whitespace-pre-wrap bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">
+                                      {hw.note}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">No instructions — practise the assigned verses.</p>
+                                  )}
+                                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                                    Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mt-4">
+                                <button
+                                  onClick={() => {
+                                    setHomeworkModal(hw);
+                                    setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
+                                    setShowHistory(false);
+                                    setNoteVisible(true);
+                                    setActiveTab('quran');
+                                  }}
+                                  className="flex-1 py-2 px-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-semibold border border-violet-200 dark:border-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+                                >
+                                  📖 Go to verses
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setQuranHomework(prev => prev.map(h => h.id === hw.id ? { ...h, isDone: true } : h));
+                                    const remaining = activeHw.filter(h => h.id !== hw.id);
+                                    if (remaining.length > 0 && homeworkModal?.id === hw.id) {
+                                      setHomeworkModal(remaining[0]);
+                                      setHomeworkJumpKey(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
+                                    } else if (remaining.length === 0) {
+                                      setHomeworkModal(null);
+                                      setNoteVisible(false);
+                                    }
+                                  }}
+                                  className="py-2 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-sm transition-all shadow-sm"
+                                >
+                                  ✅ Mark Done
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* ── Completed history ─────────────────────────────── */}
+                  <section>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                      <span className="text-xl">✅</span>
+                      Completed
+                      {doneHw.length > 0 && (
+                        <span className="bg-slate-400 dark:bg-slate-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                          {doneHw.length}
+                        </span>
+                      )}
+                    </h2>
+
+                    {doneHw.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
+                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">Completed homework will appear here.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {doneHw.map((hw, idx) => (
+                          <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden opacity-80">
+                            <div className="h-1 bg-gradient-to-r from-teal-400 to-emerald-400" />
+                            <div className="p-4 sm:p-5 flex items-start gap-3">
+                              <span className="text-xl mt-0.5 flex-shrink-0">✅</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">
+                                    #{doneHw.length - idx}
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 line-through decoration-slate-300 dark:decoration-slate-600">
+                                    {fmtRange(hw)}
+                                  </span>
+                                </div>
+                                {hw.note && (
+                                  <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1 truncate">{hw.note}</p>
+                                )}
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                                  Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                </div>
+              );
+            })()}
 
             <footer className="text-center text-xs text-slate-400 dark:text-slate-600 py-8">
               <p>Generated by Lisan &amp; Quran · {new Date(generatedAt).toLocaleString()}</p>
