@@ -473,10 +473,10 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework'>('main');
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  // Measure the sticky header so the sidebar always starts exactly below it
+  // Measure the sticky header so the tools bar sits exactly below it
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(68);
   useEffect(() => {
@@ -486,6 +486,18 @@ const App: React.FC = () => {
     setHeaderHeight(headerRef.current.getBoundingClientRect().height);
     return () => ro.disconnect();
   }, [currentUser]);
+
+  // Measure the thin tools bar height so the surah nav sits exactly below it
+  const thinBarRef = useRef<HTMLDivElement>(null);
+  const [thinBarHeight, setThinBarHeight] = useState(40);
+  useEffect(() => {
+    const el = thinBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setThinBarHeight(entry.contentRect.height));
+    ro.observe(el);
+    setThinBarHeight(el.getBoundingClientRect().height);
+    return () => ro.disconnect();
+  }, []);
 
   const handleExportBackup = () => {
     try {
@@ -1423,21 +1435,49 @@ const App: React.FC = () => {
           </div>
         )}
       </header>
-      {/* Left tools sidebar — student detail page only (not live logging session) */}
-      {!!selectedStudent && !sessionStudent && activeTab === 'main' && (
-        <ToolsSidebar
-          items={[
-            { tab: 'lettersTrainer',  icon: '🔡', label: t('header.lettersTrainer')  },
-            { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer') },
-            { tab: 'qaedah',          icon: '📖', label: 'Qaedah'                   },
-            { tab: 'tajweed',         icon: '⚖️', label: t('header.tajweed')         },
-          ]}
-          activeTab={activeTab}
-          onSelect={(tab) => { setCurrentStudentView('details'); setActiveTab(tab); }}
-          headerHeight={headerHeight}
-        />
-      )}
-      <main className={`flex-grow ${sessionStudent ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
+      {/* ── Thin student-tools bar — visible on all student pages (detail + session) ── */}
+      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework'].includes(activeTab) && (() => {
+        const activeHwCount = (sessionStudent ?? selectedStudent)?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
+        const tabs = [
+          { id: 'tajweed',         label: t('header.tajweed'),          icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
+          { id: 'qaedah',          label: 'Qaedah',                     icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
+          { id: 'alphabetTrainer', label: t('header.alphabetTrainer'),  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" /></svg> },
+          { id: 'lettersTrainer',  label: t('header.lettersTrainer'),   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg> },
+          { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
+        ] as const;
+        return (
+          <div
+            ref={thinBarRef}
+            className="sticky z-[35] bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 shadow-sm no-print"
+            style={{ top: headerHeight }}
+          >
+            <div className="flex items-center justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => { setCurrentStudentView('details'); setActiveTab(activeTab === tab.id ? 'main' : tab.id); }}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? tab.id === 'homework'
+                        ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
+                        : 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                  {'badge' in tab && tab.badge > 0 && (
+                    <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+      <main className={`flex-grow ${sessionStudent && activeTab === 'main' ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
         {activeTab === 'accountSettings' ? (
           <AccountSettingsPage
             teacherId={currentUser.id}
@@ -1461,7 +1501,7 @@ const App: React.FC = () => {
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
         ) : activeTab === 'tajweed' ? (
-          <TajweedPage students={students} preSelectedStudentId={selectedStudentId ?? undefined} />
+          <TajweedPage students={students} preSelectedStudentId={(sessionStudentId ?? selectedStudentId) ?? undefined} />
         ) : activeTab === 'calendar' ? (
           <CalendarPage
             gcalToken={gcalToken}
@@ -1470,7 +1510,99 @@ const App: React.FC = () => {
             teacherId={currentUser.id}
             onPendingCountChange={setPendingBookingCount}
           />
-        ) : sessionStudent ? (
+        ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {
+          const hw_student = sessionStudent ?? selectedStudent!;
+          const hw_all  = hw_student.quranHomework ?? [];
+          const hw_active = hw_all.filter(hw => !hw.isDone);
+          const hw_done   = hw_all.filter(hw =>  hw.isDone);
+          const fmtRange = (hw: QuranHomework) => {
+            const s = QURAN_METADATA.find(m => m.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
+            const e = QURAN_METADATA.find(m => m.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
+            if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${s} : ${hw.startAyah}`;
+            return `${s} ${hw.startAyah} → ${e} ${hw.endAyah}`;
+          };
+          const removeHomework = async (homeworkId: string) => {
+            const updated = hw_all.filter(hw => hw.id !== homeworkId);
+            handleUpdateStudent({ ...hw_student, quranHomework: updated });
+            const reportId = await getStudentReportId(currentUser.id, hw_student.id);
+            if (reportId) {
+              await updateQuranHomeworkInReport(reportId, updated);
+              supabase.channel(`report-plays-${reportId}`).send({ type: 'broadcast', event: 'homework_assigned', payload: { quranHomework: updated } });
+            }
+          };
+          return (
+            <div className="max-w-2xl mx-auto space-y-8 py-2">
+              {/* Active homework */}
+              <section>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                  <span className="text-xl">📝</span> Current Homework
+                  {hw_active.length > 0 && <span className="bg-violet-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{hw_active.length}</span>}
+                </h2>
+                {hw_active.length === 0 ? (
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
+                    <p className="text-3xl mb-2">🎉</p>
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">All caught up!</p>
+                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">No pending homework assigned.</p>
+                  </div>
+                ) : hw_active.map((hw, idx) => (
+                  <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-100 dark:border-violet-900/40 shadow-sm overflow-hidden mb-3">
+                    <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
+                    <div className="p-4 sm:p-5">
+                      <div className="flex items-start gap-2 mb-1">
+                        <span className="text-xs font-bold text-violet-500 dark:text-violet-400 uppercase tracking-wide mt-0.5">#{idx + 1}</span>
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{fmtRange(hw)}</span>
+                      </div>
+                      {hw.note ? (
+                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2 whitespace-pre-wrap bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">{hw.note}</p>
+                      ) : (
+                        <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">No instructions.</p>
+                      )}
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                        Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {hw.isDone && ' · ✅ Done'}
+                      </p>
+                      <button
+                        onClick={() => removeHomework(hw.id)}
+                        className="mt-3 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium transition-colors"
+                      >
+                        🗑 Remove assignment
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+              {/* Completed history */}
+              <section>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                  <span className="text-xl">✅</span> Completed
+                  {hw_done.length > 0 && <span className="bg-slate-400 dark:bg-slate-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{hw_done.length}</span>}
+                </h2>
+                {hw_done.length === 0 ? (
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
+                    <p className="text-sm text-slate-400 dark:text-slate-500 italic">Completed homework will appear here.</p>
+                  </div>
+                ) : hw_done.map((hw, idx) => (
+                  <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-3 opacity-75">
+                    <div className="h-1 bg-gradient-to-r from-teal-400 to-emerald-400" />
+                    <div className="p-4 sm:p-5 flex items-start gap-3">
+                      <span className="text-xl mt-0.5 flex-shrink-0">✅</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">#{hw_done.length - idx}</span>
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-300 line-through decoration-slate-300 dark:decoration-slate-600">{fmtRange(hw)}</span>
+                        </div>
+                        {hw.note && <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1 truncate">{hw.note}</p>}
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                          Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            </div>
+          );
+        })() : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}
             students={students}
@@ -1490,6 +1622,7 @@ const App: React.FC = () => {
             onRemoveTafseerRange={handleRemoveTafseerRange}
             onLogHomework={handleLogHomework}
             homeworkRanges={(sessionStudent.quranHomework ?? []).filter(hw => !hw.isDone)}
+            toolbarStickyTop={headerHeight + thinBarHeight}
             onGoBack={() => setSessionStudentId(null)}
           />
         ) : selectedStudent ? (
