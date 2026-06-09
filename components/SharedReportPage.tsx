@@ -1652,7 +1652,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               );
             })()}
             {activeTab === 'tajweed' && (
-              <TajweedPage students={[]} preSelectedStudentId={report.student_id} />
+              <TajweedPage students={[]} preSelectedStudentId={report.student_id} readOnly />
             )}
             {activeTab === 'qaedah' && (
               <QaedahPage />

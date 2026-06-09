@@ -16,11 +16,16 @@ import TajweedLessonViewer from './TajweedLessonViewer';
 interface Props {
   students: Student[];
   preSelectedStudentId?: string;
+  /** When true, hides all admin/edit controls regardless of auth state.
+   *  Use when rendering TajweedPage inside the student-facing shared report. */
+  readOnly?: boolean;
 }
 
-const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId }) => {
+const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, readOnly = false }) => {
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === 'admin';
+  // In readOnly mode (student portal) never show admin controls even if the
+  // teacher happens to open the link in their authenticated browser.
+  const isAdmin = !readOnly && currentUser?.role === 'admin';
   const tutorId = (currentUser?.role === 'teacher' || currentUser?.role === 'admin') ? currentUser.id : '';
 
   const [lessons,       setLessons]       = useState<TajweedLesson[]>([]);

@@ -55,14 +55,19 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 
-// Shared report pages are public — no AuthProvider needed, and we bypass
-// App entirely to avoid any hooks-before-return issues.
+// Shared report pages are public — App is bypassed entirely to avoid any
+// hooks-before-return issues. AuthProvider IS included so that sub-components
+// like TajweedPage that call useAuth() receive a valid context; authenticated
+// tutors opening the link in their own browser will have their session
+// available (needed for RLS-gated reads like tajweed_lessons).
 if (sharedReportId) {
   root.render(
     <React.StrictMode>
       <ErrorBoundary>
         <I18nProvider>
-          <SharedReportPage reportId={sharedReportId} />
+          <AuthProvider>
+            <SharedReportPage reportId={sharedReportId} />
+          </AuthProvider>
         </I18nProvider>
       </ErrorBoundary>
     </React.StrictMode>
