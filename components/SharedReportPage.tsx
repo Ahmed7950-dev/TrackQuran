@@ -994,6 +994,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [homeworkJumpKey, setHomeworkJumpKey] = useState<string | null>(null);
   // Whether the floating note panel is visible
   const [noteVisible, setNoteVisible] = useState(false);
+  // Whether to show the completed homework history tab
+  const [showHistory, setShowHistory] = useState(false);
   const channelRef = useRef<any>(null);
 
   // Apply theme to document
@@ -1453,18 +1455,30 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   onClick={() => {
                     setHomeworkModal(firstHw);
                     setHomeworkJumpKey(`${firstHw.startSurah}:${firstHw.startAyah}`);
+                    setShowHistory(false);
                     setNoteVisible(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-100 dark:bg-violet-900/40 border-2 border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300 text-sm font-bold shadow-sm animate-pulse hover:animate-none hover:bg-violet-200 dark:hover:bg-violet-800/60 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-900/30 border-2 border-teal-300 dark:border-teal-600 text-teal-700 dark:text-teal-300 text-sm font-bold shadow-sm animate-pulse hover:animate-none hover:bg-teal-100 dark:hover:bg-teal-800/50 transition-colors"
                 >
                   📝 Homework
                   {activeHw.length > 1 && (
-                    <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    <span className="bg-teal-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                       {activeHw.length}
                     </span>
                   )}
                 </button>
               ) : null;
+
+              // Helper: format a homework range as a readable string
+              const formatRange = (hw: QuranHomework) => {
+                const startName = QURAN_METADATA.find(s => s.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
+                const endName   = QURAN_METADATA.find(s => s.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
+                if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${startName} : ${hw.startAyah}`;
+                return `${startName} ${hw.startAyah} → ${endName} ${hw.endAyah}`;
+              };
+
+              const activeHwList  = quranHomework.filter(hw => !hw.isDone);
+              const doneHwList    = quranHomework.filter(hw =>  hw.isDone);
 
               return (
                 <div className="relative">
@@ -1490,95 +1504,146 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                     onGoBack={noop}
                     jumpToVerseKey={homeworkJumpKey}
                     nameCardExtra={homeworkBadge}
+                    homeworkRanges={activeHwList}
                   />
 
-                  {/* ── Floating homework note panel ───────────────────── */}
-                  {noteVisible && homeworkModal && (() => {
-                    const formatRange = (hw: QuranHomework) => {
-                      const startName = QURAN_METADATA.find(s => s.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
-                      const endName   = QURAN_METADATA.find(s => s.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
-                      if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${startName} : ${hw.startAyah}`;
-                      return `${startName} ${hw.startAyah} → ${endName} ${hw.endAyah}`;
-                    };
-                    const activeHwList = quranHomework.filter(hw => !hw.isDone);
+                  {/* ── Floating homework panel ─────────────────────────── */}
+                  {noteVisible && (() => {
                     return (
-                      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[250] w-full max-w-md px-3">
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-violet-200 dark:border-violet-800 overflow-hidden">
-                          {/* Coloured top strip */}
-                          <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-3 flex items-center justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">📝</span>
-                                <span className="text-white font-bold text-sm">Homework</span>
-                                {activeHwList.length > 1 && (
-                                  <span className="text-violet-200 text-xs">
-                                    {activeHwList.indexOf(homeworkModal) + 1}/{activeHwList.length}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-violet-100 text-xs mt-0.5 font-medium">{formatRange(homeworkModal)}</p>
+                      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[250] w-full max-w-sm px-3">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+
+                          {/* ── Header ── */}
+                          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                            <div className="flex items-center gap-2">
+                              {/* Tab: Active / History */}
+                              <button
+                                onClick={() => setShowHistory(false)}
+                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                  !showHistory
+                                    ? 'bg-teal-600 text-white'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400'
+                                }`}
+                              >
+                                📝 Homework {activeHwList.length > 0 && <span className="ml-1 bg-white/30 text-white text-[10px] font-bold rounded-full px-1">{activeHwList.length}</span>}
+                              </button>
+                              {doneHwList.length > 0 && (
+                                <button
+                                  onClick={() => setShowHistory(true)}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                    showHistory
+                                      ? 'bg-slate-600 text-white'
+                                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                                  }`}
+                                >
+                                  ✅ Done ({doneHwList.length})
+                                </button>
+                              )}
                             </div>
                             <button
                               onClick={() => setNoteVisible(false)}
-                              className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/20 transition-colors"
-                              title="Hide note (verses still visible below)"
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              title="Hide panel"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                               </svg>
                             </button>
                           </div>
 
-                          {/* Body */}
-                          <div className="px-4 py-3">
-                            {homeworkModal.note ? (
-                              <p className="text-slate-700 dark:text-slate-200 text-sm leading-relaxed whitespace-pre-wrap mb-3">
-                                {homeworkModal.note}
-                              </p>
-                            ) : (
-                              <p className="text-slate-400 dark:text-slate-500 text-sm italic mb-3">
-                                No specific instructions — practise the assigned verses above.
-                              </p>
-                            )}
+                          <div className="h-px bg-slate-100 dark:bg-slate-700 mx-4" />
 
-                            <div className="flex gap-2">
-                              {/* Multiple homework tabs */}
-                              {activeHwList.length > 1 && activeHwList.map((hw, i) => (
-                                <button
-                                  key={hw.id}
-                                  onClick={() => {
-                                    setHomeworkModal(hw);
-                                    setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
-                                  }}
-                                  className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                                    hw.id === homeworkModal.id
-                                      ? 'bg-violet-600 text-white'
-                                      : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'
-                                  }`}
-                                >
-                                  #{i + 1}
-                                </button>
+                          {/* ── History view ── */}
+                          {showHistory ? (
+                            <div className="px-4 py-3 space-y-2 max-h-56 overflow-y-auto">
+                              {doneHwList.length === 0 ? (
+                                <p className="text-slate-400 dark:text-slate-500 text-sm italic text-center py-2">No completed homework yet.</p>
+                              ) : doneHwList.map(hw => (
+                                <div key={hw.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50">
+                                  <span className="text-base mt-0.5">✅</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate">{formatRange(hw)}</p>
+                                    {hw.note && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">{hw.note}</p>}
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{new Date(hw.assignedAt).toLocaleDateString()}</p>
+                                  </div>
+                                </div>
                               ))}
-
-                              <button
-                                onClick={() => {
-                                  setQuranHomework(prev => prev.map(hw => hw.id === homeworkModal!.id ? { ...hw, isDone: true } : hw));
-                                  // Advance to next undone homework if any
-                                  const remaining = quranHomework.filter(hw => !hw.isDone && hw.id !== homeworkModal!.id);
-                                  if (remaining.length > 0) {
-                                    setHomeworkModal(remaining[0]);
-                                    setHomeworkJumpKey(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
-                                  } else {
-                                    setNoteVisible(false);
-                                    setHomeworkModal(null);
-                                  }
-                                }}
-                                className={`${activeHwList.length > 1 ? '' : 'flex-1'} py-2 px-4 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold text-sm hover:from-violet-700 hover:to-purple-700 active:scale-95 transition-all`}
-                              >
-                                ✅ Done!
-                              </button>
                             </div>
-                          </div>
+                          ) : (
+                            /* ── Active homework view ── */
+                            <>
+                              {activeHwList.length === 0 ? (
+                                <div className="px-4 py-5 text-center">
+                                  <p className="text-2xl mb-1">🎉</p>
+                                  <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">All done!</p>
+                                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">You've completed all homework.</p>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* Verse range + note */}
+                                  {homeworkModal && (
+                                    <div className="px-4 pt-3 pb-2">
+                                      <p className="text-xs font-bold text-teal-700 dark:text-teal-400 mb-1">{formatRange(homeworkModal)}</p>
+                                      {homeworkModal.note ? (
+                                        <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                                          {homeworkModal.note}
+                                        </p>
+                                      ) : (
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm italic">
+                                          Practise the highlighted verses above.
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Navigation chips for multiple homework items */}
+                                  {activeHwList.length > 1 && (
+                                    <div className="px-4 pb-2 flex gap-1.5 flex-wrap">
+                                      {activeHwList.map((hw, i) => (
+                                        <button
+                                          key={hw.id}
+                                          onClick={() => {
+                                            setHomeworkModal(hw);
+                                            setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
+                                          }}
+                                          className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                            homeworkModal?.id === hw.id
+                                              ? 'bg-teal-600 text-white'
+                                              : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-teal-50 dark:hover:bg-teal-900/30'
+                                          }`}
+                                        >
+                                          #{i + 1}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <div className="h-px bg-slate-100 dark:bg-slate-700 mx-4" />
+
+                                  {/* Done button */}
+                                  <div className="px-4 py-3">
+                                    <button
+                                      onClick={() => {
+                                        if (!homeworkModal) return;
+                                        setQuranHomework(prev => prev.map(hw => hw.id === homeworkModal.id ? { ...hw, isDone: true } : hw));
+                                        const remaining = activeHwList.filter(hw => hw.id !== homeworkModal.id);
+                                        if (remaining.length > 0) {
+                                          setHomeworkModal(remaining[0]);
+                                          setHomeworkJumpKey(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
+                                        } else {
+                                          setHomeworkModal(null);
+                                          // Keep panel open so they can see the 🎉 message and history
+                                        }
+                                      }}
+                                      className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-sm transition-all shadow-sm"
+                                    >
+                                      ✅ Mark as Done
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     );

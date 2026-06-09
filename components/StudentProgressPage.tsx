@@ -41,6 +41,12 @@ interface StudentProgressPageProps {
    * Used by the shared report page to inject a homework badge.
    */
   nameCardExtra?: React.ReactNode;
+  /**
+   * Verse ranges to highlight as homework. Verses inside these ranges get a
+   * distinctive violet left-border highlight. Pass an empty array (or omit) to
+   * show no highlights.
+   */
+  homeworkRanges?: Array<{ id: string; startSurah: number; startAyah: number; endSurah: number; endAyah: number }>;
   onGoBack: () => void;
   /** When true: disables all logging interactions; verse-number click plays audio instead */
   readOnly?: boolean;
@@ -1291,7 +1297,23 @@ const SearchResultsModal: React.FC<{
 };
 
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra }) => {
+/** Returns true when verse (surahNum, ayahNum) falls inside any of the given homework ranges. */
+const isVerseInHomeworkRange = (
+    surahNum: number,
+    ayahNum: number,
+    ranges: Array<{ id: string; startSurah: number; startAyah: number; endSurah: number; endAyah: number }>
+): boolean => {
+    if (!ranges || ranges.length === 0) return false;
+    for (const r of ranges) {
+        const start = r.startSurah * 10000 + r.startAyah;
+        const end   = r.endSurah   * 10000 + r.endAyah;
+        const cur   = surahNum     * 10000 + ayahNum;
+        if (cur >= start && cur <= end) return true;
+    }
+    return false;
+};
+
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [] }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -2980,9 +3002,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const verseContainerClass = `my-4${showTranslation || showNoteArea ? '' : ' inline'}`;
             const verseContainerId = `verse-container-${verse.verse_key}`;
 
+            // Homework verse highlight
+            const isHwVerse = isVerseInHomeworkRange(surahNum, ayahNum, homeworkRanges);
+            const hwHighlightClass = isHwVerse
+                ? ' border-l-4 border-teal-400 dark:border-teal-500 bg-teal-50/40 dark:bg-teal-900/10 rounded-r-lg pl-2'
+                : '';
+
             if (showTranslation) {
                 const verseContainer = (
-                    <div id={verseContainerId} key={`verse-container-${verse.verse_key}`} className="my-4">
+                    <div id={verseContainerId} key={`verse-container-${verse.verse_key}`} className={`my-4${hwHighlightClass}`}>
                         <div className="arabic-verse leading-[2.8]">{verseTextNode}{verseMarker}</div>
                         {noteSection}
                         <div key={`trans-container-${verse.verse_key}`} dir="ltr" className="translation-container mt-4 text-left font-sans text-base leading-relaxed space-y-3">
@@ -3012,7 +3040,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 surahContent.push(verseContainer);
             } else {
                 surahContent.push(
-                    <div id={verseContainerId} key={verseContainerId} className={verseContainerClass}>
+                    <div id={verseContainerId} key={verseContainerId} className={`${verseContainerClass}${hwHighlightClass}`}>
                         {verseTextNode}
                         {verseMarker}
                         {noteSection}
