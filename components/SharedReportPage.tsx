@@ -1079,6 +1079,25 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         const hw = payload?.quranHomework as QuranHomework[] | undefined;
         if (hw !== undefined) setQuranHomework(hw);
       })
+      // Teacher added/changed any student data → refresh mistakes, progress and homework live
+      .on('broadcast', { event: 'report_updated' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const mistakes    = payload?.mistakes     as SharedReportData['mistakes']           | undefined;
+        const sp          = payload?.studentProgress as SharedReportData['studentProgress'] | undefined;
+        const hw          = payload?.quranHomework as QuranHomework[]                       | undefined;
+        setReport(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            report_data: {
+              ...prev.report_data,
+              ...(mistakes  !== undefined ? { mistakes }                   : {}),
+              ...(sp        !== undefined ? { studentProgress: sp }        : {}),
+              ...(hw        !== undefined ? { quranHomework: hw }          : {}),
+            },
+          };
+        });
+        if (hw !== undefined) setQuranHomework(hw);
+      })
       // Teacher removed a verse → hide it from student's page immediately (Bug 2 fix)
       .on('broadcast', { event: 'verse_removed' }, ({ payload }: { payload: Record<string, unknown> }) => {
         const vk = payload?.verse_key as string | undefined;

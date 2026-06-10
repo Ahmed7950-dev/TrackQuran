@@ -4,7 +4,7 @@ import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport } from './services/dataService';
 import { supabase } from './lib/supabase';
 import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
@@ -499,6 +499,9 @@ const App: React.FC = () => {
     return () => ro.disconnect();
   }, []);
 
+  // Debounce timer for shared-report sync (avoids hammering DB on rapid updates)
+  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleExportBackup = () => {
     try {
       downloadBackup();
@@ -629,6 +632,35 @@ const App: React.FC = () => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
       saveStudent(currentUser.id, updatedStudent); // async, fire & forget
+
+      // ── Auto-sync shared report ───────────────────────────────────────────
+      // Debounce so rapid taps (e.g. marking several mistakes) only trigger
+      // one DB round-trip, then broadcast so any already-open student portal
+      // refreshes its mistakes/progress immediately without a page reload.
+      if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
+      syncDebounceRef.current = setTimeout(async () => {
+        const reportId = await getStudentReportId(currentUser.id, updatedStudent.id);
+        if (!reportId) return; // no shared report exists yet — nothing to sync
+        await syncStudentDataInReport(reportId, updatedStudent);
+        // Broadcast live update to any open student portal
+        supabase.channel(`report-plays-${reportId}`).send({
+          type: 'broadcast',
+          event: 'report_updated',
+          payload: {
+            mistakes: updatedStudent.mistakes ?? {},
+            quranHomework: updatedStudent.quranHomework ?? [],
+            studentProgress: {
+              recitationAchievements: updatedStudent.recitationAchievements ?? [],
+              memorizationAchievements: updatedStudent.memorizationAchievements ?? [],
+              attendance: updatedStudent.attendance ?? [],
+              masteredTajweedRules: updatedStudent.masteredTajweedRules ?? [],
+              dob: updatedStudent.dob,
+              tafsirReviews: updatedStudent.tafsirReviews ?? [],
+              tafsirMemorizationReviews: updatedStudent.tafsirMemorizationReviews ?? [],
+            },
+          },
+        });
+      }, 1500); // 1.5-second debounce window
     }
   };
 

@@ -472,6 +472,62 @@ export const updateQuranHomeworkInReport = async (reportId: string, quranHomewor
   if (error) console.error('updateQuranHomeworkInReport:', error.message);
 };
 
+/**
+ * Sync all live student data (mistakes, progress, homework) into an existing
+ * shared report while preserving the teacher-generated fields (verses, homeworkVerses).
+ * Safe to call on every student update — it's a no-op if the report doesn't exist.
+ */
+export const syncStudentDataInReport = async (
+  reportId: string,
+  student: Pick<
+    Student,
+    | 'name'
+    | 'mistakes'
+    | 'quranHomework'
+    | 'recitationAchievements'
+    | 'memorizationAchievements'
+    | 'attendance'
+    | 'masteredTajweedRules'
+    | 'dob'
+    | 'tafsirReviews'
+    | 'tafsirMemorizationReviews'
+  >,
+): Promise<void> => {
+  // Fetch existing data to preserve verses / homeworkVerses / quranicFont
+  const { data, error: fetchErr } = await supabase
+    .from('shared_reports')
+    .select('report_data')
+    .eq('id', reportId)
+    .single();
+  if (fetchErr || !data) return;
+
+  const existing = data.report_data as SharedReportData;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updated: SharedReportData = {
+    ...existing,
+    studentName: student.name,
+    generatedAt: new Date().toISOString(),
+    mistakes: student.mistakes as SharedReportData['mistakes'],
+    quranHomework: student.quranHomework ?? [],
+    studentProgress: {
+      ...(existing.studentProgress ?? {}),
+      recitationAchievements: student.recitationAchievements ?? [],
+      memorizationAchievements: student.memorizationAchievements ?? [],
+      attendance: student.attendance ?? [],
+      masteredTajweedRules: student.masteredTajweedRules ?? [],
+      dob: student.dob,
+      tafsirReviews: student.tafsirReviews ?? [],
+      tafsirMemorizationReviews: student.tafsirMemorizationReviews ?? [],
+    } as SharedReportData['studentProgress'],
+  };
+
+  const { error } = await supabase
+    .from('shared_reports')
+    .update({ report_data: updated, student_name: student.name })
+    .eq('id', reportId);
+  if (error) console.error('syncStudentDataInReport:', error.message);
+};
+
 // ============================================================
 const surahCache = new Map<number, QuranVerse[]>();
 
