@@ -102,6 +102,28 @@ const SMALL_WAW = '\u06e5';        // ARABIC SMALL WAW \u2014 Madd \u1e62ilah / 
 const SMALL_YEH = '\u06e6';        // ARABIC SMALL YEH \u2014 Madd \u1e62ilah / sub-vowel marker
 const SILENT_MARKER = '\u06df';    // ARABIC SMALL HIGH ROUNDED ZERO \u2014 silent letter (Madinah Mushaf)
 const MADD_MARKERS = [MADDAH, SMALL_HIGH_MADDA, SMALL_WAW, SMALL_YEH];
+
+// Waqf (stopping) sign characters \u2014 U+06D6 through U+06DE.
+// These superscript marks must be rendered in 'Amiri Quran' because Safari/iOS
+// does not correctly fall back per-glyph within a span that already loaded a
+// custom Quranic font. Wrapping them explicitly guarantees they show on all
+// browsers, matching Chrome/Firefox behavior.
+const WAQF_SIGN_SET = new Set([
+  '\u06d6', // \u06d6 \u2014 Waqf Mujawwaz (permissible)
+  '\u06d7', // \u06d7 \u2014 Waqf Muraqqas (makruh)
+  '\u06d8', // \u06d8 \u2014 Waqf Musta\u1e25ab
+  '\u06d9', // \u06d9 \u2014 Waqf Mamnoo' (forbidden)
+  '\u06da', // \u06da \u2014 Waqf Jaiz (the \u062c sign the user reported missing)
+  '\u06db', // \u06db \u2014 Saktah (brief pause)
+  '\u06dc', // \u06dc \u2014 Waqf Musta\u1e25ab (High Seen)
+  '\u06dd', // \u06dd \u2014 End of Ayah circle
+  '\u06de', // \u06de \u2014 Rub el-Hizb
+  '\u06df', // \u06df \u2014 Silent letter (already handled separately, included for completeness)
+]);
+const hasWaqfOrSpecialChar = (text: string): boolean => {
+  for (const ch of text) if (WAQF_SIGN_SET.has(ch)) return true;
+  return false;
+};
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
 
 // Unicode constants for Ghunnah rules
@@ -939,10 +961,13 @@ const LetterWithError: React.FC<{
                 }`}
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle() }}
             >
-                {letter.includes('\u06DF') ? (
-                    letter.split('').map((char, idx) => 
-                        char === '\u06DF' ? (
-                            <span key={idx} style={{ fontFamily: 'Amiri Regular' }}>{char}</span>
+                {hasWaqfOrSpecialChar(letter) ? (
+                    letter.split('').map((char, idx) =>
+                        WAQF_SIGN_SET.has(char) ? (
+                            // Force 'Amiri Quran' for Waqf/special marks \u2014 Safari/iOS does
+                            // not fall back per-glyph inside a span that already loaded the
+                            // Quranic web font, so these signs go invisible without this.
+                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{char}</span>
                         ) : (
                             <span key={idx}>{char}</span>
                         )
@@ -975,24 +1000,26 @@ const TajweedWord: React.FC<{
         return null;
     };
 
-    // Helper function to process unit text and wrap U+06DF characters in Amiri font
-    const processUnitWithU06DF = (unitText: string, unitIndex: number, className: string = '') => {
-        if (!unitText.includes('\u06DF')) {
+    // Helper: split unit text and wrap any Waqf/special-mark characters in
+    // 'Amiri Quran' so they render correctly on Safari/iOS (per-glyph fallback
+    // doesn't work in WebKit when the parent span already loaded a custom font).
+    const processUnitWithSpecialChars = (unitText: string, unitIndex: number, className: string = '') => {
+        if (!hasWaqfOrSpecialChar(unitText)) {
             return <span key={unitIndex} className={className}>{unitText}</span>;
         }
         const parts: React.ReactNode[] = [];
         let currentPart = '';
         let charIndex = 0;
-        for (let i = 0; i < unitText.length; i++) {
-            const char = unitText[i];
-            if (char === '\u06DF') {
+        for (const char of unitText) {
+            if (WAQF_SIGN_SET.has(char)) {
                 if (currentPart) {
-                    parts.push(<span key={`${unitIndex}-part-${charIndex++}`}>{currentPart}</span>);
+                    parts.push(<span key={`${unitIndex}-part-${charIndex++}`} className={className}>{currentPart}</span>);
                     currentPart = '';
                 }
                 parts.push(
-                    <span key={`${unitIndex}-u06df-${charIndex++}`} className={className} style={{ fontFamily: 'Amiri Regular' }}>
-                        {'\u06DF'}
+                    <span key={`${unitIndex}-waqf-${charIndex++}`} className={className}
+                          style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>
+                        {char}
                     </span>
                 );
             } else {
@@ -1011,14 +1038,14 @@ const TajweedWord: React.FC<{
         // Letters bearing U+06DF (Small High Rounded Zero) are silent in continuous reading.
         // Examples: alif in "أَنَا", wāw in "أُولَٰئِكَ", lām in "ٱلشَّمْس". Show in grey.
         if (unit.includes(SILENT_MARKER)) {
-            return processUnitWithU06DF(unit, index, 'text-slate-400 dark:text-slate-500');
+            return processUnitWithSpecialChars(unit, index, 'text-slate-400 dark:text-slate-500');
         }
 
         // --- MADD RULE (Madd Far'ee — secondary madds) ---
         // Markers: U+0653 MADDAH ABOVE (Muttasil/Munfasil), U+06E4 SMALL HIGH MADDA (Lazim),
         // U+06E5 SMALL WAW & U+06E6 SMALL YEH (Madd Silah and similar sub-vowels).
         if (showMadd && MADD_MARKERS.some(m => unit.includes(m))) {
-            return processUnitWithU06DF(unit, index, 'text-pink-600');
+            return processUnitWithSpecialChars(unit, index, 'text-pink-600');
         }
 
         let ghunnahRuleApplied = false;
@@ -1164,7 +1191,7 @@ const TajweedWord: React.FC<{
         }
 
         if (ghunnahRuleApplied) {
-            return processUnitWithU06DF(unit, index, 'text-green-600');
+            return processUnitWithSpecialChars(unit, index, 'text-green-600');
         }
 
         // --- QALQALAH RULE ---
@@ -1182,12 +1209,12 @@ const TajweedWord: React.FC<{
                  }
                  
                  if (hasSukun || (isLastWordInVerse && isLastLetterOfWord)) {
-                     return processUnitWithU06DF(unit, index, 'text-sky-500 dark:text-sky-400');
+                     return processUnitWithSpecialChars(unit, index, 'text-sky-500 dark:text-sky-400');
                  }
              }
         }
         
-        return processUnitWithU06DF(unit, index);
+        return processUnitWithSpecialChars(unit, index);
     });
 
     return <>{renderedUnits}</>;
