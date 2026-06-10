@@ -1988,16 +1988,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
                 // Set page range to cover the full surah.
                 // Short surahs (≤ 5 Mushaf pages) are shown completely in one go.
-                // Long surahs use a 5-page window starting at the surah's first page.
+                // Long surahs open at the surah's EXACT first page (no grid-snapping)
+                // so the student always sees real content from the very first window.
                 const firstPage = selectedMeta.startPage;
                 const lastPage  = selectedMeta.endPage;
                 if (lastPage - firstPage <= 4) {
                   // Surah fits in ≤ 5 pages — show the whole thing
                   setCurrentPageRange({ start: firstPage, end: lastPage });
                 } else {
-                  const newStart = Math.max(1, Math.floor((firstPage - 1) / 5) * 5 + 1);
-                  const newEnd   = Math.min(604, newStart + 4);
-                  setCurrentPageRange({ start: newStart, end: newEnd });
+                  // Start exactly at the surah's first page; never before it.
+                  const newEnd = Math.min(lastPage, firstPage + 4);
+                  setCurrentPageRange({ start: firstPage, end: newEnd });
                 }
             } catch (err: any) {
                 setError(err.message); setVerses([]);
@@ -2094,9 +2095,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (scrollToVerseKey && verses.length > 0) {
             const [surahNum, ayahNum] = scrollToVerseKey.split(':').map(Number);
             const targetPage = getPageOfAyah(surahNum, ayahNum);
-            
-            // Update page range to include the target page
-            const newStart = Math.max(1, Math.floor((targetPage - 1) / 5) * 5 + 1);
+
+            // Determine the surah's actual first page so we never open a window
+            // that starts before the surah begins (which would show empty space).
+            const [firstVSurah, firstVAyah] = verses[0].verse_key.split(':').map(Number);
+            const surahFirstPage = getPageOfAyah(firstVSurah, firstVAyah);
+
+            // Align to a 5-page grid but clamp so we never go before the surah's
+            // first page — that was the root cause of the "wrong pages" bug.
+            const gridStart = Math.max(1, Math.floor((targetPage - 1) / 5) * 5 + 1);
+            const newStart = Math.max(surahFirstPage, gridStart);
             const newEnd = Math.min(604, newStart + 4);
             setCurrentPageRange({ start: newStart, end: newEnd });
             
@@ -2829,7 +2837,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 currentPage = versePage;
                 hasShownFirstPageInRange = true;
             } else if (versePage !== currentPage) {
-                surahContent.push(<PageSeparator key={`page-${currentPage}`} pageNumber={currentPage} />);
+                // Label the separator with the page that is STARTING (versePage),
+                // not the one that just ended — so the marker reads as a page header
+                // rather than a confusing footer that's one page behind.
+                surahContent.push(<PageSeparator key={`page-${versePage}`} pageNumber={versePage} />);
                 currentPage = versePage;
             }
 
