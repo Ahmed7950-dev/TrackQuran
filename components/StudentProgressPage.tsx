@@ -1839,7 +1839,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (!focusedLetterKey) return;
         setHighlightedLetterKey(focusedLetterKey);
         const el = document.getElementById(`letter-${focusedLetterKey}`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (highlightClearTimer.current) clearTimeout(highlightClearTimer.current);
         highlightClearTimer.current = setTimeout(() => setHighlightedLetterKey(null), 3000);
     }, [focusedLetterKey]);
