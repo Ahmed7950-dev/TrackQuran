@@ -999,6 +999,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   // Increments each time the tutor broadcasts a mistake_buzz — triggers the
   // red flash + sound inside StudentProgressPage on the student's screen.
   const [buzzTrigger, setBuzzTrigger] = useState(0);
+  // Set each time the tutor long-presses a letter — scrolls student to that letter.
+  const [focusedLetterKey, setFocusedLetterKey] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
 
   // Apply theme to document
@@ -1085,6 +1087,11 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       // Tutor pressed Ctrl during live session → flash red + buzz on student screen
       .on('broadcast', { event: 'mistake_buzz' }, () => {
         setBuzzTrigger(prev => prev + 1);
+      })
+      // Tutor long-pressed a letter → scroll student screen to that letter
+      .on('broadcast', { event: 'letter_focus' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const lk = payload?.letterKey as string | undefined;
+        if (lk) setFocusedLetterKey(lk);
       })
       // Teacher added/changed any student data → refresh mistakes, progress and homework live
       .on('broadcast', { event: 'report_updated' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -1532,6 +1539,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   <StudentProgressPage
                     readOnly
                     externalBuzzTrigger={buzzTrigger}
+                    focusedLetterKey={focusedLetterKey}
                     toolbarStickyTop={156}
                     notesStudentId={report.student_id}
                     student={quranFakeStudent}

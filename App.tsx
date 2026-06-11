@@ -929,6 +929,19 @@ const App: React.FC = () => {
     });
   };
 
+  // Broadcast a letter focus to the student's open portal when the tutor
+  // long-presses a letter. Student's screen scrolls to and highlights that letter.
+  const handleLetterFocus = async (letterKey: string) => {
+    if (!currentUser || currentUser.role !== 'teacher' || !sessionStudentId) return;
+    const reportId = await getStudentReportId(currentUser.id, sessionStudentId);
+    if (!reportId) return;
+    supabase.channel(`report-plays-${reportId}`).send({
+      type: 'broadcast',
+      event: 'letter_focus',
+      payload: { letterKey },
+    });
+  };
+
   const handleBack = () => {
     // If the user navigated to a tool page from the sidebar, go back to the
     // student page rather than all the way back to the dashboard.
@@ -1670,6 +1683,7 @@ const App: React.FC = () => {
             toolbarStickyTop={headerHeight + thinBarHeight}
             onGoBack={() => setSessionStudentId(null)}
             onMistakeBuzz={handleMistakeBuzz}
+            onLetterFocus={handleLetterFocus}
           />
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (

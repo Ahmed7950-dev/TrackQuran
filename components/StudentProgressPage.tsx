@@ -74,6 +74,16 @@ interface StudentProgressPageProps {
    * on the student's screen in real time.
    */
   externalBuzzTrigger?: number;
+  /**
+   * Called (on the tutor side) when the tutor long-presses a letter.
+   * The parent broadcasts the letter key so the student's screen scrolls to it.
+   */
+  onLetterFocus?: (letterKey: string) => void;
+  /**
+   * Letter key received from outside (student side). When it changes the
+   * component scrolls to that letter and highlights it in purple.
+   */
+  focusedLetterKey?: string | null;
 }
 
 const getAge = (dob: string) => {
@@ -824,15 +834,17 @@ const LetterWithError: React.FC<{
     nextWord: string; // Next word for Ghunnah context
     prevWord: string; // Previous word for Madd context
     letterIndex: number; // Index of letter in word
-}> = ({ 
-    letter, 
-    letterKey, 
-    mistake, 
-    isEditing, 
-    errorText, 
-    onLetterClick, 
-    onTextChange, 
-    onTextSubmit, 
+    onLongPress?: (key: string) => void;
+    isFocused?: boolean;
+}> = ({
+    letter,
+    letterKey,
+    mistake,
+    isEditing,
+    errorText,
+    onLetterClick,
+    onTextChange,
+    onTextSubmit,
     onTextCancel,
     showQalqalah,
     showGhunnah,
@@ -843,9 +855,30 @@ const LetterWithError: React.FC<{
     prevWord,
     letterIndex,
     isLastWordInVerse,
-    isLastLetterOfWord
+    isLastLetterOfWord,
+    onLongPress,
+    isFocused,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
+    const longPressTimer = React.useRef<number | null>(null);
+    const isLongPressActive = React.useRef(false);
+
+    const cancelLongPress = () => {
+        if (longPressTimer.current !== null) {
+            window.clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    const startLongPress = () => {
+        if (!onLongPress) return;
+        isLongPressActive.current = false;
+        cancelLongPress();
+        longPressTimer.current = window.setTimeout(() => {
+            isLongPressActive.current = true;
+            onLongPress(letterKey);
+        }, 500);
+    };
     
     React.useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -894,7 +927,7 @@ const LetterWithError: React.FC<{
     };
 
     return (
-        <span className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
+        <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
             {isEditing && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
                     <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -960,17 +993,24 @@ const LetterWithError: React.FC<{
             <span
                 onClick={(e) => {
                     e.stopPropagation();
+                    if (isLongPressActive.current) { isLongPressActive.current = false; return; }
                     onLetterClick(letterKey);
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();
+                    startLongPress();
                 }}
+                onMouseUp={cancelLongPress}
+                onMouseLeave={cancelLongPress}
+                onTouchStart={startLongPress}
+                onTouchEnd={cancelLongPress}
+                onTouchCancel={cancelLongPress}
                 className={`inline cursor-pointer transition-colors relative z-10 ${
                     shouldHighlightSilent(letter)
                         ? '!text-slate-400 dark:!text-slate-500'
                         : `${showGhunnah && shouldHighlightGhunnah(letter, letterIndex, word, nextWord) ? '!text-green-600 dark:!text-green-400' : ''} ${showMadd && shouldHighlightMadd(letter, letterIndex, word, prevWord) ? '!text-pink-600 dark:!text-pink-400' : ''} ${showQalqalah && shouldHighlightQalqalah(letter, letterIndex, word, isLastWordInVerse, isLastLetterOfWord) ? '!text-sky-500 dark:!text-sky-400' : ''}`
                 }`}
-                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle() }}
+                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
                 {hasWaqfOrSpecialChar(letter) ? (
                     letter.split('').map((char, idx) =>
@@ -1351,7 +1391,7 @@ const isVerseInHomeworkRange = (
     return false;
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1785,6 +1825,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (mistakeSoundRef.current) mistakeSoundRef.current();
         setTimeout(() => setShowMistakeHighlight(false), 500);
     }, [externalBuzzTrigger]);
+
+    // Highlighted letter key — set when tutor long-presses a letter and the
+    // broadcast arrives on the student side via focusedLetterKey prop.
+    const [highlightedLetterKey, setHighlightedLetterKey] = useState<string | null>(null);
+    const highlightClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (!focusedLetterKey) return;
+        setHighlightedLetterKey(focusedLetterKey);
+        const el = document.getElementById(`letter-${focusedLetterKey}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (highlightClearTimer.current) clearTimeout(highlightClearTimer.current);
+        highlightClearTimer.current = setTimeout(() => setHighlightedLetterKey(null), 3000);
+    }, [focusedLetterKey]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -2938,6 +2992,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     letterIndex={letterIndex}
                                     isLastWordInVerse={isLastWordInVerse}
                                     isLastLetterOfWord={isLastLetterOfWord}
+                                    isFocused={highlightedLetterKey === letterKey}
+                                    onLongPress={!readOnly ? onLetterFocus : undefined}
                                 />
                             );
                         })}
@@ -3535,6 +3591,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             letterIndex={li}
                                                                             isLastWordInVerse={false}
                                                                             isLastLetterOfWord={li === letters.length - 1}
+                                                                            isFocused={highlightedLetterKey === lk}
+                                                                            onLongPress={!readOnly ? onLetterFocus : undefined}
                                                                         />
                                                                     );
                                                                 })}
