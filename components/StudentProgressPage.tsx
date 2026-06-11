@@ -196,6 +196,15 @@ const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: bo
 };
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
 
+// Iqlab: U+06E2 (small high meem) stacked on a tanween (U+064B/U+064C). None of
+// the bundled Quranic fonts position this pair correctly \u2014 the meem glyph is
+// drawn on top of the tanween, overlapping it. When a letter cluster contains
+// both, we strip the meem from the inline text (so the tanween renders cleanly)
+// and draw the meem ourselves in an absolutely-positioned overlay above it.
+const IQLAB_HIGH_MEEM = '\u06e2';
+const needsIqlabOverlay = (text: string): boolean =>
+    text.includes(IQLAB_HIGH_MEEM) && (text.includes('\u064b') || text.includes('\u064c'));
+
 // Unicode constants for Ghunnah rules
 const NOON = '\u0646'; // U+0646 - ن
 const MEEM = '\u0645'; // U+0645 - م
@@ -1069,7 +1078,15 @@ const LetterWithError: React.FC<{
                 }`}
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
-                {hasWaqfOrSpecialChar(letter) ? (
+                {needsIqlabOverlay(letter) ? (
+                    <span style={{ position: 'relative', display: 'inline' }}>
+                        {letter.replace(new RegExp(IQLAB_HIGH_MEEM, 'g'), '')}
+                        {/* Hafs renders a clean tail-less small meem for standalone
+                            U+06E2; forced here so the glyph is identical whichever
+                            Quranic font the user selected. */}
+                        <span style={{ position: 'absolute', top: '-0.3em', right: 0, fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
+                    </span>
+                ) : hasWaqfOrSpecialChar(letter) ? (
                     // segmentForWaqfFont groups each Arabic base letter with its
                     // combining marks (harakat, U+06DF silent marker, etc.) so that
                     // combining chars are never split into their own span \u2014 doing so
