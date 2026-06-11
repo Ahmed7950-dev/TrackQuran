@@ -996,6 +996,9 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [noteVisible, setNoteVisible] = useState(false);
   // Whether to show the completed homework history tab
   const [showHistory, setShowHistory] = useState(false);
+  // Increments each time the tutor broadcasts a mistake_buzz — triggers the
+  // red flash + sound inside StudentProgressPage on the student's screen.
+  const [buzzTrigger, setBuzzTrigger] = useState(0);
   const channelRef = useRef<any>(null);
 
   // Apply theme to document
@@ -1078,6 +1081,10 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       .on('broadcast', { event: 'homework_assigned' }, ({ payload }: { payload: Record<string, unknown> }) => {
         const hw = payload?.quranHomework as QuranHomework[] | undefined;
         if (hw !== undefined) setQuranHomework(hw);
+      })
+      // Tutor pressed Ctrl during live session → flash red + buzz on student screen
+      .on('broadcast', { event: 'mistake_buzz' }, () => {
+        setBuzzTrigger(prev => prev + 1);
       })
       // Teacher added/changed any student data → refresh mistakes, progress and homework live
       .on('broadcast', { event: 'report_updated' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -1524,6 +1531,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <div className="relative">
                   <StudentProgressPage
                     readOnly
+                    externalBuzzTrigger={buzzTrigger}
                     toolbarStickyTop={156}
                     notesStudentId={report.student_id}
                     student={quranFakeStudent}

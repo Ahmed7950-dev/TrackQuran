@@ -916,6 +916,19 @@ const App: React.FC = () => {
     }
   };
 
+  // Broadcast a real-time "buzz" to the student's open portal when the tutor
+  // presses Ctrl during a live session. Fire-and-forget — no UI feedback needed.
+  const handleMistakeBuzz = async () => {
+    if (!currentUser || currentUser.role !== 'teacher' || !sessionStudentId) return;
+    const reportId = await getStudentReportId(currentUser.id, sessionStudentId);
+    if (!reportId) return;
+    supabase.channel(`report-plays-${reportId}`).send({
+      type: 'broadcast',
+      event: 'mistake_buzz',
+      payload: { ts: Date.now() },
+    });
+  };
+
   const handleBack = () => {
     // If the user navigated to a tool page from the sidebar, go back to the
     // student page rather than all the way back to the dashboard.
@@ -1656,6 +1669,7 @@ const App: React.FC = () => {
             homeworkRanges={(sessionStudent.quranHomework ?? []).filter(hw => !hw.isDone)}
             toolbarStickyTop={headerHeight + thinBarHeight}
             onGoBack={() => setSessionStudentId(null)}
+            onMistakeBuzz={handleMistakeBuzz}
           />
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (

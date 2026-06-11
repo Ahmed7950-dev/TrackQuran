@@ -63,6 +63,17 @@ interface StudentProgressPageProps {
    * In live (tutor) mode notes are shown read-only as context.
    */
   notesStudentId?: string;
+  /**
+   * Called (on the tutor side) each time the tutor presses Ctrl to signal a
+   * mistake. The parent can use this to broadcast the event to the student.
+   */
+  onMistakeBuzz?: () => void;
+  /**
+   * Incrementing counter from the parent. Every time it changes the component
+   * fires the red-flash + buzz sound — used to replay the tutor's Ctrl press
+   * on the student's screen in real time.
+   */
+  externalBuzzTrigger?: number;
 }
 
 const getAge = (dob: string) => {
@@ -1340,7 +1351,7 @@ const isVerseInHomeworkRange = (
     return false;
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [] }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1443,6 +1454,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [clickStateUpdateTrigger, setClickStateUpdateTrigger] = useState(0); // Force re-render when click states change
     const [showMistakeHighlight, setShowMistakeHighlight] = useState(false);
     const mistakeSoundRef = useRef<(() => void) | null>(null);
+    // Keep onMistakeBuzz in a ref so the keydown handler (registered once with []
+    // deps) always calls the latest prop value without stale-closure issues.
+    const onMistakeBuzzRef = useRef(onMistakeBuzz);
+    useEffect(() => { onMistakeBuzzRef.current = onMistakeBuzz; }, [onMistakeBuzz]);
     const { t } = useI18n();
 
     const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
@@ -1761,6 +1776,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         mistakeSoundRef.current = createMistakeSound;
     }, []);
 
+    // React to a buzz broadcast from the tutor (student-side only).
+    // externalBuzzTrigger is an incrementing counter; every new value means
+    // the tutor just pressed Ctrl — show the red flash + play the sound here too.
+    useEffect(() => {
+        if (externalBuzzTrigger === undefined || externalBuzzTrigger === 0) return;
+        setShowMistakeHighlight(true);
+        if (mistakeSoundRef.current) mistakeSoundRef.current();
+        setTimeout(() => setShowMistakeHighlight(false), 500);
+    }, [externalBuzzTrigger]);
+
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement;
@@ -1780,6 +1805,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 setShowMistakeHighlight(true);
                 if (mistakeSoundRef.current) mistakeSoundRef.current();
                 setTimeout(() => setShowMistakeHighlight(false), 500);
+                // Notify parent so it can broadcast the buzz to the student's portal
+                onMistakeBuzzRef.current?.();
             }
 
             // Repetition counter (+ / 0)
