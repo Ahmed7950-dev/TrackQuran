@@ -155,6 +155,45 @@ const hasWaqfOrSpecialChar = (text: string): boolean => {
   for (const ch of text) if (WAQF_SIGN_SET.has(ch)) return true;
   return false;
 };
+
+// Segment a letter string into grapheme clusters so combining marks (harakat,
+// Waqf signs like U+06DF) stay attached to their base letter. Only clusters
+// that contain a WAQF_SIGN_SET character get the Amiri Quran font override.
+// Splitting by raw character (the old approach) detaches combining marks from
+// their base and causes glyphs like the circled sukoon to render below the line.
+const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: boolean }> => {
+  let parts: string[];
+  if (typeof Intl !== 'undefined' && typeof (Intl as Record<string, unknown>).Segmenter === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seg = new (Intl as any).Segmenter('ar', { granularity: 'grapheme' });
+    parts = [...seg.segment(text)].map((s: { segment: string }) => s.segment);
+  } else {
+    // Fallback: manually group each Arabic base letter with all following
+    // combining marks (Arabic diacritics U+0610-U+061A, U+064B-U+065F, U+0670,
+    // and the Waqf/special range U+06D6-U+06ED).
+    parts = [];
+    let cur = '';
+    for (const ch of text) {
+      const cp = ch.codePointAt(0) ?? 0;
+      const isCombining =
+        (cp >= 0x0610 && cp <= 0x061a) ||
+        (cp >= 0x064b && cp <= 0x065f) ||
+        cp === 0x0670 ||
+        (cp >= 0x06d6 && cp <= 0x06ed);
+      if (isCombining && cur) {
+        cur += ch; // attach to current base cluster
+      } else {
+        if (cur) parts.push(cur);
+        cur = ch;
+      }
+    }
+    if (cur) parts.push(cur);
+  }
+  return parts.map(segment => ({
+    segment,
+    useAmiri: [...segment].some(ch => WAQF_SIGN_SET.has(ch)),
+  }));
+};
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
 
 // Unicode constants for Ghunnah rules
@@ -1031,14 +1070,16 @@ const LetterWithError: React.FC<{
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
                 {hasWaqfOrSpecialChar(letter) ? (
-                    letter.split('').map((char, idx) =>
-                        WAQF_SIGN_SET.has(char) ? (
-                            // Force 'Amiri Quran' for Waqf/special marks \u2014 Safari/iOS does
-                            // not fall back per-glyph inside a span that already loaded the
-                            // Quranic web font, so these signs go invisible without this.
-                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{char}</span>
+                    // segmentForWaqfFont groups each Arabic base letter with its
+                    // combining marks (harakat, U+06DF silent marker, etc.) so that
+                    // combining chars are never split into their own span \u2014 doing so
+                    // detaches them from their base and causes them to render below
+                    // the line (the "alif with circled sukoon under the line" bug).
+                    segmentForWaqfFont(letter).map(({ segment, useAmiri }, idx) =>
+                        useAmiri ? (
+                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{segment}</span>
                         ) : (
-                            <span key={idx}>{char}</span>
+                            <span key={idx}>{segment}</span>
                         )
                     )
                 ) : (
@@ -1072,33 +1113,26 @@ const TajweedWord: React.FC<{
     // Helper: split unit text and wrap any Waqf/special-mark characters in
     // 'Amiri Quran' so they render correctly on Safari/iOS (per-glyph fallback
     // doesn't work in WebKit when the parent span already loaded a custom font).
+    // Uses segmentForWaqfFont so combining marks (e.g. U+06DF silent marker) stay
+    // attached to their base letter instead of being split into a separate span
+    // (which causes them to render below the baseline).
     const processUnitWithSpecialChars = (unitText: string, unitIndex: number, className: string = '') => {
         if (!hasWaqfOrSpecialChar(unitText)) {
             return <span key={unitIndex} className={className}>{unitText}</span>;
         }
-        const parts: React.ReactNode[] = [];
-        let currentPart = '';
-        let charIndex = 0;
-        for (const char of unitText) {
-            if (WAQF_SIGN_SET.has(char)) {
-                if (currentPart) {
-                    parts.push(<span key={`${unitIndex}-part-${charIndex++}`} className={className}>{currentPart}</span>);
-                    currentPart = '';
-                }
-                parts.push(
-                    <span key={`${unitIndex}-waqf-${charIndex++}`} className={className}
-                          style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>
-                        {char}
-                    </span>
-                );
-            } else {
-                currentPart += char;
-            }
-        }
-        if (currentPart) {
-            parts.push(<span key={`${unitIndex}-part-${charIndex++}`} className={className}>{currentPart}</span>);
-        }
-        return <React.Fragment key={unitIndex}>{parts}</React.Fragment>;
+        const segs = segmentForWaqfFont(unitText);
+        return (
+            <React.Fragment key={unitIndex}>
+                {segs.map(({ segment, useAmiri }, i) =>
+                    useAmiri ? (
+                        <span key={i} className={className}
+                              style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{segment}</span>
+                    ) : (
+                        <span key={i} className={className}>{segment}</span>
+                    )
+                )}
+            </React.Fragment>
+        );
     };
 
     const renderedUnits = units.map((unit, index) => {
