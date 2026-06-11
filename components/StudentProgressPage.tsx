@@ -1498,6 +1498,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // deps) always calls the latest prop value without stale-closure issues.
     const onMistakeBuzzRef = useRef(onMistakeBuzz);
     useEffect(() => { onMistakeBuzzRef.current = onMistakeBuzz; }, [onMistakeBuzz]);
+
+    // Keep onLetterFocus in a ref for the same reason (used in a stable callback).
+    const onLetterFocusRef = useRef(onLetterFocus);
+    useEffect(() => { onLetterFocusRef.current = onLetterFocus; }, [onLetterFocus]);
     const { t } = useI18n();
 
     const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
@@ -1839,6 +1843,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (highlightClearTimer.current) clearTimeout(highlightClearTimer.current);
         highlightClearTimer.current = setTimeout(() => setHighlightedLetterKey(null), 3000);
     }, [focusedLetterKey]);
+
+    // Stable callback for tutor long-press: highlights locally (instant feedback)
+    // then broadcasts to the student. Uses refs so it never goes stale.
+    const handleLetterLongPress = useCallback((key: string) => {
+        setHighlightedLetterKey(key);
+        if (highlightClearTimer.current) clearTimeout(highlightClearTimer.current);
+        highlightClearTimer.current = setTimeout(() => setHighlightedLetterKey(null), 3000);
+        onLetterFocusRef.current?.(key);
+    }, []);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -2993,7 +3006,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isLastWordInVerse={isLastWordInVerse}
                                     isLastLetterOfWord={isLastLetterOfWord}
                                     isFocused={highlightedLetterKey === letterKey}
-                                    onLongPress={!readOnly ? onLetterFocus : undefined}
+                                    onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                 />
                             );
                         })}
@@ -3592,7 +3605,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isLastWordInVerse={false}
                                                                             isLastLetterOfWord={li === letters.length - 1}
                                                                             isFocused={highlightedLetterKey === lk}
-                                                                            onLongPress={!readOnly ? onLetterFocus : undefined}
+                                                                            onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                                                         />
                                                                     );
                                                                 })}

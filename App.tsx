@@ -501,6 +501,30 @@ const App: React.FC = () => {
 
   // Debounce timer for shared-report sync (avoids hammering DB on rapid updates)
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Subscribed Realtime channel for the current live session. Kept alive so
+  // broadcasts (buzz, letter_focus) go through WebSocket, not the REST fallback.
+  const liveSessionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => {
+    if (!sessionStudentId || !currentUser || currentUser.role !== 'teacher') {
+      liveSessionChannelRef.current?.unsubscribe();
+      liveSessionChannelRef.current = null;
+      return;
+    }
+    const teacherId = currentUser.id;
+    let active = true;
+    getStudentReportId(teacherId, sessionStudentId).then(reportId => {
+      if (!active || !reportId) return;
+      const ch = supabase.channel(`report-plays-${reportId}`);
+      ch.subscribe();
+      liveSessionChannelRef.current = ch;
+    });
+    return () => {
+      active = false;
+      liveSessionChannelRef.current?.unsubscribe();
+      liveSessionChannelRef.current = null;
+    };
+  }, [sessionStudentId]);
 
   const handleExportBackup = () => {
     try {
@@ -642,8 +666,10 @@ const App: React.FC = () => {
         const reportId = await getStudentReportId(currentUser.id, updatedStudent.id);
         if (!reportId) return; // no shared report exists yet — nothing to sync
         await syncStudentDataInReport(reportId, updatedStudent);
-        // Broadcast live update to any open student portal
-        supabase.channel(`report-plays-${reportId}`).send({
+        // Broadcast live update to any open student portal.
+        // Prefer the already-subscribed session channel; fall back to a fresh one.
+        const broadcastCh = liveSessionChannelRef.current ?? supabase.channel(`report-plays-${reportId}`);
+        broadcastCh.send({
           type: 'broadcast',
           event: 'report_updated',
           payload: {
@@ -918,11 +944,8 @@ const App: React.FC = () => {
 
   // Broadcast a real-time "buzz" to the student's open portal when the tutor
   // presses Ctrl during a live session. Fire-and-forget — no UI feedback needed.
-  const handleMistakeBuzz = async () => {
-    if (!currentUser || currentUser.role !== 'teacher' || !sessionStudentId) return;
-    const reportId = await getStudentReportId(currentUser.id, sessionStudentId);
-    if (!reportId) return;
-    supabase.channel(`report-plays-${reportId}`).send({
+  const handleMistakeBuzz = () => {
+    liveSessionChannelRef.current?.send({
       type: 'broadcast',
       event: 'mistake_buzz',
       payload: { ts: Date.now() },
@@ -931,11 +954,8 @@ const App: React.FC = () => {
 
   // Broadcast a letter focus to the student's open portal when the tutor
   // long-presses a letter. Student's screen scrolls to and highlights that letter.
-  const handleLetterFocus = async (letterKey: string) => {
-    if (!currentUser || currentUser.role !== 'teacher' || !sessionStudentId) return;
-    const reportId = await getStudentReportId(currentUser.id, sessionStudentId);
-    if (!reportId) return;
-    supabase.channel(`report-plays-${reportId}`).send({
+  const handleLetterFocus = (letterKey: string) => {
+    liveSessionChannelRef.current?.send({
       type: 'broadcast',
       event: 'letter_focus',
       payload: { letterKey },
