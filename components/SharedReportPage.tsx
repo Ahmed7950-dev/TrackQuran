@@ -1001,6 +1001,10 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [buzzTrigger, setBuzzTrigger] = useState(0);
   // Set each time the tutor long-presses a letter — scrolls student to that letter.
   const [focusedLetterKey, setFocusedLetterKey] = useState<string | null>(null);
+  // Set alongside focusedLetterKey to trigger surah/page navigation before the scroll.
+  const [letterJumpKey, setLetterJumpKey] = useState<string | null>(null);
+  // Real-time cursor position broadcast by the tutor (C key mode).
+  const [cursorLetterKey, setCursorLetterKey] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
 
   // Apply theme to document
@@ -1088,10 +1092,23 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       .on('broadcast', { event: 'mistake_buzz' }, () => {
         setBuzzTrigger(prev => prev + 1);
       })
-      // Tutor long-pressed a letter → scroll student screen to that letter
+      // Tutor long-pressed a letter → navigate to its surah then scroll to it
       .on('broadcast', { event: 'letter_focus' }, ({ payload }: { payload: Record<string, unknown> }) => {
         const lk = payload?.letterKey as string | undefined;
-        if (lk) setFocusedLetterKey(lk);
+        if (!lk) return;
+        setFocusedLetterKey(lk);
+        // Extract surah:ayah to trigger navigation even if in a different surah/page
+        const parts = lk.split(':');
+        if (parts.length >= 2) setLetterJumpKey(`${parts[0]}:${parts[1]}`);
+      })
+      // Tutor moved cursor (C key mode active) → show orange dot on that letter
+      .on('broadcast', { event: 'cursor_move' }, ({ payload }: { payload: Record<string, unknown> }) => {
+        const lk = payload?.letterKey as string | undefined;
+        if (lk) setCursorLetterKey(lk);
+      })
+      // Tutor toggled cursor mode off → hide orange dot
+      .on('broadcast', { event: 'cursor_off' }, () => {
+        setCursorLetterKey(null);
       })
       // Teacher added/changed any student data → refresh mistakes, progress and homework live
       .on('broadcast', { event: 'report_updated' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -1540,6 +1557,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                     readOnly
                     externalBuzzTrigger={buzzTrigger}
                     focusedLetterKey={focusedLetterKey}
+                    cursorLetterKey={cursorLetterKey}
                     toolbarStickyTop={156}
                     notesStudentId={report.student_id}
                     student={quranFakeStudent}
@@ -1558,7 +1576,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                     onLogTafseerRange={noop}
                     onRemoveTafseerRange={noop}
                     onGoBack={noop}
-                    jumpToVerseKey={homeworkJumpKey}
+                    jumpToVerseKey={letterJumpKey ?? homeworkJumpKey}
                     nameCardExtra={homeworkBadge}
                     homeworkRanges={activeHwList}
                   />

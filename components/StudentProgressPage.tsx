@@ -84,6 +84,16 @@ interface StudentProgressPageProps {
    * component scrolls to that letter and highlights it in purple.
    */
   focusedLetterKey?: string | null;
+  /**
+   * Called (tutor side) when cursor mode is active and the cursor moves to a
+   * new letter, or null when cursor mode is toggled off.
+   */
+  onCursorMove?: (key: string | null) => void;
+  /**
+   * The letter key the tutor's cursor is currently over (student side).
+   * Shows an orange pulsing dot on that letter.
+   */
+  cursorLetterKey?: string | null;
 }
 
 const getAge = (dob: string) => {
@@ -836,6 +846,7 @@ const LetterWithError: React.FC<{
     letterIndex: number; // Index of letter in word
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
+    isCursorActive?: boolean;
 }> = ({
     letter,
     letterKey,
@@ -858,6 +869,7 @@ const LetterWithError: React.FC<{
     isLastLetterOfWord,
     onLongPress,
     isFocused,
+    isCursorActive,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
@@ -928,6 +940,12 @@ const LetterWithError: React.FC<{
 
     return (
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
+            {isCursorActive && (
+                <span
+                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-orange-400 animate-pulse"
+                    style={{ pointerEvents: 'none', zIndex: 50 }}
+                />
+            )}
             {isEditing && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
                     <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -1391,7 +1409,7 @@ const isVerseInHomeworkRange = (
     return false;
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1502,6 +1520,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Keep onLetterFocus in a ref for the same reason (used in a stable callback).
     const onLetterFocusRef = useRef(onLetterFocus);
     useEffect(() => { onLetterFocusRef.current = onLetterFocus; }, [onLetterFocus]);
+
+    // Cursor mode (C key toggle, tutor side only).
+    const [cursorModeActive, setCursorModeActive] = useState(false);
+    const cursorModeRef = useRef(false);
+    useEffect(() => { cursorModeRef.current = cursorModeActive; }, [cursorModeActive]);
+    const onCursorMoveRef = useRef(onCursorMove);
+    useEffect(() => { onCursorMoveRef.current = onCursorMove; }, [onCursorMove]);
     const { t } = useI18n();
 
     const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
@@ -1838,10 +1863,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         if (!focusedLetterKey) return;
         setHighlightedLetterKey(focusedLetterKey);
-        const el = document.getElementById(`letter-${focusedLetterKey}`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (highlightClearTimer.current) clearTimeout(highlightClearTimer.current);
         highlightClearTimer.current = setTimeout(() => setHighlightedLetterKey(null), 3000);
+        // Element may not be in the DOM yet if we're navigating to a different
+        // surah/page — retry up to 5 times with increasing delays.
+        const tryScroll = (attempt: number) => {
+            const el = document.getElementById(`letter-${focusedLetterKey}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (attempt < 5) {
+                setTimeout(() => tryScroll(attempt + 1), 300 + attempt * 200);
+            }
+        };
+        tryScroll(0);
     }, [focusedLetterKey]);
 
     // Stable callback for tutor long-press: highlights locally (instant feedback)
@@ -1904,10 +1938,51 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             // Error type shortcuts
             if (event.key.toLowerCase() === 'r') { event.preventDefault(); setErrorType('reading'); }
             else if (event.key.toLowerCase() === 't') { event.preventDefault(); setErrorType('tajweed'); }
+
+            // C key — toggle live cursor sharing with student
+            if (event.key.toLowerCase() === 'c' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                event.preventDefault();
+                const newMode = !cursorModeRef.current;
+                cursorModeRef.current = newMode;
+                setCursorModeActive(newMode);
+                if (!newMode) onCursorMoveRef.current?.(null);
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+
+    // Mousemove tracker — only active when cursor mode is on (tutor side).
+    useEffect(() => {
+        if (!cursorModeActive || readOnly) return;
+        let lastKey: string | null = null;
+        let scheduled = false;
+        const handleMouseMove = (e: MouseEvent) => {
+            if (scheduled) return;
+            scheduled = true;
+            setTimeout(() => {
+                scheduled = false;
+                const els = document.elementsFromPoint(e.clientX, e.clientY);
+                let foundKey: string | null = null;
+                outer: for (const el of els) {
+                    let node: Element | null = el;
+                    while (node) {
+                        if (node.id?.startsWith('letter-')) {
+                            foundKey = node.id.slice(7);
+                            break outer;
+                        }
+                        node = node.parentElement;
+                    }
+                }
+                if (foundKey !== lastKey) {
+                    lastKey = foundKey;
+                    onCursorMoveRef.current?.(foundKey);
+                }
+            }, 50);
+        };
+        document.addEventListener('mousemove', handleMouseMove);
+        return () => document.removeEventListener('mousemove', handleMouseMove);
+    }, [cursorModeActive, readOnly]);
 
     // ── Focus-mode: RAF momentum scroll driven by arrow keys ─────────────────
     useEffect(() => {
@@ -3006,6 +3081,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isLastWordInVerse={isLastWordInVerse}
                                     isLastLetterOfWord={isLastLetterOfWord}
                                     isFocused={highlightedLetterKey === letterKey}
+                                    isCursorActive={cursorLetterKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                 />
                             );
@@ -3605,6 +3681,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isLastWordInVerse={false}
                                                                             isLastLetterOfWord={li === letters.length - 1}
                                                                             isFocused={highlightedLetterKey === lk}
+                                                                            isCursorActive={cursorLetterKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                                                         />
                                                                     );

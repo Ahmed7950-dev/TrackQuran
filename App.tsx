@@ -962,6 +962,15 @@ const App: React.FC = () => {
     });
   };
 
+  // Broadcast real-time cursor position (C key mode). null = cursor mode off.
+  const handleCursorMove = (letterKey: string | null) => {
+    liveSessionChannelRef.current?.send({
+      type: 'broadcast',
+      event: letterKey ? 'cursor_move' : 'cursor_off',
+      payload: letterKey ? { letterKey } : {},
+    });
+  };
+
   const handleBack = () => {
     // If the user navigated to a tool page from the sidebar, go back to the
     // student page rather than all the way back to the dashboard.
@@ -1704,6 +1713,7 @@ const App: React.FC = () => {
             onGoBack={() => setSessionStudentId(null)}
             onMistakeBuzz={handleMistakeBuzz}
             onLetterFocus={handleLetterFocus}
+            onCursorMove={handleCursorMove}
           />
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (
