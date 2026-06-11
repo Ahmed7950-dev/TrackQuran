@@ -1077,7 +1077,10 @@ const LetterWithError: React.FC<{
                     // the line (the "alif with circled sukoon under the line" bug).
                     segmentForWaqfFont(letter).map(({ segment, useAmiri }, idx) =>
                         useAmiri ? (
-                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{segment}</span>
+                            // lineHeight:1 + baseline: Amiri Quran's font box is much
+                            // taller than the Quranic fonts; combined with the outer
+                            // align-top span it pushes the glyph below the baseline.
+                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif", lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
                         ) : (
                             <span key={idx}>{segment}</span>
                         )
@@ -1125,8 +1128,10 @@ const TajweedWord: React.FC<{
             <React.Fragment key={unitIndex}>
                 {segs.map(({ segment, useAmiri }, i) =>
                     useAmiri ? (
+                        // lineHeight:1 + baseline: see LetterWithError — prevents the
+                        // taller Amiri Quran font box from sinking the glyph below the line.
                         <span key={i} className={className}
-                              style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>{segment}</span>
+                              style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif", lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
                     ) : (
                         <span key={i} className={className}>{segment}</span>
                     )
