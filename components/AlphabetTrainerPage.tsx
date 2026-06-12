@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
+import AirplaneGame from './AirplaneGame';
 
 const LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
 
@@ -73,7 +74,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win';
+type View = 'select' | 'practice' | 'win' | 'airplane';
+type GameChoice = 'tower' | 'airplane';
 
 const AlphabetTrainerPage: React.FC = () => {
   const { t } = useI18n();
@@ -88,6 +90,7 @@ const AlphabetTrainerPage: React.FC = () => {
 
   const [childMode, setChildMode] = useState(false);
   const [view, setView] = useState<View>('select');
+  const [gameChoice, setGameChoice] = useState<GameChoice>('tower');
   const [queue, setQueue] = useState<string[]>([]);
   const [pos, setPos] = useState(0);
   const [restartMsg, setRestartMsg] = useState('');
@@ -186,12 +189,20 @@ const AlphabetTrainerPage: React.FC = () => {
 
   const handleStart = () => {
     if (unique === 0) return;
+    if (childMode && gameChoice === 'airplane') {
+      setView('airplane');
+      return;
+    }
     const q = buildQueue(priorities);
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
     consecutiveCorrect.current = 0;
     gameRef.current?.setStreak(0);
     gameRef.current?.reset();
   };
+
+  // Unique letters chosen for the challenge (priority > 0) — the airplane
+  // game tests each selected letter once.
+  const selectedLetters = LETTERS.filter((_, i) => priorities[i] > 0);
 
   const advancePos = () => {
     setPos(prev => {
@@ -395,6 +406,38 @@ const AlphabetTrainerPage: React.FC = () => {
           );
         })}
       </div>
+
+      {/* ── Game picker (child mode) ──────────────────────────────────────── */}
+      {childMode && (
+        <div className="mb-6">
+          <p className="text-center text-xs mb-2 font-bold text-indigo-600">
+            Pick your game! 🎮
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            {([
+              { id: 'tower' as GameChoice,    emoji: '🏰', title: 'Castle Battle', sub: 'Answer letters to send soldiers!' },
+              { id: 'airplane' as GameChoice, emoji: '✈️', title: 'Letter Flight', sub: 'Hear a letter, fly to its bubble!' },
+            ]).map(g => {
+              const active = gameChoice === g.id;
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => setGameChoice(g.id)}
+                  className={`flex flex-col items-center px-5 py-3 rounded-2xl border-4 transition-all duration-150 select-none active:scale-95 ${
+                    active
+                      ? 'bg-indigo-500 border-indigo-300 text-white shadow-lg shadow-indigo-200 scale-105'
+                      : 'bg-white border-indigo-100 text-indigo-700 hover:border-indigo-300'
+                  }`}
+                >
+                  <span className="text-3xl mb-1">{g.emoji}</span>
+                  <span className="font-extrabold text-sm">{g.title}</span>
+                  <span className={`text-[10px] ${active ? 'opacity-90' : 'opacity-60'}`}>{g.sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Action row */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -683,6 +726,11 @@ const AlphabetTrainerPage: React.FC = () => {
       {view === 'select'   && renderSelect()}
       {view === 'practice' && renderPractice()}
       {view === 'win'      && renderWin()}
+      {view === 'airplane' && (
+        <div className="max-w-3xl mx-auto px-4 pb-8">
+          <AirplaneGame letters={selectedLetters} onExit={() => setView('select')} />
+        </div>
+      )}
     </div>
   );
 };
