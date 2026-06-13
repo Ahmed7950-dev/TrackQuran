@@ -1071,12 +1071,20 @@ const LetterWithError: React.FC<{
                 onTouchStart={startLongPress}
                 onTouchEnd={cancelLongPress}
                 onTouchCancel={cancelLongPress}
-                className={`inline cursor-pointer transition-colors relative z-10 ${
+                className={`inline cursor-pointer transition-colors ${
                     shouldHighlightSilent(letter)
                         ? '!text-slate-400 dark:!text-slate-500'
                         : `${showGhunnah && shouldHighlightGhunnah(letter, letterIndex, word, nextWord) ? '!text-green-600 dark:!text-green-400' : ''} ${showMadd && shouldHighlightMadd(letter, letterIndex, word, prevWord) ? '!text-pink-600 dark:!text-pink-400' : ''} ${showQalqalah && shouldHighlightQalqalah(letter, letterIndex, word, isLastWordInVerse, isLastLetterOfWord) ? '!text-sky-500 dark:!text-sky-400' : ''}`
                 }`}
-                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', position: 'relative', zIndex: 10, ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
+                // NOTE: do NOT add `position: relative` + `z-index` here. iOS Safari has a
+                // long-standing bug where an INLINE element with position:relative and a
+                // z-index intermittently fails to paint its background-color (the mistake
+                // highlight) while absolutely-positioned children still render — which made
+                // the annotation appear above a letter with no highlight on iPad. The
+                // overlays (annotation, cursor dot, edit popup) anchor to the outer span,
+                // and the iqlab meem has its own relative wrapper, so neither is needed here.
+                // box-decoration-break:clone keeps the highlight painting if a letter wraps.
+                style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
                 {needsIqlabOverlay(letter) ? (
                     <span style={{ position: 'relative', display: 'inline' }}>
