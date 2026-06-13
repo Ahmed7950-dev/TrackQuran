@@ -1583,6 +1583,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [cursorModeActive, setCursorModeActive] = useState(false);
     const cursorModeRef = useRef(false);
     useEffect(() => { cursorModeRef.current = cursorModeActive; }, [cursorModeActive]);
+    // The letter the tutor's own cursor is over — mirrors the glow the student
+    // sees so the tutor can confirm exactly which letter they're pointing at.
+    const [localCursorKey, setLocalCursorKey] = useState<string | null>(null);
     const onCursorMoveRef = useRef(onCursorMove);
     useEffect(() => { onCursorMoveRef.current = onCursorMove; }, [onCursorMove]);
     const { t } = useI18n();
@@ -2012,7 +2015,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     // Mousemove tracker — only active when cursor mode is on (tutor side).
     useEffect(() => {
-        if (!cursorModeActive || readOnly) return;
+        if (!cursorModeActive || readOnly) { setLocalCursorKey(null); return; }
         let lastKey: string | null = null;
         let scheduled = false;
         const handleMouseMove = (e: MouseEvent) => {
@@ -2034,7 +2037,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
                 if (foundKey !== lastKey) {
                     lastKey = foundKey;
-                    onCursorMoveRef.current?.(foundKey);
+                    setLocalCursorKey(foundKey);          // mirror the glow locally
+                    onCursorMoveRef.current?.(foundKey);  // broadcast to the student
                 }
             }, 50);
         };
@@ -3139,7 +3143,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isLastWordInVerse={isLastWordInVerse}
                                     isLastLetterOfWord={isLastLetterOfWord}
                                     isFocused={highlightedLetterKey === letterKey}
-                                    isCursorActive={cursorLetterKey === letterKey}
+                                    isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                 />
                             );
@@ -3759,7 +3763,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isLastWordInVerse={false}
                                                                             isLastLetterOfWord={li === letters.length - 1}
                                                                             isFocused={highlightedLetterKey === lk}
-                                                                            isCursorActive={cursorLetterKey === lk}
+                                                                            isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                                                         />
                                                                     );
