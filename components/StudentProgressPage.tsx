@@ -988,12 +988,6 @@ const LetterWithError: React.FC<{
 
     return (
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
-            {isCursorActive && (
-                <span
-                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-orange-400 animate-pulse"
-                    style={{ pointerEvents: 'none', zIndex: 50 }}
-                />
-            )}
             {isEditing && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
                     <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden">
@@ -1071,7 +1065,7 @@ const LetterWithError: React.FC<{
                 onTouchStart={startLongPress}
                 onTouchEnd={cancelLongPress}
                 onTouchCancel={cancelLongPress}
-                className={`inline cursor-pointer transition-colors ${
+                className={`inline cursor-pointer transition-colors ${isCursorActive ? 'cursor-pointer-glow' : ''} ${
                     shouldHighlightSilent(letter)
                         ? '!text-slate-400 dark:!text-slate-500'
                         : `${showGhunnah && shouldHighlightGhunnah(letter, letterIndex, word, nextWord) ? '!text-green-600 dark:!text-green-400' : ''} ${showMadd && shouldHighlightMadd(letter, letterIndex, word, prevWord) ? '!text-pink-600 dark:!text-pink-400' : ''} ${showQalqalah && shouldHighlightQalqalah(letter, letterIndex, word, isLastWordInVerse, isLastLetterOfWord) ? '!text-sky-500 dark:!text-sky-400' : ''}`
@@ -3328,6 +3322,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     return (
         <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
+            {/* Cursor-sharing indicator (tutor side) — confirms the student can
+                see where the tutor is pointing. Toggle with the C key. */}
+            {cursorModeActive && !readOnly && (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500 text-white text-sm font-bold shadow-lg shadow-cyan-500/40 pointer-events-none select-none">
+                    <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+                    </span>
+                    Pointer visible to student · press C to stop
+                </div>
+            )}
             {/* Red screen overlay for mistake indication */}
             {showMistakeHighlight && (
                 <div 
@@ -3401,6 +3406,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         opacity: 0;
                         transform: scale(0.8);
                     }
+                }
+                /* Tutor's live pointer — pulsing cyan highlight on the student's screen */
+                @keyframes cursorGlow {
+                    0%, 100% { background-color: rgba(34,211,238,0.35); box-shadow: 0 0 0 2px rgba(6,182,212,0.55); }
+                    50%      { background-color: rgba(34,211,238,0.60); box-shadow: 0 0 10px 3px rgba(6,182,212,0.85); }
+                }
+                .cursor-pointer-glow {
+                    border-radius: 5px;
+                    animation: cursorGlow 1.1s ease-in-out infinite;
                 }
                 @keyframes shake {
                     0%, 100% {
