@@ -7,7 +7,7 @@ import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterA
 //
 // To use the real PNG plane image instead of the SVG:
 //   1. Copy the plane PNG to: public/sprites/jet-plane.png
-//   2. Replace <JetPlane /> below with:
+//   2. Replace <JetPlane src={PLANES[selectedPlane].url} /> below with:
 //      <img src="/sprites/jet-plane.png" width="150" alt="jet" style={{ display:'block' }} />
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -83,16 +83,23 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
 const playSuccess = () => playTone([523, 659, 784], 0.12);
 const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
-// ── Jet plane icon ────────────────────────────────────────────────────────────
-const PLANE_ICON = 'https://img.icons8.com/external-flat-juicy-fish/60/external-fighter-vehicles-flat-flat-juicy-fish.png';
+// ── Vehicle options ───────────────────────────────────────────────────────────
+const PLANES = [
+  { label: 'Private Plane',      url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-private-vehicles-soft-fill-soft-fill-juicy-fish.png' },
+  { label: 'Single Engine',      url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-single-vehicles-soft-fill-soft-fill-juicy-fish.png' },
+  { label: 'Helicopter',         url: 'https://img.icons8.com/external-those-icons-lineal-color-those-icons/24/external-Helicopter-transportation-and-vehicles-those-icons-lineal-color-those-icons.png' },
+  { label: 'Med Helicopter',     url: 'https://img.icons8.com/external-photo3ideastudio-lineal-color-photo3ideastudio/64/external-helicopter-emergency-photo3ideastudio-lineal-color-photo3ideastudio.png' },
+  { label: 'Jet Bomber',         url: 'https://img.icons8.com/external-smashingstocks-flat-smashing-stocks/66/external-Jet-Plane-war-and-army-smashingstocks-flat-smashing-stocks-4.png' },
+  { label: 'Space Shuttle',      url: 'https://img.icons8.com/arcade/64/space-shuttle.png' },
+];
 
 // Background scroll speed in pixels per second. Increase to scroll faster.
 const BG_SCROLL_SPEED = 120;
 
-const JetPlane: React.FC = () => (
+const JetPlane: React.FC<{ src: string }> = ({ src }) => (
   <img
-    src={PLANE_ICON}
-    alt="jet"
+    src={src}
+    alt="vehicle"
     width={90}
     height={90}
     style={{ display: 'block', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))' }}
@@ -105,9 +112,10 @@ interface AirplaneGameProps {
 }
 
 const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
-  const [status, setStatus]     = useState<GameStatus>('start');
-  const [fuel, setFuel]         = useState(START_FUEL);
-  const [score, setScore]       = useState(0);
+  const [status, setStatus]       = useState<GameStatus>('start');
+  const [selectedPlane, setSelectedPlane] = useState(0);
+  const [fuel, setFuel]           = useState(START_FUEL);
+  const [score, setScore]         = useState(0);
   const [queue, setQueue]       = useState<string[]>([]);
   const [queuePos, setQueuePos] = useState(0);
   const [bubbles, setBubbles]   = useState<Bubble[]>([]);
@@ -434,7 +442,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
           className="absolute z-20 pointer-events-none"
           style={{ left: `${planePos.current.x}%`, top: `${planePos.current.y}%`, transform: 'translate(-50%,-50%)' }}
         >
-          <JetPlane />
+          <JetPlane src={PLANES[selectedPlane].url} />
         </div>
       )}
 
@@ -459,15 +467,30 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       {/* ── Start screen ── */}
       {status === 'start' && overlay(
         <>
-          <div className="flex justify-center mb-3"><JetPlane /></div>
-          <h3 className="text-2xl font-extrabold text-sky-700 mb-2">Letter Flight!</h3>
-          <p className="text-sm font-semibold text-slate-500 mb-1">
-            Listen to the Arabic letter, then fly your jet into the correct bubble!
-          </p>
-          <p className="text-xs text-slate-400 mb-4" style={{ direction: 'rtl' }}>
-            استمع إلى الحرف ثم طِر بالطائرة إلى الفقاعة الصحيحة
-          </p>
-          <p className="text-xs font-bold text-indigo-500 mb-5">⬆️⬇️⬅️➡️ Arrow keys to fly · ⛽ Don't run out of fuel!</p>
+          <h3 className="text-xl font-extrabold text-sky-700 mb-1">Letter Flight!</h3>
+          <p className="text-xs font-semibold text-slate-400 mb-3">Choose your vehicle</p>
+          {/* Vehicle grid */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {PLANES.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedPlane(i)}
+                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all select-none ${
+                  selectedPlane === i
+                    ? 'border-orange-400 bg-orange-50 shadow-md scale-105'
+                    : 'border-slate-200 bg-white hover:border-sky-300'
+                }`}
+              >
+                <span className="absolute top-1 left-1.5 text-[10px] font-extrabold text-slate-400">{i + 1}</span>
+                <img src={p.url} alt={p.label} width={52} height={52} style={{ display: 'block' }} />
+              </button>
+            ))}
+          </div>
+          {/* Preview selected vehicle */}
+          <div className="flex justify-center mb-3">
+            <JetPlane src={PLANES[selectedPlane].url} />
+          </div>
+          <p className="text-xs font-bold text-indigo-500 mb-4">⬆️⬇️ Arrow keys to fly · ⛽ Don't run out of fuel!</p>
           <div className="flex gap-2 justify-center">
             <button onClick={startGame}
               className="px-7 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold text-lg shadow-md active:scale-95 transition-all">
