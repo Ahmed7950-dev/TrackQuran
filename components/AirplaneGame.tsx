@@ -78,8 +78,23 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
 const playSuccess = () => playTone([523, 659, 784], 0.12);
 const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
-// ── F-86 Sabre SVG (faces right, transparent bg, matches the provided PNG) ────
-const JetPlane: React.FC = () => (
+// ── Jet plane — uses the PNG from public/sprites/jet-plane.png.
+//    Save the PNG there and it will be used automatically.
+//    The SVG below is a fallback if the file is missing. ───────────────────────
+const JetPlane: React.FC = () => {
+  const [pngFailed, setPngFailed] = React.useState(false);
+  if (!pngFailed) {
+    return (
+      <img
+        src="/sprites/jet-plane.png"
+        alt="jet"
+        width={160}
+        style={{ display: 'block', objectFit: 'contain' }}
+        onError={() => setPngFailed(true)}
+      />
+    );
+  }
+  return (
   <svg viewBox="0 0 160 58" width="152" height="55" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="ag-fuse" x1="0" y1="0" x2="0" y2="1">
@@ -161,7 +176,8 @@ const JetPlane: React.FC = () => (
     <rect x="58.5" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
     <rect x="77" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
   </svg>
-);
+  );
+};
 
 // ── Cloud SVG ─────────────────────────────────────────────────────────────────
 const CloudShape: React.FC<{ w: number; opacity: number }> = ({ w, opacity }) => (
@@ -301,8 +317,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       } else {
         setTimeout(() => setBubbles([]), 500);
         setTimeout(() => {
-          planePos.current = { x: 14, y: 50 };
-          velRef.current   = { x: 0, y: 0 };
           startRound(queue[next]);
         }, 700);
       }
