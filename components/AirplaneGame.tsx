@@ -83,131 +83,18 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
 const playSuccess = () => playTone([523, 659, 784], 0.12);
 const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
-// ── Jet plane — loads PNG and strips its solid background via canvas ──────────
-const JetPlane: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [useSvg, setUseSvg] = React.useState(false);
+// ── Jet plane icon (icons8 soft-fill juicy-fish pack) ────────────────────────
+const PLANE_ICON = 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-single-vehicles-soft-fill-soft-fill-juicy-fish.png';
 
-  React.useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const c = canvasRef.current;
-      if (!c) return;
-      const ctx = c.getContext('2d');
-      if (!ctx) return;
-      c.width  = img.naturalWidth;
-      c.height = img.naturalHeight;
-      ctx.drawImage(img, 0, 0);
-      try {
-        const data = ctx.getImageData(0, 0, c.width, c.height);
-        const px = data.data;
-        // Sample top-left corner as the background colour
-        const bgR = px[0], bgG = px[1], bgB = px[2];
-        for (let i = 0; i < px.length; i += 4) {
-          const dist = Math.abs(px[i] - bgR) + Math.abs(px[i+1] - bgG) + Math.abs(px[i+2] - bgB);
-          if (dist < 45)       px[i+3] = 0;                                   // solid bg → transparent
-          else if (dist < 90)  px[i+3] = Math.round(((dist - 45) / 45) * 255); // edge → fade
-        }
-        ctx.putImageData(data, 0, 0);
-      } catch { /* cross-origin guard — canvas stays with bg */ }
-    };
-    img.onerror = () => setUseSvg(true);
-    img.src = '/sprites/jet-plane.png';
-  }, []);
-
-  if (useSvg) return (
-  <svg viewBox="0 0 160 58" width="152" height="55" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="ag-fuse" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stopColor="#dce8ee"/>
-        <stop offset="48%"  stopColor="#c0cfd7"/>
-        <stop offset="100%" stopColor="#90a5b0"/>
-      </linearGradient>
-      <linearGradient id="ag-wing" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stopColor="#c8d8e0"/>
-        <stop offset="100%" stopColor="#9ab0ba"/>
-      </linearGradient>
-      <radialGradient id="ag-intake" cx="40%" cy="35%">
-        <stop offset="0%"   stopColor="#2c3e50"/>
-        <stop offset="100%" stopColor="#0d1b22"/>
-      </radialGradient>
-    </defs>
-
-    {/* ── Exhaust glow ── */}
-    <ellipse cx="9"  cy="29" rx="10" ry="7"  fill="#ff6b00" opacity="0.72"/>
-    <ellipse cx="5"  cy="29" rx="6.5" ry="4.5" fill="#ffaa00" opacity="0.82"/>
-    <ellipse cx="2"  cy="29" rx="3.5" ry="3"  fill="#ffe066" opacity="0.65"/>
-
-    {/* ── Main fuselage ── */}
-    <path d="M15 20 Q60 17 128 18 L150 29 L128 40 Q60 41 15 38 Z" fill="url(#ag-fuse)"/>
-
-    {/* ── Drop tank ── */}
-    <path d="M70 38 L92 38 Q97 46 92 47 L70 47 Q65 46 70 38Z" fill="#a4b5bc"/>
-    <path d="M70 38 L92 38 L92 39 L70 39Z" fill="white" opacity="0.18"/>
-
-    {/* ── Main swept wings ── */}
-    <path d="M92 27 L116 4  L124 8  L103 27Z" fill="url(#ag-wing)"/>
-    <path d="M92 31 L116 54 L124 50 L103 31Z" fill="url(#ag-wing)"/>
-    {/* Wing tip pods */}
-    <ellipse cx="120" cy="6"  rx="5" ry="2.5" fill="#9ab0ba" transform="rotate(-30,120,6)"/>
-    <ellipse cx="120" cy="52" rx="5" ry="2.5" fill="#9ab0ba" transform="rotate(30,120,52)"/>
-    {/* Wing highlight */}
-    <path d="M92 27 L116 4 L117 5 L93 27Z" fill="white" opacity="0.18"/>
-
-    {/* ── Vertical tail fin ── */}
-    <path d="M17 27 L21 7  L32 22Z" fill="url(#ag-wing)"/>
-    {/* ── Horizontal stabilizers ── */}
-    <path d="M26 25 L6  18 L17 23 L26 26Z" fill="url(#ag-wing)"/>
-    <path d="M26 33 L6  40 L17 35 L26 32Z" fill="url(#ag-wing)"/>
-
-    {/* ── Nose cap ── */}
-    <path d="M128 18 L150 29 L128 40Z" fill="#9eb0b8"/>
-    <path d="M132 22 L148 29 L132 36Z" fill="#aabec7"/>
-
-    {/* ── Engine intake ── */}
-    <circle cx="135" cy="29" r="10" fill="url(#ag-intake)"/>
-    <circle cx="135" cy="29" r="7.5" fill="#0d1b22"/>
-    <circle cx="135" cy="29" r="4"   fill="#1a2d38"/>
-    <circle cx="133" cy="27" r="1.5" fill="#2c3e50" opacity="0.6"/>
-
-    {/* ── Cockpit ── */}
-    <path d="M93 19 L118 15 L127 23 L124 28 L93 28Z" fill="#7ec8e3" opacity="0.88"/>
-    <path d="M95 20 L116 16 L123 23 L121 27 L95 27Z" fill="#d4f1fb" opacity="0.38"/>
-    {/* Canopy frame lines */}
-    <line x1="107" y1="15.5" x2="104" y2="27.5" stroke="#5aa0b8" strokeWidth="0.8" opacity="0.6"/>
-    <line x1="116" y1="15"   x2="114" y2="27.5" stroke="#5aa0b8" strokeWidth="0.8" opacity="0.6"/>
-
-    {/* ── Fuselage highlights/shadows ── */}
-    <path d="M15 21 Q60 18 128 19 L130 22 Q60 21 15 24Z" fill="white" opacity="0.18"/>
-    <path d="M15 36 Q60 37 128 37 L130 40 Q60 41 15 38Z" fill="#3a5060" opacity="0.18"/>
-
-    {/* ── Panel rivet lines ── */}
-    <line x1="46" y1="20" x2="46" y2="38" stroke="#7a9aaa" strokeWidth="0.5" opacity="0.45"/>
-    <line x1="110" y1="19" x2="110" y2="39" stroke="#7a9aaa" strokeWidth="0.5" opacity="0.45"/>
-
-    {/* ── USAF Roundel ── */}
-    <circle cx="68" cy="29" r="12" fill="#002868"/>
-    <circle cx="68" cy="29" r="10" fill="white"/>
-    {/* 5-point star */}
-    <polygon
-      points="68,21.5 70.2,27.1 76.2,27.1 71.5,30.7 73.6,36.3 68,32.7 62.4,36.3 64.5,30.7 59.8,27.1 65.8,27.1"
-      fill="#002868"
-    />
-    {/* Red bars */}
-    <rect x="58.5" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
-    <rect x="77" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
-  </svg>
-  );
-
-  // PNG with canvas-stripped background
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: 160, height: 55, display: 'block', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.3))' }}
-    />
-  );
-};
+const JetPlane: React.FC = () => (
+  <img
+    src={PLANE_ICON}
+    alt="jet"
+    width={90}
+    height={90}
+    style={{ display: 'block', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))' }}
+  />
+);
 
 // ── Cloud SVG ─────────────────────────────────────────────────────────────────
 const CloudShape: React.FC<{ w: number; opacity: number }> = ({ w, opacity }) => (
