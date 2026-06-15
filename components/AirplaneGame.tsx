@@ -85,7 +85,9 @@ const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
 // ── Jet plane icon ────────────────────────────────────────────────────────────
 const PLANE_ICON = 'https://img.icons8.com/external-flat-juicy-fish/60/external-fighter-vehicles-flat-flat-juicy-fish.png';
-const CLOUD_ICON = 'https://img.icons8.com/cotton/64/clouds--v1.png';
+
+// Seconds for one full background scroll cycle. Lower = faster.
+const BG_SCROLL_SPEED = 18;
 
 const JetPlane: React.FC = () => (
   <img
@@ -96,36 +98,6 @@ const JetPlane: React.FC = () => (
     style={{ display: 'block', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))' }}
   />
 );
-
-// ── Cloud icon ────────────────────────────────────────────────────────────────
-const CloudShape: React.FC<{ w: number; opacity: number }> = ({ w, opacity }) => (
-  <svg width={w} height={w * 0.55} viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg"
-    style={{ display: 'block', opacity }}>
-    <ellipse cx="100" cy="75" rx="90" ry="32" fill="white" />
-    <ellipse cx="72"  cy="60" rx="48" ry="36" fill="white" />
-    <ellipse cx="120" cy="55" rx="52" ry="40" fill="white" />
-    <ellipse cx="155" cy="68" rx="36" ry="28" fill="white" />
-    <ellipse cx="45"  cy="70" rx="32" ry="24" fill="white" />
-  </svg>
-);
-
-// ── Cloud data ────────────────────────────────────────────────────────────────
-const FAR_CLOUDS  = [
-  { top: '7%',  w: 90,  delay: 0,    dur: 120 },
-  { top: '14%', w: 70,  delay: -38,  dur: 120 },
-  { top: '4%',  w: 110, delay: -75,  dur: 120 },
-  { top: '10%', w: 80,  delay: -105, dur: 120 },
-];
-const MID_CLOUDS  = [
-  { top: '22%', w: 130, delay: 0,    dur: 70 },
-  { top: '18%', w: 100, delay: -22,  dur: 70 },
-  { top: '28%', w: 150, delay: -50,  dur: 70 },
-];
-const NEAR_CLOUDS = [
-  { top: '34%', w: 180, delay: 0,    dur: 38 },
-  { top: '48%', w: 210, delay: -12,  dur: 38 },
-  { top: '28%', w: 160, delay: -24,  dur: 38 },
-];
 
 interface AirplaneGameProps {
   letters: string[];
@@ -177,9 +149,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
         0%   { transform: translate(-50%,-50%) scale(1);   opacity:1; }
         100% { transform: translate(-50%,-50%) scale(1.8); opacity:0; }
       }
-      @keyframes ag-cloud {
+      @keyframes ag-bg-scroll {
         from { transform: translateX(0); }
-        to   { transform: translateX(-220vw); }
+        to   { transform: translateX(-50%); }
       }
       .ag-bubble { animation: ag-float 3.2s ease-in-out infinite; }
       .ag-popped { animation: ag-pop .45s ease-out forwards; }
@@ -368,45 +340,20 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       className="select-none"
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
-        background: 'linear-gradient(180deg, #0c2461 0%, #1e40af 18%, #2563eb 40%, #60a5fa 68%, #bae6fd 88%, #e8f7ff 100%)',
+        background: '#1a6fc4',
         touchAction: 'none',
       }}
     >
-      {/* ── Parallax cloud layers ── */}
-      {/* Far (slow) */}
-      {FAR_CLOUDS.map((c, i) => (
-        <div key={`fc${i}`} className="absolute pointer-events-none"
-          style={{ top: c.top, left: '110vw', animation: `ag-cloud ${c.dur}s linear ${c.delay}s infinite` }}>
-          <CloudShape w={c.w} opacity={0.55} />
+      {/* ── Scrolling background ── */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, overflow: 'hidden' }}>
+        <div style={{
+          display: 'flex',
+          height: '100%',
+          animation: `ag-bg-scroll ${BG_SCROLL_SPEED}s linear infinite`,
+        }}>
+          <img src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} />
+          <img src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} />
         </div>
-      ))}
-      {/* Mid */}
-      {MID_CLOUDS.map((c, i) => (
-        <div key={`mc${i}`} className="absolute pointer-events-none"
-          style={{ top: c.top, left: '110vw', animation: `ag-cloud ${c.dur}s linear ${c.delay}s infinite` }}>
-          <CloudShape w={c.w} opacity={0.72} />
-        </div>
-      ))}
-      {/* Near (fast, larger) */}
-      {NEAR_CLOUDS.map((c, i) => (
-        <div key={`nc${i}`} className="absolute pointer-events-none"
-          style={{ top: c.top, left: '110vw', animation: `ag-cloud ${c.dur}s linear ${c.delay}s infinite` }}>
-          <CloudShape w={c.w} opacity={0.88} />
-        </div>
-      ))}
-
-      {/* ── Ground strip with hills ── */}
-      <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ height: '10%', zIndex: 1 }}>
-        <svg viewBox="0 0 1000 60" preserveAspectRatio="none" width="100%" height="100%">
-          <defs>
-            <linearGradient id="ag-ground" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#22c55e"/>
-              <stop offset="100%" stopColor="#15803d"/>
-            </linearGradient>
-          </defs>
-          <path d="M0 30 Q80 10 160 28 Q260 50 360 22 Q460 0 560 24 Q660 50 760 18 Q860 0 960 26 L1000 30 L1000 60 L0 60Z" fill="url(#ag-ground)"/>
-          <path d="M0 40 Q100 28 200 38 Q300 50 400 32 Q500 18 600 36 Q700 52 800 30 Q900 14 1000 38 L1000 60 L0 60Z" fill="#16a34a"/>
-        </svg>
       </div>
 
       {/* ── HUD ── */}
