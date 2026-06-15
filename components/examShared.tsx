@@ -292,6 +292,39 @@ export const QuestionAnswerInput: React.FC<{
     );
   }
 
+  // Multi-word answer — one text input per word
+  if (type === 'multi_answer') {
+    const words = item.options ?? [];
+    let answers: string[] = [];
+    try { if (value) answers = JSON.parse(value); } catch { /* ignore */ }
+    while (answers.length < words.length) answers.push('');
+
+    const updateAnswer = (idx: number, v: string) => {
+      const next = [...answers];
+      next[idx] = v;
+      onChange?.(JSON.stringify(next));
+    };
+
+    return (
+      <div className="space-y-2">
+        {words.map((word, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <span className="flex-shrink-0 text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-[80px]" dir="auto">{word}</span>
+            <span className="text-slate-400 flex-shrink-0">→</span>
+            <input
+              value={answers[i] ?? ''}
+              disabled={disabled}
+              onChange={e => updateAnswer(i, e.target.value)}
+              dir="auto"
+              placeholder={disabled ? '' : 'Your answer…'}
+              className={`flex-1 px-3 py-1.5 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white ${disabled ? 'cursor-default' : ''}`}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   // Short answer — textarea
   if (type === 'short_answer') {
     return (

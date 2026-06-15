@@ -65,6 +65,7 @@ const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
   fill_blank_options:   'Fill in the Blank (with choices)',
   short_answer:         'Short Answer',
   matching:             'Word Matching',
+  multi_answer:         'Multi-Word Answer',
 };
 
 // Fill-in-blank segment types

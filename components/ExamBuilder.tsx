@@ -21,6 +21,7 @@ const QUESTION_TYPE_LABELS: Partial<Record<HomeworkQuestionType, string>> = {
   fill_blank_options:   'Fill in the Blank (choices)',
   short_answer:         'Short Answer',
   matching:             'Word Matching',
+  multi_answer:         'Multi-Word Answer',
 };
 
 // Types shown in the add/edit dropdown (no legacy fill_blank_options)
@@ -32,6 +33,7 @@ const ADMIN_QUESTION_TYPES: [HomeworkQuestionType, string][] = [
   ['fill_blank',           'Fill in the Blank'],
   ['short_answer',         'Short Answer'],
   ['matching',             'Word Matching (auto-graded)'],
+  ['multi_answer',         'Multi-Word Answer'],
 ];
 
 const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
@@ -262,6 +264,9 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
                         return <span className="ml-2 text-xs text-slate-400">({pairs.length} pairs)</span>;
                       } catch { return null; }
                     })()}
+                    {item.questionType === 'multi_answer' && item.options && item.options.length > 0 && (
+                      <span className="ml-2 text-xs text-slate-400">({item.options.length} words)</span>
+                    )}
                   </p>
                 )}
               </div>
@@ -314,6 +319,13 @@ const ExamQuestionForm: React.FC<{
     setType(newType);
     setShowChoices(false);
     setCorrect('');
+    if (newType === 'multi_answer') {
+      setOptions(['', '']);
+    } else if (newType === 'multiple_choice') {
+      setOptions(['', '', '', '']);
+    } else if (newType === 'fill_blank') {
+      setOptions(['', '', '']);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -343,6 +355,10 @@ const ExamQuestionForm: React.FC<{
       finalCorrect = JSON.stringify(validPairs.map(p => [p.left.trim(), p.right.trim()]));
       finalOptions = undefined;
     } else if (type === 'short_answer') {
+      finalCorrect = '';
+    } else if (type === 'multi_answer') {
+      finalOptions = options.filter(o => o.trim());
+      if (finalOptions.length < 1) { setErr('Add at least one word.'); return; }
       finalCorrect = '';
     } else {
       // translate_to_arabic / translate_to_english
@@ -507,6 +523,34 @@ const ExamQuestionForm: React.FC<{
         <p className="text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 border border-slate-200 dark:border-gray-600">
           Student types a free-text answer. Tutor marks manually.
         </p>
+      )}
+
+      {/* Multi-word answer — list of words the student must answer individually */}
+      {type === 'multi_answer' && (
+        <div>
+          <label className={lbl}>Words — student writes an answer next to each</label>
+          <div className="space-y-2">
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 w-5">{i + 1}.</span>
+                <input
+                  value={opt}
+                  onChange={e => setOptions(options.map((o, j) => j === i ? e.target.value : o))}
+                  dir="auto"
+                  placeholder={`Word ${i + 1}`}
+                  className={`flex-1 ${inp}`}
+                />
+                {options.length > 1 && (
+                  <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))}
+                    className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setOptions([...options, ''])}
+            className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add word</button>
+          <p className="mt-2 text-xs text-slate-400">Tutor marks each answer manually.</p>
+        </div>
       )}
 
       {/* Correct answer field — for translate types and optional for fill_blank */}
