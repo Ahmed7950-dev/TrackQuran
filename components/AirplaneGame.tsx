@@ -315,10 +315,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       if (next >= queue.length) {
         setTimeout(() => setStatus('won'), 600);
       } else {
-        setTimeout(() => setBubbles([]), 500);
+        // Keep all surviving bubbles flying; inject the new batch after the pop animation
+        const nextLetter = queue[next];
         setTimeout(() => {
-          startRound(queue[next]);
-        }, 700);
+          setBubbles(prev => [
+            ...prev.filter(b => !b.popped),   // old bubbles keep moving
+            ...makeBubbles(nextLetter),        // new wave from the right
+          ]);
+          collidingRef.current = false;
+          setTimeout(() => playLetterAudio(nextLetter), 350);
+        }, 500);
       }
     } else {
       playWrong();
