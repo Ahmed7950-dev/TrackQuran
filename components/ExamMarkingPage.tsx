@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArabicExam, ArabicExamItem, ArabicExamAttempt, ExamItemGrading } from '../types';
 import { getExam, getExamItems, gradeAttempt, publishResult } from '../services/examService';
-import { ExamContentItem, QuestionAnswerInput, questionNumbers } from './examShared';
+import { ExamContentItem, QuestionAnswerInput, CorrectAnswerHint, questionNumbers } from './examShared';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tutor marking page. Objective questions are pre-graded (from auto-grade on
@@ -92,9 +92,7 @@ const ExamMarkingPage: React.FC<{
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Student answer</p>
                 <QuestionAnswerInput item={item} value={attempt.answers[item.id] ?? ''} disabled />
               </div>
-              {item.correctAnswer && (
-                <p className="text-xs text-green-700 dark:text-green-300 mb-2">Model answer: <span dir="auto" className="font-semibold">{item.correctAnswer}</span></p>
-              )}
+              <CorrectAnswerHint item={item} />
 
               {/* Marking controls */}
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-gray-700 pt-2">

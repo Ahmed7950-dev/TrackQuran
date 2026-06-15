@@ -399,10 +399,24 @@ export async function submitAttempt(
   for (const item of items) {
     if (item.itemType !== 'question') continue;
     const ans = attempt.answers[item.id] ?? '';
-    const objective = item.questionType === 'multiple_choice' || item.questionType === 'true_false';
-    if (objective && item.correctAnswer != null) {
+    if ((item.questionType === 'multiple_choice' || item.questionType === 'true_false') && item.correctAnswer != null) {
       const correct = answersMatch(item.correctAnswer, ans);
       grading[item.id] = { awarded: correct ? (item.marks ?? 0) : 0, correct };
+    } else if (item.questionType === 'matching' && item.correctAnswer) {
+      let correctPairs: [string, string][] = [];
+      let studentPairs: [string, string][] = [];
+      try { correctPairs = JSON.parse(item.correctAnswer); } catch { /* ignore */ }
+      try { studentPairs = ans ? JSON.parse(ans) : []; } catch { /* ignore */ }
+      let numCorrect = 0;
+      for (const [left, right] of correctPairs) {
+        const chosen = studentPairs.find(([l]) => l === left)?.[1] ?? '';
+        if (answersMatch(right, chosen)) numCorrect++;
+      }
+      const allCorrect = correctPairs.length > 0 && numCorrect === correctPairs.length;
+      const awarded = correctPairs.length > 0
+        ? Math.round((numCorrect / correctPairs.length) * (item.marks ?? 0))
+        : 0;
+      grading[item.id] = { awarded, correct: allCorrect };
     } else if (!grading[item.id]) {
       grading[item.id] = { awarded: 0, correct: false };
     }

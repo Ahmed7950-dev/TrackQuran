@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArabicExam, ArabicExamItem, ArabicExamAttempt } from '../types';
-import { ExamContentItem, QuestionAnswerInput, questionNumbers } from './examShared';
+import { ExamContentItem, QuestionAnswerInput, CorrectAnswerHint, questionNumbers } from './examShared';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Read-only published result page for the student: original answers, per-question
@@ -80,9 +80,7 @@ const ExamResultPage: React.FC<{
                 </span>
               </div>
               <QuestionAnswerInput item={item} value={attempt.answers[item.id] ?? ''} disabled />
-              {!correct && item.correctAnswer && (
-                <p className="text-xs text-green-700 dark:text-green-300 mt-2">✔ Correct answer: <span dir="auto" className="font-semibold">{item.correctAnswer}</span></p>
-              )}
+              {!correct && <CorrectAnswerHint item={item} />}
               {g?.correction && (
                 <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 bg-white dark:bg-gray-800 rounded-lg px-2 py-1.5"><span className="font-bold">Correction:</span> {g.correction}</p>
               )}

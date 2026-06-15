@@ -8,6 +8,10 @@ import { ArabicExamItem } from '../types';
 
 const FILL_SEP = ' | ';
 
+function parseMatchingPairs(json: string): [string, string][] {
+  try { return JSON.parse(json); } catch { return []; }
+}
+
 /** Renders a non-question content item (section, divider, headline, …). */
 export const ExamContentItem: React.FC<{ item: ArabicExamItem }> = ({ item }) => {
   switch (item.itemType) {
@@ -39,9 +43,10 @@ export const ExamContentItem: React.FC<{ item: ArabicExamItem }> = ({ item }) =>
 };
 
 /**
- * Answer input for a question item. `value` is the stored answer string
- * (fill_blank stores blanks joined by " | "). When `disabled`, inputs are
- * read-only (used by result/marking views).
+ * Answer input for a question item. `value` is the stored answer string.
+ * fill_blank stores blanks joined by " | ".
+ * matching stores JSON: [[left, chosenRight], ...].
+ * When `disabled`, inputs are read-only (used by result/marking views).
  */
 export const QuestionAnswerInput: React.FC<{
   item: ArabicExamItem;
@@ -52,8 +57,13 @@ export const QuestionAnswerInput: React.FC<{
   const type = item.questionType;
   const isArabic = type === 'translate_to_arabic';
 
-  // Multiple choice & fill-blank-with-options → single-select option buttons
-  if (type === 'multiple_choice' || type === 'fill_blank_options') {
+  // Multiple choice, fill_blank_options, or fill_blank WITH choices → option buttons
+  const hasOptionButtons =
+    type === 'multiple_choice' ||
+    type === 'fill_blank_options' ||
+    (type === 'fill_blank' && (item.options?.length ?? 0) > 0);
+
+  if (hasOptionButtons) {
     return (
       <div className="space-y-1.5">
         {(item.options ?? []).map((opt, i) => {
@@ -104,7 +114,7 @@ export const QuestionAnswerInput: React.FC<{
     );
   }
 
-  // Fill in the blank — render an input for each ___ in the prompt
+  // Fill in the blank (no choices) — inline inputs per ___
   if (type === 'fill_blank') {
     const parts = (item.content ?? '').split('___');
     const blanks = value ? value.split(FILL_SEP) : [];
@@ -134,6 +144,61 @@ export const QuestionAnswerInput: React.FC<{
     );
   }
 
+  // Word matching — left words shown, right side selectable
+  if (type === 'matching') {
+    const pairs = parseMatchingPairs(item.correctAnswer ?? '[]');
+    const leftWords = pairs.map(p => p[0]);
+    // Sort right words alphabetically so order doesn't give the answer away
+    const rightWords = [...pairs.map(p => p[1])].sort((a, b) => a.localeCompare(b));
+
+    let studentPairs: [string, string][] = [];
+    try { if (value) studentPairs = JSON.parse(value); } catch { /* ignore */ }
+
+    const getChosen = (left: string) =>
+      studentPairs.find(([l]) => l === left)?.[1] ?? '';
+
+    const updatePair = (left: string, right: string) => {
+      const next = leftWords.map(l => [l, l === left ? right : getChosen(l)] as [string, string]);
+      onChange?.(JSON.stringify(next));
+    };
+
+    return (
+      <div className="space-y-2">
+        {leftWords.map(left => (
+          <div key={left} className="flex items-center gap-3">
+            <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-0" dir="auto">{left}</span>
+            <span className="text-slate-400 text-sm flex-shrink-0">→</span>
+            <select
+              value={getChosen(left)}
+              disabled={disabled}
+              onChange={e => updatePair(left, e.target.value)}
+              dir="auto"
+              className={`flex-1 min-w-0 px-2 py-1.5 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm dark:text-white ${disabled ? 'cursor-default' : ''}`}
+            >
+              <option value="">— choose —</option>
+              {rightWords.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Short answer — textarea
+  if (type === 'short_answer') {
+    return (
+      <textarea
+        value={value}
+        disabled={disabled}
+        onChange={e => onChange?.(e.target.value)}
+        rows={3}
+        dir="auto"
+        placeholder={disabled ? '' : 'Write your answer here…'}
+        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white resize-none"
+      />
+    );
+  }
+
   // Free-text (translate_to_arabic / translate_to_english / fallback)
   return (
     <input
@@ -144,6 +209,33 @@ export const QuestionAnswerInput: React.FC<{
       placeholder={disabled ? '' : 'Type your answer…'}
       className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white"
     />
+  );
+};
+
+/**
+ * Renders the "correct answer" hint under a question — handles matching pairs
+ * specially instead of showing raw JSON.
+ */
+export const CorrectAnswerHint: React.FC<{ item: ArabicExamItem }> = ({ item }) => {
+  if (!item.correctAnswer) return null;
+  if (item.questionType === 'matching') {
+    const pairs = parseMatchingPairs(item.correctAnswer);
+    if (pairs.length === 0) return null;
+    return (
+      <div className="mt-2">
+        <p className="text-xs font-bold text-green-700 dark:text-green-300 mb-0.5">✔ Correct pairs:</p>
+        <div className="space-y-0.5 pl-2">
+          {pairs.map(([l, r]) => (
+            <p key={l} className="text-xs text-green-700 dark:text-green-300">{l} → {r}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <p className="text-xs text-green-700 dark:text-green-300 mt-2">
+      ✔ Correct answer: <span dir="auto" className="font-semibold">{item.correctAnswer}</span>
+    </p>
   );
 };
 

@@ -11,17 +11,31 @@ import {
 // Admin exam builder: edit settings + an ordered list of content/question items.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
+// All types shown in the items list (includes legacy fill_blank_options)
+const QUESTION_TYPE_LABELS: Partial<Record<HomeworkQuestionType, string>> = {
   multiple_choice:      'Multiple Choice',
   true_false:           'True / False',
   translate_to_arabic:  'Translate → Arabic',
   translate_to_english: 'Translate → English',
   fill_blank:           'Fill in the Blank',
-  fill_blank_options:   'Fill in the Blank (with choices)',
+  fill_blank_options:   'Fill in the Blank (choices)',
+  short_answer:         'Short Answer',
+  matching:             'Word Matching',
 };
 
+// Types shown in the add/edit dropdown (no legacy fill_blank_options)
+const ADMIN_QUESTION_TYPES: [HomeworkQuestionType, string][] = [
+  ['multiple_choice',      'Multiple Choice (auto-graded)'],
+  ['true_false',           'True / False (auto-graded)'],
+  ['translate_to_arabic',  'Translate → Arabic'],
+  ['translate_to_english', 'Translate → English'],
+  ['fill_blank',           'Fill in the Blank'],
+  ['short_answer',         'Short Answer'],
+  ['matching',             'Word Matching (auto-graded)'],
+];
+
 const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
-const label = 'block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide';
+const lbl = 'block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide';
 
 const ADD_BUTTONS: { type: ArabicExamItemType; label: string; icon: string }[] = [
   { type: 'question',    label: 'Question',    icon: '❓' },
@@ -50,14 +64,12 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
 
   useEffect(() => { reload(); }, [reload]);
 
-  // ── Settings ───────────────────────────────────────────────────────────────
   const saveSettings = async (patch: Partial<ArabicExam>) => {
     if (!exam) return;
     setExam({ ...exam, ...patch });
     await updateExam(exam.id, patch);
   };
 
-  // ── Items ──────────────────────────────────────────────────────────────────
   const addTextItem = async (type: ArabicExamItemType) => {
     await createExamItem({ examId, itemType: type, content: type === 'divider' ? undefined : '' });
     reload();
@@ -123,45 +135,43 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
 
       {/* Settings */}
       <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-5 mb-6 space-y-4">
+        {/* Level + version — display only, set at creation */}
+        <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 dark:bg-gray-700/60 rounded-lg">
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Level {exam.level}</span>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            {exam.version === 'arabic' ? 'Arabic' : 'Transliteration'}
+          </span>
+          <span className="text-xs text-slate-400 ml-auto">set at creation</span>
+        </div>
+
         <div>
-          <label className={label}>Exam title</label>
+          <label className={lbl}>Exam title</label>
           <input defaultValue={exam.title} onBlur={e => saveSettings({ title: e.target.value })} className={inp} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Level</label>
-            <select value={exam.level} onChange={e => saveSettings({ level: Number(e.target.value) as 1|2|3 })} className={inp}>
-              {[1,2,3].map(l => <option key={l} value={l}>Level {l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={label}>Version</label>
-            <select value={exam.version} onChange={e => saveSettings({ version: e.target.value as ArabicExam['version'] })} className={inp}>
-              <option value="arabic">Arabic</option>
-              <option value="transliteration">Transliteration</option>
-            </select>
-          </div>
-          <div>
-            <label className={label}>Time limit (min)</label>
+            <label className={lbl}>Time limit (min)</label>
             <input type="number" min={0} defaultValue={exam.timeLimitMinutes ?? ''} placeholder="None"
               onBlur={e => saveSettings({ timeLimitMinutes: e.target.value ? Number(e.target.value) : undefined })} className={inp} />
           </div>
           <div>
-            <label className={label}>Pass %</label>
+            <label className={lbl}>Pass %</label>
             <input type="number" min={0} max={100} defaultValue={exam.passingPercentage}
               onBlur={e => saveSettings({ passingPercentage: Number(e.target.value) })} className={inp} />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={label}>Leaderboard names</label>
-            <select value={exam.leaderboardPrivacy} onChange={e => saveSettings({ leaderboardPrivacy: e.target.value as ArabicExam['leaderboardPrivacy'] })} className={inp}>
-              <option value="first_name">First name only</option>
-              <option value="full">Full name</option>
-              <option value="anonymous">Anonymous</option>
-            </select>
-          </div>
+
+        <div>
+          <label className={lbl}>Leaderboard names</label>
+          <select value={exam.leaderboardPrivacy} onChange={e => saveSettings({ leaderboardPrivacy: e.target.value as ArabicExam['leaderboardPrivacy'] })} className={inp}>
+            <option value="first_name">First name only</option>
+            <option value="full">Full name</option>
+            <option value="anonymous">Anonymous</option>
+          </select>
         </div>
+
         <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Total marks: {exam.totalMarks}</p>
       </div>
 
@@ -175,7 +185,7 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
         ))}
       </div>
 
-      {/* Add-question form */}
+      {/* Add/edit question form */}
       {addingQ && (
         <ExamQuestionForm examId={examId} onDone={() => { setAddingQ(false); reload(); }} onCancel={() => setAddingQ(false)} />
       )}
@@ -200,7 +210,9 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                    {item.itemType === 'question' ? `Q${qNum} · ${QUESTION_TYPE_LABELS[item.questionType!]} · ${item.marks ?? 0} marks` : item.itemType}
+                    {item.itemType === 'question'
+                      ? `Q${qNum} · ${QUESTION_TYPE_LABELS[item.questionType!] ?? item.questionType} · ${item.marks ?? 0} marks`
+                      : item.itemType}
                   </span>
                   <div className="flex gap-2">
                     {item.itemType === 'question' && (
@@ -210,7 +222,6 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
                   </div>
                 </div>
 
-                {/* Editable content by type */}
                 {item.itemType === 'divider' && <hr className="border-slate-200 dark:border-gray-700" />}
                 {item.itemType === 'image' && item.imageUrl && (
                   <img src={item.imageUrl} alt="" className="max-h-40 rounded-lg border border-slate-200 dark:border-gray-700" />
@@ -226,7 +237,15 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
                   />
                 )}
                 {item.itemType === 'question' && (
-                  <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">{item.content || <span className="text-slate-400">No prompt</span>}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
+                    {item.content || <span className="text-slate-400">No prompt</span>}
+                    {item.questionType === 'matching' && item.correctAnswer && (() => {
+                      try {
+                        const pairs: [string, string][] = JSON.parse(item.correctAnswer);
+                        return <span className="ml-2 text-xs text-slate-400">({pairs.length} pairs)</span>;
+                      } catch { return null; }
+                    })()}
+                  </p>
                 )}
               </div>
             </div>
@@ -237,7 +256,7 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
   );
 };
 
-// ── Question add/edit form (with marks) ──────────────────────────────────────
+// ── Question add/edit form ────────────────────────────────────────────────────
 const ExamQuestionForm: React.FC<{
   examId: string;
   existing?: ArabicExamItem;
@@ -245,7 +264,10 @@ const ExamQuestionForm: React.FC<{
   onCancel: () => void;
 }> = ({ examId, existing, onDone, onCancel }) => {
   const isEdit = !!existing;
-  const [type, setType] = useState<HomeworkQuestionType>(existing?.questionType ?? 'multiple_choice');
+
+  const [type, setType] = useState<HomeworkQuestionType>(
+    existing?.questionType === 'fill_blank_options' ? 'fill_blank' : (existing?.questionType ?? 'multiple_choice'),
+  );
   const [question, setQuestion] = useState(existing?.content ?? '');
   const [options, setOptions] = useState<string[]>(existing?.options ?? ['', '', '', '']);
   const [correct, setCorrect] = useState(existing?.correctAnswer ?? '');
@@ -253,17 +275,39 @@ const ExamQuestionForm: React.FC<{
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const needsOptions = type === 'multiple_choice' || type === 'fill_blank_options';
+  // fill_blank: show optional choices
+  const [showChoices, setShowChoices] = useState(
+    existing?.questionType === 'fill_blank_options' ||
+    (existing?.questionType === 'fill_blank' && (existing.options?.length ?? 0) > 0),
+  );
+
+  // matching: list of {left, right} pairs
+  const [pairs, setPairs] = useState<{ left: string; right: string }[]>(() => {
+    if ((existing?.questionType === 'matching') && existing.correctAnswer) {
+      try {
+        return (JSON.parse(existing.correctAnswer) as [string, string][]).map(([l, r]) => ({ left: l, right: r }));
+      } catch { /* fall through */ }
+    }
+    return [{ left: '', right: '' }, { left: '', right: '' }];
+  });
+
   const isArabicAnswer = type === 'translate_to_arabic';
+
+  const handleTypeChange = (newType: HomeworkQuestionType) => {
+    setType(newType);
+    setShowChoices(false);
+    setCorrect('');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr('');
     const q = question.trim();
     if (!q) { setErr('Question text is required.'); return; }
+
     let finalOptions: string[] | undefined;
     let finalCorrect = correct.trim();
 
-    if (needsOptions) {
+    if (type === 'multiple_choice') {
       finalOptions = options.map(o => o.trim());
       if (finalOptions.some(o => !o)) { setErr('Fill all options.'); return; }
       if (!finalCorrect || !finalOptions.includes(finalCorrect)) { setErr('Pick the correct option.'); return; }
@@ -271,23 +315,37 @@ const ExamQuestionForm: React.FC<{
       if (!finalCorrect) { setErr('Choose True or False.'); return; }
     } else if (type === 'fill_blank') {
       if (!q.includes('___')) { setErr('Use ___ to mark the blank(s).'); return; }
-      // correct answer optional (tutor-marked); store if provided
+      if (showChoices) {
+        finalOptions = options.filter(o => o.trim());
+        if (finalOptions.length < 2) { setErr('Add at least 2 choices.'); return; }
+      }
+      // correct answer is optional for fill_blank (tutor marks)
+    } else if (type === 'matching') {
+      const validPairs = pairs.filter(p => p.left.trim() && p.right.trim());
+      if (validPairs.length < 2) { setErr('Add at least 2 complete pairs.'); return; }
+      finalCorrect = JSON.stringify(validPairs.map(p => [p.left.trim(), p.right.trim()]));
+      finalOptions = undefined;
+    } else if (type === 'short_answer') {
+      finalCorrect = '';
     } else {
+      // translate_to_arabic / translate_to_english
       if (!finalCorrect) { setErr('Provide the correct answer.'); return; }
     }
-    if (!marks || marks < 0) { setErr('Marks must be 0 or more.'); return; }
+
+    if (marks < 0) { setErr('Marks must be 0 or more.'); return; }
 
     setSaving(true);
+    const payload = {
+      content: q,
+      questionType: type,
+      options: finalOptions,
+      correctAnswer: finalCorrect || undefined,
+      marks,
+    };
     if (isEdit && existing) {
-      await updateExamItem(existing.id, {
-        content: q, questionType: type, options: needsOptions ? finalOptions : undefined,
-        correctAnswer: finalCorrect || undefined, marks,
-      }, examId);
+      await updateExamItem(existing.id, payload, examId);
     } else {
-      await createExamItem({
-        examId, itemType: 'question', content: q, questionType: type,
-        options: needsOptions ? finalOptions : undefined, correctAnswer: finalCorrect || undefined, marks,
-      });
+      await createExamItem({ examId, itemType: 'question', ...payload });
     }
     setSaving(false);
     onDone();
@@ -299,27 +357,39 @@ const ExamQuestionForm: React.FC<{
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={label}>Type</label>
-          <select value={type} onChange={e => setType(e.target.value as HomeworkQuestionType)} disabled={isEdit} className={inp}>
-            {(Object.entries(QUESTION_TYPE_LABELS) as [HomeworkQuestionType, string][]).map(([k, v]) => (
+          <label className={lbl}>Type</label>
+          <select
+            value={type}
+            onChange={e => handleTypeChange(e.target.value as HomeworkQuestionType)}
+            disabled={isEdit}
+            className={inp}
+          >
+            {ADMIN_QUESTION_TYPES.map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className={label}>Marks</label>
+          <label className={lbl}>Marks</label>
           <input type="number" min={0} value={marks} onChange={e => setMarks(Number(e.target.value))} className={inp} />
         </div>
       </div>
 
+      {/* Question text */}
       <div>
-        <label className={label}>{type === 'translate_to_english' ? 'Arabic text to translate' : type === 'fill_blank' ? 'Question (use ___ for blanks)' : 'Question / Statement'}</label>
+        <label className={lbl}>
+          {type === 'translate_to_english' ? 'Arabic text to translate'
+            : type === 'fill_blank' ? 'Question (use ___ for each blank)'
+            : type === 'matching' ? 'Question / instruction (optional)'
+            : 'Question / statement'}
+        </label>
         <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} dir="auto" className={inp} />
       </div>
 
-      {needsOptions && (
+      {/* Multiple choice options */}
+      {type === 'multiple_choice' && (
         <div>
-          <label className={label}>Options — click the dot to mark the correct one</label>
+          <label className={lbl}>Options — click the dot to mark the correct one</label>
           <div className="space-y-2">
             {options.map((opt, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -328,22 +398,29 @@ const ExamQuestionForm: React.FC<{
                   {correct === opt && opt.trim() && '✓'}
                 </button>
                 <span className="text-xs font-bold text-slate-500 w-5">{String.fromCharCode(65 + i)}.</span>
-                <input value={opt} onChange={e => {
-                  const prev = opt;
-                  setOptions(options.map((o, j) => j === i ? e.target.value : o));
-                  if (correct === prev) setCorrect(e.target.value);
-                }} dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder={`Option ${String.fromCharCode(65 + i)}`} className={`flex-1 ${inp}`} />
+                <input
+                  value={opt}
+                  onChange={e => {
+                    const prev = opt;
+                    setOptions(options.map((o, j) => j === i ? e.target.value : o));
+                    if (correct === prev) setCorrect(e.target.value);
+                  }}
+                  dir={isArabicAnswer ? 'rtl' : 'ltr'}
+                  placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                  className={`flex-1 ${inp}`}
+                />
               </div>
             ))}
           </div>
         </div>
       )}
 
+      {/* True / False */}
       {type === 'true_false' && (
         <div>
-          <label className={label}>Correct answer</label>
+          <label className={lbl}>Correct answer</label>
           <div className="flex gap-3">
-            {['True','False'].map(v => (
+            {['True', 'False'].map(v => (
               <button key={v} type="button" onClick={() => setCorrect(v)}
                 className={`flex-1 py-2 rounded-lg border-2 text-sm font-semibold ${correct === v ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>{v}</button>
             ))}
@@ -351,10 +428,83 @@ const ExamQuestionForm: React.FC<{
         </div>
       )}
 
-      {!needsOptions && type !== 'true_false' && (
+      {/* Fill in the blank: optional choices */}
+      {type === 'fill_blank' && (
         <div>
-          <label className={label}>Correct answer {type === 'fill_blank' && <span className="normal-case font-normal text-slate-400">(optional — tutor marks)</span>}</label>
-          <input value={correct} onChange={e => setCorrect(e.target.value)} dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder="Correct answer…" className={inp} />
+          <div className="flex items-center justify-between mb-2">
+            <label className={lbl + ' mb-0'}>Choices (optional)</label>
+            <button type="button"
+              onClick={() => { setShowChoices(!showChoices); setOptions(['', '', '']); }}
+              className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline">
+              {showChoices ? '− Remove choices' : '+ Add choices'}
+            </button>
+          </div>
+          {showChoices && (
+            <div className="space-y-2">
+              {options.map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400 w-5">{String.fromCharCode(65 + i)}.</span>
+                  <input value={opt} onChange={e => setOptions(options.map((o, j) => j === i ? e.target.value : o))}
+                    dir="auto" placeholder={`Choice ${String.fromCharCode(65 + i)}`} className={`flex-1 ${inp}`} />
+                  {options.length > 2 && (
+                    <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))}
+                      className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => setOptions([...options, ''])}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add choice</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Matching pairs */}
+      {type === 'matching' && (
+        <div>
+          <label className={lbl}>Word pairs</label>
+          <div className="space-y-2">
+            {pairs.map((pair, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={pair.left}
+                  onChange={e => setPairs(ps => ps.map((p, j) => j === i ? { ...p, left: e.target.value } : p))}
+                  dir="auto" placeholder="Word / phrase" className={`flex-1 ${inp}`} />
+                <span className="text-slate-400 flex-shrink-0">↔</span>
+                <input value={pair.right}
+                  onChange={e => setPairs(ps => ps.map((p, j) => j === i ? { ...p, right: e.target.value } : p))}
+                  dir="auto" placeholder="Matching word" className={`flex-1 ${inp}`} />
+                {pairs.length > 2 && (
+                  <button type="button" onClick={() => setPairs(ps => ps.filter((_, j) => j !== i))}
+                    className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setPairs(ps => [...ps, { left: '', right: '' }])}
+            className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add pair</button>
+        </div>
+      )}
+
+      {/* Short answer info */}
+      {type === 'short_answer' && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 border border-slate-200 dark:border-gray-600">
+          Student types a free-text answer. Tutor marks manually.
+        </p>
+      )}
+
+      {/* Correct answer field — for translate types and optional for fill_blank */}
+      {(type === 'translate_to_arabic' || type === 'translate_to_english') && (
+        <div>
+          <label className={lbl}>Correct answer</label>
+          <input value={correct} onChange={e => setCorrect(e.target.value)}
+            dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder="Correct answer…" className={inp} />
+        </div>
+      )}
+      {type === 'fill_blank' && (
+        <div>
+          <label className={lbl}>Correct answer <span className="normal-case font-normal text-slate-400">(optional — tutor marks)</span></label>
+          <input value={correct} onChange={e => setCorrect(e.target.value)}
+            dir="auto" placeholder="Model answer…" className={inp} />
         </div>
       )}
 

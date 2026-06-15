@@ -63,6 +63,8 @@ const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
   translate_to_english: 'Translate → English',
   fill_blank:           'Fill in the Blank',
   fill_blank_options:   'Fill in the Blank (with choices)',
+  short_answer:         'Short Answer',
+  matching:             'Word Matching',
 };
 
 // Fill-in-blank segment types

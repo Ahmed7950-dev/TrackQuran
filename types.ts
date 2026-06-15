@@ -280,7 +280,9 @@ export type HomeworkQuestionType =
   | 'translate_to_arabic'
   | 'translate_to_english'
   | 'fill_blank'
-  | 'fill_blank_options';
+  | 'fill_blank_options'
+  | 'short_answer'
+  | 'matching';
 
 export interface HomeworkQuestion {
   id: string;
