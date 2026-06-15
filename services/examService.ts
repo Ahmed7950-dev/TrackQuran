@@ -16,7 +16,7 @@ import { supabase } from '../lib/supabase';
 import {
   ArabicExam, ArabicExamItem, ArabicExamItemType, ExamVersion,
   ArabicExamUnlock, ArabicExamAttempt, ExamAttemptStatus, ExamItemGrading,
-  HomeworkQuestionType,
+  HomeworkQuestionType, LeaderboardPrivacy, LeaderboardEntry,
 } from '../types';
 import { createNotification } from './notificationService';
 
@@ -36,8 +36,8 @@ export function answersMatch(correct: string, user: string): boolean {
 interface ExamRow {
   id: string; level: number; version: string; title: string;
   time_limit_minutes: number | null; passing_percentage: number;
-  status: string; total_marks: number; created_by: string | null;
-  created_at: string; updated_at: string;
+  status: string; total_marks: number; leaderboard_privacy: string | null;
+  created_by: string | null; created_at: string; updated_at: string;
 }
 function rowToExam(r: ExamRow): ArabicExam {
   return {
@@ -49,6 +49,7 @@ function rowToExam(r: ExamRow): ArabicExam {
     passingPercentage: r.passing_percentage,
     status: r.status as 'draft' | 'published',
     totalMarks: r.total_marks,
+    leaderboardPrivacy: (r.leaderboard_privacy ?? 'first_name') as LeaderboardPrivacy,
     createdBy: r.created_by ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -90,7 +91,8 @@ function rowToUnlock(r: UnlockRow): ArabicExamUnlock {
 }
 
 interface AttemptRow {
-  id: string; exam_id: string; student_id: string; level: number; version: string;
+  id: string; exam_id: string; student_id: string; student_name: string | null;
+  level: number; version: string;
   attempt_number: number; status: string; started_at: string;
   submitted_at: string | null; marked_at: string | null; published_at: string | null;
   answers: Record<string, string> | null; grading: Record<string, ExamItemGrading> | null;
@@ -99,7 +101,8 @@ interface AttemptRow {
 }
 function rowToAttempt(r: AttemptRow): ArabicExamAttempt {
   return {
-    id: r.id, examId: r.exam_id, studentId: r.student_id, level: r.level,
+    id: r.id, examId: r.exam_id, studentId: r.student_id, studentName: r.student_name ?? undefined,
+    level: r.level,
     version: r.version as ExamVersion, attemptNumber: r.attempt_number,
     status: r.status as ExamAttemptStatus, startedAt: r.started_at,
     submittedAt: r.submitted_at ?? undefined, markedAt: r.marked_at ?? undefined,
@@ -158,6 +161,7 @@ export async function createExam(input: {
     passing_percentage: input.passingPercentage ?? 70,
     status: 'draft',
     total_marks: 0,
+    leaderboard_privacy: 'first_name',
     created_by: input.createdBy ?? null,
   }).select().single();
   if (error) { console.error('createExam:', error.message); return null; }
@@ -165,7 +169,7 @@ export async function createExam(input: {
 }
 
 export async function updateExam(id: string, patch: Partial<Pick<ArabicExam,
-  'title' | 'level' | 'version' | 'timeLimitMinutes' | 'passingPercentage' | 'status'>>): Promise<boolean> {
+  'title' | 'level' | 'version' | 'timeLimitMinutes' | 'passingPercentage' | 'status' | 'leaderboardPrivacy'>>): Promise<boolean> {
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.title             !== undefined) update.title              = patch.title;
   if (patch.level             !== undefined) update.level              = patch.level;
@@ -173,6 +177,7 @@ export async function updateExam(id: string, patch: Partial<Pick<ArabicExam,
   if (patch.timeLimitMinutes  !== undefined) update.time_limit_minutes = patch.timeLimitMinutes ?? null;
   if (patch.passingPercentage !== undefined) update.passing_percentage = patch.passingPercentage;
   if (patch.status            !== undefined) update.status             = patch.status;
+  if (patch.leaderboardPrivacy!== undefined) update.leaderboard_privacy = patch.leaderboardPrivacy;
   const { error } = await supabase.from('arabic_exams').update(update).eq('id', id);
   if (error) { console.error('updateExam:', error.message); return false; }
   return true;
@@ -287,10 +292,19 @@ export async function setExamUnlock(
   return true;
 }
 
-export async function setRetakeAllowed(studentId: string, level: number, allowed: boolean): Promise<boolean> {
+export async function setRetakeAllowed(
+  studentId: string, level: number, allowed: boolean, teacherId?: string,
+): Promise<boolean> {
   const { error } = await supabase.from('arabic_exam_unlocks')
     .update({ retake_allowed: allowed }).eq('student_id', studentId).eq('level', level);
   if (error) { console.error('setRetakeAllowed:', error.message); return false; }
+  if (allowed && teacherId) {
+    await createNotification({
+      teacherId, studentId, recipient: 'student', bookingId: null,
+      type: 'exam_retake_allowed', title: 'Retake allowed',
+      body: `Your tutor allowed you to retake the Level ${level} exam.`,
+    });
+  }
   return true;
 }
 
@@ -344,17 +358,27 @@ export async function getAttemptsForStudents(studentIds: string[]): Promise<Arab
  */
 export async function getOrCreateAttempt(
   exam: ArabicExam, studentId: string, retakeAllowed: boolean,
+  studentName?: string, teacherId?: string,
 ): Promise<ArabicExamAttempt | null> {
   const latest = await getLatestAttempt(studentId, exam.id);
   if (latest && latest.status === 'in_progress') return latest;
   if (latest && !retakeAllowed) return latest; // finished + no retake → return as-is (read-only states handle it)
   const attemptNumber = latest ? latest.attemptNumber + 1 : 1;
   const { data, error } = await supabase.from('arabic_exam_attempts').insert({
-    exam_id: exam.id, student_id: studentId, level: exam.level, version: exam.version,
+    exam_id: exam.id, student_id: studentId, student_name: studentName ?? null,
+    level: exam.level, version: exam.version,
     attempt_number: attemptNumber, status: 'in_progress',
     answers: {}, grading: {},
   }).select().single();
   if (error) { console.error('getOrCreateAttempt:', error.message); return null; }
+  // Notify the tutor that the student has started the exam.
+  if (teacherId) {
+    await createNotification({
+      teacherId, studentId, recipient: 'tutor', bookingId: null,
+      type: 'exam_started', title: 'Exam started',
+      body: `A student started the Level ${exam.level} ${exam.version} exam${attemptNumber > 1 ? ` (attempt #${attemptNumber})` : ''}.`,
+    });
+  }
   return rowToAttempt(data as AttemptRow);
 }
 
@@ -385,6 +409,7 @@ export async function submitAttempt(
   }
   const { error } = await supabase.from('arabic_exam_attempts').update({
     status: 'submitted', submitted_at: new Date().toISOString(), grading,
+    ...(attempt.studentName ? { student_name: attempt.studentName } : {}),
   }).eq('id', attempt.id);
   if (error) { console.error('submitAttempt:', error.message); return false; }
   await createNotification({
@@ -393,6 +418,82 @@ export async function submitAttempt(
     body: `A student submitted the Level ${attempt.level} ${attempt.version} exam. Ready to mark.`,
   });
   return true;
+}
+
+/** All attempts for one exam (admin "view all results"). */
+export async function getAttemptsForExam(examId: string): Promise<ArabicExamAttempt[]> {
+  const { data, error } = await supabase
+    .from('arabic_exam_attempts').select('*')
+    .eq('exam_id', examId).order('percentage', { ascending: false });
+  if (error) { console.error('getAttemptsForExam:', error.message); return []; }
+  return (data ?? []).map(rowToAttempt);
+}
+
+/**
+ * Reopen a submitted/published attempt so the student can edit and resubmit.
+ * Resets it to in-progress and notifies the student.
+ */
+export async function reopenAttempt(attempt: ArabicExamAttempt, teacherId: string): Promise<boolean> {
+  const { error } = await supabase.from('arabic_exam_attempts').update({
+    status: 'in_progress', submitted_at: null, marked_at: null, published_at: null,
+  }).eq('id', attempt.id);
+  if (error) { console.error('reopenAttempt:', error.message); return false; }
+  await createNotification({
+    teacherId, studentId: attempt.studentId, recipient: 'student', bookingId: null,
+    type: 'exam_retake_allowed', title: 'Resubmission allowed',
+    body: `Your tutor reopened the Level ${attempt.level} ${attempt.version} exam so you can edit and resubmit.`,
+  });
+  return true;
+}
+
+function formatName(name: string | undefined, privacy: LeaderboardPrivacy, index: number): string {
+  if (privacy === 'anonymous') return `Student ${index + 1}`;
+  const full = (name ?? 'Student').trim();
+  if (privacy === 'first_name') return full.split(/\s+/)[0] || 'Student';
+  return full;
+}
+
+/**
+ * Leaderboard for a level + version: best published attempt per student, ranked
+ * by percentage then earliest completion. Names formatted per the exam's privacy
+ * setting. Only published results are included.
+ */
+export async function getLeaderboard(
+  level: number, version: ExamVersion, selfStudentId?: string,
+): Promise<{ exam: ArabicExam | null; entries: LeaderboardEntry[] }> {
+  const exam = await getPublishedExam(level, version);
+  if (!exam) return { exam: null, entries: [] };
+  const { data, error } = await supabase
+    .from('arabic_exam_attempts').select('*')
+    .eq('exam_id', exam.id).eq('status', 'result_published');
+  if (error) { console.error('getLeaderboard:', error.message); return { exam, entries: [] }; }
+  const attempts = (data ?? []).map(rowToAttempt);
+
+  // Best attempt per student (highest %, then earliest completion)
+  const best = new Map<string, ArabicExamAttempt>();
+  for (const a of attempts) {
+    const cur = best.get(a.studentId);
+    const aPct = a.percentage ?? 0, cPct = cur?.percentage ?? -1;
+    if (!cur || aPct > cPct) best.set(a.studentId, a);
+  }
+  const ranked = [...best.values()].sort((x, y) => {
+    const d = (y.percentage ?? 0) - (x.percentage ?? 0);
+    if (d !== 0) return d;
+    return (x.publishedAt ?? x.submittedAt ?? '').localeCompare(y.publishedAt ?? y.submittedAt ?? '');
+  });
+
+  const entries: LeaderboardEntry[] = ranked.map((a, i) => ({
+    rank: i + 1,
+    studentId: a.studentId,
+    displayName: a.studentId === selfStudentId ? 'You' : formatName(a.studentName, exam.leaderboardPrivacy, i),
+    score: a.totalScore ?? 0,
+    percentage: a.percentage ?? 0,
+    passed: !!a.passed,
+    attemptNumber: a.attemptNumber,
+    completedAt: a.publishedAt ?? a.submittedAt,
+    isSelf: a.studentId === selfStudentId,
+  }));
+  return { exam, entries };
 }
 
 /** Save tutor's grading + feedback (without publishing yet). */

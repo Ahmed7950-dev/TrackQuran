@@ -297,6 +297,8 @@ export interface HomeworkQuestion {
 
 export type ExamVersion = 'arabic' | 'transliteration';
 
+export type LeaderboardPrivacy = 'full' | 'first_name' | 'anonymous';
+
 export type ArabicExamItemType =
   | 'section'      // section divider with a title
   | 'divider'      // plain horizontal divider
@@ -315,6 +317,7 @@ export interface ArabicExam {
   passingPercentage: number;     // e.g. 70
   status: 'draft' | 'published';
   totalMarks: number;            // sum of question marks (auto-calculated)
+  leaderboardPrivacy: LeaderboardPrivacy;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -360,6 +363,7 @@ export interface ArabicExamAttempt {
   id: string;
   examId: string;
   studentId: string;
+  studentName?: string;
   level: number;
   version: ExamVersion;
   attemptNumber: number;
@@ -375,6 +379,18 @@ export interface ArabicExamAttempt {
   passed?: boolean;
   generalFeedback?: string;
   createdAt: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  studentId: string;
+  displayName: string;       // formatted per the exam's privacy setting
+  score: number;
+  percentage: number;
+  passed: boolean;
+  attemptNumber: number;
+  completedAt?: string;      // published_at / submitted_at
+  isSelf: boolean;
 }
 
 // ── Vocabulary (word table per lesson) ────────────────────────────────────────

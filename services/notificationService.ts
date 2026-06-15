@@ -18,10 +18,12 @@ export type NotificationType =
   | 'booking_cancelled_by_student'
   | 'booking_cancelled_by_tutor'
   // Exam events. NOTE: if the booking_notifications table has a CHECK constraint
-  // on `type`, add these three values to it in the Supabase dashboard.
+  // on `type`, add these values to it in the Supabase dashboard.
   | 'exam_unlocked'
   | 'exam_submitted'
-  | 'exam_result_published';
+  | 'exam_result_published'
+  | 'exam_started'
+  | 'exam_retake_allowed';
 
 export interface BookingNotification {
   id:         string;

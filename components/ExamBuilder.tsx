@@ -152,6 +152,16 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
               onBlur={e => saveSettings({ passingPercentage: Number(e.target.value) })} className={inp} />
           </div>
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Leaderboard names</label>
+            <select value={exam.leaderboardPrivacy} onChange={e => saveSettings({ leaderboardPrivacy: e.target.value as ArabicExam['leaderboardPrivacy'] })} className={inp}>
+              <option value="first_name">First name only</option>
+              <option value="full">Full name</option>
+              <option value="anonymous">Anonymous</option>
+            </select>
+          </div>
+        </div>
         <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Total marks: {exam.totalMarks}</p>
       </div>
 

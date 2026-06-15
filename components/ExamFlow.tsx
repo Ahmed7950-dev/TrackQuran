@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArabicExam, ArabicExamItem, ArabicExamAttempt, ExamVersion } from '../types';
-import { getPublishedVersions, getPublishedExam, getExamItems, getLatestAttempt } from '../services/examService';
+import { getPublishedVersions, getPublishedExam, getExamItems, getLatestAttempt, getAttemptsForStudent } from '../services/examService';
 import ExamTakingPage from './ExamTakingPage';
 import ExamResultPage from './ExamResultPage';
+import LeaderboardPage from './LeaderboardPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Student exam flow controller (opened from the "Do Exam" button):
@@ -11,16 +12,20 @@ import ExamResultPage from './ExamResultPage';
 
 const ExamFlow: React.FC<{
   studentId: string;
+  studentName?: string;
   teacherId: string;
   level: number;
   retakeAllowed: boolean;
   onExit: () => void;
-}> = ({ studentId, teacherId, level, retakeAllowed, onExit }) => {
+}> = ({ studentId, studentName, teacherId, level, retakeAllowed, onExit }) => {
   const [versions, setVersions] = useState<ExamVersion[] | null>(null);
   const [version, setVersion] = useState<ExamVersion | null>(null);
   const [exam, setExam] = useState<ArabicExam | null>(null);
   const [items, setItems] = useState<ArabicExamItem[]>([]);
   const [attempt, setAttempt] = useState<ArabicExamAttempt | null>(null);
+  const [history, setHistory] = useState<ArabicExamAttempt[]>([]);
+  const [viewAttempt, setViewAttempt] = useState<ArabicExamAttempt | null>(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [forceTaking, setForceTaking] = useState(false);
 
@@ -38,10 +43,15 @@ const ExamFlow: React.FC<{
     setLoading(true);
     const e = await getPublishedExam(level, v);
     if (!e) { setExam(null); setLoading(false); return; }
-    const [its, att] = await Promise.all([getExamItems(e.id), getLatestAttempt(studentId, e.id)]);
+    const [its, att, all] = await Promise.all([
+      getExamItems(e.id),
+      getLatestAttempt(studentId, e.id),
+      getAttemptsForStudent(studentId),
+    ]);
     setExam(e);
     setItems(its);
     setAttempt(att);
+    setHistory(all.filter(a => a.examId === e.id));
     setLoading(false);
   }, [level, studentId]);
 
@@ -93,6 +103,11 @@ const ExamFlow: React.FC<{
     );
   }
 
+  // Leaderboard overlay (available once a result exists)
+  if (showLeaderboard) {
+    return <LeaderboardPage level={level} selfStudentId={studentId} onExit={() => setShowLeaderboard(false)} />;
+  }
+
   const status = attempt?.status;
   const showTaking = forceTaking || !attempt || status === 'in_progress';
 
@@ -103,6 +118,7 @@ const ExamFlow: React.FC<{
         exam={exam}
         items={items}
         studentId={studentId}
+        studentName={studentName}
         teacherId={teacherId}
         retakeAllowed={forceTaking || retakeAllowed}
         onExit={onExit}
@@ -113,12 +129,34 @@ const ExamFlow: React.FC<{
 
   // Result published
   if (status === 'result_published' && attempt) {
+    const shown = viewAttempt ?? attempt;
+    const publishedHistory = history.filter(a => a.status === 'result_published');
     return (
       <div>
-        <ExamResultPage exam={exam} items={items} attempt={attempt} onExit={onExit} />
+        <ExamResultPage exam={exam} items={items} attempt={shown} onExit={onExit} onViewLeaderboard={() => setShowLeaderboard(true)} />
+
+        {/* Attempt history (retakes) */}
+        {publishedHistory.length > 1 && (
+          <div className="max-w-2xl mx-auto px-4 pb-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Your attempts</p>
+            <div className="flex flex-wrap gap-2">
+              {publishedHistory.map(a => (
+                <button key={a.id} onClick={() => setViewAttempt(a)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                    shown.id === a.id
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                      : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300'
+                  }`}>
+                  #{a.attemptNumber} · {a.percentage ?? 0}% {a.passed ? '✓' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {retakeAllowed && (
-          <div className="max-w-2xl mx-auto px-4 pb-8 -mt-2 text-center">
-            <button onClick={() => setForceTaking(true)} className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold">Retake exam</button>
+          <div className="max-w-2xl mx-auto px-4 pb-8 mt-3 text-center">
+            <button onClick={() => { setViewAttempt(null); setForceTaking(true); }} className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold">Retake exam</button>
           </div>
         )}
       </div>

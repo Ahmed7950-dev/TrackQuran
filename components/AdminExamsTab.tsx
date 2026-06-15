@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArabicExam, ArabicExamItem, ExamVersion } from '../types';
-import { listExams, createExam, deleteExam, getExam, getExamItems } from '../services/examService';
+import { ArabicExam, ArabicExamItem, ArabicExamAttempt, ExamVersion } from '../types';
+import { listExams, createExam, deleteExam, getExam, getExamItems, getAttemptsForExam } from '../services/examService';
 import ExamBuilder from './ExamBuilder';
 import ExamTakingPage from './ExamTakingPage';
 
@@ -14,6 +14,7 @@ const AdminExamsTab: React.FC<{ adminId: string }> = ({ adminId }) => {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ exam: ArabicExam; items: ArabicExamItem[] } | null>(null);
+  const [results, setResults] = useState<{ exam: ArabicExam; attempts: ArabicExamAttempt[] } | null>(null);
   const [creating, setCreating] = useState(false);
 
   const reload = useCallback(async () => {
@@ -29,9 +30,45 @@ const AdminExamsTab: React.FC<{ adminId: string }> = ({ adminId }) => {
     if (exam) setPreview({ exam, items });
   };
 
+  const openResults = async (exam: ArabicExam) => {
+    setResults({ exam, attempts: await getAttemptsForExam(exam.id) });
+  };
+
   // ── Preview overlay ────────────────────────────────────────────────────────
   if (preview) {
     return <ExamTakingPage exam={preview.exam} items={preview.items} preview onExit={() => setPreview(null)} />;
+  }
+
+  // ── Results overlay (all students' attempts for one exam) ───────────────────
+  if (results) {
+    const STATUS: Record<string, string> = { in_progress: 'In progress', submitted: 'Submitted', under_review: 'Under review', result_published: 'Published' };
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setResults(null)} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 text-sm font-semibold">← Back</button>
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 truncate">{results.exam.title} — Results</h3>
+        </div>
+        {results.attempts.length === 0 ? (
+          <p className="text-center text-slate-400 py-10">No attempts yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {results.attempts.map(a => (
+              <div key={a.id} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl px-3 py-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{a.studentName || 'Student'}</p>
+                  <p className="text-xs text-slate-400">{STATUS[a.status] ?? a.status} · attempt #{a.attemptNumber}{a.submittedAt ? ` · ${new Date(a.submittedAt).toLocaleDateString()}` : ''}</p>
+                </div>
+                {a.status === 'result_published' && a.percentage != null && (
+                  <span className={`text-sm font-extrabold flex-shrink-0 ${a.passed ? 'text-green-600 dark:text-green-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {a.percentage}% {a.passed ? '✓' : ''}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   // ── Builder ────────────────────────────────────────────────────────────────
@@ -101,6 +138,7 @@ const AdminExamsTab: React.FC<{ adminId: string }> = ({ adminId }) => {
                           {exam.status === 'published' ? 'Published' : 'Draft'}
                         </span>
                         <button onClick={() => openPreview(exam.id)} className="text-xs font-semibold text-sky-600 hover:underline">Preview</button>
+                        <button onClick={() => openResults(exam)} className="text-xs font-semibold text-indigo-600 hover:underline">Results</button>
                         <button onClick={() => setEditingId(exam.id)} className="text-xs font-semibold text-amber-600 hover:underline">Edit</button>
                         <button onClick={() => handleDelete(exam.id)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
                       </div>

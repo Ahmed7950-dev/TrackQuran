@@ -438,6 +438,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     return (
       <ExamFlow
         studentId={preSelectedStudentId}
+        studentName={students.find(s => s.id === preSelectedStudentId)?.name}
         teacherId={teacherId}
         level={activeLevel}
         retakeAllowed={!!unlock?.retakeAllowed}

@@ -15,12 +15,13 @@ import {
   removeVocabMistakes,
 } from '../services/arabicService';
 import {
-  getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent,
+  getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
 } from '../services/examService';
 import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ExamMarkingPage from './ExamMarkingPage';
+import LeaderboardPage from './LeaderboardPage';
 import CalendarPage from './CalendarPage';
 import LessonTimeline from './LessonTimeline';
 import { getStoredToken } from '../services/googleCalendarService';
@@ -720,6 +721,7 @@ const ExamsTab: React.FC<{
   onMark: (a: ArabicExamAttempt) => void;
 }> = ({ studentId, teacherId, unlocks, attempts, onChanged, onMark }) => {
   const [busy, setBusy] = useState(false);
+  const [boardLevel, setBoardLevel] = useState<number | null>(null);
 
   const toggleUnlock = async (level: number, on: boolean) => {
     setBusy(true);
@@ -731,10 +733,22 @@ const ExamsTab: React.FC<{
 
   const toggleRetake = async (level: number, allowed: boolean) => {
     setBusy(true);
-    await setRetakeAllowed(studentId, level, allowed);
+    await setRetakeAllowed(studentId, level, allowed, teacherId);
     setBusy(false);
     onChanged();
   };
+
+  const reopen = async (a: ArabicExamAttempt) => {
+    if (!window.confirm('Reopen this attempt so the student can edit and resubmit?')) return;
+    setBusy(true);
+    await reopenAttempt(a, teacherId);
+    setBusy(false);
+    onChanged();
+  };
+
+  if (boardLevel !== null) {
+    return <LeaderboardPage level={boardLevel} onExit={() => setBoardLevel(null)} />;
+  }
 
   return (
     <div className="space-y-5">
@@ -759,6 +773,8 @@ const ExamsTab: React.FC<{
                     Allow retake
                   </label>
                 )}
+                <button onClick={() => setBoardLevel(level)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold">🏅 Leaderboard</button>
                 {unlocked && unlock!.unlockedAt && (
                   <span className="text-[10px] text-slate-400 w-full sm:w-auto">since {new Date(unlock!.unlockedAt).toLocaleDateString()}</span>
                 )}
@@ -785,12 +801,17 @@ const ExamsTab: React.FC<{
                     {a.status === 'result_published' && a.percentage != null ? ` · ${a.percentage}% · ${a.passed ? 'Passed' : 'Failed'}` : ''}
                   </p>
                 </div>
-                {(a.status === 'submitted' || a.status === 'under_review') && (
-                  <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex-shrink-0">Mark</button>
-                )}
-                {a.status === 'result_published' && (
-                  <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 text-xs font-bold flex-shrink-0">Review</button>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {(a.status === 'submitted' || a.status === 'under_review') && (
+                    <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold">Mark</button>
+                  )}
+                  {a.status === 'result_published' && (
+                    <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 text-xs font-bold">Review</button>
+                  )}
+                  {a.status !== 'in_progress' && (
+                    <button onClick={() => reopen(a)} disabled={busy} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 text-xs font-bold disabled:opacity-50">Reopen</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

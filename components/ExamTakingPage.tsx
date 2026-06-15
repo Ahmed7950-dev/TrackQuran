@@ -14,6 +14,7 @@ interface Props {
   items: ArabicExamItem[];
   preview?: boolean;
   studentId?: string;
+  studentName?: string;
   teacherId?: string;
   retakeAllowed?: boolean;
   onExit: () => void;
@@ -25,7 +26,7 @@ const fmt = (secs: number) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const ExamTakingPage: React.FC<Props> = ({ exam, items, preview, studentId, teacherId, retakeAllowed, onExit, onSubmitted }) => {
+const ExamTakingPage: React.FC<Props> = ({ exam, items, preview, studentId, studentName, teacherId, retakeAllowed, onExit, onSubmitted }) => {
   const [attempt, setAttempt] = useState<ArabicExamAttempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!preview);
@@ -46,7 +47,7 @@ const ExamTakingPage: React.FC<Props> = ({ exam, items, preview, studentId, teac
   useEffect(() => {
     if (preview || !studentId) return;
     let active = true;
-    getOrCreateAttempt(exam, studentId, !!retakeAllowed).then(a => {
+    getOrCreateAttempt(exam, studentId, !!retakeAllowed, studentName, teacherId).then(a => {
       if (!active || !a) { setLoading(false); return; }
       setAttempt(a);
       setAnswers(a.answers ?? {});

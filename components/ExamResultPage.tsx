@@ -12,16 +12,37 @@ const ExamResultPage: React.FC<{
   items: ArabicExamItem[];
   attempt: ArabicExamAttempt;
   onExit: () => void;
-}> = ({ exam, items, attempt, onExit }) => {
+  onViewLeaderboard?: () => void;
+}> = ({ exam, items, attempt, onExit, onViewLeaderboard }) => {
   const qNums = questionNumbers(items);
   const passed = !!attempt.passed;
+  const versionLabel = exam.version === 'arabic' ? 'Arabic' : 'Transliteration';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2">
         <button onClick={onExit} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 text-sm font-semibold">← Back</button>
-        <span className="text-xs text-slate-400">Level {exam.level} · {exam.version === 'arabic' ? 'Arabic' : 'Transliteration'}</span>
+        <div className="flex items-center gap-2">
+          {onViewLeaderboard && (
+            <button onClick={onViewLeaderboard} className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-semibold">🏅 Leaderboard</button>
+          )}
+          <span className="text-xs text-slate-400">Level {exam.level} · {versionLabel}</span>
+        </div>
       </div>
+
+      {/* Certificate (passed) */}
+      {passed && (
+        <div className="rounded-2xl mb-6 p-7 text-center border-4 border-amber-300 dark:border-amber-700 bg-gradient-to-b from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 shadow-lg">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">Certificate of Achievement</p>
+          <div className="text-5xl my-3">🎓</div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">This certifies that</p>
+          <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 my-1">{attempt.studentName || 'Student'}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">has passed the</p>
+          <p className="text-lg font-bold text-amber-700 dark:text-amber-300 my-1">Level {exam.level} {versionLabel} Exam</p>
+          <p className="text-3xl font-extrabold text-green-600 dark:text-green-400 mt-2">{attempt.percentage ?? 0}%</p>
+          {attempt.publishedAt && <p className="text-[11px] text-slate-400 mt-2">{new Date(attempt.publishedAt).toLocaleDateString()}</p>}
+        </div>
+      )}
 
       {/* Score banner */}
       <div className={`rounded-2xl p-6 text-center mb-6 border-2 ${passed ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' : 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700'}`}>
@@ -29,7 +50,7 @@ const ExamResultPage: React.FC<{
         <h2 className={`text-2xl font-extrabold ${passed ? 'text-green-700 dark:text-green-300' : 'text-rose-700 dark:text-rose-300'}`}>
           {passed ? 'Passed!' : 'Not passed'}
         </h2>
-        {passed && <p className="text-sm font-semibold text-green-700 dark:text-green-300 mt-1">Congratulations! You passed the Level {exam.level} {exam.version === 'arabic' ? 'Arabic' : 'Transliteration'} exam.</p>}
+        {passed && <p className="text-sm font-semibold text-green-700 dark:text-green-300 mt-1">Congratulations! You passed the Level {exam.level} {versionLabel} exam.</p>}
         <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-3">{attempt.percentage ?? 0}%</p>
         <p className="text-sm text-slate-500 dark:text-slate-400">{attempt.totalScore ?? 0} / {exam.totalMarks} marks · pass mark {exam.passingPercentage}%</p>
       </div>
