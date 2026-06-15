@@ -293,6 +293,90 @@ export interface HomeworkQuestion {
   createdAt: string;
 }
 
+// ── Arabic Exams ──────────────────────────────────────────────────────────────
+
+export type ExamVersion = 'arabic' | 'transliteration';
+
+export type ArabicExamItemType =
+  | 'section'      // section divider with a title
+  | 'divider'      // plain horizontal divider
+  | 'headline'     // bold heading text
+  | 'instruction'  // instruction text
+  | 'paragraph'    // body paragraph text
+  | 'image'        // image
+  | 'question';    // a gradeable question (reuses HomeworkQuestionType)
+
+export interface ArabicExam {
+  id: string;
+  level: 1 | 2 | 3;
+  version: ExamVersion;
+  title: string;
+  timeLimitMinutes?: number;     // undefined = no limit
+  passingPercentage: number;     // e.g. 70
+  status: 'draft' | 'published';
+  totalMarks: number;            // sum of question marks (auto-calculated)
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ArabicExamItem {
+  id: string;
+  examId: string;
+  itemType: ArabicExamItemType;
+  orderIndex: number;
+  content?: string;                  // text for section/headline/instruction/paragraph + question prompt
+  imageUrl?: string;                 // for image items
+  questionType?: HomeworkQuestionType;
+  options?: string[];                // for multiple_choice / fill_blank_options
+  correctAnswer?: string;            // for auto-grading objective questions
+  marks?: number;                    // for question items
+  createdAt: string;
+}
+
+export interface ArabicExamUnlock {
+  id: string;
+  studentId: string;
+  level: number;
+  unlockedBy?: string;               // tutor id
+  unlockedAt: string;
+  retakeAllowed: boolean;
+}
+
+export type ExamAttemptStatus =
+  | 'in_progress'
+  | 'submitted'
+  | 'under_review'
+  | 'result_published';
+
+// Per-question grading record stored in attempt.grading keyed by item id
+export interface ExamItemGrading {
+  awarded: number;        // marks awarded
+  correct: boolean;       // marked correct/wrong by tutor (or auto)
+  correction?: string;    // tutor's correction / explanation
+}
+
+export interface ArabicExamAttempt {
+  id: string;
+  examId: string;
+  studentId: string;
+  level: number;
+  version: ExamVersion;
+  attemptNumber: number;
+  status: ExamAttemptStatus;
+  startedAt: string;
+  submittedAt?: string;
+  markedAt?: string;
+  publishedAt?: string;
+  answers: Record<string, string>;            // itemId -> answer
+  grading: Record<string, ExamItemGrading>;   // itemId -> grading
+  totalScore?: number;
+  percentage?: number;
+  passed?: boolean;
+  generalFeedback?: string;
+  createdAt: string;
+}
+
 // ── Vocabulary (word table per lesson) ────────────────────────────────────────
 
 export interface VocabWord {

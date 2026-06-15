@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect } from '../types';
+import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect, ArabicExamUnlock } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import {
@@ -25,6 +25,7 @@ import {
   saveLevelPlan,
 } from '../services/arabicService';
 import ArabicLessonDetailPage from './ArabicLessonDetailPage';
+import ExamFlow from './ExamFlow';
 
 const LESSONS_PER_LEVEL = 20;
 const LEVELS = [1, 2, 3] as const;
@@ -311,9 +312,11 @@ interface Props {
   studentMode?: boolean;
   /** Limit which course dialects are shown (for student view). Empty = show all. */
   dialectFilter?: ArabicCourseDialect[];
+  /** Student's exam unlock rows (per level). Drives the "Do Exam" button. */
+  examUnlocks?: ArabicExamUnlock[];
 }
 
-const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter }) => {
+const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter, examUnlocks }) => {
   const { t } = useI18n();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
@@ -333,6 +336,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   // Level plans keyed by "dialect-level" (e.g. "msa-1", "levantine-2")
   const [levelPlans, setLevelPlans] = useState<Record<string, string>>({});
   const [showPlan,   setShowPlan]   = useState<1|2|3|null>(null);
+  const [examFlowOpen, setExamFlowOpen] = useState(false);
 
   // Per-lesson stats for student badges
   const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
@@ -428,6 +432,20 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const milestone1 = levelLessons[9];  // 10th lesson
   const milestone2 = levelLessons[19]; // 20th lesson
 
+  // Exam flow overlay (student taking the unlocked exam for the active level)
+  if (examFlowOpen && preSelectedStudentId) {
+    const unlock = examUnlocks?.find(u => u.level === activeLevel);
+    return (
+      <ExamFlow
+        studentId={preSelectedStudentId}
+        teacherId={teacherId}
+        level={activeLevel}
+        retakeAllowed={!!unlock?.retakeAllowed}
+        onExit={() => setExamFlowOpen(false)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -504,13 +522,40 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('arabicLessonPage.levelSummary', { count: levelTotal, total: LESSONS_PER_LEVEL })}</p>
         </div>
-        <button onClick={() => setShowPlan(activeLevel)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
-              </svg>
-              {t('arabicLessonPage.showPlan')}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {studentMode && preSelectedStudentId && (() => {
+            const unlock = examUnlocks?.find(u => u.level === activeLevel);
+            const unlocked = !!unlock;
+            return (
+              <div className="flex flex-col items-end gap-0.5">
+                <button
+                  onClick={() => unlocked && setExamFlowOpen(true)}
+                  disabled={!unlocked}
+                  title={unlocked ? 'Take the exam for this level' : 'Your tutor has not unlocked this exam yet.'}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
+                    unlocked
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  {unlocked ? '📝' : '🔒'} Do Exam
+                </button>
+                {!unlocked && (
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[140px] text-right leading-tight">
+                    Your tutor has not unlocked this exam yet.
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+          <button onClick={() => setShowPlan(activeLevel)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+                </svg>
+                {t('arabicLessonPage.showPlan')}
+          </button>
+        </div>
       </div>
 
       {/* Lesson list */}

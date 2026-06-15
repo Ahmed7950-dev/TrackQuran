@@ -4,8 +4,8 @@
 // student's spaced-rep / wrong-word progress tab.
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useState } from 'react';
-import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail } from '../types';
+import React, { useEffect, useState, useCallback } from 'react';
+import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import {
   getArabicLessons,
@@ -14,9 +14,13 @@ import {
   getVocabMistakesForStudent,
   removeVocabMistakes,
 } from '../services/arabicService';
+import {
+  getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent,
+} from '../services/examService';
 import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
+import ExamMarkingPage from './ExamMarkingPage';
 import CalendarPage from './CalendarPage';
 import LessonTimeline from './LessonTimeline';
 import { getStoredToken } from '../services/googleCalendarService';
@@ -699,6 +703,103 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   );
 };
 
+// ── Exams tab (tutor) ─────────────────────────────────────────────────────────
+
+const ATTEMPT_STATUS_LABEL: Record<string, string> = {
+  in_progress: 'In progress', submitted: 'Submitted', under_review: 'Under review',
+  result_published: 'Result published',
+};
+
+const ExamsTab: React.FC<{
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  unlocks: ArabicExamUnlock[];
+  attempts: ArabicExamAttempt[];
+  onChanged: () => void;
+  onMark: (a: ArabicExamAttempt) => void;
+}> = ({ studentId, teacherId, unlocks, attempts, onChanged, onMark }) => {
+  const [busy, setBusy] = useState(false);
+
+  const toggleUnlock = async (level: number, on: boolean) => {
+    setBusy(true);
+    if (on) await setExamUnlock(studentId, level, teacherId, false, teacherId);
+    else await removeExamUnlock(studentId, level);
+    setBusy(false);
+    onChanged();
+  };
+
+  const toggleRetake = async (level: number, allowed: boolean) => {
+    setBusy(true);
+    await setRetakeAllowed(studentId, level, allowed);
+    setBusy(false);
+    onChanged();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
+        <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-1">Exam access</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Unlock a level's exam for this student. They choose Arabic or Transliteration when they start.</p>
+        <div className="space-y-2">
+          {([1, 2, 3] as const).map(level => {
+            const unlock = unlocks.find(u => u.level === level);
+            const unlocked = !!unlock;
+            return (
+              <div key={level} className="flex flex-wrap items-center gap-3 border border-slate-100 dark:border-gray-700 rounded-xl px-3 py-2">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">Level {level}</span>
+                <button disabled={busy} onClick={() => toggleUnlock(level, !unlocked)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50 ${unlocked ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'}`}>
+                  {unlocked ? '✓ Unlocked' : 'Unlock exam'}
+                </button>
+                {unlocked && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 ml-auto">
+                    <input type="checkbox" checked={unlock!.retakeAllowed} disabled={busy}
+                      onChange={e => toggleRetake(level, e.target.checked)} />
+                    Allow retake
+                  </label>
+                )}
+                {unlocked && unlock!.unlockedAt && (
+                  <span className="text-[10px] text-slate-400 w-full sm:w-auto">since {new Date(unlock!.unlockedAt).toLocaleDateString()}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
+        <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-3">Attempts</h3>
+        {attempts.length === 0 ? (
+          <p className="text-sm text-slate-400">No exam attempts yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {attempts.map(a => (
+              <div key={a.id} className="flex items-center justify-between gap-3 border border-slate-100 dark:border-gray-700 rounded-xl px-3 py-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">
+                    Level {a.level} · {a.version === 'arabic' ? 'Arabic' : 'Transliteration'} · attempt #{a.attemptNumber}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {ATTEMPT_STATUS_LABEL[a.status] ?? a.status}
+                    {a.status === 'result_published' && a.percentage != null ? ` · ${a.percentage}% · ${a.passed ? 'Passed' : 'Failed'}` : ''}
+                  </p>
+                </div>
+                {(a.status === 'submitted' || a.status === 'under_review') && (
+                  <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex-shrink-0">Mark</button>
+                )}
+                {a.status === 'result_published' && (
+                  <button onClick={() => onMark(a)} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 text-xs font-bold flex-shrink-0">Review</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
@@ -708,7 +809,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams'>('lessons');
+  const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
+  const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
+  const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
   const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
@@ -718,6 +822,18 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   useEffect(() => {
     getArabicLessons().then(setLessons);
   }, []);
+
+  // Exam unlocks + attempts for this student
+  const reloadExams = useCallback(async () => {
+    const [unlocks, attempts] = await Promise.all([
+      getUnlocksForStudent(student.id),
+      getAttemptsForStudent(student.id),
+    ]);
+    setExamUnlocks(unlocks);
+    setExamAttempts(attempts);
+  }, [student.id]);
+
+  useEffect(() => { reloadExams(); }, [reloadExams]);
 
   useEffect(() => {
     setLessonsLoading(true);
@@ -748,13 +864,28 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
     { key: 'schedule', label: '📅 Schedule', mobileLabel: 'Schedule' },
+    // Exam management is a tutor-only control surface
+    ...(studentMode ? [] : [{ key: 'exams' as const, label: '📝 Exams', mobileLabel: 'Exams' }]),
     { key: 'profile',  label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
     ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
+
+  // Marking overlay (tutor opens a submitted attempt to grade it)
+  if (markingAttempt && !studentMode) {
+    return (
+      <ExamMarkingPage
+        attempt={markingAttempt}
+        studentName={student.name}
+        teacherId={teacherId}
+        onBack={() => { setMarkingAttempt(null); reloadExams(); }}
+        onPublished={() => { setMarkingAttempt(null); reloadExams(); }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -952,6 +1083,20 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           onStudentUpdated={onUpdateStudent}
           studentMode={studentMode}
           dialectFilter={studentDialectFilter}
+          examUnlocks={examUnlocks}
+        />
+      )}
+
+      {/* ── Exams section (tutor only) ── */}
+      {activeSection === 'exams' && !studentMode && (
+        <ExamsTab
+          studentId={student.id}
+          studentName={student.name}
+          teacherId={teacherId}
+          unlocks={examUnlocks}
+          attempts={examAttempts}
+          onChanged={reloadExams}
+          onMark={setMarkingAttempt}
         />
       )}
 
