@@ -86,8 +86,8 @@ const playWrong   = () => playTone([220, 165], 0.18, 'square');
 // ── Jet plane icon ────────────────────────────────────────────────────────────
 const PLANE_ICON = 'https://img.icons8.com/external-flat-juicy-fish/60/external-fighter-vehicles-flat-flat-juicy-fish.png';
 
-// Seconds for one full background scroll cycle. Lower = faster.
-const BG_SCROLL_SPEED = 18;
+// Background scroll speed in pixels per second. Increase to scroll faster.
+const BG_SCROLL_SPEED = 120;
 
 const JetPlane: React.FC = () => (
   <img
@@ -124,6 +124,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
   const bubbleDomRefs  = useRef<Map<string, HTMLDivElement>>(new Map());
   const collidingRef   = useRef(false);
   const queuePosRef    = useRef(0);
+  const bgStripRef     = useRef<HTMLDivElement>(null);
+  const bgOffsetRef    = useRef(0);
+  const bgImgWidthRef  = useRef(0);
 
   bubblesRef.current = bubbles;
   const currentLetter = queue[queuePos] ?? '';
@@ -132,6 +135,25 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  // ── Background infinite scroll (JS-driven, no CSS animation loop glitch) ───
+  useEffect(() => {
+    let lastTime = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      const w = bgImgWidthRef.current;
+      if (w > 0) {
+        bgOffsetRef.current -= BG_SCROLL_SPEED * dt;
+        if (bgOffsetRef.current <= -w) bgOffsetRef.current += w;
+        if (bgStripRef.current) bgStripRef.current.style.transform = `translateX(${bgOffsetRef.current}px)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   // CSS injections
@@ -148,10 +170,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       @keyframes ag-pop {
         0%   { transform: translate(-50%,-50%) scale(1);   opacity:1; }
         100% { transform: translate(-50%,-50%) scale(1.8); opacity:0; }
-      }
-      @keyframes ag-bg-scroll {
-        from { transform: translateX(0); }
-        to   { transform: translateX(-50%); }
       }
       .ag-bubble { animation: ag-float 3.2s ease-in-out infinite; }
       .ag-popped { animation: ag-pop .45s ease-out forwards; }
@@ -346,13 +364,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
     >
       {/* ── Scrolling background ── */}
       <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, overflow: 'hidden' }}>
-        <div style={{
-          display: 'flex',
-          height: '100%',
-          animation: `ag-bg-scroll ${BG_SCROLL_SPEED}s linear infinite`,
-        }}>
-          <img src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} />
-          <img src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} />
+        <div ref={bgStripRef} style={{ display: 'flex', height: '100%', willChange: 'transform' }}>
+          {[0, 1, 2, 3].map(i => (
+            <img
+              key={i}
+              src="/sprites/airplane-bg.png"
+              alt=""
+              style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }}
+              onLoad={i === 0 ? (e) => { bgImgWidthRef.current = (e.target as HTMLImageElement).offsetWidth; } : undefined}
+            />
+          ))}
         </div>
       </div>
 
