@@ -83,8 +83,9 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
 const playSuccess = () => playTone([523, 659, 784], 0.12);
 const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
-// ── Jet plane icon (icons8 soft-fill juicy-fish pack) ────────────────────────
-const PLANE_ICON = 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-single-vehicles-soft-fill-soft-fill-juicy-fish.png';
+// ── Jet plane icon ────────────────────────────────────────────────────────────
+const PLANE_ICON = 'https://img.icons8.com/external-flat-juicy-fish/60/external-fighter-vehicles-flat-flat-juicy-fish.png';
+const CLOUD_ICON = 'https://img.icons8.com/cotton/64/clouds--v1.png';
 
 const JetPlane: React.FC = () => (
   <img
@@ -96,15 +97,9 @@ const JetPlane: React.FC = () => (
   />
 );
 
-// ── Cloud SVG ─────────────────────────────────────────────────────────────────
+// ── Cloud icon ────────────────────────────────────────────────────────────────
 const CloudShape: React.FC<{ w: number; opacity: number }> = ({ w, opacity }) => (
-  <svg viewBox="0 0 120 55" width={w} height={w * 0.46} style={{ display: 'block' }}>
-    <ellipse cx="38" cy="40" rx="34" ry="18" fill="white" opacity={opacity}/>
-    <ellipse cx="62" cy="35" rx="32" ry="22" fill="white" opacity={opacity}/>
-    <ellipse cx="84" cy="42" rx="26" ry="16" fill="white" opacity={opacity}/>
-    <circle  cx="50" cy="22" r="20" fill="white" opacity={opacity}/>
-    <circle  cx="70" cy="18" r="16" fill="white" opacity={opacity}/>
-  </svg>
+  <img src={CLOUD_ICON} alt="" width={w} style={{ display: 'block', opacity }} />
 );
 
 // ── Cloud data ────────────────────────────────────────────────────────────────
