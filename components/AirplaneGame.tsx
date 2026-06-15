@@ -90,8 +90,18 @@ const PLANES = [
   { label: 'Helicopter',         url: 'https://img.icons8.com/external-those-icons-lineal-color-those-icons/24/external-Helicopter-transportation-and-vehicles-those-icons-lineal-color-those-icons.png' },
   { label: 'Med Helicopter',     url: 'https://img.icons8.com/external-photo3ideastudio-lineal-color-photo3ideastudio/64/external-helicopter-emergency-photo3ideastudio-lineal-color-photo3ideastudio.png' },
   { label: 'Jet Bomber',         url: 'https://img.icons8.com/external-smashingstocks-flat-smashing-stocks/66/external-Jet-Plane-war-and-army-smashingstocks-flat-smashing-stocks-4.png' },
-  { label: 'Space Shuttle',      url: 'https://img.icons8.com/arcade/64/space-shuttle.png' },
+  { label: 'Space Shuttle',      url: 'https://img.icons8.com/color/64/space-shuttle.png' },
 ];
+
+// Wraps a raw Arabic letter in zero-width joiners to force a positional glyph.
+function applyLetterForm(letter: string, form: string): string {
+  switch (form) {
+    case 'initial': return `${letter}‍`;
+    case 'medial':  return `‍${letter}‍`;
+    case 'final':   return `‍${letter}`;
+    default:        return `‌${letter}‌`;
+  }
+}
 
 // Background scroll speed in pixels per second. Increase to scroll faster.
 const BG_SCROLL_SPEED = 120;
@@ -108,10 +118,11 @@ const JetPlane: React.FC<{ src: string }> = ({ src }) => (
 
 interface AirplaneGameProps {
   letters: string[];
+  letterForm?: string;
   onExit: () => void;
 }
 
-const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
+const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, letterForm = 'isolated', onExit }) => {
   const [status, setStatus]       = useState<GameStatus>('start');
   const [selectedPlane, setSelectedPlane] = useState(0);
   const [fuel, setFuel]           = useState(START_FUEL);
@@ -430,7 +441,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
           }}
         >
           <span style={{ fontFamily: "'Hafs','Amiri',serif", fontSize: 'clamp(2.2rem,5.5vw,3.2rem)', lineHeight: 1, color: '#0c4a6e' }}>
-            {b.letter}
+            {applyLetterForm(b.letter, letterForm)}
           </span>
         </div>
       ))}

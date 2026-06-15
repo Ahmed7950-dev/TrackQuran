@@ -728,7 +728,7 @@ const AlphabetTrainerPage: React.FC = () => {
       {view === 'win'      && renderWin()}
       {view === 'airplane' && (
         <div className="max-w-3xl mx-auto px-4 pb-8">
-          <AirplaneGame letters={selectedLetters} onExit={() => setView('select')} />
+          <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
         </div>
       )}
     </div>
