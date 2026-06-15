@@ -42,11 +42,16 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function makeBubbles(correctLetter: string): Bubble[] {
-  const count = 3 + Math.floor(Math.random() * 3);
+const ALL_Y_SLOTS = [14, 27, 40, 53, 66, 79];
+const MIN_Y_GAP   = 16;
+
+function makeBubbles(correctLetter: string, count = 3, avoidY: number[] = []): Bubble[] {
   const wrong = shuffle(ARABIC_LETTERS.filter(l => l !== correctLetter)).slice(0, count - 1);
   const letters = shuffle([correctLetter, ...wrong]);
-  const ySlots = shuffle([18, 34, 50, 66, 80]).slice(0, count);
+  // Pick y slots that don't overlap existing bubbles
+  const free = ALL_Y_SLOTS.filter(y => avoidY.every(ay => Math.abs(ay - y) >= MIN_Y_GAP));
+  const pool = free.length >= count ? free : ALL_Y_SLOTS;
+  const ySlots = shuffle(pool).slice(0, count);
   return letters.map((letter, i) => ({
     id: `${Date.now()}-${i}`,
     letter,
@@ -78,23 +83,40 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
 const playSuccess = () => playTone([523, 659, 784], 0.12);
 const playWrong   = () => playTone([220, 165], 0.18, 'square');
 
-// ── Jet plane — uses the PNG from public/sprites/jet-plane.png.
-//    Save the PNG there and it will be used automatically.
-//    The SVG below is a fallback if the file is missing. ───────────────────────
+// ── Jet plane — loads PNG and strips its solid background via canvas ──────────
 const JetPlane: React.FC = () => {
-  const [pngFailed, setPngFailed] = React.useState(false);
-  if (!pngFailed) {
-    return (
-      <img
-        src="/sprites/jet-plane.png"
-        alt="jet"
-        width={160}
-        style={{ display: 'block', objectFit: 'contain' }}
-        onError={() => setPngFailed(true)}
-      />
-    );
-  }
-  return (
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [useSvg, setUseSvg] = React.useState(false);
+
+  React.useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      c.width  = img.naturalWidth;
+      c.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      try {
+        const data = ctx.getImageData(0, 0, c.width, c.height);
+        const px = data.data;
+        // Sample top-left corner as the background colour
+        const bgR = px[0], bgG = px[1], bgB = px[2];
+        for (let i = 0; i < px.length; i += 4) {
+          const dist = Math.abs(px[i] - bgR) + Math.abs(px[i+1] - bgG) + Math.abs(px[i+2] - bgB);
+          if (dist < 45)       px[i+3] = 0;                                   // solid bg → transparent
+          else if (dist < 90)  px[i+3] = Math.round(((dist - 45) / 45) * 255); // edge → fade
+        }
+        ctx.putImageData(data, 0, 0);
+      } catch { /* cross-origin guard — canvas stays with bg */ }
+    };
+    img.onerror = () => setUseSvg(true);
+    img.src = '/sprites/jet-plane.png';
+  }, []);
+
+  if (useSvg) return (
   <svg viewBox="0 0 160 58" width="152" height="55" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="ag-fuse" x1="0" y1="0" x2="0" y2="1">
@@ -176,6 +198,14 @@ const JetPlane: React.FC = () => {
     <rect x="58.5" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
     <rect x="77" y="27" width="6" height="4.5" fill="#BF0A30" rx="0.5"/>
   </svg>
+  );
+
+  // PNG with canvas-stripped background
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: 160, height: 55, display: 'block', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.3))' }}
+    />
   );
 };
 
@@ -315,13 +345,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       if (next >= queue.length) {
         setTimeout(() => setStatus('won'), 600);
       } else {
-        // Keep all surviving bubbles flying; inject the new batch after the pop animation
+        // Keep at most 2 old bubbles flying as distractors; spawn 3 fresh ones
+        // that avoid overlapping the survivors' vertical positions.
         const nextLetter = queue[next];
         setTimeout(() => {
-          setBubbles(prev => [
-            ...prev.filter(b => !b.popped),   // old bubbles keep moving
-            ...makeBubbles(nextLetter),        // new wave from the right
-          ]);
+          setBubbles(prev => {
+            const survivors = prev.filter(b => !b.popped).slice(0, 2);
+            const usedY = survivors.map(b => b.y);
+            return [...survivors, ...makeBubbles(nextLetter, 3, usedY)];
+          });
           collidingRef.current = false;
           setTimeout(() => playLetterAudio(nextLetter), 350);
         }, 500);
