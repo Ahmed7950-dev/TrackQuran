@@ -54,6 +54,8 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
   const [editingQ, setEditingQ] = useState<ArabicExamItem | null>(null);
   const [addingQ, setAddingQ] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragIdx = useRef<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     const [e, its] = await Promise.all([getExam(examId), getExamItems(examId)]);
@@ -89,14 +91,19 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
     if (url) { await createExamItem({ examId, itemType: 'image', imageUrl: url }); reload(); }
   };
 
-  const move = async (index: number, dir: -1 | 1) => {
+  const handleDragEnd = async () => {
+    const from = dragIdx.current;
+    const to = overIdx;
+    setOverIdx(null);
+    dragIdx.current = null;
+    if (from === null || to === null || from === to) return;
     const next = [...items];
-    const target = index + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     setItems(next);
     await reorderExamItems(next.map(i => i.id));
   };
+
 
   const removeItem = async (item: ArabicExamItem) => {
     if (!window.confirm('Delete this item?')) return;
@@ -199,11 +206,21 @@ const ExamBuilder: React.FC<{ examId: string; onBack: () => void; onPreview: (ex
         {items.map((item, index) => {
           if (item.itemType === 'question') qNum++;
           return (
-            <div key={item.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl p-3 flex gap-3">
-              {/* Reorder */}
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <button onClick={() => move(index, -1)} disabled={index === 0} className="w-6 h-6 rounded bg-slate-100 dark:bg-gray-700 text-slate-500 disabled:opacity-30">▲</button>
-                <button onClick={() => move(index, 1)} disabled={index === items.length - 1} className="w-6 h-6 rounded bg-slate-100 dark:bg-gray-700 text-slate-500 disabled:opacity-30">▼</button>
+            <div
+              key={item.id}
+              draggable
+              onDragStart={() => { dragIdx.current = index; }}
+              onDragOver={e => { e.preventDefault(); setOverIdx(index); }}
+              onDragEnd={handleDragEnd}
+              className={`bg-white dark:bg-gray-800 border rounded-xl p-3 flex gap-3 transition-colors ${
+                overIdx === index
+                  ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-200 dark:ring-amber-900'
+                  : 'border-slate-200 dark:border-gray-700'
+              }`}
+            >
+              {/* Drag handle */}
+              <div className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 select-none text-xl flex items-center px-0.5" title="Drag to reorder">
+                ⠿
               </div>
 
               {/* Body */}

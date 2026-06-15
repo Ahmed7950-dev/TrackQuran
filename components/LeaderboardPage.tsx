@@ -1,30 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { ExamVersion, LeaderboardEntry, ArabicExam } from '../types';
-import { getLeaderboard } from '../services/examService';
+import { LeaderboardEntry } from '../types';
+import { getCombinedLeaderboard } from '../services/examService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Leaderboard for a level + version. Only published results appear. Names are
-// formatted per the exam's privacy setting (handled in the service).
+// Combined leaderboard for a level — merges Arabic + Transliteration results.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MEDAL = ['🥇', '🥈', '🥉'];
+
+const VERSION_BADGE: Record<string, string> = {
+  arabic:          'AR',
+  transliteration: 'TR',
+};
 
 const LeaderboardPage: React.FC<{
   level: number;
   selfStudentId?: string;
   onExit: () => void;
 }> = ({ level, selfStudentId, onExit }) => {
-  const [version, setVersion] = useState<ExamVersion>('arabic');
-  const [exam, setExam] = useState<ArabicExam | null>(null);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    getLeaderboard(level, version, selfStudentId).then(({ exam, entries }) => {
-      setExam(exam); setEntries(entries); setLoading(false);
+    getCombinedLeaderboard(level, selfStudentId).then(({ entries }) => {
+      setEntries(entries); setLoading(false);
     });
-  }, [level, version, selfStudentId]);
+  }, [level, selfStudentId]);
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
@@ -33,24 +35,8 @@ const LeaderboardPage: React.FC<{
         <h2 className="font-extrabold text-slate-800 dark:text-slate-100">🏅 Level {level} Leaderboard</h2>
       </div>
 
-      {/* Version toggle */}
-      <div className="flex gap-2 mb-5">
-        {(['arabic', 'transliteration'] as ExamVersion[]).map(v => (
-          <button key={v} onClick={() => setVersion(v)}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${
-              version === v
-                ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
-                : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300'
-            }`}>
-            {v === 'arabic' ? 'Arabic' : 'Transliteration'}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
         <p className="text-center text-slate-400 py-10">Loading…</p>
-      ) : !exam ? (
-        <p className="text-center text-slate-400 py-10">No published exam for this version yet.</p>
       ) : entries.length === 0 ? (
         <p className="text-center text-slate-400 py-10">No results yet — be the first to complete this exam!</p>
       ) : (
@@ -72,6 +58,11 @@ const LeaderboardPage: React.FC<{
                   {e.attemptNumber > 1 ? ` · attempt #${e.attemptNumber}` : ''}
                 </p>
               </div>
+              {e.version && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 flex-shrink-0">
+                  {VERSION_BADGE[e.version] ?? e.version}
+                </span>
+              )}
               <div className="text-right flex-shrink-0">
                 <p className={`font-extrabold ${e.passed ? 'text-green-600 dark:text-green-400' : 'text-slate-600 dark:text-slate-300'}`}>{e.percentage}%</p>
                 <p className="text-[11px] text-slate-400">{e.score} marks{e.passed ? ' · ✓' : ''}</p>

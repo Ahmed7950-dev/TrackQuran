@@ -41,6 +41,12 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'booking_declined':              return { emoji: '❌', color: 'text-red-500' };
     case 'booking_cancelled_by_student':
     case 'booking_cancelled_by_tutor':   return { emoji: '🚫', color: 'text-slate-500' };
+    case 'exam_unlocked':                return { emoji: '🔓', color: 'text-green-500' };
+    case 'exam_submitted':               return { emoji: '📝', color: 'text-amber-500' };
+    case 'exam_started':                 return { emoji: '🎯', color: 'text-sky-500' };
+    case 'exam_result_published':        return { emoji: '🏆', color: 'text-amber-500' };
+    case 'exam_retake_allowed':          return { emoji: '🔄', color: 'text-indigo-500' };
+    default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }
 

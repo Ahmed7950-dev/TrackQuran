@@ -510,6 +510,59 @@ export async function getLeaderboard(
   return { exam, entries };
 }
 
+/**
+ * Combined leaderboard for a level: merges published results from both arabic
+ * and transliteration exams. Best attempt per student (highest %) across both.
+ */
+export async function getCombinedLeaderboard(
+  level: number, selfStudentId?: string,
+): Promise<{ entries: LeaderboardEntry[] }> {
+  const [arabicExam, transExam] = await Promise.all([
+    getPublishedExam(level, 'arabic'),
+    getPublishedExam(level, 'transliteration'),
+  ]);
+  const examMap = new Map<string, ArabicExam>();
+  if (arabicExam) examMap.set(arabicExam.id, arabicExam);
+  if (transExam)  examMap.set(transExam.id, transExam);
+  if (examMap.size === 0) return { entries: [] };
+
+  const { data, error } = await supabase
+    .from('arabic_exam_attempts').select('*')
+    .in('exam_id', [...examMap.keys()]).eq('status', 'result_published');
+  if (error) { console.error('getCombinedLeaderboard:', error.message); return { entries: [] }; }
+  const attempts = (data ?? []).map(rowToAttempt);
+
+  // Best attempt per student across both versions
+  const best = new Map<string, ArabicExamAttempt>();
+  for (const a of attempts) {
+    const cur = best.get(a.studentId);
+    if (!cur || (a.percentage ?? 0) > (cur.percentage ?? 0)) best.set(a.studentId, a);
+  }
+  const ranked = [...best.values()].sort((x, y) => {
+    const d = (y.percentage ?? 0) - (x.percentage ?? 0);
+    if (d !== 0) return d;
+    return (x.publishedAt ?? '').localeCompare(y.publishedAt ?? '');
+  });
+
+  const fallbackExam = arabicExam ?? transExam!;
+  const entries: LeaderboardEntry[] = ranked.map((a, i) => {
+    const exam = examMap.get(a.examId) ?? fallbackExam;
+    return {
+      rank: i + 1,
+      studentId: a.studentId,
+      displayName: a.studentId === selfStudentId ? 'You' : formatName(a.studentName, exam.leaderboardPrivacy, i),
+      score: a.totalScore ?? 0,
+      percentage: a.percentage ?? 0,
+      passed: !!a.passed,
+      attemptNumber: a.attemptNumber,
+      completedAt: a.publishedAt ?? a.submittedAt,
+      isSelf: a.studentId === selfStudentId,
+      version: a.version,
+    };
+  });
+  return { entries };
+}
+
 /** Save tutor's grading + feedback (without publishing yet). */
 export async function gradeAttempt(
   attemptId: string, grading: Record<string, ExamItemGrading>, generalFeedback: string,

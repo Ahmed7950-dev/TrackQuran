@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArabicExamItem } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,6 +43,107 @@ export const ExamContentItem: React.FC<{ item: ArabicExamItem }> = ({ item }) =>
 };
 
 /**
+ * Fill-in-the-blank with a chip pool. Student taps a chip to "hold" it, then
+ * taps a blank slot to place it. Tapping a filled slot returns the chip to the
+ * pool. Works on touch and desktop. Tutor marks this type manually.
+ */
+const FillBlankWithChoices: React.FC<{
+  item: ArabicExamItem;
+  value: string;
+  onChange?: (v: string) => void;
+  disabled?: boolean;
+}> = ({ item, value, onChange, disabled }) => {
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const parts = (item.content ?? '').split('___');
+  const numBlanks = parts.length - 1;
+  const blanks = (() => {
+    const b = value ? value.split(FILL_SEP) : [];
+    while (b.length < numBlanks) b.push('');
+    return b.slice(0, numBlanks);
+  })();
+  const placed = new Set(blanks.filter(Boolean));
+
+  const update = (idx: number, val: string) => {
+    const next = [...blanks];
+    next[idx] = val;
+    onChange?.(next.join(FILL_SEP));
+  };
+
+  const handleBlankClick = (idx: number) => {
+    if (disabled) return;
+    if (blanks[idx]) {
+      const removed = blanks[idx];
+      update(idx, '');
+      setSelected(removed);
+    } else if (selected) {
+      update(idx, selected);
+      setSelected(null);
+    }
+  };
+
+  const handleChipClick = (opt: string) => {
+    if (disabled || placed.has(opt)) return;
+    setSelected(prev => prev === opt ? null : opt);
+  };
+
+  return (
+    <div>
+      {/* Text with blank slots */}
+      <div className="flex flex-wrap items-center gap-1.5 text-sm leading-loose" dir="auto">
+        {parts.map((part, i) => (
+          <React.Fragment key={i}>
+            {part && <span className="text-slate-700 dark:text-slate-200">{part}</span>}
+            {i < numBlanks && (
+              <button
+                type="button"
+                onClick={() => handleBlankClick(i)}
+                className={`inline-flex items-center justify-center min-w-[72px] px-3 py-1 rounded-lg border-2 text-sm font-semibold transition-all ${
+                  blanks[i]
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                    : !disabled && selected
+                    ? 'border-amber-300 border-dashed bg-amber-50/50 dark:bg-amber-900/10 text-slate-400 animate-pulse'
+                    : 'border-slate-300 dark:border-gray-600 border-dashed text-slate-400'
+                } ${disabled ? 'cursor-default' : 'cursor-pointer'}`}
+              >
+                {blanks[i] || (disabled ? '—' : (!disabled && selected ? '↓' : '    '))}
+              </button>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Chip pool */}
+      {!disabled && (
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-gray-700">
+          {(item.options ?? []).map(opt => {
+            const isPlaced = placed.has(opt);
+            const isSel = selected === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => handleChipClick(opt)}
+                dir="auto"
+                className={`px-3 py-1.5 rounded-full border-2 text-sm font-semibold transition-all select-none ${
+                  isPlaced
+                    ? 'opacity-30 border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-400 cursor-not-allowed line-through'
+                    : isSel
+                    ? 'border-amber-500 bg-amber-500 text-white shadow-md scale-105 cursor-pointer'
+                    : 'border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 hover:border-amber-400 cursor-pointer'
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
  * Answer input for a question item. `value` is the stored answer string.
  * fill_blank stores blanks joined by " | ".
  * matching stores JSON: [[left, chosenRight], ...].
@@ -57,13 +158,13 @@ export const QuestionAnswerInput: React.FC<{
   const type = item.questionType;
   const isArabic = type === 'translate_to_arabic';
 
-  // Multiple choice, fill_blank_options, or fill_blank WITH choices → option buttons
-  const hasOptionButtons =
-    type === 'multiple_choice' ||
-    type === 'fill_blank_options' ||
-    (type === 'fill_blank' && (item.options?.length ?? 0) > 0);
+  // fill_blank WITH choices → special chip-based drag/click UI
+  if ((type === 'fill_blank' || type === 'fill_blank_options') && (item.options?.length ?? 0) > 0) {
+    return <FillBlankWithChoices item={item} value={value} onChange={onChange} disabled={disabled} />;
+  }
 
-  if (hasOptionButtons) {
+  // Multiple choice → option buttons
+  if (type === 'multiple_choice') {
     return (
       <div className="space-y-1.5">
         {(item.options ?? []).map((opt, i) => {

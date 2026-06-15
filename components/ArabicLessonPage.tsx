@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect, ArabicExamUnlock } from '../types';
+import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect, ArabicExamUnlock, ArabicExamAttempt } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import {
@@ -24,6 +24,7 @@ import {
   uploadLevelPlanImage,
   saveLevelPlan,
 } from '../services/arabicService';
+import { getAttemptsForStudent } from '../services/examService';
 import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 import ExamFlow from './ExamFlow';
 
@@ -337,6 +338,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [levelPlans, setLevelPlans] = useState<Record<string, string>>({});
   const [showPlan,   setShowPlan]   = useState<1|2|3|null>(null);
   const [examFlowOpen, setExamFlowOpen] = useState(false);
+  const [studentAttempts, setStudentAttempts] = useState<ArabicExamAttempt[]>([]);
 
   // Per-lesson stats for student badges
   const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
@@ -369,6 +371,12 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
     getHomeworkCompletionsForStudent(preSelectedStudentId).then(setHwDone);
     getVocabRoundsByLesson(preSelectedStudentId).then(setVocabRounds);
   }, [preSelectedStudentId]);
+
+  useEffect(() => {
+    if (studentMode && preSelectedStudentId) {
+      getAttemptsForStudent(preSelectedStudentId).then(setStudentAttempts);
+    }
+  }, [studentMode, preSelectedStudentId]);
 
   const handleDelete = async (l: ArabicLesson) => {
     if (!confirm(t('arabicLessonPage.deleteConfirm', { title: l.title }))) return;
@@ -442,7 +450,10 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
         teacherId={teacherId}
         level={activeLevel}
         retakeAllowed={!!unlock?.retakeAllowed}
-        onExit={() => setExamFlowOpen(false)}
+        onExit={() => {
+          setExamFlowOpen(false);
+          if (preSelectedStudentId) getAttemptsForStudent(preSelectedStudentId).then(setStudentAttempts);
+        }}
       />
     );
   }
@@ -527,26 +538,51 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           {studentMode && preSelectedStudentId && (() => {
             const unlock = examUnlocks?.find(u => u.level === activeLevel);
             const unlocked = !!unlock;
-            return (
+            if (!unlocked) return (
               <div className="flex flex-col items-end gap-0.5">
-                <button
-                  onClick={() => unlocked && setExamFlowOpen(true)}
-                  disabled={!unlocked}
-                  title={unlocked ? 'Take the exam for this level' : 'Your tutor has not unlocked this exam yet.'}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
-                    unlocked
-                      ? 'bg-green-600 hover:bg-green-700 text-white'
-                      : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                  }`}
-                >
-                  {unlocked ? '📝' : '🔒'} Do Exam
+                <button disabled className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed">
+                  🔒 Do Exam
                 </button>
-                {!unlocked && (
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[140px] text-right leading-tight">
-                    Your tutor has not unlocked this exam yet.
-                  </span>
-                )}
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[140px] text-right leading-tight">
+                  Your tutor has not unlocked this exam yet.
+                </span>
               </div>
+            );
+            // Pick latest attempt for this level
+            const latest = studentAttempts
+              .filter(a => a.level === activeLevel)
+              .sort((a, b) => b.attemptNumber - a.attemptNumber)[0];
+            const status = latest?.status;
+            const retake = !!unlock?.retakeAllowed;
+
+            // Determine button label + style
+            let label = '📝 Do Exam';
+            let cls = 'bg-green-600 hover:bg-green-700 text-white';
+            if (status === 'in_progress') {
+              label = '📝 Continue Exam';
+            } else if (status === 'submitted' || status === 'under_review') {
+              label = '⏳ In Progress';
+              cls = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 cursor-default';
+            } else if (status === 'result_published') {
+              if (retake) {
+                label = '🔄 Retake Exam';
+                cls = 'bg-amber-500 hover:bg-amber-600 text-white';
+              } else if (latest?.passed) {
+                label = '✅ Passed!';
+                cls = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-default';
+              } else {
+                label = '📋 See your result!';
+                cls = 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200';
+              }
+            }
+            const clickable = !status || status === 'in_progress' || status === 'result_published' || retake;
+            return (
+              <button
+                onClick={() => clickable && setExamFlowOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${cls}`}
+              >
+                {label}
+              </button>
             );
           })()}
           <button onClick={() => setShowPlan(activeLevel)}

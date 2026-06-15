@@ -393,6 +393,7 @@ export interface LeaderboardEntry {
   attemptNumber: number;
   completedAt?: string;      // published_at / submitted_at
   isSelf: boolean;
+  version?: ExamVersion;     // which exam version this entry is from
 }
 
 // ── Vocabulary (word table per lesson) ────────────────────────────────────────
