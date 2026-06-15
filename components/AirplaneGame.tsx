@@ -99,7 +99,14 @@ const JetPlane: React.FC = () => (
 
 // ── Cloud icon ────────────────────────────────────────────────────────────────
 const CloudShape: React.FC<{ w: number; opacity: number }> = ({ w, opacity }) => (
-  <img src={CLOUD_ICON} alt="" width={w} style={{ display: 'block', opacity }} />
+  <svg width={w} height={w * 0.55} viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg"
+    style={{ display: 'block', opacity }}>
+    <ellipse cx="100" cy="75" rx="90" ry="32" fill="white" />
+    <ellipse cx="72"  cy="60" rx="48" ry="36" fill="white" />
+    <ellipse cx="120" cy="55" rx="52" ry="40" fill="white" />
+    <ellipse cx="155" cy="68" rx="36" ry="28" fill="white" />
+    <ellipse cx="45"  cy="70" rx="32" ry="24" fill="white" />
+  </svg>
 );
 
 // ── Cloud data ────────────────────────────────────────────────────────────────
@@ -232,7 +239,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
         const nextLetter = queue[next];
         setTimeout(() => {
           setBubbles(prev => {
-            const survivors = prev.filter(b => !b.popped).slice(0, 2);
+            const survivors = prev.filter(b => !b.popped && b.letter !== nextLetter).slice(0, 2);
             const usedY = survivors.map(b => b.y);
             return [...survivors, ...makeBubbles(nextLetter, 3, usedY)];
           });
@@ -362,7 +369,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({ letters, onExit }) => {
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
         background: 'linear-gradient(180deg, #0c2461 0%, #1e40af 18%, #2563eb 40%, #60a5fa 68%, #bae6fd 88%, #e8f7ff 100%)',
-        touchAction: 'none', overflow: 'hidden',
+        touchAction: 'none',
       }}
     >
       {/* ── Parallax cloud layers ── */}
