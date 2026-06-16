@@ -65,7 +65,7 @@ const BG_SCROLL_SPEED       = 120;
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
 const BULLET_SPEED          = 1.8;  // % of arena per frame
-const BULLET_DAMAGE         = 18;   // fuel loss on bullet hit
+const BULLET_DAMAGE         = 9;    // fuel loss on bullet hit
 const MINE_DAMAGE           = 28;   // fuel loss on mine trigger
 const COLLECTIBLE_RADIUS    = 9;    // pickup detection (%)
 const BULLET_HIT_RADIUS     = 7;
