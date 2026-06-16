@@ -31,6 +31,7 @@ import ArabicDashboard from './components/ArabicDashboard';
 import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
 import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
+import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
 import GCalOAuthCallback from './components/GCalOAuthCallback';
@@ -358,6 +359,21 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (familyLinkId) return <FamilyLinkPage linkId={familyLinkId} />;
+
+  // ── Letter Flight online 2P — no auth required ────────────────────────────
+  const letterFlightRoomId = (() => {
+    const m = window.location.pathname.match(/^\/letter-flight\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterFlightRoomId) return (
+    <AirplaneGame
+      letters={[]}
+      letterForm="isolated"
+      roomId={letterFlightRoomId}
+      playerRole="2"
+      onExit={() => { window.location.href = '/'; }}
+    />
+  );
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
