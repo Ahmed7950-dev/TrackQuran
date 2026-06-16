@@ -1305,8 +1305,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">Player 1</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
               <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">Player 2</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
             </div>
-            <div className="flex gap-2 justify-center">
-              <button onClick={() => { setStatus('start'); if (isOnline) setP2Joined(false); }} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Play Again</button>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {isOnline
+                ? <button onClick={startGame} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
+                : <button onClick={() => setStatus('start')} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Play Again</button>}
               <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Exit</button>
             </div>
           </>);
@@ -1333,8 +1335,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">Player 1</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
               <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">Player 2</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
             </div>
-            <div className="flex gap-2 justify-center">
-              <button onClick={() => { setStatus('start'); if (isOnline) setP2Joined(false); }} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Try Again</button>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {isOnline
+                ? <button onClick={startGame} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
+                : <button onClick={() => setStatus('start')} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Try Again</button>}
               <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Exit</button>
             </div>
           </>);
