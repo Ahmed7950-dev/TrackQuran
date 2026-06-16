@@ -6,6 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
+import { renderQuranicMarks } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -699,35 +700,10 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         }
     };
 
-    // Helper function to process text and wrap U+06DF characters in Amiri font
-    const processTextWithU06DF = (text: string): React.ReactNode => {
-        if (!text.includes('\u06DF')) {
-            return text;
-        }
-        const parts: React.ReactNode[] = [];
-        let currentPart = '';
-        let charIndex = 0;
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i];
-            if (char === '\u06DF') {
-                if (currentPart) {
-                    parts.push(<span key={`part-${charIndex++}`}>{currentPart}</span>);
-                    currentPart = '';
-                }
-                parts.push(
-                    <span key={`u06df-${charIndex++}`} style={{ fontFamily: 'Amiri Regular' }}>
-                        {'\u06DF'}
-                    </span>
-                );
-            } else {
-                currentPart += char;
-            }
-        }
-        if (currentPart) {
-            parts.push(<span key={`part-${charIndex++}`}>{currentPart}</span>);
-        }
-        return <>{parts}</>;
-    };
+    // Render text with corrective fonts for the silent marker (U+06DF) plus the
+    // im\u0101la (U+06EA, Hud 11:41) and ishm\u0101m (U+06EB, Yusuf 12:11) marks that the
+    // bundled Quranic fonts render incorrectly. See utils/quranicMarks.
+    const processTextWithU06DF = (text: string): React.ReactNode => renderQuranicMarks(text);
 
     // Letter component - matches StudentProgressPage exactly for accurate highlighting
     const LetterForPDF: React.FC<{
@@ -789,17 +765,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         padding: '0'
                     }}
                 >
-                    {letter.includes('\u06DF') ? (
-                        letter.split('').map((char, idx) => 
-                            char === '\u06DF' ? (
-                                <span key={idx} style={{ fontFamily: 'Amiri Regular' }}>{char}</span>
-                            ) : (
-                                <span key={idx}>{char}</span>
-                            )
-                        )
-                    ) : (
-                        letter
-                    )}
+                    {renderQuranicMarks(letter)}
                 </span>
             </span>
         );

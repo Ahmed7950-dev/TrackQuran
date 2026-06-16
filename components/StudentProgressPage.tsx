@@ -151,30 +151,43 @@ const WAQF_SIGN_SET = new Set([
   '\u06de', // \u06de \u2014 Rub el-Hizb
   '\u06df', // \u06df \u2014 Silent letter (already handled separately, included for completeness)
 ]);
-// Im\u0101la & Ishm\u0101m marks (Hafs \u02bfan \u02bf\u0100sim). U+06EA appears only in Hud 11:41
-// (\u0645\u064e\u062c\u0652\u0631\u06ea\u0649\u0670\u0647\u064e\u0627), U+06EB only in Yusuf 12:11 (\u062a\u064e\u0623\u0652\u0645\u064e\u06eb\u0646\u064e\u0651\u0627) \u2014 the only two verses in
-// the mu\u1e63\u1e25af that use them. The bundled Quranic fonts (Hafs, Elgharib KFGQPCHafs
-// V10, \u2026) ship broken glyphs for these (aliased to U+0600 at full advance), so
-// they render as a stray disc + dotted circle. Routing their letter-cluster
-// through the same 'Amiri Quran' override used for Waqf signs renders them
-// correctly. Kept separate from WAQF_SIGN_SET so waqf-specific logic is unaffected.
-const IMALA_ISHMAM_SET = new Set([
-  '\u06ea', // \u06ea ARABIC EMPTY CENTRE LOW STOP  \u2014 im\u0101la (Hud 11:41)
-  '\u06eb', // \u06eb ARABIC EMPTY CENTRE HIGH STOP \u2014 ishm\u0101m (Yusuf 12:11)
-]);
-const needsAmiriOverride = (ch: string): boolean => WAQF_SIGN_SET.has(ch) || IMALA_ISHMAM_SET.has(ch);
+// Im\u0101la & Ishm\u0101m marks (Hafs \u02bfan \u02bf\u0100sim). These are the only two verses in the
+// mu\u1e63\u1e25af that use them, and the bundled Quranic fonts (Hafs, Elgharib KFGQPCHafs
+// V10, \u2026) ship broken glyphs for both (aliased to U+0600 at full advance), so
+// they render as a stray disc + dotted circle. Each needs a DIFFERENT corrective
+// font to match the printed mu\u1e63\u1e25af:
+//   \u2022 U+06EA im\u0101la  (Hud 11:41  \u0645\u064e\u062c\u0652\u0631\u06ea\u0649\u0670\u0647\u064e\u0627) \u2192 a small dot UNDER the letter.
+//     Only 'Uthmanic HAFS v22' draws it as that dot; Amiri draws a diamond.
+//   \u2022 U+06EB ishm\u0101m (Yusuf 12:11 \u062a\u064e\u0623\u0652\u0645\u064e\u06eb\u0646\u064e\u0651\u0627) \u2192 small mark above; 'Amiri Quran'
+//     renders this correctly.
+const IMALA_MARK  = '\u06ea'; // U+06EA ARABIC EMPTY CENTRE LOW STOP  \u2014 dot under \u0631
+const ISHMAM_MARK = '\u06eb'; // U+06EB ARABIC EMPTY CENTRE HIGH STOP
+
+// Corrective font stacks (kept separate from WAQF_SIGN_SET so waqf logic is unaffected).
+const AMIRI_QURAN_STACK  = "'Amiri Quran', 'Amiri Regular', serif";   // waqf signs + ishm\u0101m
+const UTHMANIC_V22_STACK = "'Uthmanic HAFS v22', 'Amiri Quran', serif"; // im\u0101la (dot under)
+
+// Returns the corrective font stack for a grapheme cluster, or null to keep the
+// user-selected Quranic font.
+const overrideFontForSegment = (segment: string): string | null => {
+  const chars = [...segment];
+  if (chars.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
+  if (chars.some(ch => WAQF_SIGN_SET.has(ch) || ch === ISHMAM_MARK)) return AMIRI_QURAN_STACK;
+  return null;
+};
 const hasWaqfOrSpecialChar = (text: string): boolean => {
-  for (const ch of text) if (needsAmiriOverride(ch)) return true;
+  for (const ch of text) if (WAQF_SIGN_SET.has(ch) || ch === IMALA_MARK || ch === ISHMAM_MARK) return true;
   return false;
 };
 
 // Segment a letter string into grapheme clusters so combining marks (harakat,
-// Waqf signs like U+06DF) stay attached to their base letter. Only clusters
-// that contain a Waqf sign or an imāla/ishmām mark get the Amiri Quran font
-// override (see needsAmiriOverride). Splitting by raw character (the old
-// approach) detaches combining marks from their base and causes glyphs like the
-// circled sukoon to render below the line.
-const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: boolean }> => {
+// Waqf signs like U+06DF) stay attached to their base letter. Clusters that
+// contain a Waqf sign or an imāla/ishmām mark get a corrective font override
+// (see overrideFontForSegment) — base + mark must stay in one font to shape
+// correctly. Splitting by raw character (the old approach) detaches combining
+// marks from their base and causes glyphs like the circled sukoon to render
+// below the line.
+const segmentForWaqfFont = (text: string): Array<{ segment: string; overrideFont: string | null }> => {
   let parts: string[];
   if (typeof Intl !== 'undefined' && typeof (Intl as Record<string, unknown>).Segmenter === 'function') {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -204,7 +217,7 @@ const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: bo
   }
   return parts.map(segment => ({
     segment,
-    useAmiri: [...segment].some(needsAmiriOverride),
+    overrideFont: overrideFontForSegment(segment),
   }));
 };
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
@@ -1107,12 +1120,12 @@ const LetterWithError: React.FC<{
                     // combining chars are never split into their own span \u2014 doing so
                     // detaches them from their base and causes them to render below
                     // the line (the "alif with circled sukoon under the line" bug).
-                    segmentForWaqfFont(letter).map(({ segment, useAmiri }, idx) =>
-                        useAmiri ? (
-                            // lineHeight:1 + baseline: Amiri Quran's font box is much
+                    segmentForWaqfFont(letter).map(({ segment, overrideFont }, idx) =>
+                        overrideFont ? (
+                            // lineHeight:1 + baseline: the corrective font box is much
                             // taller than the Quranic fonts; combined with the outer
                             // align-top span it pushes the glyph below the baseline.
-                            <span key={idx} style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif", lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
+                            <span key={idx} style={{ fontFamily: overrideFont, lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
                         ) : (
                             <span key={idx}>{segment}</span>
                         )
@@ -1158,12 +1171,12 @@ const TajweedWord: React.FC<{
         const segs = segmentForWaqfFont(unitText);
         return (
             <React.Fragment key={unitIndex}>
-                {segs.map(({ segment, useAmiri }, i) =>
-                    useAmiri ? (
+                {segs.map(({ segment, overrideFont }, i) =>
+                    overrideFont ? (
                         // lineHeight:1 + baseline: see LetterWithError — prevents the
-                        // taller Amiri Quran font box from sinking the glyph below the line.
+                        // taller corrective font box from sinking the glyph below the line.
                         <span key={i} className={className}
-                              style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif", lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
+                              style={{ fontFamily: overrideFont, lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
                     ) : (
                         <span key={i} className={className}>{segment}</span>
                     )

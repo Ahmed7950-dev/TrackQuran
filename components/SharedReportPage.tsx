@@ -10,6 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
+import { renderQuranicMarks } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -74,27 +75,11 @@ const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): nu
 };
 
 /**
- * Wraps U+06DF (ARABIC SMALL HIGH ROUNDED ZERO — the silent-letter marker used
- * in the Madinah Mushaf) in a span with 'Amiri Regular' so it renders as a
- * proper small circle instead of a generic glyph in Quranic fonts.
+ * Renders Quranic text with corrective fonts for the silent marker (U+06DF) and
+ * the imāla (U+06EA, Hud 11:41) / ishmām (U+06EB, Yusuf 12:11) marks that the
+ * bundled Quranic fonts render incorrectly. See utils/quranicMarks.
  */
-const U06DF = '۟';
-const processTextWithU06DF = (text: string): React.ReactNode => {
-  if (!text.includes(U06DF)) return text;
-  const parts: React.ReactNode[] = [];
-  let current = '';
-  let idx = 0;
-  for (const ch of text) {
-    if (ch === U06DF) {
-      if (current) { parts.push(<span key={`t${idx++}`}>{current}</span>); current = ''; }
-      parts.push(<span key={`d${idx++}`} style={{ fontFamily: 'Amiri Regular' }}>{ch}</span>);
-    } else {
-      current += ch;
-    }
-  }
-  if (current) parts.push(<span key={`t${idx}`}>{current}</span>);
-  return <>{parts}</>;
-};
+const processTextWithU06DF = (text: string): React.ReactNode => renderQuranicMarks(text);
 
 // Quranic fonts (same list as main app)
 const QURANIC_FONTS = [
