@@ -151,16 +151,29 @@ const WAQF_SIGN_SET = new Set([
   '\u06de', // \u06de \u2014 Rub el-Hizb
   '\u06df', // \u06df \u2014 Silent letter (already handled separately, included for completeness)
 ]);
+// Im\u0101la & Ishm\u0101m marks (Hafs \u02bfan \u02bf\u0100sim). U+06EA appears only in Hud 11:41
+// (\u0645\u064e\u062c\u0652\u0631\u06ea\u0649\u0670\u0647\u064e\u0627), U+06EB only in Yusuf 12:11 (\u062a\u064e\u0623\u0652\u0645\u064e\u06eb\u0646\u064e\u0651\u0627) \u2014 the only two verses in
+// the mu\u1e63\u1e25af that use them. The bundled Quranic fonts (Hafs, Elgharib KFGQPCHafs
+// V10, \u2026) ship broken glyphs for these (aliased to U+0600 at full advance), so
+// they render as a stray disc + dotted circle. Routing their letter-cluster
+// through the same 'Amiri Quran' override used for Waqf signs renders them
+// correctly. Kept separate from WAQF_SIGN_SET so waqf-specific logic is unaffected.
+const IMALA_ISHMAM_SET = new Set([
+  '\u06ea', // \u06ea ARABIC EMPTY CENTRE LOW STOP  \u2014 im\u0101la (Hud 11:41)
+  '\u06eb', // \u06eb ARABIC EMPTY CENTRE HIGH STOP \u2014 ishm\u0101m (Yusuf 12:11)
+]);
+const needsAmiriOverride = (ch: string): boolean => WAQF_SIGN_SET.has(ch) || IMALA_ISHMAM_SET.has(ch);
 const hasWaqfOrSpecialChar = (text: string): boolean => {
-  for (const ch of text) if (WAQF_SIGN_SET.has(ch)) return true;
+  for (const ch of text) if (needsAmiriOverride(ch)) return true;
   return false;
 };
 
 // Segment a letter string into grapheme clusters so combining marks (harakat,
 // Waqf signs like U+06DF) stay attached to their base letter. Only clusters
-// that contain a WAQF_SIGN_SET character get the Amiri Quran font override.
-// Splitting by raw character (the old approach) detaches combining marks from
-// their base and causes glyphs like the circled sukoon to render below the line.
+// that contain a Waqf sign or an imāla/ishmām mark get the Amiri Quran font
+// override (see needsAmiriOverride). Splitting by raw character (the old
+// approach) detaches combining marks from their base and causes glyphs like the
+// circled sukoon to render below the line.
 const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: boolean }> => {
   let parts: string[];
   if (typeof Intl !== 'undefined' && typeof (Intl as Record<string, unknown>).Segmenter === 'function') {
@@ -191,7 +204,7 @@ const segmentForWaqfFont = (text: string): Array<{ segment: string; useAmiri: bo
   }
   return parts.map(segment => ({
     segment,
-    useAmiri: [...segment].some(ch => WAQF_SIGN_SET.has(ch)),
+    useAmiri: [...segment].some(needsAmiriOverride),
   }));
 };
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
