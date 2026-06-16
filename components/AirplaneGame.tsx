@@ -38,14 +38,15 @@ interface P2Snapshot {
   p2Plane: number;
 }
 
-const START_FUEL      = 100;
-const FUEL_GAIN       = 10;
-const FUEL_LOSS       = 20;
-const BUBBLE_RADIUS   = 7.5;
-const BUBBLE_SPEED    = 0.14;
-const PLANE_ACCEL     = 0.09;
-const PLANE_MAX_VEL   = 1.25;
-const PLANE_DRAG      = 0.87;
+const START_FUEL           = 100;
+const FUEL_GAIN            = 10;
+const FUEL_LOSS            = 20;
+const BUBBLE_RADIUS        = 7.5;
+const BUBBLE_SPEED         = 0.14;
+const BUBBLE_SPEED_MAX_MULT = 2.4; // bubbles reach 2.4× speed by the final letter
+const PLANE_ACCEL          = 0.09;
+const PLANE_MAX_VEL        = 1.25;
+const PLANE_DRAG           = 0.87;
 const BG_SCROLL_SPEED = 120;
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
 
@@ -61,7 +62,7 @@ function shuffle<T>(arr: T[]): T[] {
 const ALL_Y_SLOTS = [14, 27, 40, 53, 66, 79];
 const MIN_Y_GAP   = 16;
 
-function makeBubbles(correctLetter: string, count = 3, avoidY: number[] = []): Bubble[] {
+function makeBubbles(correctLetter: string, count = 3, avoidY: number[] = [], speedMult = 1): Bubble[] {
   const wrong = shuffle(ARABIC_LETTERS.filter(l => l !== correctLetter)).slice(0, count - 1);
   const letters = shuffle([correctLetter, ...wrong]);
   const free = ALL_Y_SLOTS.filter(y => avoidY.every(ay => Math.abs(ay - y) >= MIN_Y_GAP));
@@ -72,7 +73,7 @@ function makeBubbles(correctLetter: string, count = 3, avoidY: number[] = []): B
     letter,
     x: 112 + i * 28,
     y: ySlots[i],
-    vx: -(BUBBLE_SPEED + Math.random() * 0.05),
+    vx: -((BUBBLE_SPEED + Math.random() * 0.05) * speedMult),
     isCorrect: letter === correctLetter,
     popped: false,
     driftDelay: Math.random() * 2.5,
@@ -213,6 +214,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const p1CrashedRef  = useRef(false);
   const p2CrashedRef  = useRef(false);
   const targetLetterRef = useRef('');
+  const speedMultRef    = useRef(1);
+  const [speedMult, setSpeedMult] = useState(1);
   // ── Background ─────────────────────────────────────────────────────────────
   const bgStripRef    = useRef<HTMLDivElement>(null);
   const bgOffsetRef   = useRef(0);
@@ -299,7 +302,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // ── Round setup ──────────────────────────────────────────────────────────────
   const startRound = useCallback((letter: string) => {
     targetLetterRef.current = letter;
-    setBubbles(makeBubbles(letter));
+    setBubbles(makeBubbles(letter, 3, [], speedMultRef.current));
     collidingRef.current = false;
     p2ColRef.current = false;
     setTimeout(() => playLetterAudio(letter), 350);
@@ -314,10 +317,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     setScore(0);
     setP2Fuel(START_FUEL);
     setP2Score(0);
-    fuelRef.current   = START_FUEL;
-    p2FuelRef.current = START_FUEL;
-    scoreRef.current  = 0;
+    fuelRef.current    = START_FUEL;
+    p2FuelRef.current  = START_FUEL;
+    scoreRef.current   = 0;
     p2ScoreRef.current = 0;
+    speedMultRef.current = 1;
+    setSpeedMult(1);
     planePos.current    = { x: 14, y: 32 };
     velRef.current      = { x: 0, y: 0 };
     tiltRef.current     = 0;
@@ -343,6 +348,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       const next = queuePosRef.current + 1;
       queuePosRef.current = next;
       setQueuePos(next);
+      // Increase bubble speed as player progresses through the queue
+      const newMult = 1 + (next / Math.max(queue.length, 1)) * (BUBBLE_SPEED_MAX_MULT - 1);
+      speedMultRef.current = newMult;
+      setSpeedMult(newMult);
       if (next >= queue.length) {
         setTimeout(() => setStatus('won'), 600);
       } else {
@@ -351,7 +360,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           setBubbles(prev => {
             const survivors = prev.filter(b => !b.popped && b.letter !== nextLetter).slice(0, 2);
             const usedY = survivors.map(b => b.y);
-            return [...survivors, ...makeBubbles(nextLetter, 3, usedY)];
+            return [...survivors, ...makeBubbles(nextLetter, 3, usedY, speedMultRef.current)];
           });
           collidingRef.current = false;
           p2ColRef.current = false;
@@ -941,6 +950,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <div className="px-3 py-1.5 rounded-full bg-white/90 border-2 border-sky-200 text-xs font-extrabold text-indigo-700 shadow whitespace-nowrap">
             {score} / {queue.length}
           </div>
+          {speedMult >= 1.15 && (
+            <div className="px-2.5 py-1.5 rounded-full border-2 text-xs font-extrabold shadow whitespace-nowrap"
+              style={{ background: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,90%,92%)`, borderColor: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,80%,55%)`, color: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,80%,35%)` }}>
+              🔥 {speedMult.toFixed(1)}×
+            </div>
+          )}
           <button onClick={() => playLetterAudio(currentLetter)}
             className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-300 border-2 border-amber-500 text-white text-base font-bold shadow active:scale-95">
             🔊
@@ -964,6 +979,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               className="px-2.5 py-1.5 rounded-full bg-white/90 border-2 border-sky-300 text-sky-700 text-xs font-bold shadow active:scale-95">
               ✕
             </button>
+            {speedMult >= 1.15 && (
+              <div className="px-2 py-1.5 rounded-full border-2 text-xs font-extrabold shadow whitespace-nowrap"
+                style={{ background: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,90%,92%)`, borderColor: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,80%,55%)`, color: `hsl(${Math.max(0, 30 - (speedMult - 1) * 30)}deg,80%,35%)` }}>
+                🔥{speedMult.toFixed(1)}×
+              </div>
+            )}
             <button onClick={() => playLetterAudio(currentLetter)}
               className="px-2.5 py-1.5 rounded-full bg-amber-400 border-2 border-amber-500 text-white text-sm font-bold shadow active:scale-95">
               🔊
