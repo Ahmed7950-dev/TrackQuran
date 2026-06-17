@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'dotlottie-wc': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string; autoplay?: boolean | string; loop?: boolean | string;
+      };
+    }
+  }
+}
+const isLottie = (url: string) => url.endsWith('.lottie') || url.endsWith('.json');
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Word Flight — same physics as Letter Flight but players fly toward Arabic
 // word bubbles whose English meaning is announced aloud.
@@ -139,7 +150,7 @@ const PLANES = [
   { label: 'Vintage Plane',  url: 'https://img.icons8.com/external-flaticons-flat-flat-icons/64/external-aircraft-history-flaticons-flat-flat-icons-2.png' },
   { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
   { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
-  { label: 'Helicopter',     url: '/sprites/helicopter.gif' },
+  { label: 'Helicopter',     url: 'https://lottie.host/781f82a4-2e97-4d4d-b8ae-8f3efa115862/x9pwwOO3eU.lottie' },
 ];
 
 const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked, flameRef }) => (
@@ -151,12 +162,18 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
       background: 'radial-gradient(ellipse at 90% 50%, rgba(255,255,255,0.92) 0%, #fde68a 22%, #f97316 52%, #dc2626 78%, transparent 100%)',
       transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 0,
     }} />
-    <img src={src} alt="vehicle" width={90} height={90} style={{
-      display: 'block', position: 'relative', zIndex: 1,
-      filter: shocked
-        ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
-        : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
-    }} />
+    {isLottie(src) ? (
+      <dotlottie-wc src={src} autoplay loop
+        style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
+          filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
+    ) : (
+      <img src={src} alt="vehicle" width={90} height={90} style={{
+        display: 'block', position: 'relative', zIndex: 1,
+        filter: shocked
+          ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
+          : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
+      }} />
+    )}
   </div>
 );
 
@@ -171,7 +188,9 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
-        <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />
+        {isLottie(p.url)
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 46, height: 46 } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />}
       </button>
     ))}
   </div>
