@@ -282,7 +282,8 @@ export type HomeworkQuestionType =
   | 'fill_blank'
   | 'fill_blank_options'
   | 'short_answer'
-  | 'matching';
+  | 'matching'
+  | 'multi_answer';
 
 export interface HomeworkQuestion {
   id: string;
