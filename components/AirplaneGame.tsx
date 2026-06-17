@@ -13,6 +13,17 @@ declare global {
 }
 const isLottie = (url: string) => url.endsWith('.lottie') || url.endsWith('.json');
 
+const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const lottie = (window as any).lottie;
+    if (!ref.current || !lottie) return;
+    const anim = lottie.loadAnimation({ container: ref.current, path: src, renderer: 'svg', loop: true, autoplay: true });
+    return () => anim.destroy();
+  }, [src]);
+  return <div ref={ref} style={{ width, height, overflow: 'hidden', ...style }} />;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Airplane letter game — 1-player, 2-player local, or 2-player online.
 // P1 controls: Arrow keys  |  P2 local: W A S D  |  P2 online: Arrow/WASD
@@ -214,10 +225,10 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
       {isLottie(src) ? (
-        <lottie-player src={src} autoplay loop background="transparent"
-          style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
+        <LottieAnim src={src} width={90} height={90}
+          style={{ display: 'block', position: 'relative', zIndex: 1,
             transform: tf,
-            filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
+            filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined }} />
       ) : (
         <img src={src} alt="vehicle" width={90} height={90}
           style={{
@@ -244,7 +255,7 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
         {isLottie(p.url)
-          ? <lottie-player src={p.url} autoplay loop background="transparent" style={{ width: 64, height: 64, transform: planeTransform(p.url) } as React.CSSProperties} />
+          ? <LottieAnim src={p.url} width={64} height={64} style={{ transform: planeTransform(p.url) }} />
           : <img src={p.url} alt={p.label} width={64} height={64} style={{ display: 'block', transform: planeTransform(p.url) }} />}
       </button>
     ))}
