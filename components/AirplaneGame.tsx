@@ -60,12 +60,12 @@ const FUEL_LOSS             = 20;
 const BUBBLE_RADIUS         = 7.5;
 const BUBBLE_SPEED          = 0.14;
 const BUBBLE_SPEED_MAX_MULT = 2.4;
-const PLANE_ACCEL           = 0.027;  // vertical acceleration
+const PLANE_ACCEL           = 0.055;  // vertical acceleration — strong enough to fight gravity
 const PLANE_MAX_VEL         = 0.95;   // vertical max speed
 const PLANE_ACCEL_H         = 0.009;  // horizontal — 3× slower
 const PLANE_MAX_VEL_H       = 0.317;  // horizontal max speed — 3× slower
 const PLANE_DRAG            = 0.975;  // slow build-up — reaches top speed over ~1.5s
-const PLANE_GRAVITY         = 0.010;  // natural downward drift
+const PLANE_GRAVITY         = 0.006;  // gentle downward drift
 const BG_SCROLL_SPEED       = 120;
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
