@@ -302,6 +302,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // ── Glow / popup effects ──────────────────────────────────────────────────
   const [p1Glow, setP1Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
   const [p2Glow, setP2Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
+  const [p1BarEmphasis, setP1BarEmphasis] = useState(false);
+  const [p2BarEmphasis, setP2BarEmphasis] = useState(false);
   const [p1HitPopup, setP1HitPopup] = useState<{ x: number; y: number } | null>(null);
   const [p2HitPopup, setP2HitPopup] = useState<{ x: number; y: number } | null>(null);
 
@@ -623,11 +625,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         triggerGlow(1, 'hit');
         setP1HitPopup({ x: planePos.current.x, y: planePos.current.y });
         setTimeout(() => setP1HitPopup(null), 900);
+        setP1BarEmphasis(true); setTimeout(() => setP1BarEmphasis(false), 850);
       } else {
         setP2Fuel(f => Math.min(START_FUEL, f + FUEL_GAIN)); setP2Score(s => s + 1);
         triggerGlow(2, 'hit');
         setP2HitPopup({ x: p2Pos.current.x, y: p2Pos.current.y });
         setTimeout(() => setP2HitPopup(null), 900);
+        setP2BarEmphasis(true); setTimeout(() => setP2BarEmphasis(false), 850);
         // Notify P2 client to play sound + show glow
         if (isOnlineMode) channelRef.current?.send({ type: 'broadcast', event: 'p2-event', payload: { kind: 'scored' } });
       }
@@ -1414,7 +1418,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* ── 2P HUD ── */}
       {status === 'playing' && is2p && (
         <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#3b82f6' }}>
+          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 transition-all duration-200"
+            style={{
+              borderColor: '#3b82f6',
+              transform: p1BarEmphasis ? 'scale(1.18)' : 'scale(1)',
+              boxShadow: p1BarEmphasis ? '0 0 0 3px rgba(59,130,246,0.4), 0 0 14px rgba(59,130,246,0.7)' : '0 1px 3px rgba(0,0,0,0.1)',
+              zIndex: p1BarEmphasis ? 30 : undefined,
+            }}>
             <span className="text-[10px] font-extrabold text-blue-600 whitespace-nowrap">{hn(p1Name)} ⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${fuel}%`, background: fuelColor(fuel) }}/></div>
             <span className="text-[10px] font-extrabold text-blue-700">{score}</span>
@@ -1433,7 +1443,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           </div>
 
           {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
-          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#f97316' }}>
+          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 transition-all duration-200"
+            style={{
+              borderColor: '#f97316',
+              transform: p2BarEmphasis ? 'scale(1.18)' : 'scale(1)',
+              boxShadow: p2BarEmphasis ? '0 0 0 3px rgba(249,115,22,0.4), 0 0 14px rgba(249,115,22,0.7)' : '0 1px 3px rgba(0,0,0,0.1)',
+              zIndex: p2BarEmphasis ? 30 : undefined,
+            }}>
             <span className="text-[10px] font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)} ⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${p2Fuel}%`, background: fuelColor(p2Fuel) }}/></div>
             <span className="text-[10px] font-extrabold text-orange-700">{p2Score}</span>
