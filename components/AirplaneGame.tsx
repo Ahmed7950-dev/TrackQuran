@@ -69,6 +69,7 @@ const START_FUEL            = 100;
 const FUEL_GAIN             = 10;
 const FUEL_LOSS             = 20;
 const BUBBLE_RADIUS         = 7.5;
+const PLANE_HIT_RADIUS      = 5.0;  // default hit radius (% screen units); override per-aircraft via hitRadius
 const BUBBLE_SPEED          = 0.14;
 const BUBBLE_SPEED_MAX_MULT = 2.4;
 const PLANE_ACCEL           = 0.015;  // vertical acceleration
@@ -170,19 +171,19 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 };
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
-const PLANES: { label: string; url: string; flip?: boolean }[] = [
-  { label: 'Heli Animated', url: '/sprites/helicopter.json' },
-  { label: 'Biplane',       url: '/sprites/plane1.json' },
-  { label: 'Airplane',      url: '/sprites/plane2.json' },
-  { label: 'Fighter',       url: '/sprites/plane3.json', flip: true },
-  { label: 'Plane 22',      url: '/sprites/plane4.json' },
-  { label: 'Plane 5',       url: '/sprites/plane5.svg' },
-  { label: 'Plane 6',       url: '/sprites/plane6.svg' },
-  { label: 'Plane 7',       url: '/sprites/plane7.svg' },
-  { label: 'Plane 8',       url: '/sprites/plane8.svg' },
-  { label: 'Plane 9',       url: '/sprites/plane9.svg',  flip: true },
-  { label: 'Plane 10',      url: '/sprites/plane10.svg', flip: true },
-  { label: 'Plane 11',      url: '/sprites/plane11.svg', flip: true },
+const PLANES: { label: string; url: string; flip?: boolean; hitRadius?: number }[] = [
+  { label: 'Heli Animated', url: '/sprites/helicopter.json', hitRadius: 4.5 },
+  { label: 'Biplane',       url: '/sprites/plane1.json',     hitRadius: 5.5 },
+  { label: 'Airplane',      url: '/sprites/plane2.json',     hitRadius: 5.5 },
+  { label: 'Fighter',       url: '/sprites/plane3.json', flip: true, hitRadius: 4.5 },
+  { label: 'Plane 22',      url: '/sprites/plane4.json',     hitRadius: 5.0 },
+  { label: 'Plane 5',       url: '/sprites/plane5.svg',      hitRadius: 5.0 },
+  { label: 'Plane 6',       url: '/sprites/plane6.svg',      hitRadius: 5.0 },
+  { label: 'Plane 7',       url: '/sprites/plane7.svg',      hitRadius: 5.5 },
+  { label: 'Plane 8',       url: '/sprites/plane8.svg',      hitRadius: 4.5 },
+  { label: 'Plane 9',       url: '/sprites/plane9.svg',  flip: true, hitRadius: 5.5 },
+  { label: 'Plane 10',      url: '/sprites/plane10.svg', flip: true, hitRadius: 5.0 },
+  { label: 'Plane 11',      url: '/sprites/plane11.svg', flip: true, hitRadius: 4.5 },
 ];
 const isFlipped = (url: string) => PLANES.find(p => p.url === url)?.flip ?? false;
 
@@ -222,7 +223,7 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
   <div className="grid grid-cols-6 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
-        className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
+        className="flex items-center justify-center p-2.5 rounded-2xl border-2 transition-all select-none"
         style={{
           borderColor: selected === i ? accentColor : '#e8edf2',
           background:  selected === i ? `${accentColor}15` : '#f8fafc',
@@ -230,8 +231,8 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
         {isLottie(p.url)
-          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 46, height: 46, transform: p.flip ? 'scaleX(-1)' : undefined } as React.CSSProperties} />
-          : <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block', transform: p.flip ? 'scaleX(-1)' : undefined }} />}
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 64, height: 64, transform: p.flip ? 'scaleX(-1)' : undefined } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={64} height={64} style={{ display: 'block', transform: p.flip ? 'scaleX(-1)' : undefined }} />}
       </button>
     ))}
   </div>
@@ -778,10 +779,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       // ── P1 bubble collision ───────────────────────────────────────────────
       if (!collidingRef.current && !p1CrashedRef.current) {
+        const p1HitR = PLANES[p1Plane]?.hitRadius ?? PLANE_HIT_RADIUS;
         for (const b of bubblesRef.current) {
           if (b.popped) continue;
           const dx = b.x - p.x, dy = (b.y - p.y) * 0.65;
-          if (Math.sqrt(dx * dx + dy * dy) < BUBBLE_RADIUS) {
+          if (Math.sqrt(dx * dx + dy * dy) < p1HitR) {
             collidingRef.current = true; handleHitRef.current(b, 1); break;
           }
         }
@@ -789,11 +791,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       // ── P2 bubble collision ───────────────────────────────────────────────
       if (is2pNow && !p2ColRef.current && !p2CrashedRef.current) {
+        const p2HitR = PLANES[p2Plane]?.hitRadius ?? PLANE_HIT_RADIUS;
         const p2c = p2Pos.current;
         for (const b of bubblesRef.current) {
           if (b.popped) continue;
           const dx = b.x - p2c.x, dy = (b.y - p2c.y) * 0.65;
-          if (Math.sqrt(dx * dx + dy * dy) < BUBBLE_RADIUS) {
+          if (Math.sqrt(dx * dx + dy * dy) < p2HitR) {
             p2ColRef.current = true; handleHitRef.current(b, 2); break;
           }
         }
