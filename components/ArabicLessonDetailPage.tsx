@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
+import WordFlightGame from './WordFlightGame';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
   updateHomeworkQuestion as updateHWQ,
@@ -1096,6 +1097,9 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [selectedStudentId, setStudentId] = useState(preSelectedStudentId ?? '');
   const [attempts, setAttempts]     = useState<VocabAttempt[]>([]);
 
+  // Word Flight game
+  const [showWordFlight, setShowWordFlight] = useState(false);
+
   // Challenge state — "I know / Not sure" button flow
   const [phase, setPhase]           = useState<ChallengePhase>('idle');
   const [shuffled, setShuffled]     = useState<VocabWord[]>([]);
@@ -1415,7 +1419,18 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                 className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
                 🎴 {t('arabicLessonDetail.startFlashcard', { count: words.length })}
               </button>
+              <button onClick={() => setShowWordFlight(true)}
+                className="w-full py-5 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl transition-colors text-lg">
+                ✈️ Word Flight Game
+              </button>
             </div>
+          )}
+
+          {showWordFlight && (
+            <WordFlightGame
+              words={words.map(w => ({ arabic: w.arabic, meaning: w.english }))}
+              onExit={() => setShowWordFlight(false)}
+            />
           )}
         </>
       )}
