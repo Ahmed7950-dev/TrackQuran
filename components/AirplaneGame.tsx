@@ -198,6 +198,8 @@ const PLANES: { label: string; url: string; flip?: boolean; rotate?: number; hit
   { label: 'Paper Plane',   url: '/sprites/paperplane.json',          hitRadius: 5.0 },
   { label: 'Dragon',        url: '/sprites/dragon1.json', flip: true, hitRadius: 5.0 },
   { label: 'Dragon 2',      url: '/sprites/dragon2.json', flip: true, hitRadius: 5.5 },
+  { label: 'Airship',       url: '/sprites/airship.json',              hitRadius: 5.5 },
+  { label: 'UFO',           url: '/sprites/ufo.json',                  hitRadius: 5.0 },
 ];
 const isFlipped  = (url: string) => PLANES.find(p => p.url === url)?.flip   ?? false;
 const getRotate  = (url: string) => PLANES.find(p => p.url === url)?.rotate ?? 0;
@@ -496,8 +498,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         100% { transform: translate(-50%, -100%) translateY(-32px); opacity: 0; }
       }
       @keyframes ag-parachute-fall {
-        from { transform: translate(-50%,-50%) translateY(0); }
-        to   { transform: translate(-50%,-50%) translateY(160vh); }
+        0%   { transform: translate(-50%,-50%) translateY(0)      translateX(0px); }
+        12%  { transform: translate(-50%,-50%) translateY(18vh)   translateX(-28px); }
+        25%  { transform: translate(-50%,-50%) translateY(38vh)   translateX(28px); }
+        37%  { transform: translate(-50%,-50%) translateY(58vh)   translateX(-28px); }
+        50%  { transform: translate(-50%,-50%) translateY(80vh)   translateX(28px); }
+        62%  { transform: translate(-50%,-50%) translateY(100vh)  translateX(-28px); }
+        75%  { transform: translate(-50%,-50%) translateY(120vh)  translateX(28px); }
+        87%  { transform: translate(-50%,-50%) translateY(142vh)  translateX(-20px); }
+        100% { transform: translate(-50%,-50%) translateY(160vh)  translateX(0px); }
       }
       .ag-bubble        { animation: ag-float         3.2s ease-in-out infinite; }
       .ag-popped        { animation: ag-pop           .45s ease-out    forwards; }
@@ -1411,12 +1420,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
         {/* Remote parachutes */}
         {status === 'playing' && p1RemoteCrashAnim === 'parachute' && (
-          <div className="absolute pointer-events-none" style={{ left: `${p1RemoteCrashPos.current.x}%`, top: `${p1RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 2.5s ease-in forwards' }}>
+          <div className="absolute pointer-events-none" style={{ left: `${p1RemoteCrashPos.current.x}%`, top: `${p1RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 8s linear forwards' }}>
             <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
           </div>
         )}
         {status === 'playing' && p2RemoteCrashAnim === 'parachute' && (
-          <div className="absolute pointer-events-none" style={{ left: `${p2RemoteCrashPos.current.x}%`, top: `${p2RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 2.5s ease-in forwards' }}>
+          <div className="absolute pointer-events-none" style={{ left: `${p2RemoteCrashPos.current.x}%`, top: `${p2RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 8s linear forwards' }}>
             <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
           </div>
         )}
@@ -1601,12 +1610,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       {/* ── Parachutes ── */}
       {status === 'playing' && p1CrashAnim === 'parachute' && (
-        <div className="absolute pointer-events-none" style={{ left: `${p1CrashPosRef.current.x}%`, top: `${p1CrashPosRef.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 2.5s ease-in forwards' }}>
+        <div className="absolute pointer-events-none" style={{ left: `${p1CrashPosRef.current.x}%`, top: `${p1CrashPosRef.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 8s linear forwards' }}>
           <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
         </div>
       )}
       {status === 'playing' && p2CrashAnim === 'parachute' && (
-        <div className="absolute pointer-events-none" style={{ left: `${p2CrashPosRef.current.x}%`, top: `${p2CrashPosRef.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 2.5s ease-in forwards' }}>
+        <div className="absolute pointer-events-none" style={{ left: `${p2CrashPosRef.current.x}%`, top: `${p2CrashPosRef.current.y}%`, zIndex: 21, animation: 'ag-parachute-fall 8s linear forwards' }}>
           <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
         </div>
       )}
