@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import lottie from 'lottie-web';
 import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
@@ -614,6 +615,40 @@ const App: React.FC = () => {
     });
     setProgress(initialProgress);
   }, [students]);
+
+  // Animated favicon using quran.json Lottie
+  useEffect(() => {
+    const size = 64;
+    const container = document.createElement('div');
+    container.style.cssText = `position:fixed;top:-${size * 2}px;left:-${size * 2}px;width:${size}px;height:${size}px;pointer-events:none;overflow:hidden;`;
+    document.body.appendChild(container);
+    let anim: ReturnType<typeof lottie.loadAnimation> | null = null;
+    let cancelled = false;
+    fetch('/sprites/quran.json')
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        anim = lottie.loadAnimation({
+          container,
+          animationData: data,
+          renderer: 'canvas',
+          loop: true,
+          autoplay: true,
+          rendererSettings: { clearCanvas: true },
+        });
+        const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+        if (!link) return;
+        anim.addEventListener('enterFrame', () => {
+          const canvas = container.querySelector('canvas');
+          if (canvas) link.href = canvas.toDataURL('image/png');
+        });
+      });
+    return () => {
+      cancelled = true;
+      anim?.destroy();
+      if (document.body.contains(container)) document.body.removeChild(container);
+    };
+  }, []);
 
   // Close font menu when clicking outside
   useEffect(() => {
