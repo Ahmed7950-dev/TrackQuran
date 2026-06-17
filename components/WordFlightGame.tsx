@@ -141,29 +141,11 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
 const PLANES = [
-  { label: 'Private Plane',  url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-private-vehicles-soft-fill-soft-fill-juicy-fish.png' },
-  { label: 'Single Engine',  url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-single-vehicles-soft-fill-soft-fill-juicy-fish.png' },
-  { label: 'Dual Helicopter',url: 'https://img.icons8.com/color/48/dual-helicopter--v2.png' },
-  { label: 'Med Helicopter', url: 'https://img.icons8.com/external-photo3ideastudio-lineal-color-photo3ideastudio/64/external-helicopter-emergency-photo3ideastudio-lineal-color-photo3ideastudio.png' },
-  { label: 'Jet Bomber',     url: 'https://img.icons8.com/external-smashingstocks-flat-smashing-stocks/66/external-Jet-Plane-war-and-army-smashingstocks-flat-smashing-stocks-4.png' },
-  { label: 'Classic Biplane',url: 'https://img.icons8.com/external-goofy-flat-kerismaker/96/external-Aircraft-transportation-obvious-flat-kerismaker.png' },
-  { label: 'Vintage Plane',  url: 'https://img.icons8.com/external-flaticons-flat-flat-icons/64/external-aircraft-history-flaticons-flat-flat-icons-2.png' },
-  { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
-  { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
-  { label: 'Helicopter',     url: 'https://lottie.host/781f82a4-2e97-4d4d-b8ae-8f3efa115862/x9pwwOO3eU.lottie' },
-  { label: 'Airplane',       url: '/sprites/Airplane.lottie' },
   { label: 'Heli Animated', url: '/sprites/helicopter.json' },
 ];
 
-const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked, flameRef }) => (
+const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked }) => (
   <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
-    <div ref={flameRef} className="wf-flame" style={{
-      position: 'absolute', right: 84, top: '50%',
-      width: 0, height: 18, opacity: 0,
-      borderRadius: '60% 10% 10% 60%',
-      background: 'radial-gradient(ellipse at 90% 50%, rgba(255,255,255,0.92) 0%, #fde68a 22%, #f97316 52%, #dc2626 78%, transparent 100%)',
-      transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 0,
-    }} />
     {isLottie(src) ? (
       <dotlottie-wc src={src} autoplay loop
         style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
@@ -180,7 +162,7 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 );
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-6 gap-2 w-full">
+  <div className="grid grid-cols-1 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
@@ -364,13 +346,11 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       @keyframes wf-glow-collectible{ 0%{transform:translate(-50%,-50%) scale(0.4);opacity:0.9;}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0;} }
       @keyframes wf-glow-mine       { 0%,20%{transform:translate(-50%,-50%) scale(0.4);opacity:1;}100%{transform:translate(-50%,-50%) scale(3.0);opacity:0;} }
       @keyframes wf-score-pop { 0%{transform:translate(-50%,-100%) translateY(0);opacity:1;}100%{transform:translate(-50%,-100%) translateY(-32px);opacity:0;} }
-      @keyframes wf-flame-flicker { 0%{transform:translateY(-50%) scaleY(1) skewY(0deg);}25%{transform:translateY(-53%) scaleY(1.14) skewY(-3deg);}50%{transform:translateY(-47%) scaleY(0.88) skewY(2deg);}75%{transform:translateY(-52%) scaleY(1.1) skewY(-1deg);}100%{transform:translateY(-50%) scaleY(1) skewY(0deg);} }
       .wf-bubble      { animation: wf-float         3.2s ease-in-out infinite; }
       .wf-popped      { animation: wf-pop           .45s ease-out    forwards; }
       .wf-collectible { animation: wf-collectible   2.4s ease-in-out infinite; }
       .wf-mine        { animation: wf-mine-pulse     1.4s ease-in-out infinite; }
       .wf-shock-overlay{ animation: wf-shock-flash  .25s ease-in-out infinite; }
-      .wf-flame       { animation: wf-flame-flicker .13s ease-in-out infinite; }
     `;
     document.head.appendChild(s);
     return () => { document.getElementById(id)?.remove(); };
@@ -599,13 +579,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           planeRef.current.style.top       = `${p.y}%`;
           planeRef.current.style.transform = `translate(-50%,-50%) rotate(${tiltRef.current}deg)`;
         }
-        const sp1 = Math.sqrt(v.x*v.x+v.y*v.y)/PLANE_MAX_VEL;
-        if (p1FlameRef.current) {
-          p1FlameRef.current.style.width   = `${Math.round(4+sp1*46)}px`;
-          p1FlameRef.current.style.height  = `${Math.round(14+sp1*20)}px`;
-          p1FlameRef.current.style.opacity = `${(0.25+sp1*0.75).toFixed(2)}`;
-        }
-      } else if (p1FlameRef.current) { p1FlameRef.current.style.opacity = '0'; }
+      }
 
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
@@ -634,13 +608,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           p2PlaneRef.current.style.top       = `${p2.y}%`;
           p2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${p2Tilt.current}deg)`;
         }
-        const sp2 = Math.sqrt(v2.x*v2.x+v2.y*v2.y)/PLANE_MAX_VEL;
-        if (p2FlameRef.current) {
-          p2FlameRef.current.style.width   = `${Math.round(4+sp2*46)}px`;
-          p2FlameRef.current.style.height  = `${Math.round(14+sp2*20)}px`;
-          p2FlameRef.current.style.opacity = `${(0.25+sp2*0.75).toFixed(2)}`;
-        }
-      } else if (p2FlameRef.current) { p2FlameRef.current.style.opacity = '0'; }
+      }
 
       for (const b of bubblesRef.current) {
         if (b.popped) continue;
@@ -852,15 +820,6 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
         p2ViewP2PlaneRef.current.style.top       = `${payload.p2.y}%`;
         p2ViewP2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p2.tilt}deg)`;
       }
-      const applyFlame = (ref: React.MutableRefObject<HTMLDivElement|null>, sp: number, crashed: boolean) => {
-        if (!ref.current) return;
-        if (crashed) { ref.current.style.opacity = '0'; return; }
-        ref.current.style.width   = `${Math.round(4+sp*46)}px`;
-        ref.current.style.height  = `${Math.round(14+sp*20)}px`;
-        ref.current.style.opacity = `${(0.25+sp*0.75).toFixed(2)}`;
-      };
-      applyFlame(p2ViewP1FlameRef, payload.p1Speed ?? 0, payload.p1.crashed);
-      applyFlame(p2ViewP2FlameRef, payload.p2Speed ?? 0, payload.p2.crashed);
       if (p2FuelBar1Ref.current) { p2FuelBar1Ref.current.style.width = `${payload.fuels[0]}%`; p2FuelBar1Ref.current.style.background = fuelColor(payload.fuels[0]); }
       if (p2FuelBar2Ref.current) { p2FuelBar2Ref.current.style.width = `${payload.fuels[1]}%`; p2FuelBar2Ref.current.style.background = fuelColor(payload.fuels[1]); }
       if (p2Score1SpanRef.current) p2Score1SpanRef.current.textContent = String(payload.scores[0]);
