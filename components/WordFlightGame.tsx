@@ -152,6 +152,7 @@ const PLANES = [
   { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
   { label: 'Helicopter',     url: 'https://lottie.host/781f82a4-2e97-4d4d-b8ae-8f3efa115862/x9pwwOO3eU.lottie' },
   { label: 'Airplane',       url: '/sprites/Airplane.lottie' },
+  { label: 'Heli Animated', url: '/sprites/helicopter.json' },
 ];
 
 const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked, flameRef }) => (
