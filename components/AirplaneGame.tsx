@@ -18,8 +18,13 @@ const LottieAnim: React.FC<{ src: string; width: number; height: number; style?:
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
-    const anim = lottie.loadAnimation({ container: ref.current, path: src, renderer: 'svg', loop: true, autoplay: true });
-    return () => anim.destroy();
+    let anim: any;
+    let cancelled = false;
+    fetch(src).then(r => r.json()).then(data => {
+      if (cancelled || !ref.current) return;
+      anim = lottie.loadAnimation({ container: ref.current, animationData: data, renderer: 'svg', loop: true, autoplay: true });
+    });
+    return () => { cancelled = true; anim?.destroy(); };
   }, [src]);
   return <div ref={ref} style={{ width, height, overflow: 'hidden', ...style }} />;
 };
