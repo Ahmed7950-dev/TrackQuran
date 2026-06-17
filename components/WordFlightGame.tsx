@@ -199,21 +199,23 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 };
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-4 gap-2 w-full">
-    {PLANES.map((p, i) => (
-      <button key={i} onClick={() => onSelect(i)}
-        className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
-        style={{
-          borderColor: selected === i ? accentColor : '#e8edf2',
-          background:  selected === i ? `${accentColor}15` : '#f8fafc',
-          boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
-          transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
-        }}>
-        {isLottie(p.url)
-          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 80, height: 80, transform: planeTransform(p.url) } as React.CSSProperties} />
-          : <img src={p.url} alt={p.label} width={80} height={80} style={{ display: 'block', transform: planeTransform(p.url) }} />}
-      </button>
-    ))}
+  <div className="max-h-56 overflow-y-auto rounded-2xl pr-0.5">
+    <div className="grid grid-cols-4 gap-2 w-full">
+      {PLANES.map((p, i) => (
+        <button key={i} onClick={() => onSelect(i)}
+          className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
+          style={{
+            borderColor: selected === i ? accentColor : '#e8edf2',
+            background:  selected === i ? `${accentColor}15` : '#f8fafc',
+            boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
+            transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
+          }}>
+          {isLottie(p.url)
+            ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 80, height: 80, transform: planeTransform(p.url) } as React.CSSProperties} />
+            : <img src={p.url} alt={p.label} width={80} height={80} style={{ display: 'block', transform: planeTransform(p.url) }} />}
+        </button>
+      ))}
+    </div>
   </div>
 );
 
