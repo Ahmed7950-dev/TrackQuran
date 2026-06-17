@@ -50,6 +50,7 @@ interface P2Snapshot {
   p1Powerup: CollectibleType | null; p2Powerup: CollectibleType | null;
   p1Shocked: boolean; p2Shocked: boolean;
   p1Name?: string; p2Name?: string;
+  p1Speed?: number; p2Speed?: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -155,13 +156,10 @@ const PLANES = [
   { label: 'Dual Helicopter',url: 'https://img.icons8.com/color/48/dual-helicopter--v2.png' },
   { label: 'Med Helicopter', url: 'https://img.icons8.com/external-photo3ideastudio-lineal-color-photo3ideastudio/64/external-helicopter-emergency-photo3ideastudio-lineal-color-photo3ideastudio.png' },
   { label: 'Jet Bomber',     url: 'https://img.icons8.com/external-smashingstocks-flat-smashing-stocks/66/external-Jet-Plane-war-and-army-smashingstocks-flat-smashing-stocks-4.png' },
-  { label: 'Space Shuttle',  url: 'https://img.icons8.com/color/64/space-shuttle.png' },
   { label: 'Classic Biplane',url: 'https://img.icons8.com/external-goofy-flat-kerismaker/96/external-Aircraft-transportation-obvious-flat-kerismaker.png' },
   { label: 'Vintage Plane',  url: 'https://img.icons8.com/external-flaticons-flat-flat-icons/64/external-aircraft-history-flaticons-flat-flat-icons-2.png' },
   { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
-  { label: 'Light Aircraft', url: 'https://img.icons8.com/external-obvious-flat-kerismaker/48/external-aircraft-transportation-vehicle-flat-obvious-flat-kerismaker.png' },
   { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
-  { label: 'Rocket',         url: 'https://img.icons8.com/color/48/rocket--v1.png' },
 ];
 
 function applyLetterForm(letter: string, form: string): string {
@@ -173,14 +171,31 @@ function applyLetterForm(letter: string, form: string): string {
   }
 }
 
-const JetPlane: React.FC<{ src: string; shocked?: boolean }> = ({ src, shocked }) => (
-  <img src={src} alt="vehicle" width={90} height={90}
-    style={{
-      display: 'block',
-      filter: shocked
-        ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
-        : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
+const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked, flameRef }) => (
+  <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
+    <div ref={flameRef} className="ag-flame" style={{
+      position: 'absolute',
+      right: 84,
+      top: '50%',
+      width: 0,
+      height: 18,
+      opacity: 0,
+      borderRadius: '60% 10% 10% 60%',
+      background: 'radial-gradient(ellipse at 90% 50%, rgba(255,255,255,0.92) 0%, #fde68a 22%, #f97316 52%, #dc2626 78%, transparent 100%)',
+      transform: 'translateY(-50%)',
+      pointerEvents: 'none',
+      zIndex: 0,
     }} />
+    <img src={src} alt="vehicle" width={90} height={90}
+      style={{
+        display: 'block',
+        position: 'relative',
+        zIndex: 1,
+        filter: shocked
+          ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
+          : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
+      }} />
+  </div>
 );
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
@@ -340,6 +355,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const p2BulletDomRefs    = useRef<Map<string, HTMLDivElement>>(new Map());
   const p2HudP1NameRef     = useRef<HTMLSpanElement>(null);
   const p2HudP2NameRef     = useRef<HTMLSpanElement>(null);
+  // ── Flame refs (DOM-direct update in RAF) ─────────────────────────────────
+  const p1FlameRef         = useRef<HTMLDivElement | null>(null);
+  const p2FlameRef         = useRef<HTMLDivElement | null>(null);
+  const p2ViewP1FlameRef   = useRef<HTMLDivElement | null>(null);
+  const p2ViewP2FlameRef   = useRef<HTMLDivElement | null>(null);
 
   // Sync mutable arrays to refs (game loop reads these)
   bubblesRef.current      = bubbles;
@@ -426,11 +446,19 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         0%   { transform: translate(-50%, -100%) translateY(0);     opacity: 1; }
         100% { transform: translate(-50%, -100%) translateY(-32px); opacity: 0; }
       }
-      .ag-bubble      { animation: ag-float       3.2s ease-in-out infinite; }
-      .ag-popped      { animation: ag-pop         .45s ease-out    forwards; }
-      .ag-collectible { animation: ag-collectible 2.4s ease-in-out infinite; }
-      .ag-mine        { animation: ag-mine-pulse  1.4s ease-in-out infinite; }
-      .ag-shock-overlay { animation: ag-shock-flash .25s ease-in-out infinite; }
+      @keyframes ag-flame-flicker {
+        0%   { transform: translateY(-50%) scaleY(1)    skewY(0deg);  }
+        25%  { transform: translateY(-53%) scaleY(1.14) skewY(-3deg); }
+        50%  { transform: translateY(-47%) scaleY(0.88) skewY(2deg);  }
+        75%  { transform: translateY(-52%) scaleY(1.1)  skewY(-1deg); }
+        100% { transform: translateY(-50%) scaleY(1)    skewY(0deg);  }
+      }
+      .ag-bubble        { animation: ag-float         3.2s ease-in-out infinite; }
+      .ag-popped        { animation: ag-pop           .45s ease-out    forwards; }
+      .ag-collectible   { animation: ag-collectible   2.4s ease-in-out infinite; }
+      .ag-mine          { animation: ag-mine-pulse    1.4s ease-in-out infinite; }
+      .ag-shock-overlay { animation: ag-shock-flash   .25s ease-in-out infinite; }
+      .ag-flame         { animation: ag-flame-flicker .13s ease-in-out infinite; }
     `;
     document.head.appendChild(s);
     return () => { document.getElementById(id)?.remove(); };
@@ -681,11 +709,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       // ── P1 physics (Arrow keys) ───────────────────────────────────────────
       if (!p1CrashedRef.current && !p1IsShocked) {
-        v.y += PLANE_GRAVITY;                         // always-on gravity
-        if (k.ArrowUp)    v.y -= PLANE_ACCEL;
-        if (k.ArrowDown)  v.y += PLANE_ACCEL;
-        if (k.ArrowLeft)  v.x -= PLANE_ACCEL * 0.75;
-        if (k.ArrowRight) v.x += PLANE_ACCEL * 0.75;
+        v.y += PLANE_GRAVITY;
+        // boost accel when already moving in the pressed direction (engine spool-up feel)
+        const p1xR = 1 + Math.max(0,  v.x) / PLANE_MAX_VEL * 2.0;
+        const p1xL = 1 + Math.max(0, -v.x) / PLANE_MAX_VEL * 2.0;
+        const p1yD = 1 + Math.max(0,  v.y) / PLANE_MAX_VEL * 1.5;
+        const p1yU = 1 + Math.max(0, -v.y) / PLANE_MAX_VEL * 1.5;
+        if (k.ArrowUp)    v.y -= PLANE_ACCEL * p1yU;
+        if (k.ArrowDown)  v.y += PLANE_ACCEL * p1yD;
+        if (k.ArrowLeft)  v.x -= PLANE_ACCEL * 0.75 * p1xL;
+        if (k.ArrowRight) v.x += PLANE_ACCEL * 0.75 * p1xR;
         v.x *= PLANE_DRAG; v.y *= PLANE_DRAG;
         v.x = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v.x));
         v.y = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v.y));
@@ -698,23 +731,36 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           planeRef.current.style.top       = `${p.y}%`;
           planeRef.current.style.transform = `translate(-50%,-50%) rotate(${tiltRef.current}deg)`;
         }
+        // flame intensity based on speed
+        const sp1 = Math.sqrt(v.x * v.x + v.y * v.y) / PLANE_MAX_VEL;
+        if (p1FlameRef.current) {
+          p1FlameRef.current.style.width   = `${Math.round(4 + sp1 * 46)}px`;
+          p1FlameRef.current.style.height  = `${Math.round(14 + sp1 * 20)}px`;
+          p1FlameRef.current.style.opacity = `${(0.25 + sp1 * 0.75).toFixed(2)}`;
+        }
+      } else if (p1FlameRef.current) {
+        p1FlameRef.current.style.opacity = '0';
       }
 
       // ── P2 physics (WASD local / remote keys online) ──────────────────────
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
-        v2.y += PLANE_GRAVITY;                        // always-on gravity
+        v2.y += PLANE_GRAVITY;
+        const p2xR = 1 + Math.max(0,  v2.x) / PLANE_MAX_VEL * 2.0;
+        const p2xL = 1 + Math.max(0, -v2.x) / PLANE_MAX_VEL * 2.0;
+        const p2yD = 1 + Math.max(0,  v2.y) / PLANE_MAX_VEL * 1.5;
+        const p2yU = 1 + Math.max(0, -v2.y) / PLANE_MAX_VEL * 1.5;
         if (isOnlineNow) {
           const rk = p2RemoteKeysRef.current;
-          if (rk.up)    v2.y -= PLANE_ACCEL;
-          if (rk.down)  v2.y += PLANE_ACCEL;
-          if (rk.left)  v2.x -= PLANE_ACCEL * 0.75;
-          if (rk.right) v2.x += PLANE_ACCEL * 0.75;
+          if (rk.up)    v2.y -= PLANE_ACCEL * p2yU;
+          if (rk.down)  v2.y += PLANE_ACCEL * p2yD;
+          if (rk.left)  v2.x -= PLANE_ACCEL * 0.75 * p2xL;
+          if (rk.right) v2.x += PLANE_ACCEL * 0.75 * p2xR;
         } else {
-          if (k.KeyW) v2.y -= PLANE_ACCEL;
-          if (k.KeyS) v2.y += PLANE_ACCEL;
-          if (k.KeyA) v2.x -= PLANE_ACCEL * 0.75;
-          if (k.KeyD) v2.x += PLANE_ACCEL * 0.75;
+          if (k.KeyW) v2.y -= PLANE_ACCEL * p2yU;
+          if (k.KeyS) v2.y += PLANE_ACCEL * p2yD;
+          if (k.KeyA) v2.x -= PLANE_ACCEL * 0.75 * p2xL;
+          if (k.KeyD) v2.x += PLANE_ACCEL * 0.75 * p2xR;
         }
         v2.x *= PLANE_DRAG; v2.y *= PLANE_DRAG;
         v2.x = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v2.x));
@@ -728,6 +774,14 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p2PlaneRef.current.style.top       = `${p2.y}%`;
           p2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${p2Tilt.current}deg)`;
         }
+        const sp2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y) / PLANE_MAX_VEL;
+        if (p2FlameRef.current) {
+          p2FlameRef.current.style.width   = `${Math.round(4 + sp2 * 46)}px`;
+          p2FlameRef.current.style.height  = `${Math.round(14 + sp2 * 20)}px`;
+          p2FlameRef.current.style.opacity = `${(0.25 + sp2 * 0.75).toFixed(2)}`;
+        }
+      } else if (p2FlameRef.current) {
+        p2FlameRef.current.style.opacity = '0';
       }
 
       // ── Bubbles ───────────────────────────────────────────────────────────
@@ -916,6 +970,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p1Shocked: now < p1ShockedUntilRef.current,
           p2Shocked: now < p2ShockedUntilRef.current,
           p1Name, p2Name,
+          p1Speed: Math.sqrt(velRef.current.x ** 2 + velRef.current.y ** 2) / PLANE_MAX_VEL,
+          p2Speed: Math.sqrt(p2Vel.current.x    ** 2 + p2Vel.current.y    ** 2) / PLANE_MAX_VEL,
         } satisfies P2Snapshot,
       });
     }, 33);
@@ -1005,6 +1061,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         p2ViewP2PlaneRef.current.style.top       = `${payload.p2.y}%`;
         p2ViewP2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p2.tilt}deg)`;
       }
+      // Update flames for P2 view planes
+      const applyFlame = (ref: React.MutableRefObject<HTMLDivElement | null>, sp: number, crashed: boolean) => {
+        if (!ref.current) return;
+        if (crashed) { ref.current.style.opacity = '0'; return; }
+        ref.current.style.width   = `${Math.round(4 + sp * 46)}px`;
+        ref.current.style.height  = `${Math.round(14 + sp * 20)}px`;
+        ref.current.style.opacity = `${(0.25 + sp * 0.75).toFixed(2)}`;
+      };
+      applyFlame(p2ViewP1FlameRef, payload.p1Speed ?? 0, payload.p1.crashed);
+      applyFlame(p2ViewP2FlameRef, payload.p2Speed ?? 0, payload.p2.crashed);
       if (p2FuelBar1Ref.current) {
         p2FuelBar1Ref.current.style.width      = `${payload.fuels[0]}%`;
         p2FuelBar1Ref.current.style.background = fuelColor(payload.fuels[0]);
@@ -1274,7 +1340,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <div ref={p2ViewP1PlaneRef} className="absolute pointer-events-none"
             style={{ left: '14%', top: '32%', transform: 'translate(-50%,-50%)', zIndex: 20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>P1</div>
-            {p1CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} />}
+            {p1CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} flameRef={p2ViewP1FlameRef} />}
           </div>
         )}
 
@@ -1283,7 +1349,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <div ref={p2ViewP2PlaneRef} className="absolute pointer-events-none"
             style={{ left: '14%', top: '68%', transform: 'translate(-50%,-50%)', zIndex: 20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>YOU</div>
-            {p2CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} />}
+            {p2CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} flameRef={p2ViewP2FlameRef} />}
           </div>
         )}
 
@@ -1437,7 +1503,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && (
         <div ref={planeRef} className="absolute pointer-events-none" style={{ left: `${planePos.current.x}%`, top: `${planePos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
           {is2p && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>{hn(p1Name)}</div>}
-          {p1CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} />}
+          {p1CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} flameRef={p1FlameRef} />}
         </div>
       )}
 
@@ -1445,7 +1511,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && is2p && (
         <div ref={p2PlaneRef} className="absolute pointer-events-none" style={{ left: `${p2Pos.current.x}%`, top: `${p2Pos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
           <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>{hn(p2Name)}</div>
-          {p2CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} />}
+          {p2CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} flameRef={p2FlameRef} />}
         </div>
       )}
 
