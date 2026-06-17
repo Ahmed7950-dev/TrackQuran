@@ -229,7 +229,9 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
 const PowerupBadge: React.FC<{ type: CollectibleType; accentColor: string }> = ({ type, accentColor }) => (
   <div className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl border-2 shadow-sm"
     style={{ background: `${accentColor}15`, borderColor: accentColor }}>
-    <img src={COLLECTIBLE_ICONS[type]} alt={type} width={22} height={22} />
+    {type === 'dynamite'
+      ? <LottieAnim src="/sprites/bomb.json" width={22} height={22} />
+      : <img src={COLLECTIBLE_ICONS[type]} alt={type} width={22} height={22} />}
     {type === 'weapon' && (
       <div className="w-full h-1 rounded-full bg-slate-200 overflow-hidden" style={{ minWidth: 36 }}>
         <div className="h-full rounded-full" style={{ background: accentColor, animation: `wf-weapon-bar ${WEAPON_DURATION / 1000}s linear forwards` }} />
@@ -270,6 +272,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const [p2Powerup, setP2Powerup]       = useState<CollectibleType|null>(null);
   const [bullets, setBullets]           = useState<Bullet[]>([]);
   const [mines, setMines]               = useState<Mine[]>([]);
+  const [mineExplosions, setMineExplosions] = useState<{id:string;x:number;y:number}[]>([]);
   const [p1Shocked, setP1Shocked]       = useState(false);
   const [p2Shocked, setP2Shocked]       = useState(false);
 
@@ -797,6 +800,10 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           const dx = m.x - p.x, dy = m.y - p.y;
           if (!p1CrashedRef.current && Math.sqrt(dx*dx+dy*dy) < MINE_TRIGGER_RADIUS) {
             m.active = false; playMineExplode(); triggerGlow(1, 'mine');
+            const expId1 = `mexp-${Date.now()}-${Math.random()}`;
+            const mx1 = m.x, my1 = m.y;
+            setMineExplosions(prev => [...prev, { id: expId1, x: mx1, y: my1 }]);
+            setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId1)), 2500);
             setMines(prev => prev.map(mm => mm.id === m.id ? { ...mm, active: false } : mm));
             setFuel(f => { const nf = Math.max(0, f - MINE_DAMAGE); if (nf <= 0) { p1CrashedRef.current = true; if (!is2pNow || p2CrashedRef.current) setTimeout(() => setStatus('lost'), 500); } return nf; });
             continue;
@@ -807,6 +814,10 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           const dx = m.x - p2.x, dy = m.y - p2.y;
           if (!p2CrashedRef.current && Math.sqrt(dx*dx+dy*dy) < MINE_TRIGGER_RADIUS) {
             m.active = false; playMineExplode(); triggerGlow(2, 'mine');
+            const expId2 = `mexp-${Date.now()}-${Math.random()}`;
+            const mx2 = m.x, my2 = m.y;
+            setMineExplosions(prev => [...prev, { id: expId2, x: mx2, y: my2 }]);
+            setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId2)), 2500);
             setMines(prev => prev.map(mm => mm.id === m.id ? { ...mm, active: false } : mm));
             setP2Fuel(f => { const nf = Math.max(0, f - MINE_DAMAGE); if (nf <= 0) { p2CrashedRef.current = true; if (p1CrashedRef.current) setTimeout(() => setStatus('lost'), 500); } return nf; });
           }
@@ -1036,7 +1047,9 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
   const renderCollectibles = (cols: Collectible[]) => cols.filter(c => c.active).map(c => (
     <div key={c.id} className="absolute pointer-events-none z-10 wf-collectible" style={{ left:`${c.x}%`, top:`${c.y}%`, transform:'translate(-50%,-50%)' }}>
-      <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46} style={{ display:'block' }} />
+      {c.type === 'dynamite'
+        ? <LottieAnim src="/sprites/bomb.json" width={50} height={50} />
+        : <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46} style={{ display:'block' }} />}
     </div>
   ));
 
@@ -1051,7 +1064,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
   const renderMines = (ms: Mine[]) => ms.filter(m => m.active).map(m => (
     <div key={m.id} className="absolute pointer-events-none z-10 wf-mine" style={{ left:`${m.x}%`, top:`${m.y}%`, transform:'translate(-50%,-50%)' }}>
-      <div style={{ width:40, height:40, borderRadius:'50%', background:'radial-gradient(circle at 38% 35%,#555,#111)', border:'3px solid #dc2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 0 14px rgba(220,38,38,0.85)' }}>💣</div>
+      <LottieAnim src="/sprites/email.json" width={60} height={60} />
     </div>
   ));
 
@@ -1133,6 +1146,11 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
         {status === 'playing' && renderCollectibles(collectibles)}
         {status === 'playing' && renderBullets(bullets, true)}
         {status === 'playing' && renderMines(mines)}
+        {mineExplosions.map(e => (
+          <div key={e.id} className="absolute pointer-events-none" style={{ left:`${e.x}%`, top:`${e.y}%`, transform:'translate(-50%,-50%)', zIndex:30 }}>
+            <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width:120, height:120 } as React.CSSProperties} />
+          </div>
+        ))}
 
         {status === 'playing' && (
           <div ref={p2ViewP1PlaneRef} className="absolute pointer-events-none" style={{ left:'14%', top:'32%', transform:'translate(-50%,-50%)', zIndex:20 }}>
@@ -1272,6 +1290,11 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       {status === 'playing' && renderCollectibles(collectibles)}
       {status === 'playing' && renderBullets(bullets)}
       {status === 'playing' && renderMines(mines)}
+      {mineExplosions.map(e => (
+        <div key={e.id} className="absolute pointer-events-none" style={{ left:`${e.x}%`, top:`${e.y}%`, transform:'translate(-50%,-50%)', zIndex:30 }}>
+          <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width:120, height:120 } as React.CSSProperties} />
+        </div>
+      ))}
 
       {flash && <div className="absolute inset-0 z-10 pointer-events-none" style={{ background: flash==='good'?'rgba(74,222,128,0.22)':'rgba(248,113,113,0.28)' }}/>}
 

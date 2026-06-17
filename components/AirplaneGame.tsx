@@ -263,7 +263,9 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
 const PowerupBadge: React.FC<{ type: CollectibleType; accentColor: string }> = ({ type, accentColor }) => (
   <div className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl border-2 shadow-sm"
     style={{ background: `${accentColor}15`, borderColor: accentColor }}>
-    <img src={COLLECTIBLE_ICONS[type]} alt={type} width={22} height={22} />
+    {type === 'dynamite'
+      ? <LottieAnim src="/sprites/bomb.json" width={22} height={22} />
+      : <img src={COLLECTIBLE_ICONS[type]} alt={type} width={22} height={22} />}
     {type === 'weapon' && (
       <div className="w-full h-1 rounded-full bg-slate-200 overflow-hidden" style={{ minWidth: 36 }}>
         <div className="h-full rounded-full" style={{
@@ -312,6 +314,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const [p2Powerup, setP2Powerup]         = useState<CollectibleType | null>(null);
   const [bullets, setBullets]             = useState<Bullet[]>([]);
   const [mines, setMines]                 = useState<Mine[]>([]);
+  const [mineExplosions, setMineExplosions] = useState<{id:string;x:number;y:number}[]>([]);
   const [p1Shocked, setP1Shocked]         = useState(false);
   const [p2Shocked, setP2Shocked]         = useState(false);
 
@@ -955,6 +958,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           const mdx = m.x - targetPos.x, mdy = (m.y - targetPos.y) * 0.65;
           if (Math.sqrt(mdx * mdx + mdy * mdy) < MINE_TRIGGER_RADIUS) {
             m.active = false; mChanged = true;
+            const expId = `mexp-${now}-${Math.random()}`;
+            const mx = m.x, my = m.y;
+            setMineExplosions(prev => [...prev, { id: expId, x: mx, y: my }]);
+            setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId)), 2500);
             if (m.owner === 1) {
               setP2Fuel(f => Math.max(0, f - MINE_DAMAGE));
               triggerGlow(2, 'mine');
@@ -1279,8 +1286,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const renderCollectibles = (cols: Collectible[]) => cols.filter(c => c.active).map(c => (
     <div key={c.id} className="absolute pointer-events-none z-10 ag-collectible"
       style={{ left: `${c.x}%`, top: `${c.y}%`, transform: 'translate(-50%,-50%)' }}>
-      <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46}
-        style={{ display: 'block' }} />
+      {c.type === 'dynamite'
+        ? <LottieAnim src="/sprites/bomb.json" width={50} height={50} />
+        : <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46} style={{ display: 'block' }} />}
     </div>
   ));
 
@@ -1299,18 +1307,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       }} />
   ));
 
-  // Placed mine — distinct from collectible: black bomb in a red-glowing circle
   const renderMines = (ms: Mine[]) => ms.filter(m => m.active).map(m => (
     <div key={m.id} className="absolute pointer-events-none z-10 ag-mine"
       style={{ left: `${m.x}%`, top: `${m.y}%`, transform: 'translate(-50%,-50%)' }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: '50%',
-        background: 'radial-gradient(circle at 38% 35%, #555, #111)',
-        border: '3px solid #dc2626',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22,
-        boxShadow: '0 0 14px rgba(220,38,38,0.85), 0 0 5px rgba(220,38,38,0.4)',
-      }}>💣</div>
+      <LottieAnim src="/sprites/email.json" width={60} height={60} />
     </div>
   ));
 
@@ -1395,6 +1395,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {status === 'playing' && renderCollectibles(collectibles)}
         {status === 'playing' && renderBullets(bullets, true)}
         {status === 'playing' && renderMines(mines)}
+        {mineExplosions.map(e => (
+          <div key={e.id} className="absolute pointer-events-none" style={{ left:`${e.x}%`, top:`${e.y}%`, transform:'translate(-50%,-50%)', zIndex:30 }}>
+            <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width:120, height:120 } as React.CSSProperties} />
+          </div>
+        ))}
 
         {/* P1 plane — position managed via DOM ref in joinOnlineGame */}
         {status === 'playing' && (
@@ -1566,6 +1571,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && renderCollectibles(collectibles)}
       {status === 'playing' && renderBullets(bullets)}
       {status === 'playing' && renderMines(mines)}
+      {mineExplosions.map(e => (
+        <div key={e.id} className="absolute pointer-events-none" style={{ left:`${e.x}%`, top:`${e.y}%`, transform:'translate(-50%,-50%)', zIndex:30 }}>
+          <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width:120, height:120 } as React.CSSProperties} />
+        </div>
+      ))}
 
       {/* ── Flash ── */}
       {flash && <div className="absolute inset-0 z-10 pointer-events-none" style={{ background: flash === 'good' ? 'rgba(74,222,128,0.22)' : 'rgba(248,113,113,0.28)' }}/>}
