@@ -201,18 +201,17 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 );
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-3 gap-2">
+  <div className="grid grid-cols-3 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
-        className="relative flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all select-none bg-white"
+        className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
         style={{
-          borderColor: selected === i ? accentColor : '#e2e8f0',
-          background:  selected === i ? `${accentColor}18` : 'white',
-          transform:   selected === i ? 'scale(1.06)' : 'scale(1)',
-          boxShadow:   selected === i ? `0 4px 12px ${accentColor}44` : undefined,
+          borderColor: selected === i ? accentColor : '#e8edf2',
+          background:  selected === i ? `${accentColor}15` : '#f8fafc',
+          boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
+          transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
-        <span className="absolute top-1 left-1.5 text-[10px] font-extrabold text-slate-400">{i + 1}</span>
-        <img src={p.url} alt={p.label} width={52} height={52} style={{ display: 'block' }} />
+        <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />
       </button>
     ))}
   </div>
@@ -319,9 +318,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const targetLetterRef = useRef('');
   const speedMultRef  = useRef(1);
   // ── Background refs ───────────────────────────────────────────────────────
-  const bgStripRef    = useRef<HTMLDivElement>(null);
-  const bgOffsetRef   = useRef(0);
-  const bgImgWidthRef = useRef(0);
+  const bgDivRef    = useRef<HTMLDivElement>(null);
+  const bgOffsetRef = useRef(0);
   // ── Collectible/powerup refs ──────────────────────────────────────────────
   const collectiblesRef    = useRef<Collectible[]>([]);
   const bulletsRef         = useRef<Bullet[]>([]);
@@ -389,12 +387,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     let lastTime = performance.now(); let raf: number;
     const tick = (now: number) => {
       const dt = Math.min((now - lastTime) / 1000, 0.05); lastTime = now;
-      const w = bgImgWidthRef.current;
-      if (w > 0) {
-        bgOffsetRef.current -= BG_SCROLL_SPEED * dt;
-        if (bgOffsetRef.current <= -w) bgOffsetRef.current += w;
-        if (bgStripRef.current) bgStripRef.current.style.transform = `translateX(${bgOffsetRef.current}px)`;
-      }
+      bgOffsetRef.current -= BG_SCROLL_SPEED * dt;
+      if (bgDivRef.current) bgDivRef.current.style.backgroundPositionX = `${bgOffsetRef.current}px`;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -1151,8 +1145,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   const overlay = (children: React.ReactNode) => (
     <div className="absolute inset-0 z-30 flex items-center justify-center"
-      style={{ background: 'rgba(10,30,80,0.55)', backdropFilter: 'blur(4px)' }}>
-      <div className="bg-white rounded-3xl shadow-2xl border-4 border-sky-200 px-6 py-6 text-center max-w-sm mx-4 w-full">
+      style={{ background: 'rgba(8,24,70,0.62)', backdropFilter: 'blur(6px)' }}>
+      <div className="bg-white rounded-3xl shadow-2xl border-2 border-sky-100 px-5 py-5 text-center max-w-sm mx-4 w-full overflow-y-auto" style={{ maxHeight: '92vh' }}>
         {children}
       </div>
     </div>
@@ -1254,30 +1248,27 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     return (
       <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
         {/* Background */}
-        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, overflow: 'hidden' }}>
-          <div ref={bgStripRef} style={{ display: 'flex', height: '100%', willChange: 'transform' }}>
-            {[0,1,2,3].map(i => <img key={i} src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} onLoad={i === 0 ? (e) => { bgImgWidthRef.current = (e.target as HTMLImageElement).offsetWidth; } : undefined} />)}
-          </div>
-        </div>
+        <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: 'url(/sprites/airplane-bg.png)', backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
 
         {/* Join screen */}
         {!p2Waiting && status === 'start' && overlay(
           <>
-            <div className="inline-block px-3 py-1 rounded-full text-xs font-extrabold text-white mb-3" style={{ background: '#f97316' }}>Letter Flight — Player 2</div>
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={44} height={44} style={{ opacity: 0.85 }} />
+              <div className="text-left">
+                <div className="inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold text-white mb-0.5" style={{ background: '#f97316' }}>Player 2</div>
+                <p className="text-[11px] text-slate-400 font-semibold">Letter Flight</p>
+              </div>
+            </div>
             <div className="mb-3">
               <input value={p2Name} onChange={e => setP2Name(e.target.value.slice(0, 16))} maxLength={16}
-                className="w-full px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
+                className="w-full px-3 py-2 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
                 placeholder="Your name" />
             </div>
-            <p className="text-xs font-semibold text-slate-500 mb-1">Choose your vehicle</p>
-            <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
-              <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
-            </div>
-            <div className="flex justify-center my-3"><JetPlane src={PLANES[p2Plane].url} /></div>
-            <p className="text-xs font-bold text-orange-500 mb-4">⬆️⬇️⬅️➡️ or W A S D · Space = fire powerup</p>
-            <div className="flex gap-2 justify-center">
-              <button onClick={joinOnlineGame} className="px-7 py-2.5 rounded-full text-white font-extrabold text-lg shadow-md active:scale-95 transition-all" style={{ background: '#f97316' }}>Join Game 🚀</button>
-              <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Back</button>
+            <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+            <div className="flex gap-2 mt-4">
+              <button onClick={joinOnlineGame} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#f97316,#fb923c)' }}>Join Game 🚀</button>
+              <button onClick={onExit} className="px-5 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm active:scale-95 transition-all hover:bg-slate-50">Back</button>
             </div>
           </>
         )}
@@ -1398,11 +1389,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
 
       {/* Background */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, overflow: 'hidden' }}>
-        <div ref={bgStripRef} style={{ display: 'flex', height: '100%', willChange: 'transform' }}>
-          {[0,1,2,3].map(i => <img key={i} src="/sprites/airplane-bg.png" alt="" style={{ height: '100%', width: 'auto', display: 'block', flexShrink: 0 }} onLoad={i === 0 ? (e) => { bgImgWidthRef.current = (e.target as HTMLImageElement).offsetWidth; } : undefined} />)}
-        </div>
-      </div>
+      <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: 'url(/sprites/airplane-bg.png)', backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
 
       {/* ── Shock overlays ── */}
       {status === 'playing' && p2Shocked && (
@@ -1530,31 +1517,39 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* Start screen */}
       {status === 'start' && overlay(
         <>
-          <h3 className="text-xl font-extrabold text-sky-700 mb-3">Letter Flight!</h3>
-          <div className="flex gap-1.5 justify-center mb-4 flex-wrap">
+          {/* Pilot + title */}
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={48} height={48} />
+            <div className="text-left">
+              <h3 className="text-xl font-black text-sky-700 leading-tight">Letter Flight!</h3>
+              <p className="text-[11px] text-slate-400 font-semibold">{letters.length} letters · fly toward the right one</p>
+            </div>
+          </div>
+
+          {/* Mode tabs */}
+          <div className="flex gap-1 justify-center mb-4 p-1 rounded-2xl bg-slate-100">
             {(['1p', '2p', '2p-online'] as const).map(m => (
               <button key={m} onClick={() => { setGameMode(m); if (m !== '2p-online') setOnlineRoomId(null); setP2Joined(false); setLinkCopied(false); }}
-                className="px-4 py-1.5 rounded-full border-2 font-extrabold text-xs transition-all"
-                style={{ borderColor: gameMode === m ? '#f97316' : '#e2e8f0', background: gameMode === m ? '#fff7ed' : 'white', color: gameMode === m ? '#ea580c' : '#94a3b8', transform: gameMode === m ? 'scale(1.05)' : 'scale(1)' }}>
-                {m === '1p' ? '1 Player' : m === '2p' ? '👥 2P Local' : '🌐 2P Online'}
+                className="flex-1 py-1.5 rounded-xl font-extrabold text-xs transition-all"
+                style={{ background: gameMode === m ? 'white' : 'transparent', color: gameMode === m ? '#0ea5e9' : '#94a3b8', boxShadow: gameMode === m ? '0 1px 4px rgba(0,0,0,0.10)' : 'none' }}>
+                {m === '1p' ? '1P' : m === '2p' ? '👥 2P' : '🌐 Online'}
               </button>
             ))}
           </div>
+
+          {/* Name */}
           <div className="mb-3">
             <input value={p1Name} onChange={e => setP1Name(e.target.value.slice(0, 16))} maxLength={16}
-              className="w-full px-3 py-1.5 rounded-xl border-2 border-sky-200 text-sm font-bold text-center text-sky-700 bg-sky-50 focus:outline-none focus:border-sky-400"
+              className="w-full px-3 py-2 rounded-xl border-2 border-sky-200 text-sm font-bold text-center text-sky-700 bg-sky-50 focus:outline-none focus:border-sky-400"
               placeholder="Your name" />
           </div>
-          <p className="text-xs font-semibold text-slate-400 mb-3">
-            {gameMode === '2p-online' ? 'Choose your vehicle' : is2p ? 'Player 1 — choose your vehicle' : 'Choose your vehicle'}
-          </p>
-          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
-            <VehiclePicker selected={p1Plane} onSelect={setP1Plane} accentColor="#3b82f6" />
-          </div>
-          <div className="flex justify-center my-3"><JetPlane src={PLANES[p1Plane].url} /></div>
 
+          {/* Aircraft grid — no scroll */}
+          <VehiclePicker selected={p1Plane} onSelect={setP1Plane} accentColor="#3b82f6" />
+
+          {/* Online room info */}
           {gameMode === '2p-online' && onlineRoomId && (
-            <div className="mb-3 text-left">
+            <div className="mt-3 text-left">
               <p className="text-[11px] font-bold text-slate-500 mb-1">Share this link with Player 2:</p>
               <div className="flex gap-1.5 items-center">
                 <div className="flex-1 bg-slate-100 rounded-lg px-2 py-1.5 text-[10px] text-slate-500 font-mono truncate border border-slate-200">{shareLink}</div>
@@ -1566,21 +1561,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             </div>
           )}
 
-          <p className="text-xs font-bold text-indigo-500 mb-4">
-            {gameMode === '2p-online' ? '⬆️⬇️⬅️➡️ You · Space = fire · P2 uses their device'
-              : is2p ? '⬆️⬇️⬅️➡️ P1 · WASD P2 · M=P1 fire · G=P2 fire'
-              : '⬆️⬇️⬅️➡️ to fly · Space = fire powerup · ⛽ Don\'t run out!'}
-          </p>
-
-          <div className="flex gap-2 justify-center">
+          {/* Action buttons */}
+          <div className="flex gap-2 mt-4">
             {is2p && gameMode !== '2p-online' ? (
-              <button onClick={() => setStatus('select_p2')} className="px-7 py-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-lg shadow-md active:scale-95 transition-all">Next → P2</button>
+              <button onClick={() => setStatus('select_p2')} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)' }}>Next → P2 ✈️</button>
             ) : gameMode === '2p-online' ? (
-              <button onClick={startGame} disabled={!p2Joined} className="px-7 py-2.5 rounded-full text-white font-extrabold text-lg shadow-md active:scale-95 transition-all disabled:opacity-40" style={{ background: p2Joined ? '#f97316' : '#94a3b8' }}>Take off! 🚀</button>
+              <button onClick={startGame} disabled={!p2Joined} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all disabled:opacity-40" style={{ background: p2Joined ? 'linear-gradient(135deg,#f97316,#fb923c)' : '#94a3b8' }}>Take off! 🚀</button>
             ) : (
-              <button onClick={startGame} className="px-7 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold text-lg shadow-md active:scale-95 transition-all">Take off! 🚀</button>
+              <button onClick={startGame} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#f97316,#fb923c)' }}>Take off! 🚀</button>
             )}
-            <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Back</button>
+            <button onClick={onExit} className="px-5 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm active:scale-95 transition-all hover:bg-slate-50">Back</button>
           </div>
         </>
       )}
@@ -1588,21 +1578,22 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* P2 vehicle select (local) */}
       {status === 'select_p2' && overlay(
         <>
-          <div className="inline-block px-3 py-1 rounded-full text-xs font-extrabold text-white mb-3" style={{ background: '#f97316' }}>Player 2</div>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={44} height={44} style={{ opacity: 0.85 }} />
+            <div className="text-left">
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold text-white mb-0.5" style={{ background: '#f97316' }}>Player 2</div>
+              <p className="text-[11px] text-slate-400 font-semibold">Choose your aircraft</p>
+            </div>
+          </div>
           <div className="mb-3">
             <input value={p2Name} onChange={e => setP2Name(e.target.value.slice(0, 16))} maxLength={16}
-              className="w-full px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
+              className="w-full px-3 py-2 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
               placeholder="Player 2 name" />
           </div>
-          <p className="text-xs font-semibold text-slate-400 mb-3">Choose your vehicle</p>
-          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
-            <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
-          </div>
-          <div className="flex justify-center my-3"><JetPlane src={PLANES[p2Plane].url} /></div>
-          <p className="text-xs font-bold text-orange-500 mb-4">W A S D to fly · G to fire</p>
-          <div className="flex gap-2 justify-center">
-            <button onClick={startGame} className="px-7 py-2.5 rounded-full text-white font-extrabold text-lg shadow-md active:scale-95 transition-all" style={{ background: '#f97316' }}>Take off! 🚀</button>
-            <button onClick={() => setStatus('start')} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">← Back</button>
+          <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+          <div className="flex gap-2 mt-4">
+            <button onClick={startGame} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#f97316,#fb923c)' }}>Take off! 🚀</button>
+            <button onClick={() => setStatus('start')} className="px-5 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm active:scale-95 transition-all hover:bg-slate-50">← Back</button>
           </div>
         </>
       )}
