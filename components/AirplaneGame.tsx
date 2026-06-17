@@ -1240,7 +1240,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {!p2Waiting && status === 'start' && overlay(
           <>
             <div className="flex items-center justify-center gap-3 mb-4">
-              <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={44} height={44} style={{ opacity: 0.85 }} />
+              <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 44, height: 44 } as React.CSSProperties} />
               <div className="text-left">
                 <div className="inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold text-white mb-0.5" style={{ background: '#f97316' }}>Player 2</div>
                 <p className="text-[11px] text-slate-400 font-semibold">Letter Flight</p>
@@ -1505,7 +1505,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         <>
           {/* Pilot + title */}
           <div className="flex items-center justify-center gap-3 mb-4">
-            <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={48} height={48} />
+            <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 48, height: 48 } as React.CSSProperties} />
             <div className="text-left">
               <h3 className="text-xl font-black text-sky-700 leading-tight">Letter Flight!</h3>
               <p className="text-[11px] text-slate-400 font-semibold">{letters.length} letters · fly toward the right one</p>
@@ -1552,9 +1552,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             {is2p && gameMode !== '2p-online' ? (
               <button onClick={() => setStatus('select_p2')} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)' }}>Next → P2 ✈️</button>
             ) : gameMode === '2p-online' ? (
-              <button onClick={startGame} disabled={!p2Joined} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all disabled:opacity-40" style={{ background: p2Joined ? 'linear-gradient(135deg,#f97316,#fb923c)' : '#94a3b8' }}>Take off! 🚀</button>
+              <button onClick={startGame} disabled={!p2Joined} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white font-black text-base shadow-xl active:scale-95 transition-all disabled:opacity-40" style={{ background: p2Joined ? 'linear-gradient(135deg,#ea580c,#f97316,#fb923c)' : '#94a3b8', boxShadow: p2Joined ? '0 4px 18px rgba(249,115,22,0.45)' : 'none' }}>
+                <dotlottie-wc src="/sprites/airplane.json" autoplay loop style={{ width: 32, height: 32, filter: 'brightness(0) invert(1)' } as React.CSSProperties} />
+                Take off!
+              </button>
             ) : (
-              <button onClick={startGame} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#f97316,#fb923c)' }}>Take off! 🚀</button>
+              <button onClick={startGame} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white font-black text-base shadow-xl active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#ea580c,#f97316,#fb923c)', boxShadow: '0 4px 18px rgba(249,115,22,0.45)' }}>
+                <dotlottie-wc src="/sprites/airplane.json" autoplay loop style={{ width: 32, height: 32, filter: 'brightness(0) invert(1)' } as React.CSSProperties} />
+                Take off!
+              </button>
             )}
             <button onClick={onExit} className="px-5 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm active:scale-95 transition-all hover:bg-slate-50">Back</button>
           </div>
@@ -1565,7 +1571,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'select_p2' && overlay(
         <>
           <div className="flex items-center justify-center gap-3 mb-4">
-            <img src="https://img.icons8.com/external-kosonicon-flat-kosonicon/64/external-pilot-airport-kosonicon-flat-kosonicon.png" alt="pilot" width={44} height={44} style={{ opacity: 0.85 }} />
+            <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 44, height: 44 } as React.CSSProperties} />
             <div className="text-left">
               <div className="inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold text-white mb-0.5" style={{ background: '#f97316' }}>Player 2</div>
               <p className="text-[11px] text-slate-400 font-semibold">Choose your aircraft</p>
@@ -1578,7 +1584,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           </div>
           <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
           <div className="flex gap-2 mt-4">
-            <button onClick={startGame} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#f97316,#fb923c)' }}>Take off! 🚀</button>
+            <button onClick={startGame} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white font-black text-base shadow-xl active:scale-95 transition-all" style={{ background: 'linear-gradient(135deg,#ea580c,#f97316,#fb923c)', boxShadow: '0 4px 18px rgba(249,115,22,0.45)' }}>
+                <dotlottie-wc src="/sprites/airplane.json" autoplay loop style={{ width: 32, height: 32, filter: 'brightness(0) invert(1)' } as React.CSSProperties} />
+                Take off!
+              </button>
             <button onClick={() => setStatus('start')} className="px-5 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm active:scale-95 transition-all hover:bg-slate-50">← Back</button>
           </div>
         </>
