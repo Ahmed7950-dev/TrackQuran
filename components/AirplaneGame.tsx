@@ -163,9 +163,14 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 };
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
-const PLANES = [
+const PLANES: { label: string; url: string; flip?: boolean }[] = [
   { label: 'Heli Animated', url: '/sprites/helicopter.json' },
+  { label: 'Biplane',       url: '/sprites/plane1.json' },
+  { label: 'Airplane',      url: '/sprites/plane2.json' },
+  { label: 'Fighter',       url: '/sprites/plane3.json', flip: true },
+  { label: 'Plane 22',      url: '/sprites/plane4.json' },
 ];
+const isFlipped = (url: string) => PLANES.find(p => p.url === url)?.flip ?? false;
 
 function applyLetterForm(letter: string, form: string): string {
   switch (form) {
@@ -176,26 +181,31 @@ function applyLetterForm(letter: string, form: string): string {
   }
 }
 
-const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked }) => (
-  <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
-    {isLottie(src) ? (
-      <dotlottie-wc src={src} autoplay loop
-        style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
-          filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
-    ) : (
-      <img src={src} alt="vehicle" width={90} height={90}
-        style={{
-          display: 'block', position: 'relative', zIndex: 1,
-          filter: shocked
-            ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
-            : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
-        }} />
-    )}
-  </div>
-);
+const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked }) => {
+  const flip = isFlipped(src);
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
+      {isLottie(src) ? (
+        <dotlottie-wc src={src} autoplay loop
+          style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
+            transform: flip ? 'scaleX(-1)' : undefined,
+            filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
+      ) : (
+        <img src={src} alt="vehicle" width={90} height={90}
+          style={{
+            display: 'block', position: 'relative', zIndex: 1,
+            transform: flip ? 'scaleX(-1)' : undefined,
+            filter: shocked
+              ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
+              : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
+          }} />
+      )}
+    </div>
+  );
+};
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-1 gap-2 w-full">
+  <div className="grid grid-cols-5 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
@@ -206,8 +216,8 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
         {isLottie(p.url)
-          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 46, height: 46 } as React.CSSProperties} />
-          : <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />}
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 46, height: 46, transform: p.flip ? 'scaleX(-1)' : undefined } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block', transform: p.flip ? 'scaleX(-1)' : undefined }} />}
       </button>
     ))}
   </div>
