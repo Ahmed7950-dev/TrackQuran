@@ -62,7 +62,7 @@ const BUBBLE_SPEED          = 0.14;
 const BUBBLE_SPEED_MAX_MULT = 2.4;
 const PLANE_ACCEL           = 0.055;  // slower build-up → heavier feel
 const PLANE_MAX_VEL         = 1.9;    // higher top speed
-const PLANE_DRAG            = 0.94;   // more momentum (was 0.87)
+const PLANE_DRAG            = 0.975;  // slow build-up — reaches top speed over ~1.5s
 const PLANE_GRAVITY         = 0.010;  // natural downward drift
 const BG_SCROLL_SPEED       = 120;
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
@@ -710,15 +710,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       // ── P1 physics (Arrow keys) ───────────────────────────────────────────
       if (!p1CrashedRef.current && !p1IsShocked) {
         v.y += PLANE_GRAVITY;
-        // boost accel when already moving in the pressed direction (engine spool-up feel)
-        const p1xR = 1 + Math.max(0,  v.x) / PLANE_MAX_VEL * 2.0;
-        const p1xL = 1 + Math.max(0, -v.x) / PLANE_MAX_VEL * 2.0;
-        const p1yD = 1 + Math.max(0,  v.y) / PLANE_MAX_VEL * 1.5;
-        const p1yU = 1 + Math.max(0, -v.y) / PLANE_MAX_VEL * 1.5;
-        if (k.ArrowUp)    v.y -= PLANE_ACCEL * p1yU;
-        if (k.ArrowDown)  v.y += PLANE_ACCEL * p1yD;
-        if (k.ArrowLeft)  v.x -= PLANE_ACCEL * 0.75 * p1xL;
-        if (k.ArrowRight) v.x += PLANE_ACCEL * 0.75 * p1xR;
+        if (k.ArrowUp)    v.y -= PLANE_ACCEL;
+        if (k.ArrowDown)  v.y += PLANE_ACCEL;
+        if (k.ArrowLeft)  v.x -= PLANE_ACCEL * 0.75;
+        if (k.ArrowRight) v.x += PLANE_ACCEL * 0.75;
         v.x *= PLANE_DRAG; v.y *= PLANE_DRAG;
         v.x = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v.x));
         v.y = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v.y));
@@ -746,21 +741,17 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
         v2.y += PLANE_GRAVITY;
-        const p2xR = 1 + Math.max(0,  v2.x) / PLANE_MAX_VEL * 2.0;
-        const p2xL = 1 + Math.max(0, -v2.x) / PLANE_MAX_VEL * 2.0;
-        const p2yD = 1 + Math.max(0,  v2.y) / PLANE_MAX_VEL * 1.5;
-        const p2yU = 1 + Math.max(0, -v2.y) / PLANE_MAX_VEL * 1.5;
         if (isOnlineNow) {
           const rk = p2RemoteKeysRef.current;
-          if (rk.up)    v2.y -= PLANE_ACCEL * p2yU;
-          if (rk.down)  v2.y += PLANE_ACCEL * p2yD;
-          if (rk.left)  v2.x -= PLANE_ACCEL * 0.75 * p2xL;
-          if (rk.right) v2.x += PLANE_ACCEL * 0.75 * p2xR;
+          if (rk.up)    v2.y -= PLANE_ACCEL;
+          if (rk.down)  v2.y += PLANE_ACCEL;
+          if (rk.left)  v2.x -= PLANE_ACCEL * 0.75;
+          if (rk.right) v2.x += PLANE_ACCEL * 0.75;
         } else {
-          if (k.KeyW) v2.y -= PLANE_ACCEL * p2yU;
-          if (k.KeyS) v2.y += PLANE_ACCEL * p2yD;
-          if (k.KeyA) v2.x -= PLANE_ACCEL * 0.75 * p2xL;
-          if (k.KeyD) v2.x += PLANE_ACCEL * 0.75 * p2xR;
+          if (k.KeyW) v2.y -= PLANE_ACCEL;
+          if (k.KeyS) v2.y += PLANE_ACCEL;
+          if (k.KeyA) v2.x -= PLANE_ACCEL * 0.75;
+          if (k.KeyD) v2.x += PLANE_ACCEL * 0.75;
         }
         v2.x *= PLANE_DRAG; v2.y *= PLANE_DRAG;
         v2.x = Math.max(-PLANE_MAX_VEL, Math.min(PLANE_MAX_VEL, v2.x));
