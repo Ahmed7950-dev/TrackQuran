@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import lottie from 'lottie-web';
 import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import AirplaneGame from './AirplaneGame';
+
+const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    let anim: any;
+    let cancelled = false;
+    fetch(src).then(r => r.json()).then(data => {
+      if (cancelled || !ref.current) return;
+      anim = lottie.loadAnimation({ container: ref.current, animationData: data, renderer: 'svg', loop: true, autoplay: true });
+    });
+    return () => { cancelled = true; anim?.destroy(); };
+  }, [src]);
+  return <div ref={ref} style={{ width, height, overflow: 'hidden', ...style }} />;
+};
 
 const LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
 
@@ -410,31 +426,97 @@ const AlphabetTrainerPage: React.FC = () => {
       {/* ── Game picker (child mode) ──────────────────────────────────────── */}
       {childMode && (
         <div className="mb-6">
-          <p className="text-center text-xs mb-2 font-bold text-indigo-600">
-            Pick your game! 🎮
+          <p className="text-center text-sm mb-3 font-extrabold text-indigo-600 tracking-wide">
+            🎮 Pick your game!
           </p>
-          <div className="flex gap-3 justify-center flex-wrap">
-            {([
-              { id: 'tower' as GameChoice,    emoji: '🏰', title: 'Castle Battle', sub: 'Answer letters to send soldiers!' },
-              { id: 'airplane' as GameChoice, emoji: '✈️', title: 'Letter Flight', sub: 'Hear a letter, fly to its bubble!' },
-            ]).map(g => {
-              const active = gameChoice === g.id;
+          <div className="flex gap-4 justify-center">
+            {/* Castle Battle */}
+            {(() => {
+              const active = gameChoice === 'tower';
               return (
                 <button
-                  key={g.id}
-                  onClick={() => setGameChoice(g.id)}
-                  className={`flex flex-col items-center px-5 py-3 rounded-2xl border-4 transition-all duration-150 select-none active:scale-95 ${
-                    active
-                      ? 'bg-indigo-500 border-indigo-300 text-white shadow-lg shadow-indigo-200 scale-105'
-                      : 'bg-white border-indigo-100 text-indigo-700 hover:border-indigo-300'
-                  }`}
+                  onClick={() => setGameChoice('tower')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 148,
+                    borderColor: active ? '#6366f1' : '#e0e7ff',
+                    background: active
+                      ? 'linear-gradient(160deg,#6366f1 0%,#4f46e5 100%)'
+                      : 'linear-gradient(160deg,#f0f4ff 0%,#e8edff 100%)',
+                    boxShadow: active
+                      ? '0 8px 24px rgba(99,102,241,0.45), 0 2px 8px rgba(99,102,241,0.3)'
+                      : '0 2px 8px rgba(99,102,241,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
                 >
-                  <span className="text-3xl mb-1">{g.emoji}</span>
-                  <span className="font-extrabold text-sm">{g.title}</span>
-                  <span className={`text-[10px] ${active ? 'opacity-90' : 'opacity-60'}`}>{g.sub}</span>
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{
+                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
+                    }} />
+                  )}
+                  <div className="pt-3 px-2">
+                    <LottieAnim src="/sprites/knight.json" width={110} height={110} />
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-indigo-700'}`}>
+                      Castle Battle
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-indigo-100' : 'text-indigo-400'}`}>
+                      Send soldiers to win!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                    </div>
+                  )}
                 </button>
               );
-            })}
+            })()}
+
+            {/* Letter Flight */}
+            {(() => {
+              const active = gameChoice === 'airplane';
+              return (
+                <button
+                  onClick={() => setGameChoice('airplane')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 148,
+                    borderColor: active ? '#06b6d4' : '#cffafe',
+                    background: active
+                      ? 'linear-gradient(160deg,#0891b2 0%,#0e7490 100%)'
+                      : 'linear-gradient(160deg,#f0feff 0%,#e0f9ff 100%)',
+                    boxShadow: active
+                      ? '0 8px 24px rgba(6,182,212,0.45), 0 2px 8px rgba(6,182,212,0.3)'
+                      : '0 2px 8px rgba(6,182,212,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{
+                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
+                    }} />
+                  )}
+                  <div className="pt-3 px-2">
+                    <LottieAnim src="/sprites/airplane-game.json" width={110} height={110} />
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-cyan-700'}`}>
+                      Letter Flight
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-cyan-100' : 'text-cyan-400'}`}>
+                      Fly to the right letter!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
