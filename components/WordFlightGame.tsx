@@ -148,35 +148,47 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 };
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
-const PLANES: { label: string; url: string; flip?: boolean; hitRadius?: number }[] = [
-  { label: 'Heli Animated', url: '/sprites/helicopter.json', hitRadius: 5.5 },
-  { label: 'Biplane',       url: '/sprites/plane1.json',     hitRadius: 6.5 },
-  { label: 'Airplane',      url: '/sprites/plane2.json',     hitRadius: 6.5 },
-  { label: 'Fighter',       url: '/sprites/plane3.json', flip: true, hitRadius: 5.5 },
-  { label: 'Plane 22',      url: '/sprites/plane4.json',     hitRadius: 6.0 },
-  { label: 'Plane 5',       url: '/sprites/plane5.svg',      hitRadius: 6.0 },
-  { label: 'Plane 6',       url: '/sprites/plane6.svg',      hitRadius: 6.0 },
-  { label: 'Plane 7',       url: '/sprites/plane7.svg',      hitRadius: 6.5 },
-  { label: 'Plane 8',       url: '/sprites/plane8.svg',      hitRadius: 5.5 },
-  { label: 'Plane 9',       url: '/sprites/plane9.svg',  flip: true, hitRadius: 6.5 },
-  { label: 'Plane 10',      url: '/sprites/plane10.svg', flip: true, hitRadius: 6.0 },
-  { label: 'Plane 11',      url: '/sprites/plane11.svg', flip: true, hitRadius: 5.5 },
+const PLANES: { label: string; url: string; flip?: boolean; rotate?: number; hitRadius?: number }[] = [
+  { label: 'Heli Animated', url: '/sprites/helicopter.json',  hitRadius: 5.5 },
+  { label: 'Biplane',       url: '/sprites/plane1.json',      hitRadius: 6.5 },
+  { label: 'Airplane',      url: '/sprites/plane2.json',      hitRadius: 6.5 },
+  { label: 'Fighter',       url: '/sprites/plane3.json',  flip: true, hitRadius: 5.5 },
+  { label: 'Plane 22',      url: '/sprites/plane4.json',      hitRadius: 6.0 },
+  { label: 'Plane 5',       url: '/sprites/plane5.svg',       hitRadius: 6.0 },
+  { label: 'Plane 6',       url: '/sprites/plane6.svg',       hitRadius: 6.0 },
+  { label: 'Plane 7',       url: '/sprites/plane7.svg',       hitRadius: 6.5 },
+  { label: 'Plane 8',       url: '/sprites/plane8.svg',       hitRadius: 5.5 },
+  { label: 'Plane 9',       url: '/sprites/plane9.svg',   flip: true, hitRadius: 6.5 },
+  { label: 'Plane 10',      url: '/sprites/plane10.svg',  flip: true, hitRadius: 6.0 },
+  { label: 'Plane 11',      url: '/sprites/plane11.svg',  flip: true, hitRadius: 5.5 },
+  { label: 'Rocket',        url: '/sprites/rocket.json',  rotate: 45,  hitRadius: 4.5 },
+  { label: 'Helicopter 2',  url: '/sprites/helicopter2.json',            hitRadius: 5.0 },
+  { label: 'Paper Plane',   url: '/sprites/paperplane.json',             hitRadius: 5.5 },
+  { label: 'Dragon',        url: '/sprites/dragon1.json', flip: true,   hitRadius: 5.5 },
+  { label: 'Dragon 2',      url: '/sprites/dragon2.json', flip: true,   hitRadius: 6.0 },
 ];
-const isFlipped = (url: string) => PLANES.find(p => p.url === url)?.flip ?? false;
+const isFlipped  = (url: string) => PLANES.find(p => p.url === url)?.flip   ?? false;
+const getRotate  = (url: string) => PLANES.find(p => p.url === url)?.rotate ?? 0;
+const planeTransform = (url: string) => {
+  const parts: string[] = [];
+  if (isFlipped(url)) parts.push('scaleX(-1)');
+  if (getRotate(url)) parts.push(`rotate(${getRotate(url)}deg)`);
+  return parts.length ? parts.join(' ') : undefined;
+};
 
 const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked }) => {
-  const flip = isFlipped(src);
+  const tf = planeTransform(src);
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
       {isLottie(src) ? (
         <dotlottie-wc src={src} autoplay loop
           style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
-            transform: flip ? 'scaleX(-1)' : undefined,
+            transform: tf,
             filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
       ) : (
         <img src={src} alt="vehicle" width={90} height={90} style={{
           display: 'block', position: 'relative', zIndex: 1,
-          transform: flip ? 'scaleX(-1)' : undefined,
+          transform: tf,
           filter: shocked
             ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
             : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
@@ -198,8 +210,8 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
         {isLottie(p.url)
-          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 80, height: 80, transform: p.flip ? 'scaleX(-1)' : undefined } as React.CSSProperties} />
-          : <img src={p.url} alt={p.label} width={80} height={80} style={{ display: 'block', transform: p.flip ? 'scaleX(-1)' : undefined }} />}
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 80, height: 80, transform: planeTransform(p.url) } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={80} height={80} style={{ display: 'block', transform: planeTransform(p.url) }} />}
       </button>
     ))}
   </div>
@@ -270,6 +282,14 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const [p2Waiting, setP2Waiting]           = useState(false);
   const [p1CrashedRemote, setP1CrashedRemote] = useState(false);
   const [p2CrashedRemote, setP2CrashedRemote] = useState(false);
+  const [p1CrashAnim, setP1CrashAnim] = useState<'explosion'|'parachute'|null>(null);
+  const [p2CrashAnim, setP2CrashAnim] = useState<'explosion'|'parachute'|null>(null);
+  const p1CrashPosRef = useRef({ x: 14, y: 32 });
+  const p2CrashPosRef = useRef({ x: 14, y: 68 });
+  const [p1RemoteCrashAnim, setP1RemoteCrashAnim] = useState<'explosion'|'parachute'|null>(null);
+  const [p2RemoteCrashAnim, setP2RemoteCrashAnim] = useState<'explosion'|'parachute'|null>(null);
+  const p1RemoteCrashPos = useRef({ x: 14, y: 32 });
+  const p2RemoteCrashPos = useRef({ x: 14, y: 68 });
 
   // ── Physics refs ──────────────────────────────────────────────────────────
   const planeRef   = useRef<HTMLDivElement>(null);
@@ -374,6 +394,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       @keyframes wf-glow-collectible{ 0%{transform:translate(-50%,-50%) scale(0.4);opacity:0.9;}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0;} }
       @keyframes wf-glow-mine       { 0%,20%{transform:translate(-50%,-50%) scale(0.4);opacity:1;}100%{transform:translate(-50%,-50%) scale(3.0);opacity:0;} }
       @keyframes wf-score-pop { 0%{transform:translate(-50%,-100%) translateY(0);opacity:1;}100%{transform:translate(-50%,-100%) translateY(-32px);opacity:0;} }
+      @keyframes wf-parachute-fall { from{transform:translate(-50%,-50%) translateY(0);}to{transform:translate(-50%,-50%) translateY(160vh);} }
       .wf-bubble      { animation: wf-float         3.2s ease-in-out infinite; }
       .wf-popped      { animation: wf-pop           .45s ease-out    forwards; }
       .wf-collectible { animation: wf-collectible   2.4s ease-in-out infinite; }
@@ -484,6 +505,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     planePos.current = { x:14, y:32 }; velRef.current = { x:0, y:0 }; tiltRef.current = 0;
     p2Pos.current    = { x:14, y:68 }; p2Vel.current  = { x:0, y:0 }; p2Tilt.current  = 0;
     p1CrashedRef.current = false; p2CrashedRef.current = false;
+    setP1CrashAnim(null); setP2CrashAnim(null);
+    setP1RemoteCrashAnim(null); setP2RemoteCrashAnim(null);
     gameModeRef.current = gameMode;
     setCollectibles([]); setP1Powerup(null); setP2Powerup(null);
     setBullets([]); setMines([]); setP1Shocked(false); setP2Shocked(false);
@@ -572,6 +595,43 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const handleHitRef = useRef(handleHit);
   useEffect(() => { handleHitRef.current = handleHit; }, [handleHit]);
   useEffect(() => { queuePosRef.current = queuePos; }, [queuePos]);
+
+  useEffect(() => {
+    if (fuel <= 0 && p1CrashedRef.current) {
+      p1CrashPosRef.current = { ...planePos.current };
+      setP1CrashAnim('explosion');
+      const t1 = setTimeout(() => setP1CrashAnim('parachute'), 1400);
+      const t2 = setTimeout(() => setP1CrashAnim(null), 3900);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [fuel]);
+  useEffect(() => {
+    if (p2Fuel <= 0 && p2CrashedRef.current) {
+      p2CrashPosRef.current = { ...p2Pos.current };
+      setP2CrashAnim('explosion');
+      const t1 = setTimeout(() => setP2CrashAnim('parachute'), 1400);
+      const t2 = setTimeout(() => setP2CrashAnim(null), 3900);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [p2Fuel]);
+  useEffect(() => {
+    if (!p1CrashedRemote) { setP1RemoteCrashAnim(null); return; }
+    const snap = latestSnapRef.current;
+    p1RemoteCrashPos.current = snap ? { x: snap.p1.x, y: snap.p1.y } : { x: 14, y: 32 };
+    setP1RemoteCrashAnim('explosion');
+    const t1 = setTimeout(() => setP1RemoteCrashAnim('parachute'), 1400);
+    const t2 = setTimeout(() => setP1RemoteCrashAnim(null), 3900);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [p1CrashedRemote]);
+  useEffect(() => {
+    if (!p2CrashedRemote) { setP2RemoteCrashAnim(null); return; }
+    const snap = latestSnapRef.current;
+    p2RemoteCrashPos.current = snap ? { x: snap.p2.x, y: snap.p2.y } : { x: 14, y: 68 };
+    setP2RemoteCrashAnim('explosion');
+    const t1 = setTimeout(() => setP2RemoteCrashAnim('parachute'), 1400);
+    const t2 = setTimeout(() => setP2RemoteCrashAnim(null), 3900);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [p2CrashedRemote]);
 
   // ── Main game loop ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1032,7 +1092,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-2">
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor:'#3b82f6' }}>
               <span ref={p2HudP1NameRef} className="text-[11px] font-extrabold text-blue-600 whitespace-nowrap">{hn(p1NameReceived)} ⛽</span>
-              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div ref={p2FuelBar1Ref} className="h-full rounded-full" style={{ width:'100%', background:'#22c55e' }}/></div>
+              <div className="relative flex-1 h-4 rounded-full overflow-hidden" style={{ background:'rgba(148,163,184,0.25)' }}><div ref={p2FuelBar1Ref} className="absolute inset-0 rounded-full" style={{ width:'100%', background:`linear-gradient(90deg, #22c55ecc, #22c55e)` }}/></div>
               <span ref={p2Score1SpanRef} className="text-[11px] font-extrabold text-blue-700 ml-1">0</span>
             </div>
             {p1Powerup && <PowerupBadge type={p1Powerup} accentColor="#3b82f6" />}
@@ -1042,7 +1102,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
             {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor:'#f97316' }}>
               <span ref={p2HudP2NameRef} className="text-[11px] font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)} ⛽</span>
-              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div ref={p2FuelBar2Ref} className="h-full rounded-full" style={{ width:'100%', background:'#22c55e' }}/></div>
+              <div className="relative flex-1 h-4 rounded-full overflow-hidden" style={{ background:'rgba(148,163,184,0.25)' }}><div ref={p2FuelBar2Ref} className="absolute inset-0 rounded-full" style={{ width:'100%', background:`linear-gradient(90deg, #22c55ecc, #22c55e)` }}/></div>
               <span ref={p2Score2SpanRef} className="text-[11px] font-extrabold text-orange-700 ml-1">0</span>
             </div>
           </div>
@@ -1058,16 +1118,26 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
         {status === 'playing' && (
           <div ref={p2ViewP1PlaneRef} className="absolute pointer-events-none" style={{ left:'14%', top:'32%', transform:'translate(-50%,-50%)', zIndex:20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background:'#3b82f6', whiteSpace:'nowrap' }}>P1</div>
-            {p1CrashedRemote ? <div style={{ fontSize:60, lineHeight:1 }}>💥</div> : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} flameRef={p2ViewP1FlameRef} />}
+            {p1CrashedRemote ? (p1RemoteCrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null) : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} flameRef={p2ViewP1FlameRef} />}
           </div>
         )}
         {status === 'playing' && (
           <div ref={p2ViewP2PlaneRef} className="absolute pointer-events-none" style={{ left:'14%', top:'68%', transform:'translate(-50%,-50%)', zIndex:20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background:'#f97316', whiteSpace:'nowrap' }}>YOU</div>
-            {p2CrashedRemote ? <div style={{ fontSize:60, lineHeight:1 }}>💥</div> : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} flameRef={p2ViewP2FlameRef} />}
+            {p2CrashedRemote ? (p2RemoteCrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null) : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} flameRef={p2ViewP2FlameRef} />}
           </div>
         )}
 
+        {status === 'playing' && p1RemoteCrashAnim === 'parachute' && (
+          <div className="absolute pointer-events-none" style={{ left: `${p1RemoteCrashPos.current.x}%`, top: `${p1RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'wf-parachute-fall 2.5s ease-in forwards' }}>
+            <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
+          </div>
+        )}
+        {status === 'playing' && p2RemoteCrashAnim === 'parachute' && (
+          <div className="absolute pointer-events-none" style={{ left: `${p2RemoteCrashPos.current.x}%`, top: `${p2RemoteCrashPos.current.y}%`, zIndex: 21, animation: 'wf-parachute-fall 2.5s ease-in forwards' }}>
+            <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
+          </div>
+        )}
         {status === 'playing' && p2Glow && latestSnapRef.current && <GlowOverlay glow={p2Glow} x={latestSnapRef.current.p2.x} y={latestSnapRef.current.p2.y} />}
 
         {status === 'playing' && (
@@ -1123,7 +1193,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           <button onClick={onExit} className="px-3 py-1.5 rounded-full bg-white/90 border-2 border-sky-300 text-sky-700 text-xs font-bold shadow active:scale-95">← Exit</button>
           <div className="flex items-center gap-1.5 flex-1 max-w-[200px] bg-white/90 rounded-full px-3 py-1.5 border-2 border-sky-200 shadow">
             <span className="text-sm">⛽</span>
-            <div className="flex-1 h-3 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width:`${fuel}%`, background:fuelColor(fuel) }}/></div>
+            <div className="relative flex-1 h-4 rounded-full overflow-hidden" style={{ background:'rgba(148,163,184,0.25)' }}><div className="absolute inset-0 rounded-full transition-all duration-300" style={{ width:`${fuel}%`, background:`linear-gradient(90deg, ${fuelColor(fuel)}cc, ${fuelColor(fuel)})` }}/></div>
             <span className="text-[11px] font-extrabold text-slate-600 w-7 text-right">{fuel}</span>
           </div>
           <div className="px-3 py-1.5 rounded-full bg-white/90 border-2 border-sky-200 text-xs font-extrabold text-indigo-700 shadow whitespace-nowrap">{score} / {queue.length}</div>
@@ -1141,16 +1211,18 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       {/* 2P HUD */}
       {status === 'playing' && is2p && (
         <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 transition-all duration-200"
+          <div className="flex items-center gap-2 bg-white/95 rounded-2xl px-3 py-2 border-2 transition-all duration-200 shadow-sm"
             style={{
               borderColor:'#3b82f6',
-              transform: p1BarEmphasis ? 'scale(1.18)' : 'scale(1)',
-              boxShadow: p1BarEmphasis ? '0 0 0 3px rgba(59,130,246,0.4), 0 0 14px rgba(59,130,246,0.7)' : '0 1px 3px rgba(0,0,0,0.1)',
+              transform: p1BarEmphasis ? 'scale(1.15)' : 'scale(1)',
+              boxShadow: p1BarEmphasis ? '0 0 0 4px rgba(59,130,246,0.35), 0 0 18px rgba(59,130,246,0.7)' : '0 2px 6px rgba(0,0,0,0.12)',
               zIndex: p1BarEmphasis ? 30 : undefined,
             }}>
-            <span className="text-[10px] font-extrabold text-blue-600 whitespace-nowrap">{hn(p1Name)} ⛽</span>
-            <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width:`${fuel}%`, background:fuelColor(fuel) }}/></div>
-            <span className="text-[10px] font-extrabold text-blue-700">{score}</span>
+            <span className="text-xs font-extrabold text-blue-600 whitespace-nowrap">{hn(p1Name)}</span>
+            <div className="relative w-24 h-4 rounded-full overflow-hidden" style={{ background:'rgba(148,163,184,0.25)' }}>
+              <div className="absolute inset-0 rounded-full transition-all duration-300" style={{ width:`${fuel}%`, background:`linear-gradient(90deg, ${fuelColor(fuel)}cc, ${fuelColor(fuel)})` }}/>
+            </div>
+            <span className="text-xs font-extrabold text-blue-700 w-5 text-right">{score}</span>
           </div>
           {p1Powerup && <PowerupBadge type={p1Powerup} accentColor="#3b82f6" />}
           <div className="flex gap-1 flex-shrink-0 flex-1 justify-center">
@@ -1158,16 +1230,18 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
             <button onClick={() => speakMeaning(currentWord.meaning)} className="px-2 py-1.5 rounded-full bg-amber-400 border-2 border-amber-500 text-white text-sm font-bold shadow active:scale-95">🔊</button>
           </div>
           {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
-          <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 transition-all duration-200"
+          <div className="flex items-center gap-2 bg-white/95 rounded-2xl px-3 py-2 border-2 transition-all duration-200 shadow-sm"
             style={{
               borderColor:'#f97316',
-              transform: p2BarEmphasis ? 'scale(1.18)' : 'scale(1)',
-              boxShadow: p2BarEmphasis ? '0 0 0 3px rgba(249,115,22,0.4), 0 0 14px rgba(249,115,22,0.7)' : '0 1px 3px rgba(0,0,0,0.1)',
+              transform: p2BarEmphasis ? 'scale(1.15)' : 'scale(1)',
+              boxShadow: p2BarEmphasis ? '0 0 0 4px rgba(249,115,22,0.35), 0 0 18px rgba(249,115,22,0.7)' : '0 2px 6px rgba(0,0,0,0.12)',
               zIndex: p2BarEmphasis ? 30 : undefined,
             }}>
-            <span className="text-[10px] font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)} ⛽</span>
-            <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width:`${p2Fuel}%`, background:fuelColor(p2Fuel) }}/></div>
-            <span className="text-[10px] font-extrabold text-orange-700">{p2Score}</span>
+            <span className="text-xs font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)}</span>
+            <div className="relative w-24 h-4 rounded-full overflow-hidden" style={{ background:'rgba(148,163,184,0.25)' }}>
+              <div className="absolute inset-0 rounded-full transition-all duration-300" style={{ width:`${p2Fuel}%`, background:`linear-gradient(90deg, ${fuelColor(p2Fuel)}cc, ${fuelColor(p2Fuel)})` }}/>
+            </div>
+            <span className="text-xs font-extrabold text-orange-700 w-5 text-right">{p2Score}</span>
           </div>
         </div>
       )}
@@ -1195,13 +1269,24 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       {status === 'playing' && (
         <div ref={planeRef} className="absolute pointer-events-none" style={{ left:`${planePos.current.x}%`, top:`${planePos.current.y}%`, transform:'translate(-50%,-50%)', zIndex:20 }}>
           {is2p && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background:'#3b82f6', whiteSpace:'nowrap' }}>{hn(p1Name)}</div>}
-          {p1CrashedRef.current ? <div style={{ fontSize:60, lineHeight:1 }}>💥</div> : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} flameRef={p1FlameRef} />}
+          {p1CrashedRef.current ? (p1CrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null) : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} flameRef={p1FlameRef} />}
         </div>
       )}
       {status === 'playing' && is2p && (
         <div ref={p2PlaneRef} className="absolute pointer-events-none" style={{ left:`${p2Pos.current.x}%`, top:`${p2Pos.current.y}%`, transform:'translate(-50%,-50%)', zIndex:20 }}>
           <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background:'#f97316', whiteSpace:'nowrap' }}>{hn(p2Name)}</div>
-          {p2CrashedRef.current ? <div style={{ fontSize:60, lineHeight:1 }}>💥</div> : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} flameRef={p2FlameRef} />}
+          {p2CrashedRef.current ? (p2CrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null) : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} flameRef={p2FlameRef} />}
+        </div>
+      )}
+
+      {status === 'playing' && p1CrashAnim === 'parachute' && (
+        <div className="absolute pointer-events-none" style={{ left: `${p1CrashPosRef.current.x}%`, top: `${p1CrashPosRef.current.y}%`, zIndex: 21, animation: 'wf-parachute-fall 2.5s ease-in forwards' }}>
+          <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
+        </div>
+      )}
+      {status === 'playing' && p2CrashAnim === 'parachute' && (
+        <div className="absolute pointer-events-none" style={{ left: `${p2CrashPosRef.current.x}%`, top: `${p2CrashPosRef.current.y}%`, zIndex: 21, animation: 'wf-parachute-fall 2.5s ease-in forwards' }}>
+          <dotlottie-wc src="/sprites/parachute.json" autoplay loop style={{ width: 80, height: 80 } as React.CSSProperties} />
         </div>
       )}
 
