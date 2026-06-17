@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import lottie from 'lottie-web';
 import { supabase } from '../lib/supabase';
 
 declare global {
@@ -15,8 +16,7 @@ const isLottie = (url: string) => url.endsWith('.lottie') || url.endsWith('.json
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const lottie = (window as any).lottie;
-    if (!ref.current || !lottie) return;
+    if (!ref.current) return;
     const anim = lottie.loadAnimation({ container: ref.current, path: src, renderer: 'svg', loop: true, autoplay: true });
     return () => anim.destroy();
   }, [src]);
