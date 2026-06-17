@@ -169,6 +169,13 @@ const PLANES: { label: string; url: string; flip?: boolean }[] = [
   { label: 'Airplane',      url: '/sprites/plane2.json' },
   { label: 'Fighter',       url: '/sprites/plane3.json', flip: true },
   { label: 'Plane 22',      url: '/sprites/plane4.json' },
+  { label: 'Plane 5',       url: '/sprites/plane5.svg' },
+  { label: 'Plane 6',       url: '/sprites/plane6.svg' },
+  { label: 'Plane 7',       url: '/sprites/plane7.svg' },
+  { label: 'Plane 8',       url: '/sprites/plane8.svg' },
+  { label: 'Plane 9',       url: '/sprites/plane9.svg',  flip: true },
+  { label: 'Plane 10',      url: '/sprites/plane10.svg', flip: true },
+  { label: 'Plane 11',      url: '/sprites/plane11.svg', flip: true },
 ];
 const isFlipped = (url: string) => PLANES.find(p => p.url === url)?.flip ?? false;
 
@@ -205,7 +212,7 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 };
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-5 gap-2 w-full">
+  <div className="grid grid-cols-6 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
