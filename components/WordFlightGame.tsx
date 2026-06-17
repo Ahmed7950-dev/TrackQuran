@@ -63,6 +63,13 @@ const PLANE_MAX_VEL_H       = 0.317;
 const PLANE_DRAG            = 0.975;
 const PLANE_GRAVITY         = 0.003;
 const BG_SCROLL_SPEED       = 120;
+const BACKGROUNDS = [
+  '/sprites/airplane-bg.png',
+  '/sprites/bg-forest.png',
+  '/sprites/bg-aurora.png',
+  '/sprites/bg-moai.png',
+  '/sprites/bg-field.png',
+];
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 const BULLET_SPEED          = 1.8;
 const BULLET_DAMAGE         = 9;
@@ -221,6 +228,7 @@ interface WordFlightGameProps {
 const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: propRoomId, playerRole }) => {
   const isP2 = playerRole === '2';
 
+  const [bgImage] = useState(() => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)]);
   const [status, setStatus]       = useState<GameStatus>('start');
   const [gameMode, setGameMode]   = useState<GameMode>('1p');
   const [p1Plane, setP1Plane]     = useState(0);
@@ -980,7 +988,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
     return (
       <div className="select-none" style={{ position:'fixed', inset:0, zIndex:50, background:'#1a6fc4', touchAction:'none' }}>
-        <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex:0, backgroundImage:'url(/sprites/airplane-bg.png)', backgroundRepeat:'repeat-x', backgroundSize:'auto 100%' }} />
+        <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex:0, backgroundImage:`url(${bgImage})`, backgroundRepeat:'repeat-x', backgroundSize:'auto 100%' }} />
 
         {!p2Waiting && status === 'start' && overlay(
           <>
@@ -1097,7 +1105,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
   return (
     <div className="select-none" style={{ position:'fixed', inset:0, zIndex:50, background:'#1a6fc4', touchAction:'none' }}>
-      <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex:0, backgroundImage:'url(/sprites/airplane-bg.png)', backgroundRepeat:'repeat-x', backgroundSize:'auto 100%' }} />
+      <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex:0, backgroundImage:`url(${bgImage})`, backgroundRepeat:'repeat-x', backgroundSize:'auto 100%' }} />
 
       {status === 'playing' && p2Shocked && <div className="absolute pointer-events-none wf-shock-overlay" style={{ right:0, top:0, bottom:0, width:'50%', background:'rgba(147,197,253,0.3)', zIndex:5 }}/>}
       {status === 'playing' && p1Shocked && <div className="absolute pointer-events-none wf-shock-overlay" style={{ left:0, top:0, bottom:0, width:'50%', background:'rgba(147,197,253,0.3)', zIndex:5 }}/>}

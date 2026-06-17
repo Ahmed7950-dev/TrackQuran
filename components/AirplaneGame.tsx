@@ -78,6 +78,13 @@ const PLANE_MAX_VEL_H       = 0.317;  // horizontal max speed
 const PLANE_DRAG            = 0.975;  // slow build-up
 const PLANE_GRAVITY         = 0.003;  // gentle downward drift
 const BG_SCROLL_SPEED       = 120;
+const BACKGROUNDS = [
+  '/sprites/airplane-bg.png',
+  '/sprites/bg-forest.png',
+  '/sprites/bg-aurora.png',
+  '/sprites/bg-moai.png',
+  '/sprites/bg-field.png',
+];
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
 const BULLET_SPEED          = 1.8;
@@ -261,6 +268,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const isP2 = playerRole === '2';
 
   // ── Core game state ───────────────────────────────────────────────────────
+  const [bgImage] = useState(() => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)]);
   const [status, setStatus]         = useState<GameStatus>('start');
   const [gameMode, setGameMode]     = useState<GameMode>('1p');
   const [p1Plane, setP1Plane]       = useState(0);
@@ -1226,7 +1234,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     return (
       <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
         {/* Background */}
-        <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: 'url(/sprites/airplane-bg.png)', backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
+        <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: `url(${bgImage})`, backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
 
         {/* Join screen */}
         {!p2Waiting && status === 'start' && overlay(
@@ -1367,7 +1375,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
 
       {/* Background */}
-      <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: 'url(/sprites/airplane-bg.png)', backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
+      <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: `url(${bgImage})`, backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
 
       {/* ── Shock overlays ── */}
       {status === 'playing' && p2Shocked && (
