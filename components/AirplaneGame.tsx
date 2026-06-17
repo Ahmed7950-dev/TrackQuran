@@ -214,7 +214,7 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: 90, height: 90 }}>
       {isLottie(src) ? (
-        <dotlottie-wc src={src} autoplay loop
+        <lottie-player src={src} autoplay loop background="transparent"
           style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
             transform: tf,
             filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
@@ -244,7 +244,7 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
         {isLottie(p.url)
-          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 64, height: 64, transform: planeTransform(p.url) } as React.CSSProperties} />
+          ? <lottie-player src={p.url} autoplay loop background="transparent" style={{ width: 64, height: 64, transform: planeTransform(p.url) } as React.CSSProperties} />
           : <img src={p.url} alt={p.label} width={64} height={64} style={{ display: 'block', transform: planeTransform(p.url) }} />}
       </button>
     ))}
