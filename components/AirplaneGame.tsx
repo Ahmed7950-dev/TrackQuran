@@ -2,6 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { supabase } from '../lib/supabase';
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'dotlottie-wc': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string; autoplay?: boolean | string; loop?: boolean | string;
+      };
+    }
+  }
+}
+const isLottie = (url: string) => url.endsWith('.lottie') || url.endsWith('.json');
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Airplane letter game — 1-player, 2-player local, or 2-player online.
 // P1 controls: Arrow keys  |  P2 local: W A S D  |  P2 online: Arrow/WASD
@@ -162,7 +173,8 @@ const PLANES = [
   { label: 'Vintage Plane',  url: 'https://img.icons8.com/external-flaticons-flat-flat-icons/64/external-aircraft-history-flaticons-flat-flat-icons-2.png' },
   { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
   { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
-  { label: 'Helicopter',     url: '/sprites/helicopter.gif' },
+  { label: 'Helicopter',     url: 'https://lottie.host/781f82a4-2e97-4d4d-b8ae-8f3efa115862/x9pwwOO3eU.lottie' },
+  { label: 'Airplane',       url: '/sprites/Airplane.lottie' },
 ];
 
 function applyLetterForm(letter: string, form: string): string {
@@ -189,20 +201,24 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
       pointerEvents: 'none',
       zIndex: 0,
     }} />
-    <img src={src} alt="vehicle" width={90} height={90}
-      style={{
-        display: 'block',
-        position: 'relative',
-        zIndex: 1,
-        filter: shocked
-          ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
-          : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
-      }} />
+    {isLottie(src) ? (
+      <dotlottie-wc src={src} autoplay loop
+        style={{ width: 90, height: 90, display: 'block', position: 'relative', zIndex: 1,
+          filter: shocked ? 'brightness(0.8) saturate(0.5)' : undefined } as React.CSSProperties} />
+    ) : (
+      <img src={src} alt="vehicle" width={90} height={90}
+        style={{
+          display: 'block', position: 'relative', zIndex: 1,
+          filter: shocked
+            ? 'drop-shadow(0 0 12px #60a5fa) drop-shadow(0 0 6px #93c5fd) brightness(0.8) saturate(0.5)'
+            : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
+        }} />
+    )}
   </div>
 );
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-5 gap-2 w-full">
+  <div className="grid grid-cols-6 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
@@ -212,7 +228,9 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
-        <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />
+        {isLottie(p.url)
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 46, height: 46 } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={46} height={46} style={{ display: 'block' }} />}
       </button>
     ))}
   </div>

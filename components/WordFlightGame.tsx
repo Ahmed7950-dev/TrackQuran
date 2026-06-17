@@ -151,6 +151,7 @@ const PLANES = [
   { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
   { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
   { label: 'Helicopter',     url: 'https://lottie.host/781f82a4-2e97-4d4d-b8ae-8f3efa115862/x9pwwOO3eU.lottie' },
+  { label: 'Airplane',       url: '/sprites/Airplane.lottie' },
 ];
 
 const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.MutableRefObject<HTMLDivElement | null> }> = ({ src, shocked, flameRef }) => (
@@ -178,7 +179,7 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 );
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-5 gap-2 w-full">
+  <div className="grid grid-cols-6 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
