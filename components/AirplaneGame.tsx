@@ -188,23 +188,16 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
 const PLANES: { label: string; url: string; flip?: boolean; rotate?: number; hitRadius?: number }[] = [
-  { label: 'Heli Animated', url: '/sprites/helicopter.json',  hitRadius: 4.5 },
-  { label: 'Biplane',       url: '/sprites/plane1.json',      hitRadius: 5.5 },
-  { label: 'Airplane',      url: '/sprites/plane2.json',      hitRadius: 5.5 },
+  { label: 'Heli Animated', url: '/sprites/helicopter.json',          hitRadius: 4.5 },
+  { label: 'Biplane',       url: '/sprites/plane1.json',              hitRadius: 5.5 },
+  { label: 'Airplane',      url: '/sprites/plane2.json',              hitRadius: 5.5 },
   { label: 'Fighter',       url: '/sprites/plane3.json',  flip: true, hitRadius: 4.5 },
-  { label: 'Plane 22',      url: '/sprites/plane4.json',      hitRadius: 5.0 },
-  { label: 'Plane 5',       url: '/sprites/plane5.svg',       hitRadius: 5.0 },
-  { label: 'Plane 6',       url: '/sprites/plane6.svg',       hitRadius: 5.0 },
-  { label: 'Plane 7',       url: '/sprites/plane7.svg',       hitRadius: 5.5 },
-  { label: 'Plane 8',       url: '/sprites/plane8.svg',       hitRadius: 4.5 },
-  { label: 'Plane 9',       url: '/sprites/plane9.svg',   flip: true, hitRadius: 5.5 },
-  { label: 'Plane 10',      url: '/sprites/plane10.svg',  flip: true, hitRadius: 5.0 },
-  { label: 'Plane 11',      url: '/sprites/plane11.svg',  flip: true, hitRadius: 4.5 },
-  { label: 'Rocket',        url: '/sprites/rocket.json',  rotate: 45,  hitRadius: 4.0 },
-  { label: 'Helicopter 2',  url: '/sprites/helicopter2.json',            hitRadius: 4.5 },
-  { label: 'Paper Plane',   url: '/sprites/paperplane.json',             hitRadius: 5.0 },
-  { label: 'Dragon',        url: '/sprites/dragon1.json', flip: true,   hitRadius: 5.0 },
-  { label: 'Dragon 2',      url: '/sprites/dragon2.json', flip: true,   hitRadius: 5.5 },
+  { label: 'Plane 22',      url: '/sprites/plane4.json',              hitRadius: 5.0 },
+  { label: 'Rocket',        url: '/sprites/rocket.json',  rotate: 45, hitRadius: 4.0 },
+  { label: 'Helicopter 2',  url: '/sprites/helicopter2.json',         hitRadius: 4.5 },
+  { label: 'Paper Plane',   url: '/sprites/paperplane.json',          hitRadius: 5.0 },
+  { label: 'Dragon',        url: '/sprites/dragon1.json', flip: true, hitRadius: 5.0 },
+  { label: 'Dragon 2',      url: '/sprites/dragon2.json', flip: true, hitRadius: 5.5 },
 ];
 const isFlipped  = (url: string) => PLANES.find(p => p.url === url)?.flip   ?? false;
 const getRotate  = (url: string) => PLANES.find(p => p.url === url)?.rotate ?? 0;
@@ -249,7 +242,7 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 };
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="grid grid-cols-5 gap-1.5 w-full">
+  <div className="grid grid-cols-4 gap-2 w-full">
     {PLANES.map((p, i) => (
       <button key={i} onClick={() => onSelect(i)}
         className="flex items-center justify-center p-1 rounded-xl border-2 transition-all select-none"
@@ -259,9 +252,7 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
           boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
           transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
         }}>
-        {isLottie(p.url)
-          ? <LottieAnim src={p.url} width={64} height={64} style={{ transform: planeTransform(p.url) }} />
-          : <img src={p.url} alt={p.label} width={64} height={64} style={{ display: 'block', transform: planeTransform(p.url) }} />}
+        <LottieAnim src={p.url} width={80} height={80} style={{ transform: planeTransform(p.url) }} />
       </button>
     ))}
   </div>
