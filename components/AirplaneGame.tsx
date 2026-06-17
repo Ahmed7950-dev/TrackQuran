@@ -49,6 +49,7 @@ interface P2Snapshot {
   collectibles: Collectible[]; bullets: Bullet[]; mines: Mine[];
   p1Powerup: CollectibleType | null; p2Powerup: CollectibleType | null;
   p1Shocked: boolean; p2Shocked: boolean;
+  p1Name?: string; p2Name?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -58,9 +59,10 @@ const FUEL_LOSS             = 20;
 const BUBBLE_RADIUS         = 7.5;
 const BUBBLE_SPEED          = 0.14;
 const BUBBLE_SPEED_MAX_MULT = 2.4;
-const PLANE_ACCEL           = 0.09;
-const PLANE_MAX_VEL         = 1.25;
-const PLANE_DRAG            = 0.87;
+const PLANE_ACCEL           = 0.055;  // slower build-up → heavier feel
+const PLANE_MAX_VEL         = 1.9;    // higher top speed
+const PLANE_DRAG            = 0.94;   // more momentum (was 0.87)
+const PLANE_GRAVITY         = 0.010;  // natural downward drift
 const BG_SCROLL_SPEED       = 120;
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
@@ -150,10 +152,16 @@ const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
 const PLANES = [
   { label: 'Private Plane',  url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-private-vehicles-soft-fill-soft-fill-juicy-fish.png' },
   { label: 'Single Engine',  url: 'https://img.icons8.com/external-soft-fill-juicy-fish/60/external-single-vehicles-soft-fill-soft-fill-juicy-fish.png' },
-  { label: 'Helicopter',     url: 'https://img.icons8.com/external-those-icons-lineal-color-those-icons/24/external-Helicopter-transportation-and-vehicles-those-icons-lineal-color-those-icons.png' },
+  { label: 'Dual Helicopter',url: 'https://img.icons8.com/color/48/dual-helicopter--v2.png' },
   { label: 'Med Helicopter', url: 'https://img.icons8.com/external-photo3ideastudio-lineal-color-photo3ideastudio/64/external-helicopter-emergency-photo3ideastudio-lineal-color-photo3ideastudio.png' },
   { label: 'Jet Bomber',     url: 'https://img.icons8.com/external-smashingstocks-flat-smashing-stocks/66/external-Jet-Plane-war-and-army-smashingstocks-flat-smashing-stocks-4.png' },
   { label: 'Space Shuttle',  url: 'https://img.icons8.com/color/64/space-shuttle.png' },
+  { label: 'Classic Biplane',url: 'https://img.icons8.com/external-goofy-flat-kerismaker/96/external-Aircraft-transportation-obvious-flat-kerismaker.png' },
+  { label: 'Vintage Plane',  url: 'https://img.icons8.com/external-flaticons-flat-flat-icons/64/external-aircraft-history-flaticons-flat-flat-icons-2.png' },
+  { label: 'Fighter Jet',    url: 'https://img.icons8.com/external-flat-icons-pause-08/64/external-aircraft-transportation-flat-icons-pause-08-3.png' },
+  { label: 'Light Aircraft', url: 'https://img.icons8.com/external-obvious-flat-kerismaker/48/external-aircraft-transportation-vehicle-flat-obvious-flat-kerismaker.png' },
+  { label: 'Avro 504',       url: 'https://img.icons8.com/color/48/avro-504-plane.png' },
+  { label: 'Rocket',         url: 'https://img.icons8.com/color/48/rocket--v1.png' },
 ];
 
 function applyLetterForm(letter: string, form: string): string {
@@ -247,6 +255,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const [p1Shocked, setP1Shocked]         = useState(false);
   const [p2Shocked, setP2Shocked]         = useState(false);
 
+  // ── Player names ──────────────────────────────────────────────────────────
+  const [p1Name, setP1Name] = useState('Player 1');
+  const [p2Name, setP2Name] = useState('Player 2');
+  // P2-instance only: P1's name received from broadcast
+  const [p1NameReceived, setP1NameReceived] = useState('Player 1');
+
   // ── Glow / popup effects ──────────────────────────────────────────────────
   const [p1Glow, setP1Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
   const [p2Glow, setP2Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
@@ -324,6 +338,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const p2BubbleSetRef     = useRef<string>('');
   const p2BulletSetRef     = useRef<string>('');
   const p2BulletDomRefs    = useRef<Map<string, HTMLDivElement>>(new Map());
+  const p2HudP1NameRef     = useRef<HTMLSpanElement>(null);
+  const p2HudP2NameRef     = useRef<HTMLSpanElement>(null);
 
   // Sync mutable arrays to refs (game loop reads these)
   bubblesRef.current      = bubbles;
@@ -665,6 +681,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       // ── P1 physics (Arrow keys) ───────────────────────────────────────────
       if (!p1CrashedRef.current && !p1IsShocked) {
+        v.y += PLANE_GRAVITY;                         // always-on gravity
         if (k.ArrowUp)    v.y -= PLANE_ACCEL;
         if (k.ArrowDown)  v.y += PLANE_ACCEL;
         if (k.ArrowLeft)  v.x -= PLANE_ACCEL * 0.75;
@@ -686,6 +703,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       // ── P2 physics (WASD local / remote keys online) ──────────────────────
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
+        v2.y += PLANE_GRAVITY;                        // always-on gravity
         if (isOnlineNow) {
           const rk = p2RemoteKeysRef.current;
           if (rk.up)    v2.y -= PLANE_ACCEL;
@@ -861,8 +879,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   useEffect(() => {
     if (gameMode !== '2p-online' || !onlineRoomId || isP2) return;
     const ch = supabase.channel(`letter-flight:${onlineRoomId}`, { config: { broadcast: { self: false } } });
-    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { p2Plane: number } }) => {
+    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { p2Plane: number; p2Name?: string } }) => {
       setP2RemotePlane(payload.p2Plane); setP2Joined(true);
+      if (payload.p2Name) setP2Name(payload.p2Name);
     });
     ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: { up: boolean; down: boolean; left: boolean; right: boolean } }) => {
       p2RemoteKeysRef.current = payload;
@@ -896,6 +915,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p2Powerup: p2PowerupRef.current,
           p1Shocked: now < p1ShockedUntilRef.current,
           p2Shocked: now < p2ShockedUntilRef.current,
+          p1Name, p2Name,
         } satisfies P2Snapshot,
       });
     }, 33);
@@ -961,6 +981,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         }
       }
 
+      // ── Names ────────────────────────────────────────────────────────────
+      if (payload.p1Name) {
+        setP1NameReceived(prev => prev !== payload.p1Name ? payload.p1Name! : prev);
+        if (p2HudP1NameRef.current) p2HudP1NameRef.current.textContent = payload.p1Name;
+      }
+      if (payload.p2Name && p2HudP2NameRef.current) p2HudP2NameRef.current.textContent = payload.p2Name;
+
       // ── Letter audio ──────────────────────────────────────────────────────
       if (payload.targetLetter && payload.targetLetter !== p2SnapshotLetterRef.current) {
         p2SnapshotLetterRef.current = payload.targetLetter;
@@ -1012,11 +1039,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     });
 
     ch.subscribe(() => {
-      ch.send({ type: 'broadcast', event: 'ready', payload: { p2Plane: p2Plane } });
+      ch.send({ type: 'broadcast', event: 'ready', payload: { p2Plane: p2Plane, p2Name: p2Name } });
     });
     channelRef.current = ch;
     setP2Waiting(true);
-  }, [propRoomId, p2Plane, playLetterAudio]);
+  }, [propRoomId, p2Plane, p2Name, playLetterAudio]);
 
   // P2 keyboard → channel input
   useEffect(() => {
@@ -1072,9 +1099,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     </div>
   );
 
-  const twoPlayerResult = (s1: number, s2: number) => {
-    if (s1 > s2) return { emoji: '🏆', msg: 'Player 1 Wins!', color: '#3b82f6' };
-    if (s2 > s1) return { emoji: '🏆', msg: 'Player 2 Wins!', color: '#f97316' };
+  const hn = (n: string) => n.length > 10 ? n.slice(0, 9) + '…' : n;
+
+  const twoPlayerResult = (s1: number, s2: number, n1 = p1Name, n2 = p2Name) => {
+    if (s1 > s2) return { emoji: '🏆', msg: `${n1} Wins! 🎉`, color: '#3b82f6' };
+    if (s2 > s1) return { emoji: '🏆', msg: `${n2} Wins! 🎉`, color: '#f97316' };
     return { emoji: '🤝', msg: "It's a Draw!", color: '#8b5cf6' };
   };
 
@@ -1176,8 +1205,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {!p2Waiting && status === 'start' && overlay(
           <>
             <div className="inline-block px-3 py-1 rounded-full text-xs font-extrabold text-white mb-3" style={{ background: '#f97316' }}>Letter Flight — Player 2</div>
+            <div className="mb-3">
+              <input value={p2Name} onChange={e => setP2Name(e.target.value.slice(0, 16))} maxLength={16}
+                className="w-full px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
+                placeholder="Your name" />
+            </div>
             <p className="text-xs font-semibold text-slate-500 mb-1">Choose your vehicle</p>
-            <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+            <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+              <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+            </div>
             <div className="flex justify-center my-3"><JetPlane src={PLANES[p2Plane].url} /></div>
             <p className="text-xs font-bold text-orange-500 mb-4">⬆️⬇️⬅️➡️ or W A S D · Space = fire powerup</p>
             <div className="flex gap-2 justify-center">
@@ -1201,7 +1237,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {status === 'playing' && (
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-2">
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor: '#3b82f6' }}>
-              <span className="text-[11px] font-extrabold text-blue-600 whitespace-nowrap">P1 ⛽</span>
+              <span ref={p2HudP1NameRef} className="text-[11px] font-extrabold text-blue-600 whitespace-nowrap">{hn(p1NameReceived)} ⛽</span>
               <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden">
                 <div ref={p2FuelBar1Ref} className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }}/>
               </div>
@@ -1213,7 +1249,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             </div>
             {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor: '#f97316' }}>
-              <span className="text-[11px] font-extrabold text-orange-600 whitespace-nowrap">YOU ⛽</span>
+              <span ref={p2HudP2NameRef} className="text-[11px] font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)} ⛽</span>
               <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden">
                 <div ref={p2FuelBar2Ref} className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }}/>
               </div>
@@ -1276,13 +1312,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {/* Win/lost overlays */}
         {(status === 'won' || status === 'lost') && latestSnapRef.current && (() => {
           const s1 = latestSnapRef.current!.scores[0], s2 = latestSnapRef.current!.scores[1];
-          const r = twoPlayerResult(s1, s2);
+          const n1 = latestSnapRef.current!.p1Name ?? p1NameReceived;
+          const n2 = latestSnapRef.current!.p2Name ?? p2Name;
+          const r = twoPlayerResult(s1, s2, n1, n2);
           return overlay(<>
             <div className="text-5xl mb-2">{status === 'won' ? r.emoji : '🪂'}</div>
             <h3 className="text-2xl font-extrabold mb-3" style={{ color: r.color }}>{status === 'won' ? r.msg : 'Both planes crashed!'}</h3>
             <div className="flex gap-3 justify-center mb-5">
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">Player 1</div><div className="text-3xl font-extrabold text-blue-700">{s1}</div></div>
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">You (P2)</div><div className="text-3xl font-extrabold text-orange-600">{s2}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">{hn(n1)}</div><div className="text-3xl font-extrabold text-blue-700">{s1}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">You ({hn(n2)})</div><div className="text-3xl font-extrabold text-orange-600">{s2}</div></div>
             </div>
             <p className="text-xs text-slate-400 mb-3">Waiting for teacher to start a new round…</p>
             <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Exit</button>
@@ -1342,7 +1380,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && is2p && (
         <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-1.5">
           <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#3b82f6' }}>
-            <span className="text-[10px] font-extrabold text-blue-600 whitespace-nowrap">P1⛽</span>
+            <span className="text-[10px] font-extrabold text-blue-600 whitespace-nowrap">{hn(p1Name)} ⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${fuel}%`, background: fuelColor(fuel) }}/></div>
             <span className="text-[10px] font-extrabold text-blue-700">{score}</span>
           </div>
@@ -1361,7 +1399,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
           {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
           <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#f97316' }}>
-            <span className="text-[10px] font-extrabold text-orange-600 whitespace-nowrap">P2⛽</span>
+            <span className="text-[10px] font-extrabold text-orange-600 whitespace-nowrap">{hn(p2Name)} ⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${p2Fuel}%`, background: fuelColor(p2Fuel) }}/></div>
             <span className="text-[10px] font-extrabold text-orange-700">{p2Score}</span>
           </div>
@@ -1398,7 +1436,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* ── P1 Airplane ── */}
       {status === 'playing' && (
         <div ref={planeRef} className="absolute pointer-events-none" style={{ left: `${planePos.current.x}%`, top: `${planePos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
-          {is2p && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>P1</div>}
+          {is2p && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>{hn(p1Name)}</div>}
           {p1CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} />}
         </div>
       )}
@@ -1406,7 +1444,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* ── P2 Airplane ── */}
       {status === 'playing' && is2p && (
         <div ref={p2PlaneRef} className="absolute pointer-events-none" style={{ left: `${p2Pos.current.x}%`, top: `${p2Pos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
-          <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>P2</div>
+          <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>{hn(p2Name)}</div>
           {p2CrashedRef.current ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} />}
         </div>
       )}
@@ -1443,10 +1481,17 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               </button>
             ))}
           </div>
+          <div className="mb-3">
+            <input value={p1Name} onChange={e => setP1Name(e.target.value.slice(0, 16))} maxLength={16}
+              className="w-full px-3 py-1.5 rounded-xl border-2 border-sky-200 text-sm font-bold text-center text-sky-700 bg-sky-50 focus:outline-none focus:border-sky-400"
+              placeholder="Your name" />
+          </div>
           <p className="text-xs font-semibold text-slate-400 mb-3">
-            {gameMode === '2p-online' ? 'Player 1 — choose your vehicle' : is2p ? 'Player 1 — choose your vehicle' : 'Choose your vehicle'}
+            {gameMode === '2p-online' ? 'Choose your vehicle' : is2p ? 'Player 1 — choose your vehicle' : 'Choose your vehicle'}
           </p>
-          <VehiclePicker selected={p1Plane} onSelect={setP1Plane} accentColor="#3b82f6" />
+          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
+            <VehiclePicker selected={p1Plane} onSelect={setP1Plane} accentColor="#3b82f6" />
+          </div>
           <div className="flex justify-center my-3"><JetPlane src={PLANES[p1Plane].url} /></div>
 
           {gameMode === '2p-online' && onlineRoomId && (
@@ -1485,8 +1530,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'select_p2' && overlay(
         <>
           <div className="inline-block px-3 py-1 rounded-full text-xs font-extrabold text-white mb-3" style={{ background: '#f97316' }}>Player 2</div>
+          <div className="mb-3">
+            <input value={p2Name} onChange={e => setP2Name(e.target.value.slice(0, 16))} maxLength={16}
+              className="w-full px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-bold text-center text-orange-700 bg-orange-50 focus:outline-none focus:border-orange-400"
+              placeholder="Player 2 name" />
+          </div>
           <p className="text-xs font-semibold text-slate-400 mb-3">Choose your vehicle</p>
-          <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
+            <VehiclePicker selected={p2Plane} onSelect={setP2Plane} accentColor="#f97316" />
+          </div>
           <div className="flex justify-center my-3"><JetPlane src={PLANES[p2Plane].url} /></div>
           <p className="text-xs font-bold text-orange-500 mb-4">W A S D to fly · G to fire</p>
           <div className="flex gap-2 justify-center">
@@ -1504,8 +1556,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             <div className="text-5xl mb-2">{r.emoji}</div>
             <h3 className="text-2xl font-extrabold mb-3" style={{ color: r.color }}>{r.msg}</h3>
             <div className="flex gap-3 justify-center mb-5">
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">Player 1</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">Player 2</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">{hn(p1Name)}</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">{hn(p2Name)}</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
             </div>
             <div className="flex gap-2 justify-center flex-wrap">
               {isOnline
@@ -1534,8 +1586,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             <h3 className="text-xl font-extrabold text-slate-600 mb-1">Both planes crashed!</h3>
             <h4 className="text-lg font-extrabold mb-3" style={{ color: r.color }}>{r.msg}</h4>
             <div className="flex gap-3 justify-center mb-5">
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">Player 1</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
-              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">Player 2</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#3b82f6' }}><div className="text-xs font-extrabold text-blue-500 mb-1">{hn(p1Name)}</div><div className="text-3xl font-extrabold text-blue-700">{score}</div></div>
+              <div className="flex-1 rounded-2xl border-2 py-3" style={{ borderColor: '#f97316' }}><div className="text-xs font-extrabold text-orange-500 mb-1">{hn(p2Name)}</div><div className="text-3xl font-extrabold text-orange-600">{p2Score}</div></div>
             </div>
             <div className="flex gap-2 justify-center flex-wrap">
               {isOnline
