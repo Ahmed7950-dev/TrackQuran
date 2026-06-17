@@ -233,23 +233,21 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 };
 
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
-  <div className="max-h-56 overflow-y-auto rounded-2xl pr-0.5">
-    <div className="grid grid-cols-4 gap-2 w-full">
-      {PLANES.map((p, i) => (
-        <button key={i} onClick={() => onSelect(i)}
-          className="flex items-center justify-center p-2 rounded-2xl border-2 transition-all select-none"
-          style={{
-            borderColor: selected === i ? accentColor : '#e8edf2',
-            background:  selected === i ? `${accentColor}15` : '#f8fafc',
-            boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
-            transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
-          }}>
-          {isLottie(p.url)
-            ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 80, height: 80, transform: planeTransform(p.url) } as React.CSSProperties} />
-            : <img src={p.url} alt={p.label} width={80} height={80} style={{ display: 'block', transform: planeTransform(p.url) }} />}
-        </button>
-      ))}
-    </div>
+  <div className="grid grid-cols-5 gap-1.5 w-full">
+    {PLANES.map((p, i) => (
+      <button key={i} onClick={() => onSelect(i)}
+        className="flex items-center justify-center p-1 rounded-xl border-2 transition-all select-none"
+        style={{
+          borderColor: selected === i ? accentColor : '#e8edf2',
+          background:  selected === i ? `${accentColor}15` : '#f8fafc',
+          boxShadow:   selected === i ? `0 0 0 3px ${accentColor}40, 0 4px 14px ${accentColor}25` : '0 1px 3px rgba(0,0,0,0.06)',
+          transform:   selected === i ? 'scale(1.08)' : 'scale(1)',
+        }}>
+        {isLottie(p.url)
+          ? <dotlottie-wc src={p.url} autoplay loop style={{ width: 64, height: 64, transform: planeTransform(p.url) } as React.CSSProperties} />
+          : <img src={p.url} alt={p.label} width={64} height={64} style={{ display: 'block', transform: planeTransform(p.url) }} />}
+      </button>
+    ))}
   </div>
 );
 
@@ -1207,9 +1205,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const fuelColor = (f: number) => f > 60 ? '#22c55e' : f > 30 ? '#f59e0b' : '#ef4444';
 
   const overlay = (children: React.ReactNode) => (
-    <div className="absolute inset-0 z-30 flex items-center justify-center"
+    <div className="absolute inset-0 z-30 flex items-start justify-center py-2 overflow-y-auto"
       style={{ background: 'rgba(8,24,70,0.62)', backdropFilter: 'blur(6px)' }}>
-      <div className="bg-white rounded-3xl shadow-2xl border-2 border-sky-100 px-5 py-5 text-center max-w-sm mx-4 w-full overflow-y-auto" style={{ maxHeight: '92vh' }}>
+      <div className="bg-white rounded-3xl shadow-2xl border-2 border-sky-100 px-5 py-5 text-center max-w-sm mx-4 w-full my-auto">
         {children}
       </div>
     </div>
