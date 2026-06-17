@@ -33,7 +33,7 @@ interface Bullet {
 }
 
 interface Mine {
-  id: string; owner: 1 | 2; // damages the OTHER player
+  id: string; owner: 1 | 2;
   x: number; y: number;
   active: boolean;
 }
@@ -64,21 +64,22 @@ const PLANE_DRAG            = 0.87;
 const BG_SCROLL_SPEED       = 120;
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
-const BULLET_SPEED          = 1.8;  // % of arena per frame
-const BULLET_DAMAGE         = 9;    // fuel loss on bullet hit
-const MINE_DAMAGE           = 28;   // fuel loss on mine trigger
-const COLLECTIBLE_RADIUS    = 9;    // pickup detection (%)
+const BULLET_SPEED          = 1.8;
+const BULLET_DAMAGE         = 9;
+const MINE_DAMAGE           = 28;
+const COLLECTIBLE_RADIUS    = 9;
 const BULLET_HIT_RADIUS     = 7;
 const MINE_TRIGGER_RADIUS   = 7;
-const WEAPON_DURATION       = 5000; // ms
-const SHOCK_DURATION        = 5000; // ms
-const COLLECTIBLE_LIFETIME  = 13000; // ms
+const WEAPON_DURATION       = 5000;
+const SHOCK_DURATION        = 5000;
+const COLLECTIBLE_LIFETIME  = 13000;
+const COLLECTIBLE_SPAWN_RATE = 0.3;
 
 const COLLECTIBLE_ICONS: Record<CollectibleType, string> = {
-  heart:     'https://img.icons8.com/arcade/64/like.png',
-  weapon:    'https://img.icons8.com/arcade/64/center-diretion-2.png',
-  dynamite:  'https://img.icons8.com/arcade/64/dynamite.png',
-  lightning: 'https://img.icons8.com/arcade/64/lightning-bolt.png',
+  heart:     'https://img.icons8.com/retro/32/like.png',
+  weapon:    'https://img.icons8.com/color-glass/48/submachine-gun.png',
+  dynamite:  'https://img.icons8.com/color/48/dynamite.png',
+  lightning: 'https://img.icons8.com/dusk/64/the-flash-sign.png',
 };
 
 const COLLECTIBLE_LABELS: Record<CollectibleType, string> = {
@@ -133,10 +134,17 @@ function playTone(freqs: number[], duration = 0.15, type: OscillatorType = 'sine
     setTimeout(() => ctx.close(), (freqs.length + 1) * duration * 1000);
   } catch { /* audio unavailable */ }
 }
-const playSuccess  = () => playTone([523, 659, 784], 0.12);
-const playWrong    = () => playTone([220, 165], 0.18, 'square');
-const playPickup   = () => playTone([880, 1047], 0.1);
-const playBulletHit = () => playTone([330, 220], 0.12, 'triangle');
+const playSuccess     = () => playTone([523, 659, 784], 0.12);
+const playWrong       = () => playTone([220, 165], 0.18, 'square');
+const playBulletHit   = () => playTone([330, 220], 0.12, 'triangle');
+const playMineExplode = () => playTone([120, 90, 150, 70], 0.22, 'sawtooth');
+
+const PICKUP_SOUNDS: Record<CollectibleType, () => void> = {
+  heart:     () => playTone([523, 784, 1047], 0.1),
+  weapon:    () => playTone([440, 330, 550], 0.1, 'square'),
+  dynamite:  () => playTone([200, 150, 250], 0.12, 'triangle'),
+  lightning: () => playTone([880, 1320, 1760], 0.07),
+};
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
 const PLANES = [
@@ -185,7 +193,6 @@ const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void;
   </div>
 );
 
-// ── Powerup badge shown in HUD ────────────────────────────────────────────────
 const PowerupBadge: React.FC<{ type: CollectibleType; accentColor: string }> = ({ type, accentColor }) => (
   <div className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl border-2 shadow-sm"
     style={{ background: `${accentColor}15`, borderColor: accentColor }}>
@@ -240,13 +247,21 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const [p1Shocked, setP1Shocked]         = useState(false);
   const [p2Shocked, setP2Shocked]         = useState(false);
 
+  // ── Glow / popup effects ──────────────────────────────────────────────────
+  const [p1Glow, setP1Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
+  const [p2Glow, setP2Glow] = useState<'hit' | 'collectible' | 'mine' | null>(null);
+  const [p1HitPopup, setP1HitPopup] = useState<{ x: number; y: number } | null>(null);
+  const [p2HitPopup, setP2HitPopup] = useState<{ x: number; y: number } | null>(null);
+
   // ── Online multiplayer state ──────────────────────────────────────────────
   const [onlineRoomId, setOnlineRoomId]       = useState<string | null>(null);
   const [p2Joined, setP2Joined]               = useState(false);
   const [p2RemotePlane, setP2RemotePlane]     = useState(1);
   const [linkCopied, setLinkCopied]           = useState(false);
-  const [p2Snapshot, setP2Snapshot]           = useState<P2Snapshot | null>(null);
   const [p2Waiting, setP2Waiting]             = useState(false);
+  // P2-only crashed state (updated rarely)
+  const [p1CrashedRemote, setP1CrashedRemote] = useState(false);
+  const [p2CrashedRemote, setP2CrashedRemote] = useState(false);
 
   // ── P1 physics refs ───────────────────────────────────────────────────────
   const planeRef   = useRef<HTMLDivElement>(null);
@@ -298,6 +313,17 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const scoreRef           = useRef(0);
   const p2ScoreRef         = useRef(0);
   const p2SnapshotLetterRef = useRef('');
+  // ── P2 smoothness refs (DOM-direct updates to avoid React re-renders) ─────
+  const latestSnapRef      = useRef<P2Snapshot | null>(null);
+  const p2ViewP1PlaneRef   = useRef<HTMLDivElement>(null);
+  const p2ViewP2PlaneRef   = useRef<HTMLDivElement>(null);
+  const p2FuelBar1Ref      = useRef<HTMLDivElement>(null);
+  const p2FuelBar2Ref      = useRef<HTMLDivElement>(null);
+  const p2Score1SpanRef    = useRef<HTMLSpanElement>(null);
+  const p2Score2SpanRef    = useRef<HTMLSpanElement>(null);
+  const p2BubbleSetRef     = useRef<string>('');
+  const p2BulletSetRef     = useRef<string>('');
+  const p2BulletDomRefs    = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Sync mutable arrays to refs (game loop reads these)
   bubblesRef.current      = bubbles;
@@ -339,7 +365,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   // ── CSS animations ────────────────────────────────────────────────────────
   useEffect(() => {
-    const id = 'ag-styles-v3';
+    const id = 'ag-styles-v4';
     if (document.getElementById(id)) return;
     const s = document.createElement('style');
     s.id = id;
@@ -358,7 +384,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       }
       @keyframes ag-mine-pulse {
         0%,100% { transform: translate(-50%,-50%) scale(1); }
-        50%      { transform: translate(-50%,-50%) scale(1.12); }
+        50%      { transform: translate(-50%,-50%) scale(1.15); }
       }
       @keyframes ag-shock-flash {
         0%,100% { opacity: 0.25; }
@@ -368,10 +394,26 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         from { transform: scaleX(1); }
         to   { transform: scaleX(0); }
       }
-      .ag-bubble      { animation: ag-float     3.2s ease-in-out infinite; }
-      .ag-popped      { animation: ag-pop       .45s ease-out    forwards; }
+      @keyframes ag-glow-hit {
+        0%   { transform: translate(-50%,-50%) scale(0.4); opacity: 0.9; }
+        100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0; }
+      }
+      @keyframes ag-glow-collectible {
+        0%   { transform: translate(-50%,-50%) scale(0.4); opacity: 0.9; }
+        100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0; }
+      }
+      @keyframes ag-glow-mine {
+        0%,20% { transform: translate(-50%,-50%) scale(0.4); opacity: 1; }
+        100%   { transform: translate(-50%,-50%) scale(3.0); opacity: 0; }
+      }
+      @keyframes ag-score-pop {
+        0%   { transform: translate(-50%, -100%) translateY(0);     opacity: 1; }
+        100% { transform: translate(-50%, -100%) translateY(-32px); opacity: 0; }
+      }
+      .ag-bubble      { animation: ag-float       3.2s ease-in-out infinite; }
+      .ag-popped      { animation: ag-pop         .45s ease-out    forwards; }
       .ag-collectible { animation: ag-collectible 2.4s ease-in-out infinite; }
-      .ag-mine        { animation: ag-mine-pulse 1.4s ease-in-out infinite; }
+      .ag-mine        { animation: ag-mine-pulse  1.4s ease-in-out infinite; }
       .ag-shock-overlay { animation: ag-shock-flash .25s ease-in-out infinite; }
     `;
     document.head.appendChild(s);
@@ -388,9 +430,23 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     audio.play().catch(() => speakLetter(letter));
   }, []);
 
+  // ── Trigger glow helper ───────────────────────────────────────────────────
+  const triggerGlow = useCallback((player: 1 | 2, type: 'hit' | 'collectible' | 'mine') => {
+    const dur = type === 'mine' ? 900 : 700;
+    if (player === 1) {
+      setP1Glow(type);
+      setTimeout(() => setP1Glow(g => g === type ? null : g), dur);
+    } else {
+      setP2Glow(type);
+      setTimeout(() => setP2Glow(g => g === type ? null : g), dur);
+    }
+  }, []);
+
   // ── Apply collectible effect ───────────────────────────────────────────────
   const applyCollectible = useCallback((type: CollectibleType, player: 1 | 2) => {
-    playPickup();
+    PICKUP_SOUNDS[type]();
+    triggerGlow(player, 'collectible');
+
     if (type === 'heart') {
       if (player === 1) setFuel(f => Math.min(START_FUEL, f + 35));
       else              setP2Fuel(f => Math.min(START_FUEL, f + 35));
@@ -405,8 +461,14 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       if (player === 1) { p1PowerupRef.current = 'lightning'; setP1Powerup('lightning'); }
       else              { p2PowerupRef.current = 'lightning'; setP2Powerup('lightning'); }
     }
-  }, []); // all deps are stable refs/setters
+
+    // Notify P2 client of their own collectible pickup
+    if (player === 2 && gameModeRef.current === '2p-online') {
+      channelRef.current?.send({ type: 'broadcast', event: 'p2-event', payload: { kind: 'collectible', colType: type } });
+    }
+  }, [triggerGlow]);
   const applyCollectibleRef = useRef(applyCollectible);
+  useEffect(() => { applyCollectibleRef.current = applyCollectible; }, [applyCollectible]);
 
   // ── Fire handler — P1 ─────────────────────────────────────────────────────
   const fireP1 = useCallback(() => {
@@ -482,37 +544,52 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     p2Pos.current    = { x: 14, y: 68 }; p2Vel.current = { x: 0, y: 0 }; p2Tilt.current = 0;
     p1CrashedRef.current = false; p2CrashedRef.current = false;
     gameModeRef.current = gameMode;
-    // Reset collectibles
     setCollectibles([]); setP1Powerup(null); setP2Powerup(null);
     setBullets([]); setMines([]); setP1Shocked(false); setP2Shocked(false);
     p1PowerupRef.current = null; p2PowerupRef.current = null;
     p1ShockedUntilRef.current = 0; p2ShockedUntilRef.current = 0;
     p1WeaponUntilRef.current = 0; p2WeaponUntilRef.current = 0;
+    setP1Glow(null); setP2Glow(null);
+    setP1CrashedRemote(false); setP2CrashedRemote(false);
     setStatus('playing');
     startRound(q[0]);
   }, [letters, startRound, gameMode]);
 
   // ── Hit handling ──────────────────────────────────────────────────────────
   const handleHit = useCallback((bubble: Bubble, player: 1 | 2) => {
-    const is2pMode = gameModeRef.current === '2p' || gameModeRef.current === '2p-online';
+    const is2pMode    = gameModeRef.current === '2p' || gameModeRef.current === '2p-online';
+    const isOnlineMode = gameModeRef.current === '2p-online';
     if (bubble.isCorrect) {
-      playSuccess(); setFlash('good');
-      if (player === 1) { setFuel(f => Math.min(START_FUEL, f + FUEL_GAIN)); setScore(s => s + 1); }
-      else              { setP2Fuel(f => Math.min(START_FUEL, f + FUEL_GAIN)); setP2Score(s => s + 1); }
+      // Sound: don't play on P1 side when P2 scores in online mode (P2 plays it via broadcast)
+      if (!isOnlineMode || player === 1) playSuccess();
+      setFlash('good');
+
+      if (player === 1) {
+        setFuel(f => Math.min(START_FUEL, f + FUEL_GAIN)); setScore(s => s + 1);
+        triggerGlow(1, 'hit');
+        setP1HitPopup({ x: planePos.current.x, y: planePos.current.y });
+        setTimeout(() => setP1HitPopup(null), 900);
+      } else {
+        setP2Fuel(f => Math.min(START_FUEL, f + FUEL_GAIN)); setP2Score(s => s + 1);
+        triggerGlow(2, 'hit');
+        setP2HitPopup({ x: p2Pos.current.x, y: p2Pos.current.y });
+        setTimeout(() => setP2HitPopup(null), 900);
+        // Notify P2 client to play sound + show glow
+        if (isOnlineMode) channelRef.current?.send({ type: 'broadcast', event: 'p2-event', payload: { kind: 'scored' } });
+      }
+
       setBubbles(bs => bs.map(b => b.id === bubble.id ? { ...b, popped: true } : b));
       const next = queuePosRef.current + 1;
       queuePosRef.current = next; setQueuePos(next);
-      // Speed ramp
       const newMult = 1 + (next / Math.max(queue.length, 1)) * (BUBBLE_SPEED_MAX_MULT - 1);
       speedMultRef.current = newMult; setSpeedMult(newMult);
       if (next >= queue.length) {
         setTimeout(() => setStatus('won'), 600);
       } else {
         const nextLetter = queue[next];
-        // Maybe spawn a collectible
         const allTypes: CollectibleType[] = ['heart', 'weapon', 'dynamite', 'lightning'];
         const spawnTypes = is2pMode ? allTypes : ['heart'] as CollectibleType[];
-        if (next < queue.length && Math.random() < 0.7) {
+        if (Math.random() < COLLECTIBLE_SPAWN_RATE) {
           const type = spawnTypes[Math.floor(Math.random() * spawnTypes.length)];
           const cx = 28 + Math.random() * 44;
           const cy = ALL_Y_SLOTS[Math.floor(Math.random() * ALL_Y_SLOTS.length)];
@@ -552,7 +629,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       }
     }
     setTimeout(() => setFlash(null), 400);
-  }, [queue, playLetterAudio]);
+  }, [queue, playLetterAudio, triggerGlow]);
 
   const handleHitRef = useRef(handleHit);
   useEffect(() => { handleHitRef.current = handleHit; }, [handleHit]);
@@ -672,7 +749,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       for (const c of collectiblesRef.current) {
         if (!c.active) continue;
         if (now > c.expiresAt) { c.active = false; colChanged = true; continue; }
-        // P1
         if (!p1CrashedRef.current) {
           const d1x = c.x - p.x, d1y = (c.y - p.y) * 0.65;
           if (Math.sqrt(d1x * d1x + d1y * d1y) < COLLECTIBLE_RADIUS) {
@@ -680,7 +756,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             applyCollectibleRef.current(c.type, 1); continue;
           }
         }
-        // P2
         if (is2pNow && !p2CrashedRef.current) {
           const p2c = p2Pos.current;
           const d2x = c.x - p2c.x, d2y = (c.y - p2c.y) * 0.65;
@@ -697,14 +772,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       for (const b of bulletsRef.current) {
         if (!b.active) continue;
         b.x += b.vx; b.y += b.vy;
-        // Off-screen
         if (b.x < -5 || b.x > 105 || b.y < -5 || b.y > 105) {
           b.active = false;
           const el = bulletDomRefs.current.get(b.id);
           if (el) el.style.display = 'none';
           bChanged = true; continue;
         }
-        // Hit opponent
         const target = b.owner === 1 ? p2Pos.current : planePos.current;
         const targetCrashed = b.owner === 1 ? p2CrashedRef.current : p1CrashedRef.current;
         if (!targetCrashed && is2pNow) {
@@ -736,9 +809,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           const mdx = m.x - targetPos.x, mdy = (m.y - targetPos.y) * 0.65;
           if (Math.sqrt(mdx * mdx + mdy * mdy) < MINE_TRIGGER_RADIUS) {
             m.active = false; mChanged = true;
-            if (m.owner === 1) setP2Fuel(f => Math.max(0, f - MINE_DAMAGE));
-            else               setFuel(f => Math.max(0, f - MINE_DAMAGE));
-            playBulletHit();
+            if (m.owner === 1) {
+              setP2Fuel(f => Math.max(0, f - MINE_DAMAGE));
+              triggerGlow(2, 'mine');
+              if (gameModeRef.current === '2p-online') channelRef.current?.send({ type: 'broadcast', event: 'p2-event', payload: { kind: 'mine' } });
+            } else {
+              setFuel(f => Math.max(0, f - MINE_DAMAGE));
+              triggerGlow(1, 'mine');
+            }
+            playMineExplode();
             setFlash('bad'); setTimeout(() => setFlash(null), 400);
           }
         }
@@ -749,7 +828,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [status, isP2]);
+  }, [status, isP2, triggerGlow]);
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -758,7 +837,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       const move = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'];
       if (move.includes(e.code)) { e.preventDefault(); keysDown.current[e.code] = true; }
       const mode = gameModeRef.current;
-      // Fire
       if (e.code === 'Space' && (mode === '1p' || mode === '2p-online')) { e.preventDefault(); fireP1Ref.current(); }
       if (e.code === 'KeyM'  && mode === '2p') { e.preventDefault(); fireP1Ref.current(); }
       if (e.code === 'KeyG'  && mode === '2p') { e.preventDefault(); fireP2Ref.current(); }
@@ -769,7 +847,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); keysDown.current = {}; };
   }, [status, isP2]);
 
-  // ── Cleanup audio ─────────────────────────────────────────────────────────
   useEffect(() => () => { audioRef.current?.pause(); window.speechSynthesis?.cancel(); }, []);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -784,13 +861,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   useEffect(() => {
     if (gameMode !== '2p-online' || !onlineRoomId || isP2) return;
     const ch = supabase.channel(`letter-flight:${onlineRoomId}`, { config: { broadcast: { self: false } } });
-    ch.on('broadcast', { event: 'ready' },  ({ payload }: { payload: { p2Plane: number } }) => {
+    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { p2Plane: number } }) => {
       setP2RemotePlane(payload.p2Plane); setP2Joined(true);
     });
-    ch.on('broadcast', { event: 'input' },  ({ payload }: { payload: { up: boolean; down: boolean; left: boolean; right: boolean } }) => {
+    ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: { up: boolean; down: boolean; left: boolean; right: boolean } }) => {
       p2RemoteKeysRef.current = payload;
     });
-    ch.on('broadcast', { event: 'fire' },   () => { fireP2Ref.current(); });
+    ch.on('broadcast', { event: 'fire' }, () => { fireP2Ref.current(); });
     ch.subscribe();
     channelRef.current = ch;
     return () => { ch.unsubscribe(); channelRef.current = null; };
@@ -827,32 +904,113 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   // ─────────────────────────────────────────────────────────────────────────
   // ONLINE — P2 side
+  // P2 uses DOM-direct updates (no React re-render per broadcast) for planes,
+  // fuel bars, scores, and bubble positions. React state only updates when
+  // structural content changes (bubble set, powerups, status, etc.).
   // ─────────────────────────────────────────────────────────────────────────
 
   const joinOnlineGame = useCallback(() => {
     if (!propRoomId) return;
     const ch = supabase.channel(`letter-flight:${propRoomId}`, { config: { broadcast: { self: false } } });
+
     ch.on('broadcast', { event: 'state' }, ({ payload }: { payload: P2Snapshot }) => {
-      setP2Snapshot(payload);
+      // Always store latest snapshot for DOM updates
+      latestSnapRef.current = payload;
       setP2Waiting(false);
-      setStatus(payload.status);
-      setBubbles(payload.bubbles);
-      setFuel(payload.fuels[0]);
-      setP2Fuel(payload.fuels[1]);
-      setScore(payload.scores[0]);
-      setP2Score(payload.scores[1]);
-      setCollectibles(payload.collectibles ?? []);
-      setBullets(payload.bullets ?? []);
-      setMines(payload.mines ?? []);
-      setP1Powerup(payload.p1Powerup ?? null);
-      setP2Powerup(payload.p2Powerup ?? null);
-      setP1Shocked(payload.p1Shocked ?? false);
-      setP2Shocked(payload.p2Shocked ?? false);
+
+      // ── Structural React state (only when value changes) ──────────────────
+      setStatus(prev => prev !== payload.status ? payload.status : prev);
+      setP1Powerup(prev => prev !== (payload.p1Powerup ?? null) ? (payload.p1Powerup ?? null) : prev);
+      setP2Powerup(prev => prev !== (payload.p2Powerup ?? null) ? (payload.p2Powerup ?? null) : prev);
+      setP1Shocked(prev => prev !== payload.p1Shocked ? (payload.p1Shocked ?? false) : prev);
+      setP2Shocked(prev => prev !== payload.p2Shocked ? (payload.p2Shocked ?? false) : prev);
+      if (payload.p1.crashed) setP1CrashedRemote(true);
+      if (payload.p2.crashed) setP2CrashedRemote(true);
+
+      // ── Bubbles — only re-render when the set (IDs) changes ──────────────
+      const newBubbleSet = payload.bubbles.map(b => b.id).join(',');
+      if (newBubbleSet !== p2BubbleSetRef.current) {
+        p2BubbleSetRef.current = newBubbleSet;
+        setBubbles(payload.bubbles);
+      }
+
+      // ── Collectibles — update when set changes ────────────────────────────
+      const newColSet = (payload.collectibles ?? []).filter(c => c.active).map(c => c.id).join(',');
+      setCollectibles(prev => {
+        const prevSet = prev.filter(c => c.active).map(c => c.id).join(',');
+        return prevSet !== newColSet ? (payload.collectibles ?? []) : prev;
+      });
+
+      // ── Mines — update when set changes ───────────────────────────────────
+      const newMineSet = (payload.mines ?? []).filter(m => m.active).map(m => m.id).sort().join(',');
+      setMines(prev => {
+        const prevSet = prev.filter(m => m.active).map(m => m.id).sort().join(',');
+        return prevSet !== newMineSet ? (payload.mines ?? []) : prev;
+      });
+
+      // ── Bullets — DOM-direct positions, React only when set changes ───────
+      const newBulletSet = (payload.bullets ?? []).filter(b => b.active).map(b => b.id).sort().join(',');
+      if (newBulletSet !== p2BulletSetRef.current) {
+        p2BulletSetRef.current = newBulletSet;
+        setBullets(payload.bullets ?? []);
+      } else {
+        for (const b of (payload.bullets ?? [])) {
+          if (!b.active) continue;
+          const el = p2BulletDomRefs.current.get(b.id);
+          if (el) { el.style.left = `${b.x}%`; el.style.top = `${b.y}%`; }
+        }
+      }
+
+      // ── Letter audio ──────────────────────────────────────────────────────
       if (payload.targetLetter && payload.targetLetter !== p2SnapshotLetterRef.current) {
         p2SnapshotLetterRef.current = payload.targetLetter;
         if (payload.status === 'playing') setTimeout(() => playLetterAudio(payload.targetLetter), 200);
       }
+
+      // ── Direct DOM updates — smooth, no React re-render ───────────────────
+      if (p2ViewP1PlaneRef.current) {
+        p2ViewP1PlaneRef.current.style.left      = `${payload.p1.x}%`;
+        p2ViewP1PlaneRef.current.style.top       = `${payload.p1.y}%`;
+        p2ViewP1PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p1.tilt}deg)`;
+      }
+      if (p2ViewP2PlaneRef.current) {
+        p2ViewP2PlaneRef.current.style.left      = `${payload.p2.x}%`;
+        p2ViewP2PlaneRef.current.style.top       = `${payload.p2.y}%`;
+        p2ViewP2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p2.tilt}deg)`;
+      }
+      if (p2FuelBar1Ref.current) {
+        p2FuelBar1Ref.current.style.width      = `${payload.fuels[0]}%`;
+        p2FuelBar1Ref.current.style.background = fuelColor(payload.fuels[0]);
+      }
+      if (p2FuelBar2Ref.current) {
+        p2FuelBar2Ref.current.style.width      = `${payload.fuels[1]}%`;
+        p2FuelBar2Ref.current.style.background = fuelColor(payload.fuels[1]);
+      }
+      if (p2Score1SpanRef.current) p2Score1SpanRef.current.textContent = String(payload.scores[0]);
+      if (p2Score2SpanRef.current) p2Score2SpanRef.current.textContent = String(payload.scores[1]);
+
+      // Update bubble positions directly
+      for (const b of payload.bubbles) {
+        if (b.popped) continue;
+        const el = bubbleDomRefs.current.get(b.id);
+        if (el) el.style.left = `${b.x}%`;
+      }
     });
+
+    // P2 receives event notifications from P1 (sound + glow on P2's own screen)
+    ch.on('broadcast', { event: 'p2-event' }, ({ payload: ev }: { payload: { kind: string; colType?: CollectibleType } }) => {
+      if (ev.kind === 'scored') {
+        playSuccess();
+        setP2Glow('hit'); setTimeout(() => setP2Glow(g => g === 'hit' ? null : g), 700);
+      } else if (ev.kind === 'collectible') {
+        if (ev.colType) PICKUP_SOUNDS[ev.colType]();
+        setP2Glow('collectible'); setTimeout(() => setP2Glow(g => g === 'collectible' ? null : g), 700);
+      } else if (ev.kind === 'mine') {
+        playMineExplode();
+        setP2Glow('mine'); setTimeout(() => setP2Glow(g => g === 'mine' ? null : g), 900);
+      }
+    });
+
     ch.subscribe(() => {
       ch.send({ type: 'broadcast', event: 'ready', payload: { p2Plane: p2Plane } });
     });
@@ -925,10 +1083,25 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     navigator.clipboard.writeText(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
   };
 
+  // ── Glow overlay helper (expanding colored circle from plane center) ───────
+  const GlowOverlay: React.FC<{ glow: 'hit' | 'collectible' | 'mine' | null; x: number; y: number }> = ({ glow, x, y }) => {
+    if (!glow) return null;
+    const color = glow === 'hit' ? 'rgba(250,204,21,0.7)' : glow === 'collectible' ? 'rgba(167,139,250,0.7)' : 'rgba(239,68,68,0.75)';
+    return (
+      <div className="absolute pointer-events-none z-25"
+        style={{
+          left: `${x}%`, top: `${y}%`,
+          width: 90, height: 90, borderRadius: '50%',
+          background: color,
+          animation: `ag-glow-${glow} 0.75s ease-out forwards`,
+        }} />
+    );
+  };
+
   // ── Shared renderers ──────────────────────────────────────────────────────
   const renderBubbles = (bubbleSrc: Bubble[], lf: string) => bubbleSrc.map(b => (
     <div key={b.id}
-      ref={isP2 ? undefined : el => { if (el) bubbleDomRefs.current.set(b.id, el); else bubbleDomRefs.current.delete(b.id); }}
+      ref={el => { if (el) bubbleDomRefs.current.set(b.id, el); else bubbleDomRefs.current.delete(b.id); }}
       className={`absolute z-10 flex items-center justify-center rounded-full ${b.popped ? 'ag-popped' : 'ag-bubble'}`}
       style={{
         left: `${b.x}%`, top: `${b.y}%`, transform: 'translate(-50%,-50%)',
@@ -946,17 +1119,18 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   const renderCollectibles = (cols: Collectible[]) => cols.filter(c => c.active).map(c => (
     <div key={c.id} className="absolute pointer-events-none z-10 ag-collectible"
-      style={{ left: `${c.x}%`, top: `${c.y}%` }}>
-      <div style={{ position: 'relative' }}>
-        <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46}
-          style={{ display: 'block', filter: 'drop-shadow(0 3px 10px rgba(0,0,0,0.6))' }} />
-      </div>
+      style={{ left: `${c.x}%`, top: `${c.y}%`, transform: 'translate(-50%,-50%)' }}>
+      <img src={COLLECTIBLE_ICONS[c.type]} alt={c.type} width={46} height={46}
+        style={{ display: 'block' }} />
     </div>
   ));
 
-  const renderBullets = (buls: Bullet[]) => buls.filter(b => b.active).map(b => (
+  const renderBullets = (buls: Bullet[], isP2View = false) => buls.filter(b => b.active).map(b => (
     <div key={b.id}
-      ref={isP2 ? undefined : el => { if (el) bulletDomRefs.current.set(b.id, el); else bulletDomRefs.current.delete(b.id); }}
+      ref={el => {
+        const map = isP2View ? p2BulletDomRefs.current : bulletDomRefs.current;
+        if (el) map.set(b.id, el); else map.delete(b.id);
+      }}
       className="absolute pointer-events-none"
       style={{
         left: `${b.x}%`, top: `${b.y}%`, transform: 'translate(-50%,-50%)',
@@ -966,11 +1140,18 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       }} />
   ));
 
+  // Placed mine — distinct from collectible: black bomb in a red-glowing circle
   const renderMines = (ms: Mine[]) => ms.filter(m => m.active).map(m => (
     <div key={m.id} className="absolute pointer-events-none z-10 ag-mine"
-      style={{ left: `${m.x}%`, top: `${m.y}%` }}>
-      <img src={COLLECTIBLE_ICONS.dynamite} alt="mine" width={38} height={38}
-        style={{ display: 'block', filter: 'drop-shadow(0 2px 8px rgba(220,38,38,0.7))' }} />
+      style={{ left: `${m.x}%`, top: `${m.y}%`, transform: 'translate(-50%,-50%)' }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: '50%',
+        background: 'radial-gradient(circle at 38% 35%, #555, #111)',
+        border: '3px solid #dc2626',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 22,
+        boxShadow: '0 0 14px rgba(220,38,38,0.85), 0 0 5px rgba(220,38,38,0.4)',
+      }}>💣</div>
     </div>
   ));
 
@@ -978,11 +1159,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // P2 CLIENT VIEW
   // ─────────────────────────────────────────────────────────────────────────
   if (isP2) {
-    const snap = p2Snapshot;
-    const snapLF    = snap?.letterForm ?? 'isolated';
-    const s1 = score, s2 = p2Score, f1 = fuel, f2 = p2Fuel;
-    const p1PlaneUrl = snap ? PLANES[snap.p1Plane]?.url ?? PLANES[0].url : PLANES[0].url;
-    const p2PlaneUrl = snap ? PLANES[snap.p2Plane]?.url ?? PLANES[1].url : PLANES[p2Plane].url;
+    const snapLF    = latestSnapRef.current?.letterForm ?? 'isolated';
+    const p1PlaneUrl = latestSnapRef.current ? PLANES[latestSnapRef.current.p1Plane]?.url ?? PLANES[0].url : PLANES[0].url;
+    const p2PlaneUrl = latestSnapRef.current ? PLANES[latestSnapRef.current.p2Plane]?.url ?? PLANES[1].url : PLANES[p2Plane].url;
 
     return (
       <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
@@ -1023,47 +1202,58 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-2">
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor: '#3b82f6' }}>
               <span className="text-[11px] font-extrabold text-blue-600 whitespace-nowrap">P1 ⛽</span>
-              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${f1}%`, background: fuelColor(f1) }}/></div>
-              <span className="text-[11px] font-extrabold text-blue-700 ml-1">{s1}</span>
+              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden">
+                <div ref={p2FuelBar1Ref} className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }}/>
+              </div>
+              <span ref={p2Score1SpanRef} className="text-[11px] font-extrabold text-blue-700 ml-1">0</span>
             </div>
             {p1Powerup && <PowerupBadge type={p1Powerup} accentColor="#3b82f6" />}
             <div className="flex gap-1 flex-shrink-0">
-              <button onClick={() => { if (snap) playLetterAudio(snap.targetLetter); }} className="px-2.5 py-1.5 rounded-full bg-amber-400 border-2 border-amber-500 text-white text-sm font-bold shadow active:scale-95">🔊</button>
+              <button onClick={() => { const snap = latestSnapRef.current; if (snap) playLetterAudio(snap.targetLetter); }} className="px-2.5 py-1.5 rounded-full bg-amber-400 border-2 border-amber-500 text-white text-sm font-bold shadow active:scale-95">🔊</button>
             </div>
             {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
             <div className="flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1.5 border-2 shadow flex-1 min-w-0" style={{ borderColor: '#f97316' }}>
-              <span className="text-[11px] font-extrabold text-orange-600 whitespace-nowrap">P2 ⛽</span>
-              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${f2}%`, background: fuelColor(f2) }}/></div>
-              <span className="text-[11px] font-extrabold text-orange-700 ml-1">{s2}</span>
+              <span className="text-[11px] font-extrabold text-orange-600 whitespace-nowrap">YOU ⛽</span>
+              <div className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden">
+                <div ref={p2FuelBar2Ref} className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }}/>
+              </div>
+              <span ref={p2Score2SpanRef} className="text-[11px] font-extrabold text-orange-700 ml-1">0</span>
             </div>
           </div>
+        )}
+
+        {/* P1 shock overlay */}
+        {status === 'playing' && p1Shocked && (
+          <div className="absolute inset-0 pointer-events-none ag-shock-overlay" style={{ background: 'rgba(147,197,253,0.35)', zIndex: 5 }}/>
         )}
 
         {/* Game elements */}
         {status === 'playing' && renderBubbles(bubbles, snapLF)}
         {status === 'playing' && renderCollectibles(collectibles)}
-        {status === 'playing' && renderBullets(bullets)}
+        {status === 'playing' && renderBullets(bullets, true)}
         {status === 'playing' && renderMines(mines)}
 
-        {/* P1 shock overlay */}
-        {status === 'playing' && p1Shocked && (
-          <div className="absolute inset-0 z-5 pointer-events-none ag-shock-overlay" style={{ background: 'rgba(147,197,253,0.35)', zIndex: 5 }}/>
-        )}
-
-        {/* P1 plane */}
-        {status === 'playing' && snap && (
-          <div className="absolute pointer-events-none" style={{ left: `${snap.p1.x}%`, top: `${snap.p1.y}%`, transform: `translate(-50%,-50%) rotate(${snap.p1.tilt}deg)`, zIndex: 20 }}>
+        {/* P1 plane — position managed via DOM ref in joinOnlineGame */}
+        {status === 'playing' && (
+          <div ref={p2ViewP1PlaneRef} className="absolute pointer-events-none"
+            style={{ left: '14%', top: '32%', transform: 'translate(-50%,-50%)', zIndex: 20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>P1</div>
-            {snap.p1.crashed ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} />}
+            {p1CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p1PlaneUrl} shocked={p1Shocked} />}
           </div>
         )}
 
-        {/* P2 plane */}
-        {status === 'playing' && snap && (
-          <div className="absolute pointer-events-none" style={{ left: `${snap.p2.x}%`, top: `${snap.p2.y}%`, transform: `translate(-50%,-50%) rotate(${snap.p2.tilt}deg)`, zIndex: 20 }}>
+        {/* P2 plane (YOU) — position managed via DOM ref */}
+        {status === 'playing' && (
+          <div ref={p2ViewP2PlaneRef} className="absolute pointer-events-none"
+            style={{ left: '14%', top: '68%', transform: 'translate(-50%,-50%)', zIndex: 20 }}>
             <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>YOU</div>
-            {snap.p2.crashed ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} />}
+            {p2CrashedRemote ? <div style={{ fontSize: 60, lineHeight: 1 }}>💥</div> : <JetPlane src={p2PlaneUrl} shocked={p2Shocked} />}
           </div>
+        )}
+
+        {/* P2 own glow effect */}
+        {status === 'playing' && p2Glow && latestSnapRef.current && (
+          <GlowOverlay glow={p2Glow} x={latestSnapRef.current.p2.x} y={latestSnapRef.current.p2.y} />
         )}
 
         {/* Touch controls */}
@@ -1075,7 +1265,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             <button {...holdBtnP2('right')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-orange-300 text-orange-700 text-lg font-bold shadow-md active:bg-orange-100 select-none">▶</button>
           </div>
         )}
-        {/* Touch fire button for P2 */}
         {status === 'playing' && p2Powerup && (
           <button className="absolute bottom-16 left-4 z-20 w-16 h-16 rounded-2xl border-3 text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
             style={{ background: '#f97316', borderColor: '#ea580c', border: '3px solid #ea580c' }}
@@ -1085,7 +1274,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         )}
 
         {/* Win/lost overlays */}
-        {(status === 'won' || status === 'lost') && snap && (() => {
+        {(status === 'won' || status === 'lost') && latestSnapRef.current && (() => {
+          const s1 = latestSnapRef.current!.scores[0], s2 = latestSnapRef.current!.scores[1];
           const r = twoPlayerResult(s1, s2);
           return overlay(<>
             <div className="text-5xl mb-2">{status === 'won' ? r.emoji : '🪂'}</div>
@@ -1117,12 +1307,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         </div>
       </div>
 
-      {/* ── P2 shock overlay (blue flash on P2's half) ── */}
+      {/* ── Shock overlays ── */}
       {status === 'playing' && p2Shocked && (
         <div className="absolute pointer-events-none ag-shock-overlay"
           style={{ right: 0, top: 0, bottom: 0, width: '50%', background: 'rgba(147,197,253,0.3)', zIndex: 5 }}/>
       )}
-      {/* ── P1 shock overlay ── */}
       {status === 'playing' && p1Shocked && (
         <div className="absolute pointer-events-none ag-shock-overlay"
           style={{ left: 0, top: 0, bottom: 0, width: '50%', background: 'rgba(147,197,253,0.3)', zIndex: 5 }}/>
@@ -1152,7 +1341,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* ── 2P HUD ── */}
       {status === 'playing' && is2p && (
         <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-1.5">
-          {/* P1 panel */}
           <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#3b82f6' }}>
             <span className="text-[10px] font-extrabold text-blue-600 whitespace-nowrap">P1⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${fuel}%`, background: fuelColor(fuel) }}/></div>
@@ -1160,7 +1348,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           </div>
           {p1Powerup && <PowerupBadge type={p1Powerup} accentColor="#3b82f6" />}
 
-          {/* Centre */}
           <div className="flex gap-1 flex-shrink-0 flex-1 justify-center">
             <button onClick={onExit} className="px-2 py-1.5 rounded-full bg-white/90 border-2 border-sky-300 text-sky-700 text-xs font-bold shadow active:scale-95">✕</button>
             {speedMult >= 1.15 && (
@@ -1173,7 +1360,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           </div>
 
           {p2Powerup && <PowerupBadge type={p2Powerup} accentColor="#f97316" />}
-          {/* P2 panel */}
           <div className="flex items-center gap-1 bg-white/90 rounded-full px-2 py-1.5 border-2 shadow" style={{ borderColor: '#f97316' }}>
             <span className="text-[10px] font-extrabold text-orange-600 whitespace-nowrap">P2⛽</span>
             <div className="w-16 h-2.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full transition-all duration-300" style={{ width: `${p2Fuel}%`, background: fuelColor(p2Fuel) }}/></div>
@@ -1190,6 +1376,24 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       {/* ── Flash ── */}
       {flash && <div className="absolute inset-0 z-10 pointer-events-none" style={{ background: flash === 'good' ? 'rgba(74,222,128,0.22)' : 'rgba(248,113,113,0.28)' }}/>}
+
+      {/* ── Glow effects ── */}
+      {status === 'playing' && <GlowOverlay glow={p1Glow} x={planePos.current.x} y={planePos.current.y} />}
+      {status === 'playing' && is2p && <GlowOverlay glow={p2Glow} x={p2Pos.current.x} y={p2Pos.current.y} />}
+
+      {/* ── Score popups ── */}
+      {status === 'playing' && p1HitPopup && (
+        <div className="absolute pointer-events-none z-30"
+          style={{ left: `${p1HitPopup.x}%`, top: `${p1HitPopup.y}%`, animation: 'ag-score-pop 0.9s ease-out forwards', color: '#22c55e', fontSize: 18, fontWeight: 900, textShadow: '0 1px 4px rgba(0,0,0,0.9)', whiteSpace: 'nowrap' }}>
+          +1 ⛽
+        </div>
+      )}
+      {status === 'playing' && p2HitPopup && (
+        <div className="absolute pointer-events-none z-30"
+          style={{ left: `${p2HitPopup.x}%`, top: `${p2HitPopup.y}%`, animation: 'ag-score-pop 0.9s ease-out forwards', color: '#f97316', fontSize: 18, fontWeight: 900, textShadow: '0 1px 4px rgba(0,0,0,0.9)', whiteSpace: 'nowrap' }}>
+          +1 ⛽
+        </div>
+      )}
 
       {/* ── P1 Airplane ── */}
       {status === 'playing' && (
@@ -1216,7 +1420,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <button {...holdBtn('ArrowRight')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-sky-300 text-sky-700 text-lg font-bold shadow-md active:bg-sky-100 select-none">▶</button>
         </div>
       )}
-      {/* Touch fire button (1P / P1 online with powerup) */}
       {status === 'playing' && p1Powerup && (!is2p || isOnline) && (
         <button className="absolute bottom-16 left-4 z-20 w-16 h-16 rounded-2xl text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
           style={{ background: '#3b82f6', border: '3px solid #2563eb' }}
@@ -1246,7 +1449,6 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <VehiclePicker selected={p1Plane} onSelect={setP1Plane} accentColor="#3b82f6" />
           <div className="flex justify-center my-3"><JetPlane src={PLANES[p1Plane].url} /></div>
 
-          {/* Online share box */}
           {gameMode === '2p-online' && onlineRoomId && (
             <div className="mb-3 text-left">
               <p className="text-[11px] font-bold text-slate-500 mb-1">Share this link with Player 2:</p>
