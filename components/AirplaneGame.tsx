@@ -308,6 +308,13 @@ const Joystick: React.FC<{
 
 const FullscreenButton: React.FC = () => {
   const [fs, setFs] = React.useState(false);
+  const [hint, setHint] = React.useState(false);
+  const el = document.documentElement as any;
+  const fsSupported = !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  // Already launched as a standalone web app (Add to Home Screen) → no chrome to hide.
+  const standalone = (navigator as any).standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
   React.useEffect(() => {
     const handler = () => setFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handler);
@@ -317,9 +324,17 @@ const FullscreenButton: React.FC = () => {
       document.removeEventListener('webkitfullscreenchange', handler);
     };
   }, []);
+
+  if (standalone) return null;
+
   const toggle = () => {
+    if (!fsSupported) {
+      // iOS Safari: no Fullscreen API. Point the user to Add to Home Screen.
+      setHint(true);
+      setTimeout(() => setHint(false), 4000);
+      return;
+    }
     try {
-      const el = document.documentElement as any;
       const d = document as any;
       if (!document.fullscreenElement) {
         if (el.requestFullscreen) el.requestFullscreen();
@@ -331,15 +346,26 @@ const FullscreenButton: React.FC = () => {
     } catch (_) {}
   };
   return (
-    <button onClick={toggle} style={{
-      position: 'absolute', top: 8, right: 8, zIndex: 60,
-      width: 36, height: 36, borderRadius: 8,
-      background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)',
-      color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backdropFilter: 'blur(4px)', touchAction: 'manipulation',
-    }}>
-      {fs ? '⊡' : '⛶'}
-    </button>
+    <>
+      <button onClick={toggle} style={{
+        position: 'absolute', top: 8, right: 8, zIndex: 60,
+        width: 36, height: 36, borderRadius: 8,
+        background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)',
+        color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backdropFilter: 'blur(4px)', touchAction: 'manipulation',
+      }}>
+        {fs ? '⊡' : '⛶'}
+      </button>
+      {hint && (
+        <div style={{
+          position: 'absolute', top: 50, right: 8, zIndex: 60, maxWidth: 220,
+          background: 'rgba(15,23,42,0.92)', color: 'white', fontSize: 12, fontWeight: 600,
+          padding: '8px 12px', borderRadius: 10, lineHeight: 1.4,
+        }}>
+          For fullscreen on iPhone: tap <b>Share</b> ⬆️ → <b>Add to Home Screen</b>, then open from that icon.
+        </div>
+      )}
+    </>
   );
 };
 
