@@ -296,6 +296,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const [p2CrashedRemote, setP2CrashedRemote] = useState(false);
   const [p1CrashAnim, setP1CrashAnim] = useState<'explosion'|'parachute'|null>(null);
   const [p2CrashAnim, setP2CrashAnim] = useState<'explosion'|'parachute'|null>(null);
+  const [p1Down, setP1Down] = useState(false);
+  const [p2Down, setP2Down] = useState(false);
   const p1CrashPosRef = useRef({ x: 14, y: 32 });
   const p2CrashPosRef = useRef({ x: 14, y: 68 });
   const [p1RemoteCrashAnim, setP1RemoteCrashAnim] = useState<'explosion'|'parachute'|null>(null);
@@ -527,6 +529,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     planePos.current = { x:14, y:32 }; velRef.current = { x:0, y:0 }; tiltRef.current = 0;
     p2Pos.current    = { x:14, y:68 }; p2Vel.current  = { x:0, y:0 }; p2Tilt.current  = 0;
     p1CrashedRef.current = false; p2CrashedRef.current = false;
+    setP1Down(false); setP2Down(false);
     setP1CrashAnim(null); setP2CrashAnim(null);
     setP1RemoteCrashAnim(null); setP2RemoteCrashAnim(null);
     gameModeRef.current = gameMode;
@@ -622,6 +625,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     if (fuel <= 0 && p1CrashedRef.current) {
       p1CrashPosRef.current = { ...planePos.current };
       setP1CrashAnim('explosion');
+      setP1Down(true);
       const t1 = setTimeout(() => setP1CrashAnim('parachute'), 1400);
       const t2 = setTimeout(() => setP1CrashAnim(null), 3900);
       return () => { clearTimeout(t1); clearTimeout(t2); };
@@ -631,6 +635,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     if (p2Fuel <= 0 && p2CrashedRef.current) {
       p2CrashPosRef.current = { ...p2Pos.current };
       setP2CrashAnim('explosion');
+      setP2Down(true);
       const t1 = setTimeout(() => setP2CrashAnim('parachute'), 1400);
       const t2 = setTimeout(() => setP2CrashAnim(null), 3900);
       return () => { clearTimeout(t1); clearTimeout(t2); };
@@ -844,6 +849,17 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [isP2, status]);
 
+  const startGameRef = useRef(startGame);
+  useEffect(() => { startGameRef.current = startGame; }, [startGame]);
+
+  const handleRestart = useCallback(() => {
+    if (isP2) {
+      channelRef.current?.send({ type: 'broadcast', event: 'restart', payload: {} });
+    } else {
+      startGame();
+    }
+  }, [isP2, startGame]);
+
   // ── Online room creation ───────────────────────────────────────────────────
   useEffect(() => {
     if (gameMode !== '2p-online' || isP2 || onlineRoomId) return;
@@ -858,6 +874,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       p2RemoteKeysRef.current = payload;
     });
     ch.on('broadcast', { event: 'fire' }, () => { fireP2Ref.current(); });
+    ch.on('broadcast', { event: 'restart' }, () => { startGameRef.current(); });
     ch.subscribe();
     channelRef.current = ch;
   }, [gameMode, isP2, onlineRoomId]);
@@ -1438,6 +1455,20 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           </div>
         </>
       )}
+
+      {status === 'playing' && ((is2p && (p1Down || p2Down)) || (isP2 && (p1CrashedRemote || p2CrashedRemote))) && (() => {
+        const p1IsDown = is2p ? p1Down : p1CrashedRemote;
+        const p2IsDown = is2p ? p2Down : p2CrashedRemote;
+        const downName = p1IsDown && !p2IsDown ? hn(p1Name) : !p1IsDown && p2IsDown ? hn(p2Name) : null;
+        return (
+          <div className="absolute bottom-20 left-1/2 z-30 flex items-center gap-3 rounded-2xl border-2 border-red-200 shadow-2xl px-4 py-3" style={{ transform:'translateX(-50%)', background:'rgba(255,255,255,0.97)', backdropFilter:'blur(6px)' }}>
+            <span className="text-2xl">🪂</span>
+            <span className="font-extrabold text-slate-700 text-sm whitespace-nowrap">{downName ? `${downName} is down!` : 'Both pilots down!'}</span>
+            <button onClick={handleRestart} className="px-4 py-1.5 rounded-full font-extrabold text-white text-sm active:scale-95 transition-all shadow" style={{ background:'linear-gradient(135deg,#22c55e,#16a34a)' }}>🔄 Restart</button>
+            <button onClick={onExit} className="px-3 py-1.5 rounded-full font-bold text-slate-500 border-2 border-slate-200 text-sm active:scale-95 transition-all">Exit</button>
+          </div>
+        );
+      })()}
 
       {status === 'won' && overlay(
         is2p ? (() => {
