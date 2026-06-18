@@ -1522,8 +1522,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {status === 'playing' && (
           <div className="absolute z-20" style={{ bottom: 20, left: 20 }}>
             <Joystick accentColor="#f97316" onKeys={k => {
-              p2RemoteKeysRef.current.up = k.up; p2RemoteKeysRef.current.down = k.down;
-              p2RemoteKeysRef.current.left = k.left; p2RemoteKeysRef.current.right = k.right;
+              const prev = p2RemoteKeysRef.current;
+              if (k.up === prev.up && k.down === prev.down && k.left === prev.left && k.right === prev.right) return;
+              p2RemoteKeysRef.current = { up: k.up, down: k.down, left: k.left, right: k.right };
               channelRef.current?.send({ type: 'broadcast', event: 'input', payload: { ...p2RemoteKeysRef.current } });
             }} />
           </div>
