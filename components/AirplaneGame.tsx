@@ -712,12 +712,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
     if (powerup === 'weapon') {
       if (!is2pNow || now > p1WeaponUntilRef.current) { p1PowerupRef.current = null; setP1Powerup(null); return; }
-      // Manual aim: fire in the plane's heading (velocity) direction, not at the opponent.
-      const s = planePos.current, v = velRef.current;
-      let dx = v.x, dy = v.y;
-      if (Math.hypot(dx, dy) < 0.06) { dx = 1; dy = 0; } // stationary → straight ahead
-      const dist = Math.hypot(dx, dy) || 1;
-      setBullets(prev => [...prev, { id: `b1-${now}`, owner: 1 as const, x: s.x, y: s.y, vx: dx / dist * BULLET_SPEED, vy: dy / dist * BULLET_SPEED, active: true }]);
+      // Fire straight ahead, out the front of the plane. Player chases the target to aim.
+      const s = planePos.current;
+      setBullets(prev => [...prev, { id: `b1-${now}`, owner: 1 as const, x: s.x + 2, y: s.y, vx: BULLET_SPEED, vy: 0, active: true }]);
     } else if (powerup === 'dynamite') {
       if (!is2pNow) { p1PowerupRef.current = null; setP1Powerup(null); return; }
       setMines(prev => [...prev, { id: `m1-${now}`, owner: 1 as const, x: planePos.current.x, y: planePos.current.y, active: true }]);
@@ -743,12 +740,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
     if (powerup === 'weapon') {
       if (now > p2WeaponUntilRef.current) { p2PowerupRef.current = null; setP2Powerup(null); return; }
-      // Manual aim: fire in the plane's heading (velocity) direction, not at the opponent.
-      const s = p2Pos.current, v = p2Vel.current;
-      let dx = v.x, dy = v.y;
-      if (Math.hypot(dx, dy) < 0.06) { dx = 1; dy = 0; } // stationary → straight ahead
-      const dist = Math.hypot(dx, dy) || 1;
-      setBullets(prev => [...prev, { id: `b2-${now}`, owner: 2 as const, x: s.x, y: s.y, vx: dx / dist * BULLET_SPEED, vy: dy / dist * BULLET_SPEED, active: true }]);
+      // Fire straight ahead, out the front of the plane. Player chases the target to aim.
+      const s = p2Pos.current;
+      setBullets(prev => [...prev, { id: `b2-${now}`, owner: 2 as const, x: s.x + 2, y: s.y, vx: BULLET_SPEED, vy: 0, active: true }]);
     } else if (powerup === 'dynamite') {
       setMines(prev => [...prev, { id: `m2-${now}`, owner: 2 as const, x: p2Pos.current.x, y: p2Pos.current.y, active: true }]);
       p2PowerupRef.current = null; setP2Powerup(null);
