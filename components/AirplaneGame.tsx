@@ -255,14 +255,14 @@ const Joystick: React.FC<{
   const baseRef = React.useRef<HTMLDivElement>(null);
   const knobRef = React.useRef<HTMLDivElement>(null);
   const ptrId = React.useRef<number | null>(null);
+  const centerRef = React.useRef({ x: 0, y: 0 });
   const BASE_R = 55, KNOB_R = 24, MAX = BASE_R - KNOB_R, DEAD = 0.22;
 
   const move = (cx: number, cy: number) => {
-    const el = baseRef.current, kn = knobRef.current;
-    if (!el || !kn) return;
+    const kn = knobRef.current;
+    if (!kn) return;
     kn.style.transition = 'none';
-    const rc = el.getBoundingClientRect();
-    const ox = cx - (rc.left + rc.width / 2), oy = cy - (rc.top + rc.height / 2);
+    const ox = cx - centerRef.current.x, oy = cy - centerRef.current.y;
     const d = Math.hypot(ox, oy), a = Math.atan2(oy, ox);
     const cd = Math.min(d, MAX);
     kn.style.transform = `translate(calc(-50% + ${cd * Math.cos(a)}px), calc(-50% + ${cd * Math.sin(a)}px))`;
@@ -287,6 +287,8 @@ const Joystick: React.FC<{
         ptrId.current = e.pointerId;
         e.currentTarget.setPointerCapture(e.pointerId);
         e.preventDefault();
+        const rc = e.currentTarget.getBoundingClientRect();
+        centerRef.current = { x: rc.left + rc.width / 2, y: rc.top + rc.height / 2 };
         move(e.clientX, e.clientY);
       }}
       onPointerMove={e => { if (e.pointerId !== ptrId.current) return; e.preventDefault(); move(e.clientX, e.clientY); }}
@@ -301,6 +303,43 @@ const Joystick: React.FC<{
         transform: 'translate(-50%, -50%)', pointerEvents: 'none',
       }} />
     </div>
+  );
+};
+
+const FullscreenButton: React.FC = () => {
+  const [fs, setFs] = React.useState(false);
+  React.useEffect(() => {
+    const handler = () => setFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    document.addEventListener('webkitfullscreenchange', handler);
+    return () => {
+      document.removeEventListener('fullscreenchange', handler);
+      document.removeEventListener('webkitfullscreenchange', handler);
+    };
+  }, []);
+  const toggle = () => {
+    try {
+      const el = document.documentElement as any;
+      const d = document as any;
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        if (d.exitFullscreen) d.exitFullscreen();
+        else if (d.webkitExitFullscreen) d.webkitExitFullscreen();
+      }
+    } catch (_) {}
+  };
+  return (
+    <button onClick={toggle} style={{
+      position: 'absolute', top: 8, right: 8, zIndex: 60,
+      width: 36, height: 36, borderRadius: 8,
+      background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)',
+      color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(4px)', touchAction: 'manipulation',
+    }}>
+      {fs ? '⊡' : '⛶'}
+    </button>
   );
 };
 
@@ -1404,6 +1443,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       <div className="select-none" style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#1a6fc4', touchAction: 'none' }}>
         {/* Background */}
         <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: `url(${bgImage})`, backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
+        <FullscreenButton />
 
         {/* Join screen */}
         {!p2Waiting && status === 'start' && overlay(
@@ -1568,6 +1608,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       {/* Background */}
       <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: `url(${bgImage})`, backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
+      <FullscreenButton />
 
       {/* ── Shock overlays ── */}
       {status === 'playing' && p2Shocked && (
