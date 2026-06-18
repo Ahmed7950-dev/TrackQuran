@@ -4,6 +4,7 @@ import App from './App';
 import { I18nProvider } from './context/I18nProvider';
 import { AuthProvider } from './context/AuthProvider';
 import SharedReportPage from './components/SharedReportPage';
+import WordFlightJoinPage from './components/WordFlightJoinPage';
 
 // ── Route detection — done once before any React rendering ──────────────────
 // Checking pathname here (outside any component) avoids React Rules-of-Hooks
@@ -12,6 +13,11 @@ const pathname = window.location.pathname;
 
 const sharedReportId = (() => {
   const m = pathname.match(/^\/report\/([a-f0-9-]{36})$/i);
+  return m ? m[1] : null;
+})();
+
+const wordFlightRoomId = (() => {
+  const m = pathname.match(/^\/word-flight\/(.+)$/);
   return m ? m[1] : null;
 })();
 
@@ -68,6 +74,16 @@ if (sharedReportId) {
           <AuthProvider>
             <SharedReportPage reportId={sharedReportId} />
           </AuthProvider>
+        </I18nProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+} else if (wordFlightRoomId) {
+  root.render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <I18nProvider>
+          <WordFlightJoinPage roomId={wordFlightRoomId} />
         </I18nProvider>
       </ErrorBoundary>
     </React.StrictMode>
