@@ -104,8 +104,8 @@ const BACKGROUNDS = [
 ];
 const ONLINE_SITE_URL       = 'https://www.lisanquran.com';
 
-const BULLET_SPEED          = 1.8;
-const BULLET_DAMAGE         = 9;
+const BULLET_SPEED          = 2.0;
+const BULLET_DAMAGE         = 3;
 const MINE_DAMAGE           = 28;
 const COLLECTIBLE_RADIUS    = 9;
 const BULLET_HIT_RADIUS     = 7;
@@ -240,8 +240,8 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
           }} />
       )}
       {shocked && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 5, pointerEvents: 'none' }}>
-          <LottieAnim src="/sprites/electric-power.json" width={130} height={130} />
+        <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 5, pointerEvents: 'none' }}>
+          <LottieAnim src="/sprites/electric-power.json" width={80} height={80} />
         </div>
       )}
     </div>
@@ -348,19 +348,19 @@ const FullscreenButton: React.FC = () => {
   return (
     <>
       <button onClick={toggle} style={{
-        position: 'absolute', top: 8, right: 8, zIndex: 60,
-        width: 36, height: 36, borderRadius: 8,
+        position: 'absolute', top: '50%', right: 4, zIndex: 60, transform: 'translateY(-50%)',
+        width: 34, height: 34, borderRadius: 8,
         background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)',
-        color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        backdropFilter: 'blur(4px)', touchAction: 'manipulation',
+        color: 'white', fontSize: 17, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        touchAction: 'manipulation',
       }}>
         {fs ? '⊡' : '⛶'}
       </button>
       {hint && (
         <div style={{
-          position: 'absolute', top: 50, right: 8, zIndex: 60, maxWidth: 220,
+          position: 'absolute', top: '50%', right: 44, zIndex: 60, maxWidth: 220, transform: 'translateY(-50%)',
           background: 'rgba(15,23,42,0.92)', color: 'white', fontSize: 12, fontWeight: 600,
-          padding: '8px 12px', borderRadius: 10, lineHeight: 1.4,
+          padding: '8px 12px', borderRadius: 10, lineHeight: 1.4, pointerEvents: 'none',
         }}>
           For fullscreen on iPhone: tap <b>Share</b> ⬆️ → <b>Add to Home Screen</b>, then open from that icon.
         </div>
@@ -707,13 +707,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     if (!powerup) return;
     const now = Date.now();
     if (now < p1FireCooldownRef.current) return;
-    p1FireCooldownRef.current = now + 350;
+    p1FireCooldownRef.current = now + 120;
     const is2pNow = gameModeRef.current === '2p' || gameModeRef.current === '2p-online';
 
     if (powerup === 'weapon') {
       if (!is2pNow || now > p1WeaponUntilRef.current) { p1PowerupRef.current = null; setP1Powerup(null); return; }
-      const s = planePos.current, t = p2Pos.current;
-      const dx = t.x - s.x, dy = t.y - s.y, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Manual aim: fire in the plane's heading (velocity) direction, not at the opponent.
+      const s = planePos.current, v = velRef.current;
+      let dx = v.x, dy = v.y;
+      if (Math.hypot(dx, dy) < 0.06) { dx = 1; dy = 0; } // stationary → straight ahead
+      const dist = Math.hypot(dx, dy) || 1;
       setBullets(prev => [...prev, { id: `b1-${now}`, owner: 1 as const, x: s.x, y: s.y, vx: dx / dist * BULLET_SPEED, vy: dy / dist * BULLET_SPEED, active: true }]);
     } else if (powerup === 'dynamite') {
       if (!is2pNow) { p1PowerupRef.current = null; setP1Powerup(null); return; }
@@ -736,12 +739,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     if (!powerup) return;
     const now = Date.now();
     if (now < p2FireCooldownRef.current) return;
-    p2FireCooldownRef.current = now + 350;
+    p2FireCooldownRef.current = now + 120;
 
     if (powerup === 'weapon') {
       if (now > p2WeaponUntilRef.current) { p2PowerupRef.current = null; setP2Powerup(null); return; }
-      const s = p2Pos.current, t = planePos.current;
-      const dx = t.x - s.x, dy = t.y - s.y, dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Manual aim: fire in the plane's heading (velocity) direction, not at the opponent.
+      const s = p2Pos.current, v = p2Vel.current;
+      let dx = v.x, dy = v.y;
+      if (Math.hypot(dx, dy) < 0.06) { dx = 1; dy = 0; } // stationary → straight ahead
+      const dist = Math.hypot(dx, dy) || 1;
       setBullets(prev => [...prev, { id: `b2-${now}`, owner: 2 as const, x: s.x, y: s.y, vx: dx / dist * BULLET_SPEED, vy: dy / dist * BULLET_SPEED, active: true }]);
     } else if (powerup === 'dynamite') {
       setMines(prev => [...prev, { id: `m2-${now}`, owner: 2 as const, x: p2Pos.current.x, y: p2Pos.current.y, active: true }]);
@@ -1454,9 +1460,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       className="absolute pointer-events-none"
       style={{
         left: `${b.x}%`, top: `${b.y}%`, transform: 'translate(-50%,-50%)',
-        width: 14, height: 14, borderRadius: '50%', zIndex: 25,
-        background: b.owner === 1 ? '#3b82f6' : '#f97316',
-        boxShadow: b.owner === 1 ? '0 0 10px #93c5fd, 0 0 4px #60a5fa' : '0 0 10px #fdba74, 0 0 4px #fb923c',
+        width: 8, height: 8, borderRadius: '50%', zIndex: 25,
+        background: '#f97316',
+        boxShadow: '0 0 6px #fdba74, 0 0 3px #fb923c',
       }} />
   ));
 
@@ -1826,13 +1832,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* Start screen */}
       {status === 'start' && overlay(
         <>
-          {/* Pilot + title */}
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 48, height: 48 } as React.CSSProperties} />
-            <div className="text-left">
-              <h3 className="text-xl font-black text-sky-700 leading-tight">Letter Flight!</h3>
-              <p className="text-[11px] text-slate-400 font-semibold">{letters.length} letters · fly toward the right one</p>
-            </div>
+          {/* Pilot */}
+          <div className="flex flex-col items-center justify-center mb-4">
+            <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 120, height: 120 } as React.CSSProperties} />
+            <p className="text-base font-extrabold text-sky-700 mt-1 text-center">Your pilot is ready to fly, Captain!</p>
           </div>
 
           {/* Mode tabs */}
