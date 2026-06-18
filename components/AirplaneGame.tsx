@@ -248,6 +248,62 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
   );
 };
 
+const Joystick: React.FC<{
+  onKeys: (k: { up: boolean; down: boolean; left: boolean; right: boolean }) => void;
+  accentColor?: string;
+}> = ({ onKeys, accentColor = '#3b82f6' }) => {
+  const baseRef = React.useRef<HTMLDivElement>(null);
+  const knobRef = React.useRef<HTMLDivElement>(null);
+  const ptrId = React.useRef<number | null>(null);
+  const BASE_R = 55, KNOB_R = 24, MAX = BASE_R - KNOB_R, DEAD = 0.22;
+
+  const move = (cx: number, cy: number) => {
+    const el = baseRef.current, kn = knobRef.current;
+    if (!el || !kn) return;
+    kn.style.transition = 'none';
+    const rc = el.getBoundingClientRect();
+    const ox = cx - (rc.left + rc.width / 2), oy = cy - (rc.top + rc.height / 2);
+    const d = Math.hypot(ox, oy), a = Math.atan2(oy, ox);
+    const cd = Math.min(d, MAX);
+    kn.style.transform = `translate(calc(-50% + ${cd * Math.cos(a)}px), calc(-50% + ${cd * Math.sin(a)}px))`;
+    const nx = ox / MAX, ny = oy / MAX;
+    onKeys({ up: ny < -DEAD, down: ny > DEAD, left: nx < -DEAD, right: nx > DEAD });
+  };
+
+  const release = () => {
+    const kn = knobRef.current;
+    if (kn) { kn.style.transition = 'transform 0.15s ease-out'; kn.style.transform = 'translate(-50%, -50%)'; }
+    onKeys({ up: false, down: false, left: false, right: false });
+    ptrId.current = null;
+  };
+
+  return (
+    <div ref={baseRef}
+      style={{ width: BASE_R * 2, height: BASE_R * 2, borderRadius: '50%',
+        background: `${accentColor}22`, border: `2.5px solid ${accentColor}55`,
+        position: 'relative', touchAction: 'none', userSelect: 'none', flexShrink: 0 }}
+      onPointerDown={e => {
+        if (ptrId.current !== null) return;
+        ptrId.current = e.pointerId;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+        move(e.clientX, e.clientY);
+      }}
+      onPointerMove={e => { if (e.pointerId !== ptrId.current) return; e.preventDefault(); move(e.clientX, e.clientY); }}
+      onPointerUp={e => { if (e.pointerId === ptrId.current) release(); }}
+      onPointerCancel={e => { if (e.pointerId === ptrId.current) release(); }}
+    >
+      <div ref={knobRef} style={{
+        width: KNOB_R * 2, height: KNOB_R * 2, borderRadius: '50%',
+        background: accentColor, opacity: 0.82,
+        boxShadow: `0 3px 12px ${accentColor}90`,
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+      }} />
+    </div>
+  );
+};
+
 const VehiclePicker: React.FC<{ selected: number; onSelect: (i: number) => void; accentColor: string }> = ({ selected, onSelect, accentColor }) => (
   <div className="grid grid-cols-4 gap-2 w-full">
     {PLANES.map((p, i) => (
@@ -1464,16 +1520,17 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
         {/* Touch controls */}
         {status === 'playing' && (
-          <div className="absolute bottom-16 right-3 z-20 grid grid-cols-3 gap-1.5" style={{ direction: 'ltr' }}>
-            <div/><button {...holdBtnP2('up')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-orange-300 text-orange-700 text-lg font-bold shadow-md active:bg-orange-100 select-none">▲</button><div/>
-            <button {...holdBtnP2('left')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-orange-300 text-orange-700 text-lg font-bold shadow-md active:bg-orange-100 select-none">◀</button>
-            <button {...holdBtnP2('down')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-orange-300 text-orange-700 text-lg font-bold shadow-md active:bg-orange-100 select-none">▼</button>
-            <button {...holdBtnP2('right')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-orange-300 text-orange-700 text-lg font-bold shadow-md active:bg-orange-100 select-none">▶</button>
+          <div className="absolute z-20" style={{ bottom: 20, left: 20 }}>
+            <Joystick accentColor="#f97316" onKeys={k => {
+              p2RemoteKeysRef.current.up = k.up; p2RemoteKeysRef.current.down = k.down;
+              p2RemoteKeysRef.current.left = k.left; p2RemoteKeysRef.current.right = k.right;
+              channelRef.current?.send({ type: 'broadcast', event: 'input', payload: { ...p2RemoteKeysRef.current } });
+            }} />
           </div>
         )}
         {status === 'playing' && p2Powerup && (
-          <button className="absolute bottom-16 left-4 z-20 w-16 h-16 rounded-2xl border-3 text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
-            style={{ background: '#f97316', borderColor: '#ea580c', border: '3px solid #ea580c' }}
+          <button className="absolute z-20 w-16 h-16 rounded-2xl text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
+            style={{ bottom: 28, right: 20, background: '#f97316', border: '3px solid #ea580c' }}
             onPointerDown={e => { e.preventDefault(); channelRef.current?.send({ type: 'broadcast', event: 'fire', payload: {} }); }}>
             💥
           </button>
@@ -1652,19 +1709,36 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         </div>
       )}
 
-      {/* ── Touch controls (1P) ── */}
-      {status === 'playing' && !is2p && (
-        <div className="absolute bottom-16 right-3 z-20 grid grid-cols-3 gap-1.5" style={{ direction: 'ltr' }}>
-          <div/><button {...holdBtn('ArrowUp')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-sky-300 text-sky-700 text-lg font-bold shadow-md active:bg-sky-100 select-none">▲</button><div/>
-          <button {...holdBtn('ArrowLeft')}  className="w-12 h-12 rounded-xl bg-white/80 border-2 border-sky-300 text-sky-700 text-lg font-bold shadow-md active:bg-sky-100 select-none">◀</button>
-          <button {...holdBtn('ArrowDown')}  className="w-12 h-12 rounded-xl bg-white/80 border-2 border-sky-300 text-sky-700 text-lg font-bold shadow-md active:bg-sky-100 select-none">▼</button>
-          <button {...holdBtn('ArrowRight')} className="w-12 h-12 rounded-xl bg-white/80 border-2 border-sky-300 text-sky-700 text-lg font-bold shadow-md active:bg-sky-100 select-none">▶</button>
+      {/* P1 joystick — shown in all modes */}
+      {status === 'playing' && (
+        <div className="absolute z-20" style={{ bottom: 20, left: 20 }}>
+          <Joystick accentColor="#3b82f6" onKeys={k => {
+            keysDown.current.ArrowUp = k.up; keysDown.current.ArrowDown = k.down;
+            keysDown.current.ArrowLeft = k.left; keysDown.current.ArrowRight = k.right;
+          }} />
         </div>
       )}
+      {/* P1 fire button */}
       {status === 'playing' && p1Powerup && (!is2p || isOnline) && (
-        <button className="absolute bottom-16 left-4 z-20 w-16 h-16 rounded-2xl text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
-          style={{ background: '#3b82f6', border: '3px solid #2563eb' }}
+        <button className="absolute z-20 w-16 h-16 rounded-2xl text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
+          style={{ bottom: 28, right: 20, background: '#3b82f6', border: '3px solid #2563eb' }}
           onPointerDown={e => { e.preventDefault(); fireP1Ref.current(); }}>
+          💥
+        </button>
+      )}
+      {/* P2 joystick + fire — local 2P mode */}
+      {status === 'playing' && gameMode === '2p' && (
+        <div className="absolute z-20" style={{ bottom: 20, right: 20 }}>
+          <Joystick accentColor="#f97316" onKeys={k => {
+            keysDown.current.KeyW = k.up; keysDown.current.KeyS = k.down;
+            keysDown.current.KeyA = k.left; keysDown.current.KeyD = k.right;
+          }} />
+        </div>
+      )}
+      {status === 'playing' && gameMode === '2p' && p2Powerup && (
+        <button className="absolute z-20 w-16 h-16 rounded-2xl text-white text-2xl font-extrabold shadow-lg active:scale-90 transition-all select-none"
+          style={{ bottom: 148, right: 20, background: '#f97316', border: '3px solid #ea580c' }}
+          onPointerDown={e => { e.preventDefault(); fireP2Ref.current(); }}>
           💥
         </button>
       )}
