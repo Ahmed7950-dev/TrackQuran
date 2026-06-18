@@ -205,6 +205,11 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
             : 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))',
         }} />
       )}
+      {shocked && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 5, pointerEvents: 'none' }}>
+          <LottieAnim src="/sprites/electric-power.json" width={130} height={130} />
+        </div>
+      )}
     </div>
   );
 };
