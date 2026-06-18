@@ -1104,6 +1104,16 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [isP2, status]);
 
+  // P2 input heartbeat — re-broadcast current key state ~10x/sec so dropped
+  // realtime packets self-heal (broadcast is fire-and-forget / lossy on mobile).
+  useEffect(() => {
+    if (!isP2 || status !== 'playing') return;
+    const id = setInterval(() => {
+      channelRef.current?.send({ type:'broadcast', event:'input', payload:{ ...p2RemoteKeysRef.current } });
+    }, 100);
+    return () => clearInterval(id);
+  }, [isP2, status]);
+
   useEffect(() => { return () => { channelRef.current?.unsubscribe(); channelRef.current = null; }; }, []);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
