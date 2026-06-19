@@ -276,9 +276,12 @@ interface ProgressTabProps {
   student: ArabicStudent;
   lessons: ArabicLesson[];
   onMistakesUpdated: () => void;
+  lessonLogs: ArabicLessonLog[];
+  calendarDate: Date;
+  onMonthChange: (d: Date) => void;
 }
 
-const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesUpdated }) => {
+const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesUpdated, lessonLogs, calendarDate, onMonthChange }) => {
   const { t } = useI18n();
   const [attempts, setAttempts] = useState<VocabAttempt[]>([]);
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
@@ -493,6 +496,14 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 
   return (
     <div className="space-y-8">
+
+      {/* ── Lesson History Calendar ───────────────────────────────────────── */}
+      <ArabicLessonCalendar
+        logs={lessonLogs}
+        lessons={lessons}
+        calendarDate={calendarDate}
+        onMonthChange={onMonthChange}
+      />
 
       {/* ── Spaced-Repetition Timeline ───────────────────────────────────── */}
       <section>
@@ -838,7 +849,8 @@ const KIND_BADGE: Record<ArabicLessonLog['kind'], { cls: string; label: string }
 };
 
 const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, calendarDate, onMonthChange }) => {
-  const lessonMap = useMemo(() => new Map(lessons.map(l => [l.id, l.title])), [lessons]);
+  const lessonMap = useMemo(() => new Map(lessons.map(l => [l.id, l])), [lessons]);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const dayMap = useMemo(() => {
     const m = new Map<string, ArabicLessonLog[]>();
@@ -855,39 +867,51 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  // Close expanded day when month changes
+  const handleMonthChange = (d: Date) => { setExpandedDay(null); onMonthChange(d); };
+
   const cells: React.ReactNode[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(<div key={`e-${i}`} className="min-h-[90px]" />);
+  for (let i = 0; i < firstDay; i++) cells.push(<div key={`e-${i}`} />);
 
   for (let day = 1; day <= daysInMonth; day++) {
     const ds      = new Date(year, month, day).toDateString();
     const entries = dayMap.get(ds) ?? [];
     const isToday = ds === new Date().toDateString();
     const active  = entries.length > 0;
+    const isOpen  = expandedDay === ds;
 
     const headerCls = active
-      ? 'bg-emerald-400 text-white'
+      ? 'bg-emerald-500 text-white'
       : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
     const borderCls = active
-      ? 'border-emerald-300 dark:border-emerald-700'
+      ? 'border-emerald-300 dark:border-emerald-600'
       : 'border-slate-200 dark:border-gray-600';
 
     cells.push(
-      <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[90px] overflow-hidden ${isToday ? 'ring-2 ring-amber-500 ring-offset-1' : ''}`}>
-        <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
+      <div
+        key={day}
+        onClick={() => active && setExpandedDay(isOpen ? null : ds)}
+        className={`rounded-lg border ${borderCls} flex flex-col min-h-[72px] overflow-hidden transition-shadow ${
+          active ? 'cursor-pointer hover:shadow-md hover:border-emerald-400' : ''
+        } ${isToday ? 'ring-2 ring-amber-400 ring-offset-1' : ''} ${isOpen ? 'ring-2 ring-emerald-500 ring-offset-1' : ''}`}
+      >
+        <div className={`${headerCls} px-1.5 py-1 text-center flex-shrink-0 flex items-center justify-center gap-1`}>
           <span className="text-xs font-bold leading-none">{day}</span>
+          {active && <span className="text-[9px] font-bold opacity-80">{entries.length > 1 ? `×${entries.length}` : ''}</span>}
         </div>
         {entries.length > 0 && (
           <div className="flex flex-col gap-0.5 p-1 overflow-hidden">
-            {entries.map((log, i) => {
+            {entries.slice(0, 2).map((log, i) => {
               const badge = KIND_BADGE[log.kind] ?? KIND_BADGE.progress;
-              const title = lessonMap.get(log.lessonId) ?? 'Lesson';
               return (
-                <span key={i} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight ${badge.cls}`}>
-                  <span className="font-bold">{badge.label}</span>
-                  <span className="truncate max-w-[70px]" title={title}>· {title}</span>
+                <span key={i} className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded leading-tight truncate ${badge.cls}`}>
+                  {badge.label}
                 </span>
               );
             })}
+            {entries.length > 2 && (
+              <span className="text-[8px] text-slate-400 dark:text-slate-500 px-1">+{entries.length - 2} more</span>
+            )}
           </div>
         )}
       </div>
@@ -897,10 +921,10 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 space-y-4">
       {/* Title + nav */}
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => onMonthChange(new Date(year, month - 1))}
+      <div className="flex items-center justify-between">
+        <button onClick={() => handleMonthChange(new Date(year, month - 1))}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
           ‹
         </button>
@@ -908,25 +932,16 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
           <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
             {calendarDate.toLocaleString('en', { month: 'long', year: 'numeric' })}
           </h3>
-          <div className="flex items-center justify-center gap-3 mt-1.5">
-            {[
-              { cls: 'bg-emerald-400', label: 'Active day' },
-            ].map(l => (
-              <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-                <span className={`w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0 ${l.cls}`} />
-                {l.label}
-              </span>
-            ))}
-          </div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Click an active day to expand</p>
         </div>
-        <button onClick={() => onMonthChange(new Date(year, month + 1))}
+        <button onClick={() => handleMonthChange(new Date(year, month + 1))}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
           ›
         </button>
       </div>
 
       {/* Day-name header */}
-      <div className="grid grid-cols-7 gap-1 mb-1">
+      <div className="grid grid-cols-7 gap-1">
         {dayNames.map(d => (
           <div key={d} className="text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>
         ))}
@@ -935,8 +950,41 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
       {/* Days grid */}
       <div className="grid grid-cols-7 gap-1">{cells}</div>
 
+      {/* Expanded day detail panel */}
+      {expandedDay && (() => {
+        const entries = dayMap.get(expandedDay) ?? [];
+        const dateLabel = new Date(expandedDay).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        return (
+          <div className="border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{dateLabel}</h4>
+              <button onClick={() => setExpandedDay(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none">✕</button>
+            </div>
+            <div className="space-y-2">
+              {entries.map((log, i) => {
+                const badge  = KIND_BADGE[log.kind] ?? KIND_BADGE.progress;
+                const lesson = lessonMap.get(log.lessonId);
+                const time   = new Date(log.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={i} className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-slate-100 dark:border-gray-700">
+                    <span className={`flex-shrink-0 px-2 py-1 rounded-full text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{lesson?.title ?? 'Unknown lesson'}</p>
+                      {log.slide && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Slide {log.slide}{lesson ? '' : ''}</p>
+                      )}
+                    </div>
+                    <span className="flex-shrink-0 text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{time}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Badge legend */}
-      <div className="mt-4 flex flex-wrap gap-2 justify-center">
+      <div className="flex flex-wrap gap-2 justify-center pt-1">
         {Object.entries(KIND_BADGE).map(([kind, { cls, label }]) => (
           <span key={kind} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>
             {label}
@@ -945,7 +993,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
       </div>
 
       {logs.length === 0 && (
-        <p className="text-center text-slate-400 dark:text-slate-500 text-sm mt-6">No lesson activity logged yet.</p>
+        <p className="text-center text-slate-400 dark:text-slate-500 text-sm py-4">No lesson activity logged yet.</p>
       )}
     </div>
   );
@@ -960,7 +1008,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'lesson-calendar'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -1021,11 +1069,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'lesson-calendar'; label: string; mobileLabel: string }> = [
-    { key: 'lessons',          label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
-    { key: 'progress',         label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
-    { key: 'lesson-calendar',  label: '📅 History', mobileLabel: '📅 History' },
-    { key: 'schedule',         label: '🗓 Schedule', mobileLabel: 'Schedule' },
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams'; label: string; mobileLabel: string }> = [
+    { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
+    { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
+    { key: 'schedule', label: '🗓 Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [{ key: 'exams' as const, label: '📝 Exams', mobileLabel: 'Exams' }]),
     { key: 'profile',          label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
     ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
@@ -1264,14 +1311,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           student={student}
           lessons={dialectLessons}
           onMistakesUpdated={() => setProgressKey(k => k + 1)}
-        />
-      )}
-
-      {/* ── Lesson history calendar ── */}
-      {activeSection === 'lesson-calendar' && (
-        <ArabicLessonCalendar
-          logs={lessonLogs}
-          lessons={lessons}
+          lessonLogs={lessonLogs}
           calendarDate={calendarDate}
           onMonthChange={setCalendarDate}
         />
