@@ -4,8 +4,8 @@
 // student's spaced-rep / wrong-word progress tab.
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt } from '../types';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import {
   getArabicLessons,
@@ -13,6 +13,7 @@ import {
   getVocabWordCountsByLesson,
   getVocabMistakesForStudent,
   removeVocabMistakes,
+  getLessonLogsForStudent,
 } from '../services/arabicService';
 import {
   getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
@@ -821,6 +822,135 @@ const ExamsTab: React.FC<{
   );
 };
 
+// ── Arabic Lesson History Calendar ────────────────────────────────────────────
+
+interface ArabicLessonCalendarProps {
+  logs: ArabicLessonLog[];
+  lessons: ArabicLesson[];
+  calendarDate: Date;
+  onMonthChange: (d: Date) => void;
+}
+
+const KIND_BADGE: Record<ArabicLessonLog['kind'], { cls: string; label: string }> = {
+  progress: { cls: 'bg-amber-100 text-amber-700',   label: 'Progress' },
+  done:     { cls: 'bg-emerald-100 text-emerald-700', label: 'Done'     },
+  revision: { cls: 'bg-violet-100 text-violet-700',  label: 'Revision' },
+};
+
+const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, calendarDate, onMonthChange }) => {
+  const lessonMap = useMemo(() => new Map(lessons.map(l => [l.id, l.title])), [lessons]);
+
+  const dayMap = useMemo(() => {
+    const m = new Map<string, ArabicLessonLog[]>();
+    logs.forEach(log => {
+      const key = new Date(log.createdAt).toDateString();
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(log);
+    });
+    return m;
+  }, [logs]);
+
+  const month       = calendarDate.getMonth();
+  const year        = calendarDate.getFullYear();
+  const firstDay    = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: React.ReactNode[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(<div key={`e-${i}`} className="min-h-[90px]" />);
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds      = new Date(year, month, day).toDateString();
+    const entries = dayMap.get(ds) ?? [];
+    const isToday = ds === new Date().toDateString();
+    const active  = entries.length > 0;
+
+    const headerCls = active
+      ? 'bg-emerald-400 text-white'
+      : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
+    const borderCls = active
+      ? 'border-emerald-300 dark:border-emerald-700'
+      : 'border-slate-200 dark:border-gray-600';
+
+    cells.push(
+      <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[90px] overflow-hidden ${isToday ? 'ring-2 ring-amber-500 ring-offset-1' : ''}`}>
+        <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
+          <span className="text-xs font-bold leading-none">{day}</span>
+        </div>
+        {entries.length > 0 && (
+          <div className="flex flex-col gap-0.5 p-1 overflow-hidden">
+            {entries.map((log, i) => {
+              const badge = KIND_BADGE[log.kind] ?? KIND_BADGE.progress;
+              const title = lessonMap.get(log.lessonId) ?? 'Lesson';
+              return (
+                <span key={i} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight ${badge.cls}`}>
+                  <span className="font-bold">{badge.label}</span>
+                  <span className="truncate max-w-[70px]" title={title}>· {title}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
+      {/* Title + nav */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => onMonthChange(new Date(year, month - 1))}
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
+          ‹
+        </button>
+        <div className="text-center">
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+            {calendarDate.toLocaleString('en', { month: 'long', year: 'numeric' })}
+          </h3>
+          <div className="flex items-center justify-center gap-3 mt-1.5">
+            {[
+              { cls: 'bg-emerald-400', label: 'Active day' },
+            ].map(l => (
+              <span key={l.label} className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <span className={`w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0 ${l.cls}`} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <button onClick={() => onMonthChange(new Date(year, month + 1))}
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-gray-700 text-slate-500 dark:text-slate-300 text-lg font-bold transition-colors">
+          ›
+        </button>
+      </div>
+
+      {/* Day-name header */}
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {dayNames.map(d => (
+          <div key={d} className="text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>
+        ))}
+      </div>
+
+      {/* Days grid */}
+      <div className="grid grid-cols-7 gap-1">{cells}</div>
+
+      {/* Badge legend */}
+      <div className="mt-4 flex flex-wrap gap-2 justify-center">
+        {Object.entries(KIND_BADGE).map(([kind, { cls, label }]) => (
+          <span key={kind} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>
+            {label}
+          </span>
+        ))}
+      </div>
+
+      {logs.length === 0 && (
+        <p className="text-center text-slate-400 dark:text-slate-500 text-sm mt-6">No lesson activity logged yet.</p>
+      )}
+    </div>
+  );
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
@@ -830,7 +960,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'lesson-calendar'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -839,10 +969,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [upcomingLessons, setUpcomingLessons] = useState<UnifiedLesson[]>([]);
   const [lessonsLoading, setLessonsLoading] = useState(false);
+  const [lessonLogs, setLessonLogs]         = useState<ArabicLessonLog[]>([]);
+  const [calendarDate, setCalendarDate]     = useState(new Date());
 
   useEffect(() => {
     getArabicLessons().then(setLessons);
   }, []);
+
+  useEffect(() => {
+    getLessonLogsForStudent(student.id).then(setLessonLogs);
+  }, [student.id]);
 
   // Exam unlocks + attempts for this student
   const reloadExams = useCallback(async () => {
@@ -885,13 +1021,13 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams'; label: string; mobileLabel: string }> = [
-    { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
-    { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
-    { key: 'schedule', label: '📅 Schedule', mobileLabel: 'Schedule' },
-    // Exam management is a tutor-only control surface
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'lesson-calendar'; label: string; mobileLabel: string }> = [
+    { key: 'lessons',          label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
+    { key: 'progress',         label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
+    { key: 'lesson-calendar',  label: '📅 History', mobileLabel: '📅 History' },
+    { key: 'schedule',         label: '🗓 Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [{ key: 'exams' as const, label: '📝 Exams', mobileLabel: 'Exams' }]),
-    { key: 'profile',  label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
+    { key: 'profile',          label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
     ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
 
@@ -1128,6 +1264,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           student={student}
           lessons={dialectLessons}
           onMistakesUpdated={() => setProgressKey(k => k + 1)}
+        />
+      )}
+
+      {/* ── Lesson history calendar ── */}
+      {activeSection === 'lesson-calendar' && (
+        <ArabicLessonCalendar
+          logs={lessonLogs}
+          lessons={lessons}
+          calendarDate={calendarDate}
+          onMonthChange={setCalendarDate}
         />
       )}
 
