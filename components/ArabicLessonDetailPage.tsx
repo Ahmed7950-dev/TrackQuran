@@ -3,6 +3,7 @@
 //   📖 Lesson PDF  · 📝 Homework  · 🔤 Vocabulary  · 🎬 Dialogue Video
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import lottie from 'lottie-web';
 import {
   ArabicLesson, ArabicStudent,
   HomeworkQuestion, HomeworkQuestionType,
@@ -1686,6 +1687,77 @@ const HomeworkTab: React.FC<{
     );
   }
 
+  // ── Tutor read-only view (no student selected) ────────────────────────────
+  if (!isAdmin && !studentMode && !studentId) {
+    let rNum = 0;
+    return (
+      <div className="max-w-3xl mx-auto p-6 space-y-5">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Homework Preview</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{lessonTitle} · {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}</p>
+        </div>
+        {practiceItems.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-slate-200 dark:border-gray-700 p-12 text-center">
+            <p className="font-semibold text-slate-500 dark:text-slate-400">No questions added yet.</p>
+          </div>
+        )}
+        {practiceItems.map(item => {
+          rNum++;
+          const qtype = item.questionType ?? 'short_answer';
+          let pairs: [string, string][] = [];
+          if (qtype === 'matching') { try { pairs = JSON.parse(item.correctAnswer ?? '[]'); } catch { /* */ } }
+          return (
+            <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-bold flex items-center justify-center">{rNum}</span>
+                <div className="flex-1 space-y-2">
+                  <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm" dir="auto">{item.content}</p>
+                  {item.imageUrl && <img src={item.imageUrl} className="rounded-xl max-h-40 object-contain" />}
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 text-xs font-medium">{qtype.replace(/_/g, ' ')}</span>
+                </div>
+              </div>
+              {(qtype === 'multiple_choice' || qtype === 'fill_blank_options') && item.options && (
+                <div className="grid grid-cols-2 gap-2 pl-10">
+                  {item.options.map((opt, i) => (
+                    <div key={i} className={`px-3 py-2 rounded-lg border text-sm ${opt === item.correctAnswer ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 font-semibold' : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>
+                      {opt === item.correctAnswer && <span className="mr-1">✓</span>}{opt}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {qtype === 'true_false' && (
+                <div className="flex gap-2 pl-10">
+                  {['true', 'false'].map(v => (
+                    <div key={v} className={`px-4 py-1.5 rounded-lg border text-sm font-medium capitalize ${v === item.correctAnswer ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400'}`}>
+                      {v === item.correctAnswer && <span className="mr-1">✓</span>}{v}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {qtype === 'matching' && pairs.length > 0 && (
+                <div className="pl-10 space-y-1.5">
+                  {pairs.map(([a, b], i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <span className="px-2 py-1 bg-slate-100 dark:bg-gray-700 rounded">{a}</span>
+                      <span className="text-slate-400">→</span>
+                      <span className="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 rounded">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(qtype === 'fill_blank' || qtype === 'short_answer' || qtype === 'translate') && item.correctAnswer && (
+                <div className="pl-10">
+                  <p className="text-xs text-slate-400 mb-1">Answer</p>
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300" dir="auto">{item.correctAnswer}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ── Admin view ────────────────────────────────────────────────────────────
   let qNum = 0;
 
@@ -2066,6 +2138,11 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [cardIndex, setCardIndex]   = useState(0);
   const [wrongWords, setWrongWords] = useState<VocabWord[]>([]);
   const [saving, setSaving]         = useState(false);
+  const [flipped, setFlipped]       = useState(false);
+
+  // Lottie refs for challenge buttons
+  const greetingLottieRef = useRef<HTMLDivElement>(null);
+  const planeLottieRef    = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getVocabWords(lessonId).then(ws => { setWords(ws); setLoading(false); });
@@ -2075,6 +2152,23 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     if (!selectedStudentId) { setAttempts([]); return; }
     getVocabAttempts(selectedStudentId, lessonId).then(setAttempts);
   }, [selectedStudentId, lessonId]);
+
+  // Reset flip when card changes
+  useEffect(() => { setFlipped(false); }, [cardIndex, phase]);
+
+  // Lottie: greeting card button
+  useEffect(() => {
+    if (!greetingLottieRef.current) return;
+    const anim = lottie.loadAnimation({ container: greetingLottieRef.current, renderer: 'svg', loop: true, autoplay: true, path: '/greeting-card.json' });
+    return () => anim.destroy();
+  }, [phase]);
+
+  // Lottie: plane button
+  useEffect(() => {
+    if (!planeLottieRef.current) return;
+    const anim = lottie.loadAnimation({ container: planeLottieRef.current, renderer: 'svg', loop: true, autoplay: true, path: '/plane.json' });
+    return () => anim.destroy();
+  }, [phase]);
 
   const startChallenge = () => {
     setShuffled(shuffleArray(words)); setCardIndex(0);
@@ -2188,19 +2282,52 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-16 px-12 text-center shadow-sm space-y-4">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">{t('arabicLessonDetail.doYouKnow')}</p>
-          <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
+        {/* Flip card */}
+        <div style={{ perspective: '1200px' }} onClick={() => setFlipped(f => !f)} className="cursor-pointer select-none">
+          <div style={{ transformStyle: 'preserve-3d', transition: 'transform 0.55s cubic-bezier(0.4,0.2,0.2,1)', transform: flipped ? 'rotateY(180deg)' : 'none', position: 'relative', minHeight: '200px' }}>
+            {/* Front — English */}
+            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+              className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-16 px-12 text-center shadow-sm space-y-4 absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">{t('arabicLessonDetail.doYouKnow')}</p>
+              <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
+              <p className="text-xs text-slate-300 dark:text-slate-600 mt-2">tap to reveal</p>
+            </div>
+            {/* Back — Arabic + transliteration */}
+            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+              className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-700 py-16 px-12 text-center shadow-sm space-y-3 absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-6xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
+              {word.transliteration && <p className="text-xl text-amber-700 dark:text-amber-300 italic">{word.transliteration}</p>}
+              <p className="text-base text-slate-500 dark:text-slate-400 mt-1">= {word.english}</p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
-          <button onClick={handleNotSure}
-            className="py-7 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-2xl">
-            😕 {t('arabicLessonDetail.notSure')}
+        <div className="grid grid-cols-2 gap-6 mt-4">
+          {/* Not Sure button */}
+          <button onClick={() => { setFlipped(true); handleNotSure(); }}
+            className="group flex flex-col items-center justify-center gap-3 py-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 transition-all shadow-sm">
+            <svg className="w-10 h-10 text-red-500 dark:text-red-400 group-hover:scale-110 transition-transform" viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="m54.47021 44.459c-2.59771-3.29311-13.30316-6.74373-15.55609-7.442a35.687 35.687 0 0 0 -.44635-3.85693 12.1115 12.1115 0 0 0 3.38965-6.10737 5.33833 5.33833 0 0 0 1.84158-6.63125 15.86778 15.86778 0 0 0 .36444-5.08649 16.08178 16.08178 0 0 0 -.94532-4.11816 6.18869 6.18869 0 0 0 1.4795-3.11133 1.33544 1.33544 0 0 0 -1.48828-1.52734 8.02887 8.02887 0 0 1 -5.05225-.86622 16.30427 16.30427 0 0 0 -12.35547-.001c-4.8548 2.27275-8.21593 8.78178-6.477 15.20617a5.49549 5.49549 0 0 0 2.29738 6.25192 13.10539 13.10539 0 0 0 3.20392 5.97485 36.27915 36.27915 0 0 0 -.44855 3.87927c-2.33026.69617-12.78967 3.95831-15.37744 7.14783-2.33938 2.88471-3.17727 13.09956-3.26516 14.25483a1 1 0 0 0 1.99414.15235c.22558-2.9668 1.17236-11.11036 2.82422-13.14747 1.8833-2.32128 10.26562-5.23535 14.084-6.39648 4.48152 5.49784 7.01416 5.12012 7.01416 5.12012 2.58008 0 5.8335-3.56934 7.12256-5.11719 3.8584 1.2207 12.34472 4.27539 14.22607 6.66016 1.58057 2.0039 2.38037 9.96582 2.55518 12.86523a.9999.9999 0 0 0 1.99609-.12012c-.06789-1.13086-.72902-11.1289-2.98098-13.98338zm-27.91992-36.93752c3.77491-1.76757 8.80274-.873 10.72119.03125a10.468 10.468 0 0 0 5.10452 1.10743 3.22376 3.22376 0 0 1 -.9043 1.3623 1.31716 1.31716 0 0 0 -.37939 1.50293 14.12089 14.12089 0 0 1 .98 3.99512 13.867 13.867 0 0 1 -.21192 4.02051 8.966 8.966 0 0 1 -1.46142-4.7295 1.33542 1.33542 0 0 0 -1.71827-1.248 26.0117 26.0117 0 0 1 -14.38281.04882 1.33147 1.33147 0 0 0 -1.70508 1.22461 8.1478 8.1478 0 0 1 -1.65531 4.61325c-.84566-4.62851 1.40407-9.95686 5.61279-11.92872zm-3.16015 18.81934a1.00094 1.00094 0 0 0 -.51319-.69141 3.49381 3.49381 0 0 1 -1.86071-3.53717c.83685-.27554 3.10076-2.95691 3.51013-6.36712a28.05229 28.05229 0 0 0 13.92138-.042c.25144 2.58886 2.09919 6.708 3.75013 6.66693a3.66306 3.66306 0 0 1 -1.78675 3.254.997.997 0 0 0 -.44433.67578 9.49692 9.49692 0 0 1 -4.66455 6.68067c-.15918.084-3.93995 2.01074-7.17725.34375a10.52343 10.52343 0 0 1 -4.73486-6.98343zm8.15771 15.81348c-1.30658-.007-3.72931-2.3042-5.337-4.23743a29.60949 29.60949 0 0 1 .32122-3.21136c2.96526 1.91969 7.07172 1.5756 10.1026-.18537a31.34117 31.34117 0 0 1 .348 3.41767c-3.73339 4.37668-5.43482 4.21649-5.43482 4.21649z"/>
+              <path d="m49.66748 56.4375h-9a1 1 0 0 1 0-2h9a1 1 0 0 1 0 2z"/>
+              <path d="m53.43457 35.35938a3.85156 3.85156 0 0 1 1.83154-3.74708c1.03077-.67968 1.16651-1.00683 1.082-1.48242-.27333-1.53729-3.3849-1.28819-2.98242.17481a1 1 0 0 1 -1.92869.52931c-1.16431-4.24423 6.13532-5.23283 6.87988-1.05566.354 1.98438-1.20166 3.00977-1.94873 3.50293a1.86228 1.86228 0 0 0 -.94043 1.916.99987.99987 0 0 1 -1.99315.16211z"/>
+              <circle cx="54.485" cy="38.02" r=".954"/>
+              <path d="m7.76953 36.84277a3.84848 3.84848 0 0 1 1.832-3.74707c1.03028-.67968 1.166-1.00683 1.08155-1.48242-.27323-1.53336-3.38463-1.293-2.98243.17481a1 1 0 0 1 -1.92871.52929c-1.16634-4.2477 6.1361-5.22843 6.87989-1.05566.35351 1.98242-1.20118 3.00976-1.94825 3.50293a1.86185 1.86185 0 0 0 -.94091 1.916.99988.99988 0 0 1 -1.99314.16212z"/>
+              <circle cx="8.82" cy="39.503" r=".954"/>
+              <path d="m11.06055 13.2627a3.84842 3.84842 0 0 1 1.832-3.74707c1.03027-.67969 1.166-1.00684 1.08154-1.48243-.27243-1.52894-3.38594-1.296-2.98291.17481a1 1 0 0 1 -1.92868.52929c-1.16597-4.2463 6.1365-5.22917 6.88037-1.05566.35352 1.98242-1.20117 3.00977-1.94824 3.50293a1.86186 1.86186 0 0 0 -.94092 1.916.99987.99987 0 0 1 -1.99316.16213z"/>
+              <circle cx="12.111" cy="15.923" r=".954"/>
+              <path d="m50.2583 15.958a3.84738 3.84738 0 0 1 1.832-3.748c1.03028-.67969 1.166-1.00683 1.08155-1.48242-.273-1.53231-3.38546-1.29425-2.98292.1748a1 1 0 0 1 -1.92871.5293c-1.16663-4.24892 6.13698-5.22647 6.88041-1.05568.35351 1.98437-1.20167 3.01074-1.94874 3.5039a1.86009 1.86009 0 0 0 -.94043 1.916.99987.99987 0 0 1 -1.99316.1621z"/>
+              <circle cx="51.309" cy="18.618" r=".954"/>
+            </svg>
+            <span className="text-red-600 dark:text-red-400 font-bold text-base">{t('arabicLessonDetail.notSure')}</span>
           </button>
+          {/* I Know button */}
           <button onClick={handleKnow}
-            className="py-7 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-2xl">
-            ✓ {t('arabicLessonDetail.iKnow')}
+            className="group flex flex-col items-center justify-center gap-3 py-6 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all shadow-sm">
+            <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" viewBox="0 0 511.981 511.981" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="m495.502 236.263c0-13.943-5.405-26.767-15.219-36.109-9.477-9.021-22.134-13.988-35.641-13.988l-162.409.005c-16.464-17.908-21.958-44.092-13.27-65.004 13.031-31.362 12.298-56.688-2.45-84.684-11.503-21.836-40.53-39.068-60.886-36.162-12.265 1.752-20.815 10.203-23.461 23.186-.871 4.273-1.131 9.309-1.434 15.14-.838 16.181-1.987 38.342-16.159 65.492-8.273 15.85-11.13 32.729-13.651 47.623-4.637 27.396-7.396 43.662-34.698 46.645v-2.718c0-5.523-4.477-10-10-10h-79.745c-5.523 0-10 4.477-10 10v294.035c0 5.523 4.477 10 10 10h79.747c5.523 0 10-4.477 10-10v-2.805c18.363 1.452 36.906 6.572 56.363 11.959 23.27 6.443 47.331 13.105 71.701 13.105h112.143c30.679 0 55.501-16.171 66.4-43.259 6.207-15.427 6.479-31.339 1.319-43.197 7.605-5.464 13.936-13.05 18.544-22.471 8.322-17.01 9.151-36.271 2.793-51.103 10.897-8.542 17.625-20.821 20.692-32.648 3.592-13.852 2.572-27.342-2.22-37.645 18.45-7.413 31.541-25.096 31.541-45.397zm-50.079 29.099-50 1.087c-5.521.12-9.9 4.693-9.78 10.215.12 5.521 4.698 9.88 10.215 9.78l46.76-1.017c5.417 4.956 7.292 16.949 4.204 28.856-1.755 6.769-9.489 28.854-35.313 28.854-5.523 0-10 4.477-10 10s4.477 10 10 10c5.839 0 11.188-.757 16.062-2.124 3.48 9.364 2.561 22.216-2.839 33.252-2.771 5.665-8.338 14.068-18.253 18.42-.29.106-.577.227-.857.362-3.794 1.536-8.202 2.481-13.301 2.481-5.523 0-10 4.477-10 10s4.477 10 10 10c4.732 0 9.298-.551 13.651-1.624 2.543 6.26 2.738 16.342-1.692 27.353-3.717 9.238-15.819 30.724-47.845 30.724h-112.145c-21.652 0-43.37-6.014-66.363-12.38-20.081-5.56-40.752-11.273-61.701-12.737v-79.162c0-5.523-4.477-10-10-10s-10 4.477-10 10v92.021h-59.747v-274.035h59.747v92.014c0 5.523 4.477 10 10 10s10-4.477 10-10v-79.225c44.37-4.023 49.689-35.446 54.417-63.377 2.385-14.089 4.851-28.657 11.661-41.706 16.189-31.015 17.521-56.709 18.402-73.712.261-5.03.486-9.374 1.058-12.182 1.244-6.104 4.107-7.01 6.692-7.379 11.005-1.571 32.208 10.207 40.363 25.685 11.989 22.757 12.459 41.735 1.675 67.688-9.547 22.979-6.491 50.531 6.882 72.679h-12.329c-5.522 0-10 4.478-10 10s4.478 10 10 10l199.595-.006c8.349 0 16.109 3.009 21.85 8.474 5.81 5.53 9.009 13.209 9.009 21.623.001 15.684-13.492 28.737-30.078 29.098z"/>
+              <path d="m106.226 332.702c-5.523 0-10 4.48-10 10.003s4.477 10 10 10 10-4.477 10-10v-.007c0-5.523-4.477-9.996-10-9.996z"/>
+            </svg>
+            <span className="text-emerald-700 dark:text-emerald-400 font-bold text-base">{t('arabicLessonDetail.iKnow')}</span>
           </button>
         </div>
       </div>
@@ -2376,12 +2503,20 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                 </div>
               )}
               <button onClick={startChallenge}
-                className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-lg">
-                🎴 {t('arabicLessonDetail.startFlashcard', { count: words.length })}
+                className="w-full flex items-center gap-4 px-5 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg">
+                <div ref={greetingLottieRef} className="w-14 h-14 flex-shrink-0" />
+                <div className="text-left">
+                  <p className="text-base font-bold">{t('arabicLessonDetail.startFlashcard', { count: words.length })}</p>
+                  <p className="text-xs font-normal opacity-80">Flip cards to test your memory</p>
+                </div>
               </button>
               <button onClick={() => setShowWordFlight(true)}
-                className="w-full py-5 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl transition-colors text-lg">
-                ✈️ Word Flight Game
+                className="w-full flex items-center gap-4 px-5 py-4 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg">
+                <div ref={planeLottieRef} className="w-14 h-14 flex-shrink-0" />
+                <div className="text-left">
+                  <p className="text-base font-bold">Word Flight Game</p>
+                  <p className="text-xs font-normal opacity-80">Catch the falling Arabic words</p>
+                </div>
               </button>
             </div>
           )}
