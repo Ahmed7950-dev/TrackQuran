@@ -138,14 +138,14 @@ const PdfPager: React.FC<Props> = ({ url, initialPage = 1, onPageChange, classNa
 
       {/* Page navigation */}
       {!error && numPages > 0 && (
-        <div className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-2 bg-gray-800 border-t border-gray-700 select-none">
+        <div className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-2 bg-gray-900 border-t border-gray-700 select-none">
           <button onClick={() => go(page - 1)} disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg bg-gray-700 text-gray-200 text-sm font-semibold hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
             ‹ Prev
           </button>
-          <span className="text-sm font-semibold text-gray-200 tabular-nums">{page} / {numPages}</span>
+          <span className="text-sm font-semibold text-white tabular-nums">{page} / {numPages}</span>
           <button onClick={() => go(page + 1)} disabled={page >= numPages}
-            className="px-3 py-1.5 rounded-lg bg-gray-700 text-gray-200 text-sm font-semibold hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">
+            className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
             Next ›
           </button>
         </div>

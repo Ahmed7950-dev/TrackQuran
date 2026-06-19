@@ -662,7 +662,11 @@ const TajweedLessonViewer: React.FC<Props> = ({
         )}
         {/* Progress-mode status badge (Arabic) */}
         {progressMode && selectedStudentId && (
-          <span className="px-2 py-1 rounded-md bg-gray-700 text-gray-200 text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">{statusBadge}</span>
+          <span className={`px-2 py-1 rounded-md text-[11px] font-semibold flex-shrink-0 whitespace-nowrap ${
+            progress?.status === 'in_progress' ? 'bg-amber-500 text-white'
+            : progress?.status === 'done'      ? 'bg-emerald-600 text-white'
+            :                                    'bg-slate-500 text-white'
+          }`}>{statusBadge}</span>
         )}
         {selectedStudentId && students.length > 0 && (
           progressMode ? (
