@@ -21,6 +21,8 @@ import {
   deleteHomeworkQuestion,
   getHomeworkItems, createHomeworkItem, updateHomeworkItem,
   deleteHomeworkItem, reorderHomeworkItems, uploadHomeworkImage,
+  saveHomeworkSubmission, getHomeworkSubmission, updateHomeworkGrading,
+  HomeworkSubmission,
   getVocabWords, createVocabWord, deleteVocabWord,
   getVocabAttempts, saveVocabAttempts,
   saveVocabMistakes,
@@ -31,6 +33,7 @@ import {
   saveLessonNote,
   getLessonProgressForStudent, markLessonProgress, markLessonDone, logLessonRevision,
 } from '../services/arabicService';
+import { createNotification } from '../services/notificationService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,18 +107,19 @@ interface Props {
   onStudentUpdated?: (s: ArabicStudent) => void;
   onHomeworkComplete?: (lessonId: string) => void;
   studentMode?: boolean;
+  initialTab?: Tab;
 }
 
 const ArabicLessonDetailPage: React.FC<Props> = ({
   lesson: initialLesson, students, teacherId,
   preSelectedStudentId, onClose, onStudentUpdated, onHomeworkComplete,
-  studentMode = false,
+  studentMode = false, initialTab,
 }) => {
   const { t } = useI18n();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const [lesson, setLesson] = useState(initialLesson);
-  const [activeTab, setActiveTab] = useState<Tab>(initialLesson.pdfUrl ? 'lesson' : 'homework');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? (initialLesson.pdfUrl ? 'lesson' : 'homework'));
   const [canvasVocabWords, setCanvasVocabWords] = useState<VocabWordBasic[]>([]);
 
   // ── Teacher's note & grammar summary ───────────────────────────────────────
@@ -332,8 +336,11 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
           <div className="h-full overflow-y-auto">
             <HomeworkTab
               lessonId={lesson.id}
+              lessonTitle={lesson.title}
               isAdmin={isAdmin}
               studentId={preSelectedStudentId}
+              studentName={students.find(s => s.id === preSelectedStudentId)?.name}
+              teacherId={teacherId}
               onHomeworkComplete={onHomeworkComplete}
             />
           </div>
@@ -580,10 +587,13 @@ const GrammarTab: React.FC<{
 
 const HomeworkTab: React.FC<{
   lessonId: string;
+  lessonTitle: string;
   isAdmin: boolean;
   studentId?: string;
+  studentName?: string;
+  teacherId: string;
   onHomeworkComplete?: (lessonId: string) => void;
-}> = ({ lessonId, isAdmin, studentId, onHomeworkComplete }) => {
+}> = ({ lessonId, lessonTitle, isAdmin, studentId, studentName, teacherId, onHomeworkComplete }) => {
   const { t } = useI18n();
   const [items, setItems]     = useState<HomeworkItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -599,6 +609,10 @@ const HomeworkTab: React.FC<{
   const [subAnswers, setSubAnswers] = useState<Record<string, Record<number, string>>>({});
   const [results, setResults]     = useState<Record<string, 'correct' | 'wrong' | 'manual'>>({});
   const [hwScore, setHwScore]     = useState({ correct: 0, total: 0 });
+  // tutor review
+  const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
+  const [grading, setGrading]       = useState<Record<string, { correct: boolean; note?: string }>>({});
+  const [gradeSaving, setGradeSaving] = useState(false);
 
   const reload = useCallback(async () => {
     const its = await getHomeworkItems(lessonId);
@@ -607,6 +621,17 @@ const HomeworkTab: React.FC<{
   }, [lessonId]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Load student submission when tutor is reviewing
+  useEffect(() => {
+    if (!isAdmin || !studentId) return;
+    getHomeworkSubmission(lessonId, studentId).then(sub => {
+      if (sub) {
+        setSubmission(sub);
+        setGrading(sub.grading ?? {});
+      }
+    });
+  }, [isAdmin, studentId, lessonId]);
 
   const practiceItems = items.filter(i => i.itemType === 'question');
 
@@ -647,7 +672,27 @@ const HomeworkTab: React.FC<{
     if (studentId) {
       markHomeworkComplete(studentId, lessonId).catch(console.error);
       onHomeworkComplete?.(lessonId);
+      // Save answers to Supabase so tutor can review them
+      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers).catch(console.error);
+      // Notify the tutor
+      createNotification({
+        teacherId,
+        studentId,
+        recipient: 'tutor',
+        bookingId: null,
+        type: 'homework_submitted',
+        title: `${studentName ?? 'Student'} submitted homework`,
+        body: lessonTitle,
+        metadata: { lessonId },
+      }).catch(console.error);
     }
+  };
+
+  const saveGrading = async (newGrading: Record<string, { correct: boolean; note?: string }>) => {
+    if (!studentId) return;
+    setGradeSaving(true);
+    await updateHomeworkGrading(lessonId, studentId, newGrading);
+    setGradeSaving(false);
   };
 
   // Admin builder helpers
@@ -993,6 +1038,21 @@ const HomeworkTab: React.FC<{
         </p>
       </div>
 
+      {/* Submission review banner */}
+      {submission && (
+        <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-teal-800 dark:text-teal-200">
+              📋 Student submitted · {new Date(submission.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+            {submission.gradedAt && (
+              <p className="text-xs text-teal-600 dark:text-teal-400 mt-0.5">Graded on {new Date(submission.gradedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+            )}
+          </div>
+          {gradeSaving && <span className="text-xs text-teal-600 dark:text-teal-400 animate-pulse">Saving…</span>}
+        </div>
+      )}
+
       {/* Add buttons */}
       <div className="flex flex-wrap gap-2">
         {ADD_BUTTONS.map(b => (
@@ -1069,11 +1129,104 @@ const HomeworkTab: React.FC<{
                       className={inp}
                     />
                   )}
-                  {item.itemType === 'question' && (
-                    <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
-                      {item.content || <span className="text-slate-400">No prompt</span>}
-                    </p>
-                  )}
+                  {item.itemType === 'question' && (() => {
+                    const qtype = item.questionType;
+                    const studentAns = submission?.answers?.[item.id];
+                    const studentSub = submission?.subAnswers?.[item.id];
+                    const g = grading[item.id];
+                    const isManual = qtype === 'short_answer' || qtype === 'multi_answer' || qtype === 'matching';
+
+                    return (
+                      <>
+                        <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
+                          {item.content || <span className="text-slate-400">No prompt</span>}
+                        </p>
+                        {/* Student answer (only shown when submission exists) */}
+                        {submission && (
+                          <div className={`mt-2 rounded-lg border px-3 py-2 text-xs space-y-1 ${
+                            g ? (g.correct ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20' : 'border-red-300 bg-red-50 dark:bg-red-900/20') : 'border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/50'
+                          }`}>
+                            <p className="font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">Student's answer</p>
+                            {qtype === 'matching' && studentSub ? (
+                              (() => {
+                                let pairs: [string, string][] = [];
+                                try { pairs = JSON.parse(item.correctAnswer ?? '[]'); } catch { /* */ }
+                                return (
+                                  <div className="space-y-0.5">
+                                    {pairs.map((pair, i) => (
+                                      <p key={i} className="text-slate-700 dark:text-slate-200">
+                                        {pair[0]} → <span className="font-medium">{studentSub[i] ?? '—'}</span>
+                                        {studentSub[i] && (answersMatch(pair[1], studentSub[i])
+                                          ? <span className="text-emerald-600 ml-1">✅</span>
+                                          : <span className="text-red-500 ml-1">❌ ({pair[1]})</span>
+                                        )}
+                                      </p>
+                                    ))}
+                                  </div>
+                                );
+                              })()
+                            ) : qtype === 'fill_blank' && studentSub ? (
+                              (() => {
+                                const parts = (item.content ?? '').split('___');
+                                const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
+                                return (
+                                  <p className="text-slate-700 dark:text-slate-200">
+                                    {parts.map((part, i) => (
+                                      <span key={i}>
+                                        {part}
+                                        {i < parts.length - 1 && (
+                                          <span className={`font-bold mx-0.5 ${answersMatch(fbAns[i] ?? '', studentSub[i] ?? '') ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            [{studentSub[i] ?? '—'}]
+                                          </span>
+                                        )}
+                                      </span>
+                                    ))}
+                                  </p>
+                                );
+                              })()
+                            ) : qtype === 'multi_answer' && studentSub ? (
+                              <div className="space-y-0.5">
+                                {(item.options ?? []).map((word, i) => (
+                                  <p key={i} className="text-slate-700 dark:text-slate-200">{word}: <span className="font-medium">{studentSub[i] ?? '—'}</span></p>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className={`font-medium ${studentAns ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400'}`} dir="auto">
+                                {studentAns || '—'}
+                                {!isManual && studentAns && (
+                                  answersMatch(item.correctAnswer ?? '', studentAns) || studentAns === item.correctAnswer
+                                    ? <span className="text-emerald-600 ml-1">✅</span>
+                                    : <span className="text-red-500 ml-1">❌</span>
+                                )}
+                              </p>
+                            )}
+                            {/* Grading controls for manual questions */}
+                            {isManual && (
+                              <div className="flex items-center gap-2 pt-1">
+                                <span className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Mark:</span>
+                                <button
+                                  onClick={() => {
+                                    const ng = { ...grading, [item.id]: { correct: true } };
+                                    setGrading(ng);
+                                    saveGrading(ng);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${g?.correct === true ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-gray-600 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
+                                >✅ Correct</button>
+                                <button
+                                  onClick={() => {
+                                    const ng = { ...grading, [item.id]: { correct: false } };
+                                    setGrading(ng);
+                                    saveGrading(ng);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${g?.correct === false ? 'bg-red-500 text-white' : 'bg-slate-100 dark:bg-gray-600 text-slate-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30'}`}
+                                >❌ Wrong</button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             );

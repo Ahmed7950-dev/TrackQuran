@@ -510,6 +510,94 @@ export async function uploadHomeworkImage(file: File): Promise<string | null> {
   return supabase.storage.from('tajweed-assets').getPublicUrl(path).data.publicUrl;
 }
 
+// ── Homework submissions ──────────────────────────────────────────────────────
+
+export interface HomeworkSubmission {
+  id: string;
+  lessonId: string;
+  studentId: string;
+  teacherId: string;
+  answers: Record<string, string>;
+  subAnswers: Record<string, Record<number, string>>;
+  grading: Record<string, { correct: boolean; note?: string }>;
+  submittedAt: string;
+  gradedAt?: string;
+}
+
+interface HWSubmissionRow {
+  id: string;
+  lesson_id: string;
+  student_id: string;
+  teacher_id: string;
+  answers: Record<string, string>;
+  sub_answers: Record<string, Record<number, string>>;
+  grading: Record<string, { correct: boolean; note?: string }>;
+  submitted_at: string;
+  graded_at: string | null;
+}
+
+function rowToSubmission(r: HWSubmissionRow): HomeworkSubmission {
+  return {
+    id: r.id,
+    lessonId: r.lesson_id,
+    studentId: r.student_id,
+    teacherId: r.teacher_id,
+    answers: r.answers ?? {},
+    subAnswers: r.sub_answers ?? {},
+    grading: r.grading ?? {},
+    submittedAt: r.submitted_at,
+    gradedAt: r.graded_at ?? undefined,
+  };
+}
+
+export async function saveHomeworkSubmission(
+  lessonId: string,
+  studentId: string,
+  teacherId: string,
+  answers: Record<string, string>,
+  subAnswers: Record<string, Record<number, string>>,
+): Promise<void> {
+  await supabase.from('homework_submissions').upsert(
+    {
+      lesson_id: lessonId,
+      student_id: studentId,
+      teacher_id: teacherId,
+      answers,
+      sub_answers: subAnswers,
+      grading: {},
+      submitted_at: new Date().toISOString(),
+      graded_at: null,
+    },
+    { onConflict: 'lesson_id,student_id' },
+  );
+}
+
+export async function getHomeworkSubmission(
+  lessonId: string,
+  studentId: string,
+): Promise<HomeworkSubmission | null> {
+  const { data, error } = await supabase
+    .from('homework_submissions')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return rowToSubmission(data as HWSubmissionRow);
+}
+
+export async function updateHomeworkGrading(
+  lessonId: string,
+  studentId: string,
+  grading: Record<string, { correct: boolean; note?: string }>,
+): Promise<void> {
+  await supabase
+    .from('homework_submissions')
+    .update({ grading, graded_at: new Date().toISOString() })
+    .eq('lesson_id', lessonId)
+    .eq('student_id', studentId);
+}
+
 // ── Vocabulary words ─────────────────────────────────────────────────────────
 
 export async function getVocabWords(lessonId: string): Promise<VocabWord[]> {

@@ -18,10 +18,12 @@ import {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface NotificationCenterProps {
-  teacherId:  string;
-  recipient:  'tutor' | 'student';
+  teacherId:   string;
+  recipient:   'tutor' | 'student';
   /** Required when recipient === 'student' */
-  studentId?: string;
+  studentId?:  string;
+  /** Called when a deep-linkable notification is clicked */
+  onNavigate?: (studentId: string, lessonId: string) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'exam_started':                 return { emoji: '🎯', color: 'text-sky-500' };
     case 'exam_result_published':        return { emoji: '🏆', color: 'text-amber-500' };
     case 'exam_retake_allowed':          return { emoji: '🔄', color: 'text-indigo-500' };
+    case 'homework_submitted':           return { emoji: '📋', color: 'text-teal-500' };
     default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }
@@ -56,6 +59,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   teacherId,
   recipient,
   studentId,
+  onNavigate,
 }) => {
   const [open,          setOpen]          = useState(false);
   const [notifications, setNotifications] = useState<BookingNotification[]>([]);
@@ -131,6 +135,10 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       setNotifications(prev =>
         prev.map(x => x.id === n.id ? { ...x, isRead: true } : x),
       );
+    }
+    if (n.type === 'homework_submitted' && n.metadata?.lessonId && onNavigate) {
+      setOpen(false);
+      onNavigate(n.studentId, n.metadata.lessonId);
     }
   };
 

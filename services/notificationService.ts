@@ -23,7 +23,8 @@ export type NotificationType =
   | 'exam_submitted'
   | 'exam_result_published'
   | 'exam_started'
-  | 'exam_retake_allowed';
+  | 'exam_retake_allowed'
+  | 'homework_submitted';
 
 export interface BookingNotification {
   id:         string;
@@ -36,6 +37,7 @@ export interface BookingNotification {
   body:       string;
   isRead:     boolean;
   createdAt:  string;
+  metadata?:  Record<string, string>;
 }
 
 // ── DB row ────────────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ interface NotificationRow {
   body:        string;
   is_read:     boolean;
   created_at:  string;
+  metadata?:   Record<string, string> | null;
 }
 
 function rowToNotification(r: NotificationRow): BookingNotification {
@@ -65,6 +68,7 @@ function rowToNotification(r: NotificationRow): BookingNotification {
     body:      r.body,
     isRead:    r.is_read,
     createdAt: r.created_at,
+    metadata:  r.metadata ?? undefined,
   };
 }
 
@@ -95,6 +99,7 @@ export async function createNotification(input: {
   type:       NotificationType;
   title:      string;
   body:       string;
+  metadata?:  Record<string, string>;
 }): Promise<void> {
   try {
     await supabase.from('booking_notifications').insert({
@@ -106,6 +111,7 @@ export async function createNotification(input: {
       title:      input.title,
       body:       input.body,
       is_read:    false,
+      metadata:   input.metadata ?? null,
     });
   } catch {
     // best-effort — never surface notification errors to the user

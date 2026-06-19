@@ -316,9 +316,12 @@ interface Props {
   dialectFilter?: ArabicCourseDialect[];
   /** Student's exam unlock rows (per level). Drives the "Do Exam" button. */
   examUnlocks?: ArabicExamUnlock[];
+  /** When set, auto-open this lesson (from notification deep-link) */
+  deepLinkLessonId?: string | null;
+  onDeepLinkConsumed?: () => void;
 }
 
-const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter, examUnlocks }) => {
+const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStudentId, onStudentUpdated, studentMode = false, dialectFilter, examUnlocks, deepLinkLessonId, onDeepLinkConsumed }) => {
   const { t } = useI18n();
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
@@ -357,6 +360,16 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       ? (students.find(s => s.id === preSelectedStudentId)?.completedLessonIds ?? [])
       : []
   );
+
+  // Auto-open lesson from deep-link (homework notification click)
+  useEffect(() => {
+    if (!deepLinkLessonId || lessons.length === 0) return;
+    const target = lessons.find(l => l.id === deepLinkLessonId);
+    if (target) {
+      setViewing(target);
+      onDeepLinkConsumed?.();
+    }
+  }, [deepLinkLessonId, lessons, onDeepLinkConsumed]);
 
   useEffect(() => {
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
@@ -699,6 +712,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           teacherId={teacherId}
           preSelectedStudentId={preSelectedStudentId}
           studentMode={studentMode}
+          initialTab={deepLinkLessonId === viewing.id ? 'homework' : undefined}
           onClose={async () => {
             setViewing(null);
             if (preSelectedStudentId) {

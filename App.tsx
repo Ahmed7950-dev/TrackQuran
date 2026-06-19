@@ -403,6 +403,7 @@ const App: React.FC = () => {
   const [arabicStudents, setArabicStudents] = useState<ArabicStudent[]>([]);
   const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(null);
   const [arabicVocabCounts, setArabicVocabCounts] = useState<Record<string, number>>({});
+  const [hwDeepLink, setHwDeepLink] = useState<{ studentId: string; lessonId: string } | null>(null);
 
   const handleAddArabicStudent = async (student: ArabicStudent) => {
     setArabicStudents(prev => {
@@ -1224,7 +1225,15 @@ const App: React.FC = () => {
                   }
                 </svg>
               </button>
-              <NotificationCenter teacherId={currentUser.id} recipient="tutor" />
+              <NotificationCenter
+                teacherId={currentUser.id}
+                recipient="tutor"
+                onNavigate={(sid, lid) => {
+                  setSelectedArabicStudentId(sid);
+                  setActiveTab('main');
+                  setHwDeepLink({ studentId: sid, lessonId: lid });
+                }}
+              />
               <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
                 {currentTheme === 'dark' ? (
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
@@ -1328,6 +1337,8 @@ const App: React.FC = () => {
               onUpdateStudent={handleUpdateArabicStudent}
               onDeleteStudent={handleDeleteArabicStudent}
               vocabCount={arabicVocabCounts[selectedArabicStudent.id] ?? 0}
+              hwDeepLink={hwDeepLink?.studentId === selectedArabicStudent.id ? hwDeepLink : null}
+              onHwDeepLinkConsumed={() => setHwDeepLink(null)}
             />
           ) : (
             <ArabicDashboard
@@ -1427,7 +1438,15 @@ const App: React.FC = () => {
                         <span className="hidden sm:inline">{t('common.back')}</span>
                     </button>
                 )}
-                <NotificationCenter teacherId={currentUser.id} recipient="tutor" />
+                <NotificationCenter
+                  teacherId={currentUser.id}
+                  recipient="tutor"
+                  onNavigate={(sid, lid) => {
+                    setSelectedArabicStudentId(sid);
+                    setActiveTab('main');
+                    setHwDeepLink({ studentId: sid, lessonId: lid });
+                  }}
+                />
                 <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
                 {currentTheme === 'dark' ? (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>

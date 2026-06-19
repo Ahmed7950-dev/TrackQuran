@@ -39,6 +39,9 @@ interface Props {
   studentMode?: boolean;
   /** Total vocabulary words learned (lesson words + custom list words) */
   vocabCount?: number;
+  /** When set, auto-navigate to the lessons section and open this lesson's homework */
+  hwDeepLink?: { studentId: string; lessonId: string } | null;
+  onHwDeepLinkConsumed?: () => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1003,6 +1006,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
   student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false, vocabCount = 0,
+  hwDeepLink, onHwDeepLinkConsumed,
 }) => {
   const { t } = useI18n();
   const [editOpen, setEditOpen]       = useState(false);
@@ -1013,6 +1017,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
   const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
+  const [deepLinkLessonId, setDeepLinkLessonId] = useState<string | null>(null);
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [upcomingLessons, setUpcomingLessons] = useState<UnifiedLesson[]>([]);
@@ -1023,6 +1028,14 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   useEffect(() => {
     getArabicLessons().then(setLessons);
   }, []);
+
+  // Handle deep-link from homework notification
+  useEffect(() => {
+    if (!hwDeepLink) return;
+    setActiveSection('lessons');
+    setDeepLinkLessonId(hwDeepLink.lessonId);
+    onHwDeepLinkConsumed?.();
+  }, [hwDeepLink, onHwDeepLinkConsumed]);
 
   useEffect(() => {
     getLessonLogsForStudent(student.id).then(setLessonLogs);
@@ -1288,6 +1301,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           studentMode={studentMode}
           dialectFilter={studentDialectFilter}
           examUnlocks={examUnlocks}
+          deepLinkLessonId={deepLinkLessonId}
+          onDeepLinkConsumed={() => setDeepLinkLessonId(null)}
         />
       )}
 
