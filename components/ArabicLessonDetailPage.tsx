@@ -338,6 +338,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               lessonId={lesson.id}
               lessonTitle={lesson.title}
               isAdmin={isAdmin}
+              studentMode={studentMode}
               studentId={preSelectedStudentId}
               studentName={students.find(s => s.id === preSelectedStudentId)?.name}
               teacherId={teacherId}
@@ -589,11 +590,12 @@ const HomeworkTab: React.FC<{
   lessonId: string;
   lessonTitle: string;
   isAdmin: boolean;
+  studentMode: boolean;
   studentId?: string;
   studentName?: string;
   teacherId: string;
   onHomeworkComplete?: (lessonId: string) => void;
-}> = ({ lessonId, lessonTitle, isAdmin, studentId, studentName, teacherId, onHomeworkComplete }) => {
+}> = ({ lessonId, lessonTitle, isAdmin, studentMode, studentId, studentName, teacherId, onHomeworkComplete }) => {
   const { t } = useI18n();
   const [items, setItems]     = useState<HomeworkItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -745,7 +747,7 @@ const HomeworkTab: React.FC<{
   const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
 
   // ── Student view ──────────────────────────────────────────────────────────
-  if (!isAdmin) {
+  if (studentMode) {
     const submitted = hwMode === 'submitted';
 
     // Render answer input for a question item
@@ -1024,6 +1026,294 @@ const HomeworkTab: React.FC<{
     );
   }
 
+  // ── Tutor review view (teacher role, viewing a specific student) ─────────
+  if (!isAdmin && !studentMode && studentId) {
+    const manualTypes: HomeworkQuestionType[] = ['short_answer', 'multi_answer'];
+    let reviewQNum = 0;
+    const totalMarked = Object.keys(grading).length;
+    const totalCorrect = Object.values(grading).filter(g => g.correct).length;
+
+    const renderStudentAnswer = (item: HomeworkItem) => {
+      const qtype = item.questionType;
+      const ans = submission?.answers?.[item.id];
+      const sub = submission?.subAnswers?.[item.id];
+
+      if (qtype === 'matching') {
+        let pairs: [string, string][] = [];
+        try { pairs = JSON.parse(item.correctAnswer ?? '[]'); } catch { /* */ }
+        return (
+          <div className="space-y-1.5">
+            {pairs.map((pair, i) => {
+              const studentVal = sub?.[i] ?? '';
+              const correct = answersMatch(pair[1], studentVal);
+              return (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <span className="w-32 flex-shrink-0 font-medium text-slate-700 dark:text-slate-200">{pair[0]}</span>
+                  <span className="text-slate-400">→</span>
+                  <span className={`flex-1 font-semibold ${studentVal ? (correct ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400') : 'text-slate-400 italic'}`}>
+                    {studentVal || 'No answer'}
+                  </span>
+                  {studentVal && (correct
+                    ? <span className="text-emerald-600 flex-shrink-0">✅</span>
+                    : <span className="flex-shrink-0 text-red-500">❌ <span className="text-xs text-emerald-600 font-medium">{pair[1]}</span></span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+
+      if (qtype === 'fill_blank') {
+        const parts = (item.content ?? '').split('___');
+        const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
+        return (
+          <p className="text-sm text-slate-700 dark:text-slate-200 leading-loose">
+            {parts.map((part, i) => (
+              <span key={i}>
+                {part}
+                {i < parts.length - 1 && (() => {
+                  const sv = sub?.[i] ?? '';
+                  const ok = answersMatch(fbAns[i] ?? '', sv);
+                  return (
+                    <span className={`inline-block mx-1 px-2 py-0.5 rounded font-bold text-sm ${sv ? (ok ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300') : 'bg-slate-100 dark:bg-gray-700 text-slate-400 italic'}`}>
+                      {sv || '—'}
+                      {sv && !ok && <span className="ml-1 text-xs text-emerald-600">({fbAns[i]})</span>}
+                    </span>
+                  );
+                })()}
+              </span>
+            ))}
+          </p>
+        );
+      }
+
+      if (qtype === 'multi_answer') {
+        return (
+          <div className="space-y-1.5">
+            {(item.options ?? []).map((word, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <span className="w-28 flex-shrink-0 font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-gray-700 px-2 py-1 rounded">{word}</span>
+                <span className={`flex-1 font-semibold ${sub?.[i] ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400 italic'}`} dir="auto">
+                  {sub?.[i] || 'No answer'}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      if (qtype === 'multiple_choice' || qtype === 'fill_blank_options') {
+        const correct = ans === item.correctAnswer;
+        return (
+          <div className="space-y-1.5">
+            {(item.options ?? []).map((opt, i) => {
+              const isSelected = ans === opt;
+              const isCorrect = opt === item.correctAnswer;
+              return (
+                <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${
+                  isSelected && correct ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 font-semibold text-emerald-700 dark:text-emerald-300'
+                  : isSelected && !correct ? 'border-red-400 bg-red-50 dark:bg-red-900/20 font-semibold text-red-600 dark:text-red-400'
+                  : isCorrect && !correct ? 'border-emerald-300 bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400'
+                  : 'border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400'
+                }`}>
+                  <span className="w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold border-current">
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <span className="flex-1">{opt}</span>
+                  {isSelected && (correct ? <span>✅</span> : <span>❌</span>)}
+                  {isCorrect && !isSelected && <span className="text-xs font-semibold text-emerald-600">(correct)</span>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+
+      if (qtype === 'true_false') {
+        const correct = ans === item.correctAnswer;
+        return (
+          <div className="flex gap-3">
+            {['True', 'False'].map(opt => {
+              const isSelected = ans === opt;
+              const isCorrect = opt === item.correctAnswer;
+              return (
+                <div key={opt} className={`flex-1 text-center px-4 py-3 rounded-xl border-2 font-semibold text-sm ${
+                  isSelected && correct ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                  : isSelected ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                  : isCorrect && !correct ? 'border-emerald-300 text-emerald-600 dark:text-emerald-400'
+                  : 'border-slate-200 dark:border-gray-600 text-slate-400'
+                }`}>
+                  {opt}{isSelected && (correct ? ' ✅' : ' ❌')}
+                  {isCorrect && !isSelected && <span className="block text-xs font-normal">correct</span>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+
+      // short_answer, translate types
+      return (
+        <div className={`px-4 py-3 rounded-xl border-2 text-sm font-medium ${
+          ans ? 'border-slate-200 dark:border-gray-600 text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-gray-700/50'
+          : 'border-dashed border-slate-200 dark:border-gray-600 text-slate-400 italic'
+        }`} dir="auto">
+          {ans || 'No answer provided'}
+        </div>
+      );
+    };
+
+    return (
+      <div className="max-w-3xl mx-auto p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+              {studentName ? `${studentName}'s Homework` : 'Homework Review'}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{lessonTitle}</p>
+          </div>
+          {submission ? (
+            <div className="text-right flex-shrink-0">
+              <span className="inline-block px-3 py-1 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-full text-xs font-bold">
+                Submitted {new Date(submission.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+              {totalMarked > 0 && (
+                <p className="text-xs text-slate-400 mt-1">{totalCorrect}/{totalMarked} marked · {gradeSaving && <span className="text-amber-500 animate-pulse">saving…</span>}</p>
+              )}
+            </div>
+          ) : (
+            <span className="inline-block px-3 py-1 bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 rounded-full text-xs font-bold">
+              Not submitted yet
+            </span>
+          )}
+        </div>
+
+        {/* No submission state */}
+        {!submission && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-slate-200 dark:border-gray-700 p-12 text-center space-y-3">
+            <div className="text-5xl">📭</div>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{studentName ?? 'The student'} hasn't submitted this homework yet.</p>
+            <p className="text-sm text-slate-400">You'll receive a notification when they submit.</p>
+          </div>
+        )}
+
+        {/* Question review cards */}
+        {submission && practiceItems.map(item => {
+          reviewQNum++;
+          const qtype = item.questionType;
+          const isManual = manualTypes.includes(qtype ?? 'short_answer');
+          const g = grading[item.id];
+          const autoCorrect = !isManual && (() => {
+            const ans = submission.answers?.[item.id];
+            const sub = submission.subAnswers?.[item.id];
+            if (qtype === 'matching') {
+              try {
+                const pairs: [string, string][] = JSON.parse(item.correctAnswer ?? '[]');
+                return pairs.every((p, i) => answersMatch(p[1], sub?.[i] ?? ''));
+              } catch { return false; }
+            }
+            if (qtype === 'fill_blank') {
+              const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
+              const blanks = (item.content ?? '').split('___').length - 1;
+              return Array.from({ length: blanks }, (_, i) => i).every(i => answersMatch(fbAns[i] ?? '', sub?.[i] ?? ''));
+            }
+            if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
+              return ans === item.correctAnswer;
+            }
+            return answersMatch(item.correctAnswer ?? '', ans ?? '');
+          })();
+
+          const cardBorder = isManual
+            ? (g?.correct === true ? 'border-emerald-300 dark:border-emerald-700' : g?.correct === false ? 'border-red-300 dark:border-red-700' : 'border-slate-200 dark:border-gray-700')
+            : (autoCorrect ? 'border-emerald-300 dark:border-emerald-700' : 'border-red-300 dark:border-red-700');
+
+          return (
+            <div key={item.id} className={`bg-white dark:bg-gray-800 rounded-2xl border-2 p-5 space-y-4 ${cardBorder}`}>
+              {/* Question header */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">Q{reviewQNum}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-medium">
+                    {QUESTION_TYPE_LABELS[qtype ?? 'short_answer']}
+                  </span>
+                  {item.marks != null && item.marks > 0 && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
+                      {item.marks} mark{item.marks !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                {/* Result badge */}
+                {isManual ? (
+                  g?.correct === true ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full">✅ Correct</span>
+                  : g?.correct === false ? <span className="text-xs font-bold text-red-600 bg-red-100 dark:bg-red-900/30 px-3 py-1 rounded-full">❌ Incorrect</span>
+                  : <span className="text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-3 py-1 rounded-full">⏳ Needs marking</span>
+                ) : (
+                  autoCorrect
+                    ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 rounded-full">✅ Correct</span>
+                    : <span className="text-xs font-bold text-red-600 bg-red-100 dark:bg-red-900/30 px-3 py-1 rounded-full">❌ Incorrect</span>
+                )}
+              </div>
+
+              {/* Question prompt */}
+              {qtype !== 'fill_blank' && (
+                <p className="text-base font-semibold text-slate-800 dark:text-slate-100" dir="auto">{item.content}</p>
+              )}
+
+              {/* Student's answer */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Student's Answer</p>
+                {renderStudentAnswer(item)}
+              </div>
+
+              {/* Correct answer (for auto-graded wrong answers) */}
+              {!isManual && !autoCorrect && item.correctAnswer && qtype !== 'matching' && qtype !== 'fill_blank' && qtype !== 'multiple_choice' && qtype !== 'fill_blank_options' && qtype !== 'true_false' && (
+                <div className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
+                  <span className="font-bold">Correct answer:</span> {item.correctAnswer}
+                </div>
+              )}
+
+              {/* Manual marking buttons */}
+              {isManual && (
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => {
+                      const ng = { ...grading, [item.id]: { correct: true } };
+                      setGrading(ng);
+                      saveGrading(ng);
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
+                      g?.correct === true
+                        ? 'bg-emerald-500 text-white shadow-sm'
+                        : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700'
+                    }`}
+                  >
+                    ✅ Correct
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ng = { ...grading, [item.id]: { correct: false } };
+                      setGrading(ng);
+                      saveGrading(ng);
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
+                      g?.correct === false
+                        ? 'bg-red-500 text-white shadow-sm'
+                        : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700'
+                    }`}
+                  >
+                    ❌ Incorrect
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ── Admin view ────────────────────────────────────────────────────────────
   let qNum = 0;
 
@@ -1037,21 +1327,6 @@ const HomeworkTab: React.FC<{
           {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}{items.length > practiceItems.length ? ` · ${items.length} total items` : ''}
         </p>
       </div>
-
-      {/* Submission review banner */}
-      {submission && (
-        <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-teal-800 dark:text-teal-200">
-              📋 Student submitted · {new Date(submission.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </p>
-            {submission.gradedAt && (
-              <p className="text-xs text-teal-600 dark:text-teal-400 mt-0.5">Graded on {new Date(submission.gradedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-            )}
-          </div>
-          {gradeSaving && <span className="text-xs text-teal-600 dark:text-teal-400 animate-pulse">Saving…</span>}
-        </div>
-      )}
 
       {/* Add buttons */}
       <div className="flex flex-wrap gap-2">
@@ -1129,104 +1404,11 @@ const HomeworkTab: React.FC<{
                       className={inp}
                     />
                   )}
-                  {item.itemType === 'question' && (() => {
-                    const qtype = item.questionType;
-                    const studentAns = submission?.answers?.[item.id];
-                    const studentSub = submission?.subAnswers?.[item.id];
-                    const g = grading[item.id];
-                    const isManual = qtype === 'short_answer' || qtype === 'multi_answer' || qtype === 'matching';
-
-                    return (
-                      <>
-                        <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
-                          {item.content || <span className="text-slate-400">No prompt</span>}
-                        </p>
-                        {/* Student answer (only shown when submission exists) */}
-                        {submission && (
-                          <div className={`mt-2 rounded-lg border px-3 py-2 text-xs space-y-1 ${
-                            g ? (g.correct ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20' : 'border-red-300 bg-red-50 dark:bg-red-900/20') : 'border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/50'
-                          }`}>
-                            <p className="font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide text-[10px]">Student's answer</p>
-                            {qtype === 'matching' && studentSub ? (
-                              (() => {
-                                let pairs: [string, string][] = [];
-                                try { pairs = JSON.parse(item.correctAnswer ?? '[]'); } catch { /* */ }
-                                return (
-                                  <div className="space-y-0.5">
-                                    {pairs.map((pair, i) => (
-                                      <p key={i} className="text-slate-700 dark:text-slate-200">
-                                        {pair[0]} → <span className="font-medium">{studentSub[i] ?? '—'}</span>
-                                        {studentSub[i] && (answersMatch(pair[1], studentSub[i])
-                                          ? <span className="text-emerald-600 ml-1">✅</span>
-                                          : <span className="text-red-500 ml-1">❌ ({pair[1]})</span>
-                                        )}
-                                      </p>
-                                    ))}
-                                  </div>
-                                );
-                              })()
-                            ) : qtype === 'fill_blank' && studentSub ? (
-                              (() => {
-                                const parts = (item.content ?? '').split('___');
-                                const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
-                                return (
-                                  <p className="text-slate-700 dark:text-slate-200">
-                                    {parts.map((part, i) => (
-                                      <span key={i}>
-                                        {part}
-                                        {i < parts.length - 1 && (
-                                          <span className={`font-bold mx-0.5 ${answersMatch(fbAns[i] ?? '', studentSub[i] ?? '') ? 'text-emerald-600' : 'text-red-500'}`}>
-                                            [{studentSub[i] ?? '—'}]
-                                          </span>
-                                        )}
-                                      </span>
-                                    ))}
-                                  </p>
-                                );
-                              })()
-                            ) : qtype === 'multi_answer' && studentSub ? (
-                              <div className="space-y-0.5">
-                                {(item.options ?? []).map((word, i) => (
-                                  <p key={i} className="text-slate-700 dark:text-slate-200">{word}: <span className="font-medium">{studentSub[i] ?? '—'}</span></p>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className={`font-medium ${studentAns ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400'}`} dir="auto">
-                                {studentAns || '—'}
-                                {!isManual && studentAns && (
-                                  answersMatch(item.correctAnswer ?? '', studentAns) || studentAns === item.correctAnswer
-                                    ? <span className="text-emerald-600 ml-1">✅</span>
-                                    : <span className="text-red-500 ml-1">❌</span>
-                                )}
-                              </p>
-                            )}
-                            {/* Grading controls for manual questions */}
-                            {isManual && (
-                              <div className="flex items-center gap-2 pt-1">
-                                <span className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Mark:</span>
-                                <button
-                                  onClick={() => {
-                                    const ng = { ...grading, [item.id]: { correct: true } };
-                                    setGrading(ng);
-                                    saveGrading(ng);
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${g?.correct === true ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-gray-600 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
-                                >✅ Correct</button>
-                                <button
-                                  onClick={() => {
-                                    const ng = { ...grading, [item.id]: { correct: false } };
-                                    setGrading(ng);
-                                    saveGrading(ng);
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${g?.correct === false ? 'bg-red-500 text-white' : 'bg-slate-100 dark:bg-gray-600 text-slate-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30'}`}
-                                >❌ Wrong</button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
+                  {item.itemType === 'question' && (
+                    <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
+                      {item.content || <span className="text-slate-400">No prompt</span>}
+                    </p>
+                  )}
                 </div>
               </div>
             );
