@@ -310,6 +310,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               onMarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, true); return true; }}
               onUnmarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, false); return true; }}
               progressMode
+              studentMode={studentMode}
               getProgress={async (sid, lid) => {
                 const m = await getLessonProgressForStudent(sid);
                 const p = m.get(lid);
