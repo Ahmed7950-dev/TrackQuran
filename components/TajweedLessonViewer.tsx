@@ -7,6 +7,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Student, TajweedLesson } from '../types';
 import { markLessonCompleted, unmarkLessonCompleted, getCompletedLessonIds } from '../services/tajweedService';
+import PdfPager from './PdfPager';
+
+/** Per-student lesson progress passed in by the Arabic context (progressMode). */
+export interface ViewerProgress { status: 'in_progress' | 'done'; lastSlide: number; revisionCount: number; }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -53,6 +57,14 @@ interface Props {
   onUploadImage?:    (file: File) => Promise<string | null>;
   // Vocabulary import — pass words to enable the "Import Vocab" button
   vocabWords?: VocabWordBasic[];
+  // ── Progress mode (Arabic) — opt-in slide tracking + progress/done/revision.
+  //    When enabled, the PDF renders page-by-page (PdfPager) and the Mark Done
+  //    button becomes the progress state machine. Quran/Tajweed omit these.
+  progressMode?: boolean;
+  getProgress?:     (studentId: string, lessonId: string) => Promise<ViewerProgress | null>;
+  onMarkProgress?:  (studentId: string, lessonId: string, slide: number, total: number) => Promise<void>;
+  onMarkLessonDone?:(studentId: string, lessonId: string, total: number) => Promise<void>;
+  onLogRevision?:   (studentId: string, lessonId: string) => Promise<void>;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -64,6 +76,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
   embedded = false,
   onSaveWhiteboard, onLoadWhiteboard, onUploadImage,
   vocabWords,
+  progressMode = false, getProgress, onMarkProgress, onMarkLessonDone, onLogRevision,
 }) => {
   const _fetchIds = fetchCompletedIds ?? getCompletedLessonIds;
   const _mark     = onMarkCompleted   ?? markLessonCompleted;
@@ -136,6 +149,12 @@ const TajweedLessonViewer: React.FC<Props> = ({
   const [completedIds,      setCompletedIds]      = useState<Set<string>>(new Set());
   const [selectedStudentId, setSelectedStudentId] = useState(preSelectedStudentId ?? '');
   const [marking,           setMarking]           = useState(false);
+
+  // ── Progress mode (Arabic) state ──────────────────────────────────────────
+  const [currentSlide, setCurrentSlide] = useState(1);
+  const [totalSlides,  setTotalSlides]  = useState(0);
+  const [progress,     setProgress]     = useState<ViewerProgress | null>(null);
+  const [resumeSlide,  setResumeSlide]  = useState(1);   // page PdfPager opens on
 
   const iframeSrc = lesson.pdfUrl ?? '';
 
@@ -542,6 +561,53 @@ const TajweedLessonViewer: React.FC<Props> = ({
     setMarking(false);
   };
 
+  // ── Progress mode: load this student's saved progress & resume position ────
+  useEffect(() => {
+    if (!progressMode || !getProgress || !selectedStudentId) { setProgress(null); setResumeSlide(1); return; }
+    let cancelled = false;
+    getProgress(selectedStudentId, lesson.id).then(p => {
+      if (cancelled) return;
+      setProgress(p);
+      setResumeSlide(p?.lastSlide && p.lastSlide > 0 ? p.lastSlide : 1);
+    });
+    return () => { cancelled = true; };
+  }, [progressMode, getProgress, selectedStudentId, lesson.id]);
+
+  const isLastSlide  = totalSlides > 0 && currentSlide >= totalSlides;
+  const alreadyDone  = progress?.status === 'done';
+  // Button intent on the final slide: first completion vs. logging a revision.
+  const progressAction: 'progress' | 'done' | 'revision' =
+    !isLastSlide ? 'progress' : (alreadyDone ? 'revision' : 'done');
+
+  const handleProgress = async () => {
+    if (!selectedStudentId || marking) return;
+    setMarking(true);
+    try {
+      if (progressAction === 'progress') {
+        await onMarkProgress?.(selectedStudentId, lesson.id, currentSlide, totalSlides);
+        setProgress(p => ({ status: 'in_progress', lastSlide: currentSlide, revisionCount: p?.revisionCount ?? 0 }));
+      } else if (progressAction === 'done') {
+        await onMarkLessonDone?.(selectedStudentId, lesson.id, totalSlides);
+        setProgress(p => ({ status: 'done', lastSlide: totalSlides || currentSlide, revisionCount: p?.revisionCount ?? 0 }));
+        setCompletedIds(p => new Set([...p, lesson.id]));
+      } else {
+        await onLogRevision?.(selectedStudentId, lesson.id);
+        setProgress(p => ({ status: 'done', lastSlide: p?.lastSlide ?? (totalSlides || currentSlide), revisionCount: (p?.revisionCount ?? 0) + 1 }));
+      }
+    } finally { setMarking(false); }
+  };
+
+  const progressBtnLabel =
+    progressAction === 'progress' ? '⏳ Mark progress'
+    : progressAction === 'done'   ? '✓ Mark done'
+    :                               '🔄 Log revision';
+
+  const statusBadge =
+    !progress                       ? 'Not started'
+    : progress.status === 'in_progress' ? `In progress · slide ${progress.lastSlide}`
+    : progress.revisionCount > 0    ? `Done · revised ×${progress.revisionCount}`
+    :                                 'Done';
+
   const selectedTextObj = texts.find(t => t.id === selectedId);
 
   // Canvas cursor based on tool
@@ -594,13 +660,25 @@ const TajweedLessonViewer: React.FC<Props> = ({
             {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
+        {/* Progress-mode status badge (Arabic) */}
+        {progressMode && selectedStudentId && (
+          <span className="px-2 py-1 rounded-md bg-gray-700 text-gray-200 text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">{statusBadge}</span>
+        )}
         {selectedStudentId && students.length > 0 && (
-          <button onClick={handleMark} disabled={marking}
-            className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 disabled:opacity-50 ${isCompleted ? 'bg-green-600 text-white hover:bg-red-600' : 'bg-teal-600 text-white hover:bg-teal-700'}`}>
-            {marking ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
-              : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
-            {isCompleted ? 'Done ✓' : 'Mark Done'}
-          </button>
+          progressMode ? (
+            <button onClick={handleProgress} disabled={marking}
+              className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 disabled:opacity-50 text-white ${progressAction === 'done' ? 'bg-teal-600 hover:bg-teal-700' : progressAction === 'revision' ? 'bg-violet-600 hover:bg-violet-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
+              {marking && <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>}
+              {progressBtnLabel}
+            </button>
+          ) : (
+            <button onClick={handleMark} disabled={marking}
+              className={`flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg flex-shrink-0 disabled:opacity-50 ${isCompleted ? 'bg-green-600 text-white hover:bg-red-600' : 'bg-teal-600 text-white hover:bg-teal-700'}`}>
+              {marking ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
+                : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
+              {isCompleted ? 'Done ✓' : 'Mark Done'}
+            </button>
+          )
         )}
       </div>
 
@@ -610,19 +688,31 @@ const TajweedLessonViewer: React.FC<Props> = ({
         {/* Left: PDF */}
         <div ref={pdfContainerRef}
           className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} relative flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
-          {loadingPdf && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300 z-10 bg-gray-700">
-              <svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
-              <span className="text-sm">Loading PDF…</span>
-            </div>
-          )}
-          {pdfError && <p className="absolute z-10 text-red-400 text-sm px-6 text-center">{pdfError}</p>}
-          {iframeSrc ? (
-            <iframe src={iframeSrc} title={lesson.title} className="w-full h-full bg-white" style={{ border: 'none' }} allowFullScreen
-              onLoad={() => { setLoadingPdf(false); setPdfError(''); }}
-              onError={() => { setLoadingPdf(false); setPdfError('Failed to load PDF.'); }} />
+          {progressMode && iframeSrc ? (
+            // Paged PDF.js viewer — tracks the current slide for progress/resume.
+            <PdfPager
+              key={`${iframeSrc}#${resumeSlide}`}
+              url={iframeSrc}
+              initialPage={resumeSlide}
+              onPageChange={(p, total) => { setCurrentSlide(p); setTotalSlides(total); }}
+            />
           ) : (
-            !loadingPdf && <p className="text-gray-400 text-sm">No PDF attached to this lesson.</p>
+            <>
+              {loadingPdf && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300 z-10 bg-gray-700">
+                  <svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
+                  <span className="text-sm">Loading PDF…</span>
+                </div>
+              )}
+              {pdfError && <p className="absolute z-10 text-red-400 text-sm px-6 text-center">{pdfError}</p>}
+              {iframeSrc ? (
+                <iframe src={iframeSrc} title={lesson.title} className="w-full h-full bg-white" style={{ border: 'none' }} allowFullScreen
+                  onLoad={() => { setLoadingPdf(false); setPdfError(''); }}
+                  onError={() => { setLoadingPdf(false); setPdfError('Failed to load PDF.'); }} />
+              ) : (
+                !loadingPdf && <p className="text-gray-400 text-sm">No PDF attached to this lesson.</p>
+              )}
+            </>
           )}
         </div>
 

@@ -26,6 +26,7 @@ import {
   markHomeworkComplete,
   getWhiteboardData, saveWhiteboardData, uploadNoteImage,
   saveLessonNote,
+  getLessonProgressForStudent, markLessonProgress, markLessonDone, logLessonRevision,
 } from '../services/arabicService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -308,6 +309,15 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               fetchCompletedIds={async (sid) => new Set(students.find(x => x.id === sid)?.completedLessonIds ?? [])}
               onMarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, true); return true; }}
               onUnmarkCompleted={async (sid, lid) => { await handleMarkDone(sid, lid, false); return true; }}
+              progressMode
+              getProgress={async (sid, lid) => {
+                const m = await getLessonProgressForStudent(sid);
+                const p = m.get(lid);
+                return p ? { status: p.status, lastSlide: p.lastSlide, revisionCount: p.revisionCount } : null;
+              }}
+              onMarkProgress={async (sid, lid, slide, total) => { await markLessonProgress(sid, lid, slide, total); }}
+              onMarkLessonDone={async (sid, lid, total) => { await markLessonDone(studentMode ? null : teacherId, sid, lid, total); }}
+              onLogRevision={async (sid, lid) => { await logLessonRevision(sid, lid); }}
               onClose={() => {}}
               onSaveWhiteboard={async (data) => { await saveWhiteboardData(lesson.id, wbAuthorId, data); }}
               onLoadWhiteboard={async () => getWhiteboardData(lesson.id, wbAuthorId)}
