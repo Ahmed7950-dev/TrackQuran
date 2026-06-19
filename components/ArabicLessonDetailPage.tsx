@@ -578,8 +578,6 @@ const GrammarTab: React.FC<{
 // HOMEWORK TAB
 // ═══════════════════════════════════════════════════════
 
-type PracticePhase = 'idle' | 'practising' | 'done';
-
 const HomeworkTab: React.FC<{
   lessonId: string;
   isAdmin: boolean;
@@ -587,19 +585,20 @@ const HomeworkTab: React.FC<{
   onHomeworkComplete?: (lessonId: string) => void;
 }> = ({ lessonId, isAdmin, studentId, onHomeworkComplete }) => {
   const { t } = useI18n();
-  const [items, setItems]           = useState<HomeworkItem[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [addingQ, setAddingQ]       = useState(false);
-  const [editingQ, setEditingQ]     = useState<HomeworkItem | null>(null);
-  const [practicePhase, setPhase]   = useState<PracticePhase>('idle');
-  const [qIndex, setQIndex]         = useState(0);
-  const [userAnswer, setUserAnswer] = useState('');
-  const [blankAnswers, setBlankAnswers] = useState<Record<number, string>>({});
-  const [feedback, setFeedback]     = useState<'correct' | 'wrong' | 'manual' | null>(null);
-  const [score, setScore]           = useState(0);
-  const fileRef                     = useRef<HTMLInputElement>(null);
-  const dragIdx                     = useRef<number | null>(null);
-  const [overIdx, setOverIdx]       = useState<number | null>(null);
+  const [items, setItems]     = useState<HomeworkItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  // admin
+  const [addingQ, setAddingQ]   = useState(false);
+  const [editingQ, setEditingQ] = useState<HomeworkItem | null>(null);
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const dragIdx  = useRef<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  // student
+  const [hwMode, setHwMode]       = useState<'preview' | 'answering' | 'submitted'>('preview');
+  const [answers, setAnswers]     = useState<Record<string, string>>({});
+  const [subAnswers, setSubAnswers] = useState<Record<string, Record<number, string>>>({});
+  const [results, setResults]     = useState<Record<string, 'correct' | 'wrong' | 'manual'>>({});
+  const [hwScore, setHwScore]     = useState({ correct: 0, total: 0 });
 
   const reload = useCallback(async () => {
     const its = await getHomeworkItems(lessonId);
@@ -611,43 +610,44 @@ const HomeworkTab: React.FC<{
 
   const practiceItems = items.filter(i => i.itemType === 'question');
 
-  const startPractice = () => {
-    setQIndex(0); setUserAnswer(''); setBlankAnswers({}); setFeedback(null); setScore(0);
-    setPhase('practising');
-  };
-
-  const checkAnswer = () => {
-    const q = practiceItems[qIndex];
-    const qtype = q.questionType;
-    const questionText = q.content ?? '';
-    if (qtype === 'matching' || qtype === 'short_answer' || qtype === 'multi_answer') {
-      setFeedback('manual'); return;
-    }
-    let correct = false;
-    if (qtype === 'fill_blank') {
-      const blanksCount = (questionText.match(/___/g) ?? []).length;
-      const answers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
-      correct = Array.from({ length: blanksCount }, (_, i) => i)
-        .every(i => answersMatch(answers[i] ?? '', blankAnswers[i] ?? ''));
-    } else if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
-      correct = userAnswer === q.correctAnswer;
-    } else {
-      correct = answersMatch(q.correctAnswer ?? '', userAnswer);
-    }
-    if (correct) setScore(s => s + 1);
-    setFeedback(correct ? 'correct' : 'wrong');
-  };
-
-  const nextQuestion = () => {
-    if (qIndex + 1 >= practiceItems.length) {
-      setPhase('done');
-      if (studentId) {
-        markHomeworkComplete(studentId, lessonId).catch(console.error);
-        onHomeworkComplete?.(lessonId);
+  const submitHomework = () => {
+    const res: Record<string, 'correct' | 'wrong' | 'manual'> = {};
+    let correct = 0;
+    for (const q of practiceItems) {
+      const qtype = q.questionType;
+      if (qtype === 'short_answer' || qtype === 'multi_answer') {
+        res[q.id] = 'manual';
+      } else if (qtype === 'matching') {
+        try {
+          const pairs: [string, string][] = JSON.parse(q.correctAnswer ?? '[]');
+          const all = pairs.every((pair, i) => answersMatch(pair[1], subAnswers[q.id]?.[i] ?? ''));
+          res[q.id] = all ? 'correct' : 'wrong';
+          if (all) correct++;
+        } catch { res[q.id] = 'manual'; }
+      } else if (qtype === 'fill_blank') {
+        const blanksCount = (q.content ?? '').split('___').length - 1;
+        const fbAnswers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
+        const all = Array.from({ length: blanksCount }, (_, i) => i)
+          .every(i => answersMatch(fbAnswers[i] ?? '', subAnswers[q.id]?.[i] ?? ''));
+        res[q.id] = all ? 'correct' : 'wrong';
+        if (all) correct++;
+      } else if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
+        const ok = answers[q.id] === q.correctAnswer;
+        res[q.id] = ok ? 'correct' : 'wrong';
+        if (ok) correct++;
+      } else {
+        const ok = answersMatch(q.correctAnswer ?? '', answers[q.id] ?? '');
+        res[q.id] = ok ? 'correct' : 'wrong';
+        if (ok) correct++;
       }
-      return;
     }
-    setQIndex(i => i + 1); setUserAnswer(''); setBlankAnswers({}); setFeedback(null);
+    setResults(res);
+    setHwScore({ correct, total: practiceItems.length });
+    setHwMode('submitted');
+    if (studentId) {
+      markHomeworkComplete(studentId, lessonId).catch(console.error);
+      onHomeworkComplete?.(lessonId);
+    }
   };
 
   // Admin builder helpers
@@ -697,211 +697,317 @@ const HomeworkTab: React.FC<{
 
   if (loading) return <LoadingSpinner />;
 
-  // ── Practice ─────────────────────────────────────────────────────────────
-  if (practicePhase === 'practising') {
-    const q = practiceItems[qIndex];
-    const qtype = q.questionType;
-    const questionText = q.content ?? '';
-    const fbParts = qtype === 'fill_blank' ? questionText.split('___') : [];
-    const fbAnswers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
-    const isManual = qtype === 'matching' || qtype === 'short_answer' || qtype === 'multi_answer';
+  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
 
-    return (
-      <div className="max-w-4xl mx-auto p-10 space-y-8">
-        <div className="flex items-center justify-between">
-          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.questionOf', { n: qIndex + 1, total: practiceItems.length })}</span>
-          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
-        </div>
-        <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(qIndex / practiceItems.length) * 100}%` }} />
-        </div>
+  // ── Student view ──────────────────────────────────────────────────────────
+  if (!isAdmin) {
+    const submitted = hwMode === 'submitted';
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 shadow-sm space-y-6">
-          <span className="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-sm font-semibold">
-            {QUESTION_TYPE_LABELS[qtype ?? 'short_answer']}
-          </span>
+    // Render answer input for a question item
+    const renderInput = (q: HomeworkItem) => {
+      const qtype = q.questionType;
+      const sid = q.id;
+      const res = results[sid];
+      const done = submitted;
 
-          {/* Question text */}
-          {qtype !== 'fill_blank' && (
-            <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100"
-               dir={qtype === 'translate_to_english' ? 'rtl' : 'ltr'}>
-              {questionText}
+      const borderFor = (opt: string) => {
+        if (!done || answers[sid] !== opt) return answers[sid] === opt ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-slate-200 dark:border-gray-600 hover:border-amber-300';
+        return res === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300';
+      };
+
+      if (qtype === 'multiple_choice' || qtype === 'fill_blank_options') {
+        return (
+          <div className="space-y-2 mt-3">
+            {(q.options ?? []).map((opt, i) => (
+              <button key={i} type="button" disabled={done} onClick={() => setAnswers(p => ({ ...p, [sid]: opt }))}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 text-sm transition-colors ${borderFor(opt)} text-slate-700 dark:text-slate-200`}>
+                {String.fromCharCode(65 + i)}. {opt}
+                {done && res === 'correct' && answers[sid] === opt && <span className="ml-2">✅</span>}
+                {done && res === 'wrong' && answers[sid] === opt && <span className="ml-2">❌</span>}
+                {done && q.correctAnswer === opt && answers[sid] !== opt && <span className="ml-2 text-emerald-600 font-semibold text-xs">(correct)</span>}
+              </button>
+            ))}
+          </div>
+        );
+      }
+
+      if (qtype === 'true_false') {
+        return (
+          <div className="flex gap-3 mt-3">
+            {['True', 'False'].map(opt => (
+              <button key={opt} type="button" disabled={done} onClick={() => setAnswers(p => ({ ...p, [sid]: opt }))}
+                className={`flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition-colors ${borderFor(opt)} text-slate-700 dark:text-slate-200`}>
+                {opt}
+                {done && answers[sid] === opt && (res === 'correct' ? ' ✅' : ' ❌')}
+                {done && q.correctAnswer === opt && answers[sid] !== opt && <span className="ml-1 text-emerald-600 text-xs">(correct)</span>}
+              </button>
+            ))}
+          </div>
+        );
+      }
+
+      if (qtype === 'fill_blank') {
+        const parts = (q.content ?? '').split('___');
+        const fbAnswers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
+        return (
+          <div className="flex flex-wrap items-center gap-2 text-base leading-loose mt-3">
+            {parts.map((part, i) => (
+              <React.Fragment key={i}>
+                {part && <span className="text-slate-800 dark:text-slate-100">{part}</span>}
+                {i < parts.length - 1 && (
+                  <span className="inline-flex flex-col items-center gap-0.5">
+                    <input type="text" disabled={done}
+                      value={subAnswers[sid]?.[i] ?? ''}
+                      onChange={e => setSubAnswers(p => ({ ...p, [sid]: { ...(p[sid] ?? {}), [i]: e.target.value } }))}
+                      className={`w-32 px-2 py-0.5 border-b-2 text-center text-sm focus:outline-none bg-transparent dark:text-white transition-colors ${
+                        done
+                          ? (results[sid] === 'correct' ? 'border-emerald-500 text-emerald-700' : 'border-red-400 text-red-600')
+                          : 'border-amber-500 focus:border-amber-600'
+                      }`}
+                    />
+                    {done && results[sid] === 'wrong' && fbAnswers[i] && (
+                      <span className="text-[10px] text-emerald-600 font-semibold">{fbAnswers[i]}</span>
+                    )}
+                  </span>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      }
+
+      if (qtype === 'matching') {
+        let pairs: [string, string][] = [];
+        try { pairs = JSON.parse(q.correctAnswer ?? '[]'); } catch { /* */ }
+        const rightOpts = pairs.map(p => p[1]);
+        return (
+          <div className="space-y-2 mt-3">
+            {pairs.map((pair, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-gray-700 px-3 py-2 rounded-lg">{pair[0]}</span>
+                <span className="text-slate-400 text-sm flex-shrink-0">→</span>
+                <select disabled={done}
+                  value={subAnswers[sid]?.[i] ?? ''}
+                  onChange={e => setSubAnswers(p => ({ ...p, [sid]: { ...(p[sid] ?? {}), [i]: e.target.value } }))}
+                  className={`flex-1 px-2 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                    done
+                      ? answersMatch(pair[1], subAnswers[sid]?.[i] ?? '') ? 'border-emerald-500' : 'border-red-400'
+                      : 'border-slate-300 dark:border-gray-600'
+                  }`}>
+                  <option value="">Choose…</option>
+                  {rightOpts.map((opt, j) => <option key={j} value={opt}>{opt}</option>)}
+                </select>
+                {done && (
+                  answersMatch(pair[1], subAnswers[sid]?.[i] ?? '') ? <span className="text-emerald-600 flex-shrink-0">✅</span>
+                  : <span className="flex-shrink-0 flex flex-col items-start"><span className="text-red-500">❌</span><span className="text-[10px] text-emerald-600 font-semibold">{pair[1]}</span></span>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      if (qtype === 'short_answer') {
+        return (
+          <textarea disabled={done} rows={3}
+            value={answers[sid] ?? ''}
+            onChange={e => setAnswers(p => ({ ...p, [sid]: e.target.value }))}
+            placeholder="Write your answer here…"
+            dir="auto"
+            className={`mt-3 ${inp} resize-none ${done ? 'opacity-70' : ''}`}
+          />
+        );
+      }
+
+      if (qtype === 'multi_answer') {
+        const words = q.options ?? [];
+        return (
+          <div className="space-y-2 mt-3">
+            {words.map((word, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="w-32 flex-shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-gray-700 px-3 py-2 rounded-lg">{word}</span>
+                <input type="text" disabled={done}
+                  value={subAnswers[sid]?.[i] ?? ''}
+                  onChange={e => setSubAnswers(p => ({ ...p, [sid]: { ...(p[sid] ?? {}), [i]: e.target.value } }))}
+                  placeholder="Your answer…"
+                  dir="auto"
+                  className={`flex-1 px-3 py-2 border border-slate-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 ${done ? 'opacity-70' : ''}`}
+                />
+              </div>
+            ))}
+            {done && <p className="text-xs text-slate-400 italic">Tutor will review your answers.</p>}
+          </div>
+        );
+      }
+
+      // translate types
+      return (
+        <input type="text" disabled={done}
+          value={answers[sid] ?? ''}
+          onChange={e => setAnswers(p => ({ ...p, [sid]: e.target.value }))}
+          dir={qtype === 'translate_to_arabic' ? 'rtl' : 'ltr'}
+          placeholder="Type your answer…"
+          className={`mt-3 ${inp} ${done ? 'opacity-70' : ''}`}
+        />
+      );
+    };
+
+    // Render a single item (context or question) for student
+    const renderStudentItem = (item: HomeworkItem, qNum: number) => {
+      const submitted = hwMode === 'submitted';
+      const res = results[item.id];
+      return (
+        <div key={item.id} className={`bg-white dark:bg-gray-800 border rounded-2xl p-5 space-y-1 ${
+          submitted && item.itemType === 'question'
+            ? res === 'correct' ? 'border-emerald-300 dark:border-emerald-700'
+            : res === 'wrong' ? 'border-red-300 dark:border-red-700'
+            : 'border-slate-200 dark:border-gray-700'
+            : 'border-slate-200 dark:border-gray-700'
+        }`}>
+          {item.itemType === 'divider' && <hr className="border-slate-200 dark:border-gray-700" />}
+          {item.itemType === 'image' && item.imageUrl && (
+            <img src={item.imageUrl} alt="" className="max-h-60 rounded-xl" />
+          )}
+          {(['section', 'headline', 'instruction', 'paragraph'] as ArabicExamItemType[]).includes(item.itemType) && (
+            <p className={`${item.itemType === 'headline' ? 'text-lg font-bold text-slate-800 dark:text-slate-100' : item.itemType === 'section' ? 'text-base font-bold text-amber-700 dark:text-amber-300' : item.itemType === 'instruction' ? 'text-sm text-sky-700 dark:text-sky-300 italic' : 'text-sm text-slate-700 dark:text-slate-300'}`} dir="auto">
+              {item.content}
             </p>
           )}
-
-          {/* Tutor-marked notice */}
-          {isManual && (
-            <div className="px-4 py-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl text-sm text-sky-700 dark:text-sky-300">
-              This question type is marked by your tutor.
-            </div>
-          )}
-
-          {/* Answer input by type */}
-          {!isManual && (
+          {item.itemType === 'question' && (
             <>
-              {(qtype === 'multiple_choice' || qtype === 'fill_blank_options') && q.options?.length ? (
-                <div className="space-y-3">
-                  {q.options.map((opt, i) => (
-                    <button key={i} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                      className={`w-full text-left px-6 py-4 rounded-xl border-2 text-base transition-colors ${
-                        userAnswer === opt
-                          ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                            : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                            : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                          : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
-                      }`}>
-                      {String.fromCharCode(65 + i)}. {opt}
-                    </button>
-                  ))}
-                </div>
-              ) : qtype === 'true_false' ? (
-                <div className="flex gap-4">
-                  {(['True', 'False']).map(opt => (
-                    <button key={opt} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                      className={`flex-1 py-4 rounded-xl border-2 font-semibold text-base transition-colors ${
-                        userAnswer === opt
-                          ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                            : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                            : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                          : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
-                      }`}>{opt}
-                    </button>
-                  ))}
-                </div>
-              ) : qtype === 'fill_blank' ? (
-                <div className="flex flex-wrap items-center gap-2 text-xl leading-loose">
-                  {fbParts.map((part, i) => (
-                    <React.Fragment key={i}>
-                      {part && <span className="text-slate-800 dark:text-slate-100">{part}</span>}
-                      {i < fbParts.length - 1 && (
-                        <input type="text" value={blankAnswers[i] ?? ''}
-                          onChange={e => setBlankAnswers(prev => ({ ...prev, [i]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
-                          disabled={!!feedback}
-                          className={`w-36 px-3 py-1 border-b-2 text-center text-base focus:outline-none transition-colors ${
-                            feedback === 'correct' ? 'border-emerald-500 text-emerald-700'
-                              : feedback === 'wrong' ? 'border-red-500 text-red-700'
-                              : 'border-amber-500 focus:border-amber-600'
-                          } bg-transparent dark:text-white`}
-                        />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              ) : (
-                <input type="text" value={userAnswer}
-                  onChange={e => setUserAnswer(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
-                  disabled={!!feedback}
-                  dir={qtype === 'translate_to_arabic' ? 'rtl' : 'ltr'}
-                  placeholder="Type your answer…"
-                  className="w-full px-5 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-base focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white"
-                  autoFocus
-                />
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Q{qNum} · {QUESTION_TYPE_LABELS[item.questionType ?? 'short_answer']}
+                </span>
+                {submitted && (
+                  res === 'correct' ? <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">Correct ✅</span>
+                  : res === 'wrong' ? <span className="text-xs font-bold text-red-600 bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Incorrect ❌</span>
+                  : <span className="text-xs font-bold text-sky-600 bg-sky-50 dark:bg-sky-900/30 px-2 py-0.5 rounded-full">Tutor review 📋</span>
+                )}
+              </div>
+              {item.questionType !== 'fill_blank' && (
+                <p className="text-base font-medium text-slate-800 dark:text-slate-100" dir={item.questionType === 'translate_to_english' ? 'rtl' : 'auto'}>
+                  {item.content}
+                </p>
               )}
+              {renderInput(item)}
             </>
           )}
+        </div>
+      );
+    };
 
-          {/* Feedback */}
-          {feedback && feedback !== 'manual' && (
-            <div className={`flex items-start gap-4 p-4 rounded-xl ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
-              <span className="text-2xl">{feedback === 'correct' ? '✅' : '❌'}</span>
-              <div>
-                <p className="font-semibold text-lg">{feedback === 'correct' ? t('arabicLessonDetail.correct') : t('arabicLessonDetail.incorrect')}</p>
-                {feedback === 'wrong' && (
-                  <p className="text-base mt-0.5">
-                    {t('arabicLessonDetail.correctAnswer')} <span className="font-bold">
-                      {qtype === 'fill_blank' ? fbAnswers.join(' / ') : q.correctAnswer}
-                    </span>
-                  </p>
-                )}
+    // ── Preview mode (blurred) ────────────────────────────────────────────────
+    if (hwMode === 'preview') {
+      return (
+        <div className="max-w-3xl mx-auto p-8 space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.homeworkTitle')}</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
+              {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center">
+              <div className="text-5xl mb-3">📝</div>
+              <p className="font-semibold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.noQuestionsStudent')}</p>
+            </div>
+          ) : (
+            <div className="relative rounded-2xl overflow-hidden">
+              {/* Blur overlay */}
+              <div className="absolute inset-0 backdrop-blur-sm bg-white/70 dark:bg-gray-900/70 z-10 flex flex-col items-center justify-center gap-4 rounded-2xl">
+                <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">
+                  {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''} ready
+                </p>
+                <button onClick={() => setHwMode('answering')}
+                  className="px-8 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-xl shadow-lg transition-colors">
+                  📝 Do Homework
+                </button>
+              </div>
+              {/* Blurred question list */}
+              <div className="pointer-events-none select-none space-y-3 p-1">
+                {practiceItems.map((q, i) => (
+                  <div key={q.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-5">
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Q{i + 1} · {QUESTION_TYPE_LABELS[q.questionType ?? 'short_answer']}</span>
+                    <p className="mt-1 text-base text-slate-700 dark:text-slate-200 line-clamp-2" dir="auto">{q.content}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
-
-          <div className="flex gap-3">
-            {!feedback ? (
-              <button onClick={checkAnswer}
-                disabled={isManual ? false : qtype === 'fill_blank'
-                  ? Object.keys(blankAnswers).length < (questionText.match(/___/g) ?? []).length
-                  : !userAnswer}
-                className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors text-base">
-                {isManual ? 'Continue' : t('arabicLessonDetail.submit')}
-              </button>
-            ) : (
-              <button onClick={nextQuestion}
-                className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-                {qIndex + 1 >= practiceItems.length ? t('arabicLessonDetail.seeResults') : t('arabicLessonDetail.nextQuestion')}
-              </button>
-            )}
-          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Results ───────────────────────────────────────────────────────────────
-  if (practicePhase === 'done') {
-    const pct = Math.round((score / practiceItems.length) * 100);
+    // ── Answering / Submitted mode ────────────────────────────────────────────
+    let qNum = 0;
+    const pct = submitted ? Math.round((hwScore.correct / (hwScore.total || 1)) * 100) : 0;
+
     return (
-      <div className="max-w-2xl mx-auto p-12 text-center space-y-6">
-        <div className="text-7xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
-        <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.practiceComplete')}</h2>
-        <p className="text-lg text-slate-500 dark:text-slate-400">
-          {t('arabicLessonDetail.practiceScore', { score, total: practiceItems.length, pct })}
-        </p>
-        <button onClick={startPractice}
-          className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-          {t('arabicLessonDetail.tryAgain')}
-        </button>
-        <button onClick={() => setPhase('idle')}
-          className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
-          {t('arabicLessonDetail.backToQuestions')}
-        </button>
+      <div className="max-w-3xl mx-auto p-8 space-y-5">
+        {/* Submitted summary */}
+        {submitted && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 text-center space-y-3">
+            <div className="text-5xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Homework submitted!</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              {hwScore.correct} / {hwScore.total} auto-graded correct
+              {hwScore.total < practiceItems.length ? ` · ${practiceItems.length - hwScore.total} sent for tutor review` : ''}
+            </p>
+            <button onClick={() => { setHwMode('preview'); setAnswers({}); setSubAnswers({}); setResults({}); }}
+              className="mt-1 px-6 py-2 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
+              ↩ Redo homework
+            </button>
+          </div>
+        )}
+
+        {/* All items */}
+        {items.map(item => {
+          if (item.itemType === 'question') qNum++;
+          return renderStudentItem(item, qNum);
+        })}
+
+        {/* Submit button */}
+        {!submitted && (
+          <button onClick={submitHomework}
+            className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-base shadow">
+            Submit Homework
+          </button>
+        )}
       </div>
     );
   }
 
-  // ── Normal view ───────────────────────────────────────────────────────────
+  // ── Admin view ────────────────────────────────────────────────────────────
   let qNum = 0;
-  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
 
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-6">
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onImageChosen} />
 
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.homeworkTitle')}</h2>
-          <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
-            {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}{items.length > practiceItems.length ? ` · ${items.length} total items` : ''}
-          </p>
-        </div>
-        {practiceItems.length > 0 && !isAdmin && (
-          <button onClick={startPractice}
-            className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
-            ▶ {t('arabicLessonDetail.startPractice')}
-          </button>
-        )}
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.homeworkTitle')}</h2>
+        <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
+          {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}{items.length > practiceItems.length ? ` · ${items.length} total items` : ''}
+        </p>
       </div>
 
-      {/* Admin add buttons */}
-      {isAdmin && (
-        <div className="flex flex-wrap gap-2">
-          {ADD_BUTTONS.map(b => (
-            <button key={b.type} onClick={() => onAddClick(b.type)}
-              className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-sm font-semibold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
-              {b.icon} {b.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Add buttons */}
+      <div className="flex flex-wrap gap-2">
+        {ADD_BUTTONS.map(b => (
+          <button key={b.type} onClick={() => onAddClick(b.type)}
+            className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-sm font-semibold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+            {b.icon} {b.label}
+          </button>
+        ))}
+      </div>
 
       {/* Add / edit question form */}
-      {isAdmin && addingQ && (
+      {addingQ && (
         <HomeworkQuestionForm lessonId={lessonId} onDone={() => { setAddingQ(false); reload(); }} onCancel={() => setAddingQ(false)} />
       )}
-      {isAdmin && editingQ && (
+      {editingQ && (
         <HomeworkQuestionForm lessonId={lessonId} existing={editingQ} onDone={() => { setEditingQ(null); reload(); }} onCancel={() => setEditingQ(null)} />
       )}
 
@@ -910,9 +1016,7 @@ const HomeworkTab: React.FC<{
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center">
           <div className="text-5xl mb-3">📝</div>
           <p className="font-semibold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.noQuestions')}</p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isAdmin ? t('arabicLessonDetail.noQuestionsAdmin') : t('arabicLessonDetail.noQuestionsStudent')}
-          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('arabicLessonDetail.noQuestionsAdmin')}</p>
         </div>
       )}
 
@@ -924,21 +1028,19 @@ const HomeworkTab: React.FC<{
             return (
               <div
                 key={item.id}
-                draggable={isAdmin}
-                onDragStart={isAdmin ? () => { dragIdx.current = index; } : undefined}
-                onDragOver={isAdmin ? e => { e.preventDefault(); setOverIdx(index); } : undefined}
-                onDragEnd={isAdmin ? handleDragEnd : undefined}
+                draggable
+                onDragStart={() => { dragIdx.current = index; }}
+                onDragOver={e => { e.preventDefault(); setOverIdx(index); }}
+                onDragEnd={handleDragEnd}
                 className={`bg-white dark:bg-gray-800 border rounded-xl p-3 flex gap-3 transition-colors ${
-                  isAdmin && overIdx === index
+                  overIdx === index
                     ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-200 dark:ring-amber-900'
                     : 'border-slate-200 dark:border-gray-700'
                 }`}
               >
-                {isAdmin && (
-                  <div className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 select-none text-xl flex items-center px-0.5" title="Drag to reorder">
-                    ⠿
-                  </div>
-                )}
+                <div className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 select-none text-xl flex items-center px-0.5" title="Drag to reorder">
+                  ⠿
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -946,34 +1048,26 @@ const HomeworkTab: React.FC<{
                         ? `Q${qNum} · ${QUESTION_TYPE_LABELS[item.questionType ?? 'short_answer']} · ${item.marks ?? 0} marks`
                         : item.itemType}
                     </span>
-                    {isAdmin && (
-                      <div className="flex gap-2">
-                        {item.itemType === 'question' && (
-                          <button onClick={() => setEditingQ(item)} className="text-xs font-semibold text-sky-600 hover:underline">Edit</button>
-                        )}
-                        <button onClick={() => removeItem(item)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                      {item.itemType === 'question' && (
+                        <button onClick={() => setEditingQ(item)} className="text-xs font-semibold text-sky-600 hover:underline">Edit</button>
+                      )}
+                      <button onClick={() => removeItem(item)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
+                    </div>
                   </div>
                   {item.itemType === 'divider' && <hr className="border-slate-200 dark:border-gray-700" />}
                   {item.itemType === 'image' && item.imageUrl && (
                     <img src={item.imageUrl} alt="" className="max-h-40 rounded-lg border border-slate-200 dark:border-gray-700" />
                   )}
                   {(['section', 'headline', 'instruction', 'paragraph'] as ArabicExamItemType[]).includes(item.itemType) && (
-                    isAdmin ? (
-                      <textarea
-                        defaultValue={item.content ?? ''}
-                        onBlur={e => saveContent(item, e.target.value)}
-                        rows={item.itemType === 'paragraph' ? 3 : 1}
-                        dir="auto"
-                        placeholder={`Enter ${item.itemType} text…`}
-                        className={inp}
-                      />
-                    ) : (
-                      <p className={`text-sm dark:text-slate-200 ${item.itemType === 'headline' ? 'font-bold text-base' : item.itemType === 'section' ? 'font-bold text-amber-700 dark:text-amber-300' : 'text-slate-700'}`} dir="auto">
-                        {item.content}
-                      </p>
-                    )
+                    <textarea
+                      defaultValue={item.content ?? ''}
+                      onBlur={e => saveContent(item, e.target.value)}
+                      rows={item.itemType === 'paragraph' ? 3 : 1}
+                      dir="auto"
+                      placeholder={`Enter ${item.itemType} text…`}
+                      className={inp}
+                    />
                   )}
                   {item.itemType === 'question' && (
                     <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
