@@ -702,6 +702,8 @@ const TajweedLessonViewer: React.FC<Props> = ({
               url={iframeSrc}
               initialPage={resumeSlide}
               onPageChange={(p, total) => { setCurrentSlide(p); setTotalSlides(total); }}
+              fitMode={showCanvas ? 'width' : 'contain'}
+              pageStrip={showCanvas}
             />
           ) : (
             <>
