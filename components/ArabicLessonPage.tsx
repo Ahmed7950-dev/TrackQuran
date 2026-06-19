@@ -19,6 +19,7 @@ import {
   uploadArabicLessonPdf,
   getHomeworkCountsByLesson,
   getHomeworkCompletionsForStudent,
+  getLessonProgressForStudent,
   getVocabRoundsByLesson,
   getLevelPlans,
   uploadLevelPlanImage,
@@ -344,6 +345,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
   const [hwDone,      setHwDone]      = useState<string[]>([]);
   const [vocabRounds, setVocabRounds] = useState<Record<string, number>>({});
+  const [lessonProgress, setLessonProgress] = useState<Awaited<ReturnType<typeof getLessonProgressForStudent>>>(new Map());
 
   // Drag-reorder (admin)
   const dragIdx   = useRef<number | null>(null);
@@ -367,10 +369,28 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   }, []);
 
   useEffect(() => {
-    if (!preSelectedStudentId) { setHwDone([]); setVocabRounds({}); return; }
+    if (!preSelectedStudentId) { setHwDone([]); setVocabRounds({}); setLessonProgress(new Map()); return; }
     getHomeworkCompletionsForStudent(preSelectedStudentId).then(setHwDone);
     getVocabRoundsByLesson(preSelectedStudentId).then(setVocabRounds);
+    getLessonProgressForStudent(preSelectedStudentId).then(setLessonProgress);
   }, [preSelectedStudentId]);
+
+  // Resolve the display status for a lesson (combines completion + progress row).
+  const lessonStatus = (lessonId: string): { label: string; cls: string } | null => {
+    if (!preSelectedStudentId) return null;
+    const prog = lessonProgress.get(lessonId);
+    const done = prog?.status === 'done' || completedSet.has(lessonId);
+    if (done) {
+      const rev = prog?.revisionCount ?? 0;
+      return rev > 0
+        ? { label: `Done · revised ×${rev}`, cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' }
+        : { label: 'Done', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' };
+    }
+    if (prog?.status === 'in_progress') {
+      return { label: `In progress · slide ${prog.lastSlide}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' };
+    }
+    return { label: 'Not started', cls: 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400' };
+  };
 
   useEffect(() => {
     if (studentMode && preSelectedStudentId) {
@@ -620,6 +640,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
                 homeworkDone={hwDone.includes(lesson.id)}
                 vocabRounds={vocabRounds[lesson.id] ?? 0}
                 showStudentStats={!!preSelectedStudentId}
+                statusChip={lessonStatus(lesson.id)}
                 onView={() => setViewing(lesson)}
                 onEdit={e => { e.stopPropagation(); setEditing(lesson); }}
                 onDelete={e => { e.stopPropagation(); handleDelete(lesson); }}
@@ -705,6 +726,7 @@ interface RowProps {
   lesson: ArabicLesson; index: number; isAdmin: boolean; isDragOver: boolean;
   isCompleted: boolean;
   hwQuestionCount: number; homeworkDone: boolean; vocabRounds: number; showStudentStats: boolean;
+  statusChip?: { label: string; cls: string } | null;
   onView: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void; onDragEnd: () => void;
@@ -714,6 +736,7 @@ const ArabicLessonRow: React.FC<RowProps> = ({
   lesson, index, isAdmin, isDragOver,
   isCompleted,
   hwQuestionCount, homeworkDone, vocabRounds, showStudentStats,
+  statusChip,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) => {
@@ -766,6 +789,11 @@ const ArabicLessonRow: React.FC<RowProps> = ({
       {/* Student progress badges */}
       {showStudentStats && (
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {statusChip && (
+            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${statusChip.cls}`}>
+              {statusChip.label}
+            </span>
+          )}
           {hwQuestionCount > 0 && (
             homeworkDone ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-800">
