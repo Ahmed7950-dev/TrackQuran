@@ -9,34 +9,38 @@ interface Props {
   initialPage?: number;
   onPageChange?: (page: number, total: number) => void;
   className?: string;
-  /** 'width' (default) — scale to container width, allow vertical scroll.
-   *  'contain'          — scale to fit both width AND height, no scroll. */
+  /** 'width' — scale to container width (default).
+   *  'contain' — scale to fit both dimensions (no scroll). */
   fitMode?: 'width' | 'contain';
-  /** Show a horizontal strip of numbered page buttons for quick navigation. */
+  /** Render thumbnail previews of every page below the main slide. */
   pageStrip?: boolean;
 }
+
+const THUMB_W = 96; // thumbnail render width in px (height is proportional)
 
 const PdfPager: React.FC<Props> = ({
   url, initialPage = 1, onPageChange, className,
   fitMode = 'width', pageStrip = false,
 }) => {
-  const containerRef  = useRef<HTMLDivElement>(null);
-  const canvasRef     = useRef<HTMLCanvasElement>(null);
-  const stripRef      = useRef<HTMLDivElement>(null);
-  const docRef        = useRef<any>(null);
-  const renderTaskRef = useRef<any>(null);
-  const pageRef       = useRef(1);
-  const fitModeRef    = useRef(fitMode);
+  const containerRef    = useRef<HTMLDivElement>(null);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const thumbStripRef   = useRef<HTMLDivElement>(null);
+  const docRef          = useRef<any>(null);
+  const renderTaskRef   = useRef<any>(null);
+  const pageRef         = useRef(1);
+  const fitModeRef      = useRef(fitMode);
   const onPageChangeRef = useRef(onPageChange);
 
   useEffect(() => { onPageChangeRef.current = onPageChange; }, [onPageChange]);
   useEffect(() => { fitModeRef.current = fitMode; }, [fitMode]);
 
-  const [numPages, setNumPages] = useState(0);
-  const [page, setPage]         = useState(initialPage);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState('');
+  const [numPages,   setNumPages]   = useState(0);
+  const [page,       setPage]       = useState(initialPage);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState('');
+  const [thumbnails, setThumbnails] = useState<string[]>([]); // dataURLs, index = page-1
 
+  // ── Render the main canvas ──────────────────────────────────────────────────
   const renderPage = useCallback(async (n: number) => {
     const doc = docRef.current, canvas = canvasRef.current, container = containerRef.current;
     if (!doc || !canvas || !container) return;
@@ -46,9 +50,10 @@ const PdfPager: React.FC<Props> = ({
       const unscaled = pdfPage.getViewport({ scale: 1 });
       const padding  = 24;
       const availW   = container.clientWidth  - padding;
-      const availH   = fitModeRef.current === 'contain'
-        ? container.clientHeight - padding
-        : Infinity;
+      // In contain mode (or when pageStrip is active and container has finite height)
+      // scale to fit both dimensions; otherwise scale to width only.
+      const useContain = fitModeRef.current === 'contain' || pageStrip;
+      const availH   = useContain ? container.clientHeight - padding : Infinity;
       const scale    = Math.max(0.2, Math.min(availW / unscaled.width, availH / unscaled.height));
       const dpr      = Math.min(window.devicePixelRatio || 1, 2);
       const viewport = pdfPage.getViewport({ scale });
@@ -64,12 +69,34 @@ const PdfPager: React.FC<Props> = ({
     } catch (e: any) {
       if (e?.name !== 'RenderingCancelledException') console.error('PdfPager render:', e?.message ?? e);
     }
+  }, [pageStrip]);
+
+  // ── Render all thumbnails in the background after load ─────────────────────
+  const renderThumbnails = useCallback(async (doc: any, total: number) => {
+    const results: string[] = new Array(total).fill('');
+    for (let i = 1; i <= total; i++) {
+      try {
+        const pdfPage  = await doc.getPage(i);
+        const unscaled = pdfPage.getViewport({ scale: 1 });
+        const scale    = THUMB_W / unscaled.width;
+        const viewport = pdfPage.getViewport({ scale });
+        const c        = document.createElement('canvas');
+        c.width        = Math.floor(viewport.width);
+        c.height       = Math.floor(viewport.height);
+        const ctx      = c.getContext('2d');
+        if (!ctx) continue;
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+        results[i - 1] = c.toDataURL('image/jpeg', 0.75);
+        // Progressively update so thumbnails appear as they're ready
+        setThumbnails([...results]);
+      } catch { /* skip this thumbnail */ }
+    }
   }, []);
 
-  // Load the document once per url.
+  // ── Load document ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError(''); setNumPages(0);
+    setLoading(true); setError(''); setNumPages(0); setThumbnails([]);
     const task = pdfjsLib.getDocument({
       url,
       cMapUrl: '/pdfjs/cmaps/',
@@ -86,6 +113,7 @@ const PdfPager: React.FC<Props> = ({
       setLoading(false);
       onPageChangeRef.current?.(start, doc.numPages);
       await renderPage(start);
+      if (pageStrip) renderThumbnails(doc, doc.numPages);
     }).catch((e: any) => {
       if (cancelled) return;
       console.error('PdfPager load:', e?.message ?? e);
@@ -100,12 +128,12 @@ const PdfPager: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
-  // Re-render on page or fitMode change.
+  // ── Re-render main canvas on page / fitMode change ─────────────────────────
   useEffect(() => {
     if (!loading && docRef.current) renderPage(page);
   }, [page, loading, fitMode, renderPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-fit on container resize.
+  // ── Refit on container resize ──────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -118,9 +146,9 @@ const PdfPager: React.FC<Props> = ({
     return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, [renderPage]);
 
-  // Auto-scroll the strip to keep the active page button visible.
+  // ── Auto-scroll thumbnail strip to keep current page visible ───────────────
   useEffect(() => {
-    const strip = stripRef.current;
+    const strip = thumbStripRef.current;
     if (!strip) return;
     const btn = strip.querySelector(`[data-page="${page}"]`) as HTMLElement | null;
     btn?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -133,10 +161,11 @@ const PdfPager: React.FC<Props> = ({
     onPageChangeRef.current?.(clamped, numPages);
   };
 
-  const isContain = fitMode === 'contain';
+  const isContain = fitMode === 'contain' && !pageStrip;
 
   return (
     <div className={`relative flex flex-col h-full w-full bg-gray-700 ${className ?? ''}`}>
+      {/* Loading / error overlays */}
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300 z-10 bg-gray-700">
           <svg className="animate-spin w-10 h-10" fill="none" viewBox="0 0 24 24">
@@ -150,37 +179,76 @@ const PdfPager: React.FC<Props> = ({
         <p className="absolute z-10 inset-0 flex items-center justify-center text-red-400 text-sm px-6 text-center">{error}</p>
       )}
 
-      {/* Page canvas area */}
-      <div
-        ref={containerRef}
-        className={`flex-1 min-h-0 flex justify-center p-3 ${
-          isContain ? 'overflow-hidden items-center' : 'overflow-auto items-start'
-        }`}
-      >
-        {!error && <canvas ref={canvasRef} className="shadow-lg bg-white" />}
-      </div>
+      {pageStrip ? (
+        /* ── Split layout: main slide (flex-1) + thumbnail grid below ───────── */
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Main slide — fills available space, canvas scales to contain */}
+          <div
+            ref={containerRef}
+            className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-3"
+          >
+            {!error && <canvas ref={canvasRef} className="shadow-lg bg-white max-w-full max-h-full" />}
+          </div>
 
-      {/* Slide strip — quick jump between pages */}
-      {!error && pageStrip && numPages > 1 && (
-        <div
-          ref={stripRef}
-          className="flex-shrink-0 flex gap-1.5 px-3 py-2 overflow-x-auto bg-gray-800 border-t border-gray-700"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          {Array.from({ length: numPages }, (_, i) => i + 1).map(n => (
-            <button
-              key={n}
-              data-page={n}
-              onClick={() => go(n)}
-              className={`flex-shrink-0 min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition-colors ${
-                n === page
-                  ? 'bg-white text-gray-900 shadow'
-                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
-              }`}
+          {/* Thumbnail grid — fills remaining space */}
+          {!error && thumbnails.length > 0 && (
+            <div
+              ref={thumbStripRef}
+              className="flex-shrink-0 flex gap-2 px-2 py-2 overflow-x-auto bg-gray-800 border-t border-gray-600"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#4b5563 transparent' }}
             >
-              {n}
-            </button>
-          ))}
+              {thumbnails.map((src, i) => {
+                const n       = i + 1;
+                const isCurr  = page === n;
+                return (
+                  <button
+                    key={n}
+                    data-page={n}
+                    onClick={() => go(n)}
+                    title={`Slide ${n}`}
+                    className={`relative flex-shrink-0 rounded-md overflow-hidden transition-all duration-150 ${
+                      isCurr
+                        ? 'ring-2 ring-white shadow-lg scale-105 z-10'
+                        : 'opacity-60 hover:opacity-100 hover:ring-1 hover:ring-gray-400'
+                    }`}
+                    style={{ height: 80 }}
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={`Slide ${n}`}
+                        className="h-full w-auto block bg-white"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="h-20 w-16 bg-gray-600 flex items-center justify-center">
+                        <svg className="w-4 h-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/>
+                        </svg>
+                      </div>
+                    )}
+                    {/* Page number badge */}
+                    <span className={`absolute bottom-0 inset-x-0 text-center text-[9px] font-bold py-0.5 ${
+                      isCurr ? 'bg-white/90 text-gray-900' : 'bg-black/50 text-white'
+                    }`}>
+                      {n}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── Standard layout: scrollable (width) or contained (contain) ──────── */
+        <div
+          ref={containerRef}
+          className={`flex-1 min-h-0 flex justify-center p-3 ${
+            isContain ? 'overflow-hidden items-center' : 'overflow-auto items-start'
+          }`}
+        >
+          {!error && <canvas ref={canvasRef} className="shadow-lg bg-white" />}
         </div>
       )}
 
