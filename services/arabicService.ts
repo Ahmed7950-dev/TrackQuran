@@ -12,6 +12,7 @@ import {
   ArabicStudent, ArabicLesson, ArabicDialect, ArabicCourseDialect, WeeklySlot,
   ArabicLevelPlan,
   HomeworkQuestion, HomeworkQuestionType,
+  HomeworkItem, ArabicExamItemType,
   VocabWord, VocabMode, VocabAttempt, VocabMistakeDetail,
   ArabicLessonProgress, ArabicLessonLog,
 } from '../types';
@@ -410,6 +411,103 @@ export async function deleteHomeworkQuestion(id: string): Promise<boolean> {
   const { error } = await supabase.from('arabic_lesson_homework').delete().eq('id', id);
   if (error) { console.error('deleteHomeworkQuestion:', error.message); return false; }
   return true;
+}
+
+// ── Homework items (rich builder model — mirrors arabic_exam_items) ───────────
+
+interface HomeworkItemRow {
+  id: string;
+  lesson_id: string;
+  item_type: string;
+  order_index: number;
+  content: string | null;
+  image_url: string | null;
+  question_type: string | null;
+  options: string[] | null;
+  correct_answer: string | null;
+  marks: number | null;
+  created_at: string;
+}
+
+function rowToHomeworkItem(r: HomeworkItemRow): HomeworkItem {
+  return {
+    id: r.id,
+    lessonId: r.lesson_id,
+    itemType: r.item_type as ArabicExamItemType,
+    orderIndex: r.order_index,
+    content: r.content ?? undefined,
+    imageUrl: r.image_url ?? undefined,
+    questionType: (r.question_type as HomeworkQuestionType) ?? undefined,
+    options: r.options ?? undefined,
+    correctAnswer: r.correct_answer ?? undefined,
+    marks: r.marks ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
+export async function getHomeworkItems(lessonId: string): Promise<HomeworkItem[]> {
+  const { data, error } = await supabase
+    .from('homework_items').select('*')
+    .eq('lesson_id', lessonId).order('order_index', { ascending: true });
+  if (error) { console.error('getHomeworkItems:', error.message); return []; }
+  return (data ?? []).map(rowToHomeworkItem);
+}
+
+export async function createHomeworkItem(input: {
+  lessonId: string; itemType: ArabicExamItemType; content?: string; imageUrl?: string;
+  questionType?: HomeworkQuestionType; options?: string[]; correctAnswer?: string; marks?: number;
+}): Promise<HomeworkItem | null> {
+  const { data: existing } = await supabase
+    .from('homework_items').select('order_index')
+    .eq('lesson_id', input.lessonId).order('order_index', { ascending: false }).limit(1);
+  const maxOrder = (existing?.[0] as { order_index?: number } | undefined)?.order_index ?? 0;
+  const { data, error } = await supabase.from('homework_items').insert({
+    lesson_id:     input.lessonId,
+    item_type:     input.itemType,
+    order_index:   maxOrder + 1,
+    content:       input.content ?? null,
+    image_url:     input.imageUrl ?? null,
+    question_type: input.questionType ?? null,
+    options:       input.options ?? null,
+    correct_answer: input.correctAnswer ?? null,
+    marks:         input.marks ?? null,
+  }).select().single();
+  if (error) { console.error('createHomeworkItem:', error.message); return null; }
+  return rowToHomeworkItem(data as HomeworkItemRow);
+}
+
+export async function updateHomeworkItem(id: string, patch: Partial<Pick<HomeworkItem,
+  'content' | 'imageUrl' | 'questionType' | 'options' | 'correctAnswer' | 'marks'>>): Promise<boolean> {
+  const update: Record<string, unknown> = {};
+  if (patch.content       !== undefined) update.content        = patch.content ?? null;
+  if (patch.imageUrl      !== undefined) update.image_url      = patch.imageUrl ?? null;
+  if (patch.questionType  !== undefined) update.question_type  = patch.questionType ?? null;
+  if (patch.options       !== undefined) update.options        = patch.options ?? null;
+  if (patch.correctAnswer !== undefined) update.correct_answer = patch.correctAnswer ?? null;
+  if (patch.marks         !== undefined) update.marks          = patch.marks ?? null;
+  const { error } = await supabase.from('homework_items').update(update).eq('id', id);
+  if (error) { console.error('updateHomeworkItem:', error.message); return false; }
+  return true;
+}
+
+export async function deleteHomeworkItem(id: string): Promise<boolean> {
+  const { error } = await supabase.from('homework_items').delete().eq('id', id);
+  if (error) { console.error('deleteHomeworkItem:', error.message); return false; }
+  return true;
+}
+
+export async function reorderHomeworkItems(orderedIds: string[]): Promise<void> {
+  await Promise.all(orderedIds.map((id, i) =>
+    supabase.from('homework_items').update({ order_index: i + 1 }).eq('id', id),
+  ));
+}
+
+export async function uploadHomeworkImage(file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+  const path = `homework-images/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from('tajweed-assets').upload(path, file, { upsert: true });
+  if (error) { console.error('uploadHomeworkImage:', error.message); return null; }
+  return supabase.storage.from('tajweed-assets').getPublicUrl(path).data.publicUrl;
 }
 
 // ── Vocabulary words ─────────────────────────────────────────────────────────

@@ -320,6 +320,20 @@ export interface HomeworkQuestion {
   createdAt: string;
 }
 
+export interface HomeworkItem {
+  id: string;
+  lessonId: string;
+  itemType: ArabicExamItemType;
+  orderIndex: number;
+  content?: string;
+  imageUrl?: string;
+  questionType?: HomeworkQuestionType;
+  options?: string[];
+  correctAnswer?: string;
+  marks?: number;
+  createdAt: string;
+}
+
 // ── Arabic Exams ──────────────────────────────────────────────────────────────
 
 export type ExamVersion = 'arabic' | 'transliteration';

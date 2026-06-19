@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArabicLesson, ArabicStudent,
   HomeworkQuestion, HomeworkQuestionType,
+  HomeworkItem, ArabicExamItemType,
   VocabWord, VocabMode, VocabAttempt,
   TajweedLesson, Student,
 } from '../types';
@@ -18,6 +19,8 @@ import {
   getHomeworkQuestions, createHomeworkQuestion,
   updateHomeworkQuestion as updateHWQ,
   deleteHomeworkQuestion,
+  getHomeworkItems, createHomeworkItem, updateHomeworkItem,
+  deleteHomeworkItem, reorderHomeworkItems, uploadHomeworkImage,
   getVocabWords, createVocabWord, deleteVocabWord,
   getVocabAttempts, saveVocabAttempts,
   saveVocabMistakes,
@@ -30,9 +33,6 @@ import {
 } from '../services/arabicService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-let _uid = 0;
-const genId = () => `s${++_uid}_${Date.now()}`;
 
 function stripDiacritics(s: string) {
   return s.replace(/[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, '');
@@ -70,30 +70,26 @@ const QUESTION_TYPE_LABELS: Record<HomeworkQuestionType, string> = {
   multi_answer:         'Multi-Word Answer',
 };
 
-// Fill-in-blank segment types
-type FBSegment =
-  | { id: string; type: 'text';  value: string }
-  | { id: string; type: 'blank'; answer: string };
+const ADD_BUTTONS: { type: ArabicExamItemType; label: string; icon: string }[] = [
+  { type: 'question',    label: 'Question',    icon: '❓' },
+  { type: 'section',     label: 'Section',     icon: '📑' },
+  { type: 'headline',    label: 'Headline',    icon: '🔠' },
+  { type: 'instruction', label: 'Instruction', icon: '📌' },
+  { type: 'paragraph',   label: 'Paragraph',   icon: '📝' },
+  { type: 'image',       label: 'Image',       icon: '🖼️' },
+  { type: 'divider',     label: 'Divider',     icon: '➖' },
+];
 
-function segmentsToQuestion(segs: FBSegment[]): { question: string; options: string[] } {
-  let question = '';
-  const options: string[] = [];
-  segs.forEach(s => {
-    if (s.type === 'text')  { question += s.value; }
-    else                    { question += '___'; options.push(s.answer); }
-  });
-  return { question, options };
-}
-
-function questionToSegments(question: string, options?: string[]): FBSegment[] {
-  const parts = question.split('___');
-  const segs: FBSegment[] = [];
-  parts.forEach((text, i) => {
-    if (text) segs.push({ id: genId(), type: 'text',  value: text });
-    if (i < parts.length - 1) segs.push({ id: genId(), type: 'blank', answer: options?.[i] ?? '' });
-  });
-  return segs.length ? segs : [{ id: genId(), type: 'text', value: '' }];
-}
+const ADMIN_QUESTION_TYPES: [HomeworkQuestionType, string][] = [
+  ['multiple_choice',      'Multiple Choice (auto-graded)'],
+  ['true_false',           'True / False (auto-graded)'],
+  ['translate_to_arabic',  'Translate → Arabic'],
+  ['translate_to_english', 'Translate → English'],
+  ['fill_blank',           'Fill in the Blank'],
+  ['short_answer',         'Short Answer'],
+  ['matching',             'Word Matching (auto-graded)'],
+  ['multi_answer',         'Multi-Word Answer'],
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
@@ -591,20 +587,29 @@ const HomeworkTab: React.FC<{
   onHomeworkComplete?: (lessonId: string) => void;
 }> = ({ lessonId, isAdmin, studentId, onHomeworkComplete }) => {
   const { t } = useI18n();
-  const [questions, setQuestions]   = useState<HomeworkQuestion[]>([]);
+  const [items, setItems]           = useState<HomeworkItem[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [showForm, setShowForm]     = useState(false);
-  const [editingQ, setEditingQ]     = useState<HomeworkQuestion | null>(null);
+  const [addingQ, setAddingQ]       = useState(false);
+  const [editingQ, setEditingQ]     = useState<HomeworkItem | null>(null);
   const [practicePhase, setPhase]   = useState<PracticePhase>('idle');
   const [qIndex, setQIndex]         = useState(0);
   const [userAnswer, setUserAnswer] = useState('');
   const [blankAnswers, setBlankAnswers] = useState<Record<number, string>>({});
-  const [feedback, setFeedback]     = useState<'correct' | 'wrong' | null>(null);
+  const [feedback, setFeedback]     = useState<'correct' | 'wrong' | 'manual' | null>(null);
   const [score, setScore]           = useState(0);
+  const fileRef                     = useRef<HTMLInputElement>(null);
+  const dragIdx                     = useRef<number | null>(null);
+  const [overIdx, setOverIdx]       = useState<number | null>(null);
 
-  useEffect(() => {
-    getHomeworkQuestions(lessonId).then(qs => { setQuestions(qs); setLoading(false); });
+  const reload = useCallback(async () => {
+    const its = await getHomeworkItems(lessonId);
+    setItems(its);
+    setLoading(false);
   }, [lessonId]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const practiceItems = items.filter(i => i.itemType === 'question');
 
   const startPractice = () => {
     setQIndex(0); setUserAnswer(''); setBlankAnswers({}); setFeedback(null); setScore(0);
@@ -612,24 +617,29 @@ const HomeworkTab: React.FC<{
   };
 
   const checkAnswer = () => {
-    const q = questions[qIndex];
+    const q = practiceItems[qIndex];
+    const qtype = q.questionType;
+    const questionText = q.content ?? '';
+    if (qtype === 'matching' || qtype === 'short_answer' || qtype === 'multi_answer') {
+      setFeedback('manual'); return;
+    }
     let correct = false;
-    if (q.type === 'fill_blank') {
-      const blanksCount = (q.question.match(/___/g) ?? []).length;
-      const answers = q.options?.length ? q.options : [q.correctAnswer];
+    if (qtype === 'fill_blank') {
+      const blanksCount = (questionText.match(/___/g) ?? []).length;
+      const answers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
       correct = Array.from({ length: blanksCount }, (_, i) => i)
         .every(i => answersMatch(answers[i] ?? '', blankAnswers[i] ?? ''));
-    } else if (q.type === 'multiple_choice' || q.type === 'fill_blank_options' || q.type === 'true_false') {
+    } else if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
       correct = userAnswer === q.correctAnswer;
     } else {
-      correct = answersMatch(q.correctAnswer, userAnswer);
+      correct = answersMatch(q.correctAnswer ?? '', userAnswer);
     }
     if (correct) setScore(s => s + 1);
     setFeedback(correct ? 'correct' : 'wrong');
   };
 
   const nextQuestion = () => {
-    if (qIndex + 1 >= questions.length) {
+    if (qIndex + 1 >= practiceItems.length) {
       setPhase('done');
       if (studentId) {
         markHomeworkComplete(studentId, lessonId).catch(console.error);
@@ -640,109 +650,160 @@ const HomeworkTab: React.FC<{
     setQIndex(i => i + 1); setUserAnswer(''); setBlankAnswers({}); setFeedback(null);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('arabicLessonDetail.deleteQuestionConfirm'))) return;
-    if (await deleteHomeworkQuestion(id)) setQuestions(prev => prev.filter(q => q.id !== id));
+  // Admin builder helpers
+  const addTextItem = async (type: ArabicExamItemType) => {
+    await createHomeworkItem({ lessonId, itemType: type, content: type === 'divider' ? undefined : '' });
+    reload();
+  };
+
+  const onAddClick = (type: ArabicExamItemType) => {
+    if (type === 'question') { setAddingQ(true); return; }
+    if (type === 'image')    { fileRef.current?.click(); return; }
+    addTextItem(type);
+  };
+
+  const onImageChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const url = await uploadHomeworkImage(file);
+    if (url) { await createHomeworkItem({ lessonId, itemType: 'image', imageUrl: url }); reload(); }
+  };
+
+  const handleDragEnd = async () => {
+    const from = dragIdx.current;
+    const to = overIdx;
+    setOverIdx(null);
+    dragIdx.current = null;
+    if (from === null || to === null || from === to) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setItems(next);
+    await reorderHomeworkItems(next.map(i => i.id));
+  };
+
+  const removeItem = async (item: HomeworkItem) => {
+    if (!window.confirm('Delete this item?')) return;
+    await deleteHomeworkItem(item.id);
+    reload();
+  };
+
+  const saveContent = async (item: HomeworkItem, content: string) => {
+    if (content === (item.content ?? '')) return;
+    await updateHomeworkItem(item.id, { content });
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, content } : i));
   };
 
   if (loading) return <LoadingSpinner />;
 
   // ── Practice ─────────────────────────────────────────────────────────────
   if (practicePhase === 'practising') {
-    const q = questions[qIndex];
-    const fbParts = q.type === 'fill_blank' ? q.question.split('___') : [];
-    const fbAnswers = q.options?.length ? q.options : [q.correctAnswer];
+    const q = practiceItems[qIndex];
+    const qtype = q.questionType;
+    const questionText = q.content ?? '';
+    const fbParts = qtype === 'fill_blank' ? questionText.split('___') : [];
+    const fbAnswers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
+    const isManual = qtype === 'matching' || qtype === 'short_answer' || qtype === 'multi_answer';
 
     return (
       <div className="max-w-4xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.questionOf', { n: qIndex + 1, total: questions.length })}</span>
+          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.questionOf', { n: qIndex + 1, total: practiceItems.length })}</span>
           <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(qIndex / questions.length) * 100}%` }} />
+          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(qIndex / practiceItems.length) * 100}%` }} />
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 shadow-sm space-y-6">
           <span className="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-sm font-semibold">
-            {QUESTION_TYPE_LABELS[q.type]}
+            {QUESTION_TYPE_LABELS[qtype ?? 'short_answer']}
           </span>
 
           {/* Question text */}
-          {q.type !== 'fill_blank' && (
+          {qtype !== 'fill_blank' && (
             <p className="text-2xl font-semibold text-slate-800 dark:text-slate-100"
-               dir={q.type === 'translate_to_english' ? 'rtl' : 'ltr'}>
-              {q.question}
+               dir={qtype === 'translate_to_english' ? 'rtl' : 'ltr'}>
+              {questionText}
             </p>
           )}
 
+          {/* Tutor-marked notice */}
+          {isManual && (
+            <div className="px-4 py-3 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl text-sm text-sky-700 dark:text-sky-300">
+              This question type is marked by your tutor.
+            </div>
+          )}
+
           {/* Answer input by type */}
-          {(q.type === 'multiple_choice' || q.type === 'fill_blank_options') && q.options?.length ? (
-            <div className="space-y-3">
-              {q.options.map((opt, i) => (
-                <button key={i} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                  className={`w-full text-left px-6 py-4 rounded-xl border-2 text-base transition-colors ${
-                    userAnswer === opt
-                      ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                        : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                        : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                      : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
-                  }`}>
-                  {String.fromCharCode(65 + i)}. {opt}
-                </button>
-              ))}
-            </div>
-          ) : q.type === 'true_false' ? (
-            <div className="flex gap-4">
-              {([t('arabicLessonDetail.true'), t('arabicLessonDetail.false')]).map(opt => (
-                <button key={opt} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
-                  className={`flex-1 py-4 rounded-xl border-2 font-semibold text-base transition-colors ${
-                    userAnswer === opt
-                      ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                        : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                        : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                      : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
-                  }`}>{opt}
-                </button>
-              ))}
-            </div>
-          ) : q.type === 'fill_blank' ? (
-            // Multi-blank fill-in
-            <div className="flex flex-wrap items-center gap-2 text-xl leading-loose">
-              {fbParts.map((part, i) => (
-                <React.Fragment key={i}>
-                  {part && <span className="text-slate-800 dark:text-slate-100">{part}</span>}
-                  {i < fbParts.length - 1 && (
-                    <input
-                      type="text"
-                      value={blankAnswers[i] ?? ''}
-                      onChange={e => setBlankAnswers(prev => ({ ...prev, [i]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
-                      disabled={!!feedback}
-                      className={`w-36 px-3 py-1 border-b-2 text-center text-base focus:outline-none transition-colors ${
-                        feedback === 'correct' ? 'border-emerald-500 text-emerald-700'
-                          : feedback === 'wrong' ? 'border-red-500 text-red-700'
-                          : 'border-amber-500 focus:border-amber-600'
-                      } bg-transparent dark:text-white`}
-                    />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          ) : (
-            <input type="text" value={userAnswer}
-              onChange={e => setUserAnswer(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
-              disabled={!!feedback}
-              dir={q.type === 'translate_to_arabic' ? 'rtl' : 'ltr'}
-              placeholder="Type your answer…"
-              className="w-full px-5 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-base focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white"
-              autoFocus
-            />
+          {!isManual && (
+            <>
+              {(qtype === 'multiple_choice' || qtype === 'fill_blank_options') && q.options?.length ? (
+                <div className="space-y-3">
+                  {q.options.map((opt, i) => (
+                    <button key={i} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
+                      className={`w-full text-left px-6 py-4 rounded-xl border-2 text-base transition-colors ${
+                        userAnswer === opt
+                          ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                            : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                            : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                          : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
+                      }`}>
+                      {String.fromCharCode(65 + i)}. {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : qtype === 'true_false' ? (
+                <div className="flex gap-4">
+                  {(['True', 'False']).map(opt => (
+                    <button key={opt} disabled={!!feedback} onClick={() => setUserAnswer(opt)}
+                      className={`flex-1 py-4 rounded-xl border-2 font-semibold text-base transition-colors ${
+                        userAnswer === opt
+                          ? feedback === 'correct' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                            : feedback === 'wrong' ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                            : 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                          : 'border-slate-200 dark:border-gray-600 hover:border-amber-300 text-slate-700 dark:text-slate-200'
+                      }`}>{opt}
+                    </button>
+                  ))}
+                </div>
+              ) : qtype === 'fill_blank' ? (
+                <div className="flex flex-wrap items-center gap-2 text-xl leading-loose">
+                  {fbParts.map((part, i) => (
+                    <React.Fragment key={i}>
+                      {part && <span className="text-slate-800 dark:text-slate-100">{part}</span>}
+                      {i < fbParts.length - 1 && (
+                        <input type="text" value={blankAnswers[i] ?? ''}
+                          onChange={e => setBlankAnswers(prev => ({ ...prev, [i]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
+                          disabled={!!feedback}
+                          className={`w-36 px-3 py-1 border-b-2 text-center text-base focus:outline-none transition-colors ${
+                            feedback === 'correct' ? 'border-emerald-500 text-emerald-700'
+                              : feedback === 'wrong' ? 'border-red-500 text-red-700'
+                              : 'border-amber-500 focus:border-amber-600'
+                          } bg-transparent dark:text-white`}
+                        />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              ) : (
+                <input type="text" value={userAnswer}
+                  onChange={e => setUserAnswer(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !feedback) checkAnswer(); }}
+                  disabled={!!feedback}
+                  dir={qtype === 'translate_to_arabic' ? 'rtl' : 'ltr'}
+                  placeholder="Type your answer…"
+                  className="w-full px-5 py-4 border-2 border-slate-200 dark:border-gray-600 rounded-xl text-base focus:outline-none focus:border-amber-400 dark:bg-gray-700 dark:text-white"
+                  autoFocus
+                />
+              )}
+            </>
           )}
 
           {/* Feedback */}
-          {feedback && (
+          {feedback && feedback !== 'manual' && (
             <div className={`flex items-start gap-4 p-4 rounded-xl ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
               <span className="text-2xl">{feedback === 'correct' ? '✅' : '❌'}</span>
               <div>
@@ -750,9 +811,7 @@ const HomeworkTab: React.FC<{
                 {feedback === 'wrong' && (
                   <p className="text-base mt-0.5">
                     {t('arabicLessonDetail.correctAnswer')} <span className="font-bold">
-                      {q.type === 'fill_blank'
-                        ? fbAnswers.join(' / ')
-                        : q.correctAnswer}
+                      {qtype === 'fill_blank' ? fbAnswers.join(' / ') : q.correctAnswer}
                     </span>
                   </p>
                 )}
@@ -763,16 +822,16 @@ const HomeworkTab: React.FC<{
           <div className="flex gap-3">
             {!feedback ? (
               <button onClick={checkAnswer}
-                disabled={q.type === 'fill_blank'
-                  ? Object.keys(blankAnswers).length < (q.question.match(/___/g) ?? []).length
+                disabled={isManual ? false : qtype === 'fill_blank'
+                  ? Object.keys(blankAnswers).length < (questionText.match(/___/g) ?? []).length
                   : !userAnswer}
                 className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl disabled:opacity-40 transition-colors text-base">
-                {t('arabicLessonDetail.submit')}
+                {isManual ? 'Continue' : t('arabicLessonDetail.submit')}
               </button>
             ) : (
               <button onClick={nextQuestion}
                 className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
-                {qIndex + 1 >= questions.length ? t('arabicLessonDetail.seeResults') : t('arabicLessonDetail.nextQuestion')}
+                {qIndex + 1 >= practiceItems.length ? t('arabicLessonDetail.seeResults') : t('arabicLessonDetail.nextQuestion')}
               </button>
             )}
           </div>
@@ -783,13 +842,13 @@ const HomeworkTab: React.FC<{
 
   // ── Results ───────────────────────────────────────────────────────────────
   if (practicePhase === 'done') {
-    const pct = Math.round((score / questions.length) * 100);
+    const pct = Math.round((score / practiceItems.length) * 100);
     return (
       <div className="max-w-2xl mx-auto p-12 text-center space-y-6">
         <div className="text-7xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
         <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.practiceComplete')}</h2>
         <p className="text-lg text-slate-500 dark:text-slate-400">
-          {t('arabicLessonDetail.practiceScore', { score, total: questions.length, pct })}
+          {t('arabicLessonDetail.practiceScore', { score, total: practiceItems.length, pct })}
         </p>
         <button onClick={startPractice}
           className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-base">
@@ -804,44 +863,50 @@ const HomeworkTab: React.FC<{
   }
 
   // ── Normal view ───────────────────────────────────────────────────────────
+  let qNum = 0;
+  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
+
   return (
-    <div className="max-w-5xl mx-auto p-8 space-y-8">
+    <div className="max-w-5xl mx-auto p-8 space-y-6">
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onImageChosen} />
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.homeworkTitle')}</h2>
           <p className="text-base text-slate-500 dark:text-slate-400 mt-1">
-            {t('arabicLessonDetail.homeworkSubtitle', { count: questions.length, hint: isAdmin ? t('arabicLessonDetail.homeworkHintAdmin') : t('arabicLessonDetail.homeworkHintStudent') })}
+            {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''}{items.length > practiceItems.length ? ` · ${items.length} total items` : ''}
           </p>
         </div>
-        <div className="flex gap-2">
-          {questions.length > 0 && !isAdmin && (
-            <button onClick={startPractice}
-              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
-              ▶ {t('arabicLessonDetail.startPractice')}
-            </button>
-          )}
-          {isAdmin && (
-            <button onClick={() => { setEditingQ(null); setShowForm(v => !v); }}
-              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
-              {showForm && !editingQ ? `✕ ${t('arabicLessonDetail.cancel')}` : `+ ${t('arabicLessonDetail.addQuestion')}`}
-            </button>
-          )}
-        </div>
+        {practiceItems.length > 0 && !isAdmin && (
+          <button onClick={startPractice}
+            className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg transition-colors text-base">
+            ▶ {t('arabicLessonDetail.startPractice')}
+          </button>
+        )}
       </div>
 
-      {/* Add / Edit form */}
-      {isAdmin && (showForm || editingQ) && (
-        <AddHomeworkQuestionForm
-          lessonId={lessonId}
-          existingQuestion={editingQ ?? undefined}
-          onCreated={q => { setQuestions(prev => [...prev, q]); setShowForm(false); }}
-          onUpdated={q => { setQuestions(prev => prev.map(x => x.id === q.id ? q : x)); setEditingQ(null); setShowForm(false); }}
-          onCancel={() => { setEditingQ(null); setShowForm(false); }}
-        />
+      {/* Admin add buttons */}
+      {isAdmin && (
+        <div className="flex flex-wrap gap-2">
+          {ADD_BUTTONS.map(b => (
+            <button key={b.type} onClick={() => onAddClick(b.type)}
+              className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-sm font-semibold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+              {b.icon} {b.label}
+            </button>
+          ))}
+        </div>
       )}
 
-      {/* Empty */}
-      {questions.length === 0 && !showForm && (
+      {/* Add / edit question form */}
+      {isAdmin && addingQ && (
+        <HomeworkQuestionForm lessonId={lessonId} onDone={() => { setAddingQ(false); reload(); }} onCancel={() => setAddingQ(false)} />
+      )}
+      {isAdmin && editingQ && (
+        <HomeworkQuestionForm lessonId={lessonId} existing={editingQ} onDone={() => { setEditingQ(null); reload(); }} onCancel={() => setEditingQ(null)} />
+      )}
+
+      {/* Empty state */}
+      {items.length === 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center">
           <div className="text-5xl mb-3">📝</div>
           <p className="font-semibold text-slate-700 dark:text-slate-200">{t('arabicLessonDetail.noQuestions')}</p>
@@ -851,359 +916,320 @@ const HomeworkTab: React.FC<{
         </div>
       )}
 
-      {/* Question list */}
-      {questions.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700 overflow-hidden">
-          {questions.map((q, i) => (
-            <div key={q.id} className="flex items-start gap-5 p-6">
-              <span className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-sm font-bold mt-0.5">
-                {i + 1}
-              </span>
-              <div className="flex-1 min-w-0 space-y-2">
-                <span className="inline-block px-2.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-sm font-semibold">
-                  {QUESTION_TYPE_LABELS[q.type]}
-                </span>
-                <p className="text-base text-slate-800 dark:text-slate-100" dir={q.type === 'translate_to_english' ? 'rtl' : 'ltr'}>
-                  {q.question}
-                </p>
+      {/* Items list */}
+      {items.length > 0 && (
+        <div className="space-y-3">
+          {items.map((item, index) => {
+            if (item.itemType === 'question') qNum++;
+            return (
+              <div
+                key={item.id}
+                draggable={isAdmin}
+                onDragStart={isAdmin ? () => { dragIdx.current = index; } : undefined}
+                onDragOver={isAdmin ? e => { e.preventDefault(); setOverIdx(index); } : undefined}
+                onDragEnd={isAdmin ? handleDragEnd : undefined}
+                className={`bg-white dark:bg-gray-800 border rounded-xl p-3 flex gap-3 transition-colors ${
+                  isAdmin && overIdx === index
+                    ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-200 dark:ring-amber-900'
+                    : 'border-slate-200 dark:border-gray-700'
+                }`}
+              >
                 {isAdmin && (
-                  <p className="text-sm text-slate-400">
-                    ✓ {q.type === 'fill_blank' && q.options?.length
-                      ? 'Answers: ' + q.options.join(' / ')
-                      : 'Answer: ' + q.correctAnswer}
-                  </p>
+                  <div className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 select-none text-xl flex items-center px-0.5" title="Drag to reorder">
+                    ⠿
+                  </div>
                 )}
-              </div>
-              {isAdmin && (
-                <div className="flex gap-1 flex-shrink-0">
-                  <button onClick={() => { setEditingQ(q); setShowForm(true); }}
-                    className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-                    </svg>
-                  </button>
-                  <button onClick={() => handleDelete(q.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                    </svg>
-                  </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      {item.itemType === 'question'
+                        ? `Q${qNum} · ${QUESTION_TYPE_LABELS[item.questionType ?? 'short_answer']} · ${item.marks ?? 0} marks`
+                        : item.itemType}
+                    </span>
+                    {isAdmin && (
+                      <div className="flex gap-2">
+                        {item.itemType === 'question' && (
+                          <button onClick={() => setEditingQ(item)} className="text-xs font-semibold text-sky-600 hover:underline">Edit</button>
+                        )}
+                        <button onClick={() => removeItem(item)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
+                      </div>
+                    )}
+                  </div>
+                  {item.itemType === 'divider' && <hr className="border-slate-200 dark:border-gray-700" />}
+                  {item.itemType === 'image' && item.imageUrl && (
+                    <img src={item.imageUrl} alt="" className="max-h-40 rounded-lg border border-slate-200 dark:border-gray-700" />
+                  )}
+                  {(['section', 'headline', 'instruction', 'paragraph'] as ArabicExamItemType[]).includes(item.itemType) && (
+                    isAdmin ? (
+                      <textarea
+                        defaultValue={item.content ?? ''}
+                        onBlur={e => saveContent(item, e.target.value)}
+                        rows={item.itemType === 'paragraph' ? 3 : 1}
+                        dir="auto"
+                        placeholder={`Enter ${item.itemType} text…`}
+                        className={inp}
+                      />
+                    ) : (
+                      <p className={`text-sm dark:text-slate-200 ${item.itemType === 'headline' ? 'font-bold text-base' : item.itemType === 'section' ? 'font-bold text-amber-700 dark:text-amber-300' : 'text-slate-700'}`} dir="auto">
+                        {item.content}
+                      </p>
+                    )
+                  )}
+                  {item.itemType === 'question' && (
+                    <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
+                      {item.content || <span className="text-slate-400">No prompt</span>}
+                    </p>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
-      )}
-      {questions.length > 0 && !isAdmin && (
-        <button
-          onClick={() => {
-            const win = window.open('', '_blank');
-            if (!win) return;
-            const rows = questions.map((q, i) => {
-              // Build the choices/word-bank HTML per question type — never reveal answers
-              let choicesHtml = '';
-              if (q.type === 'multiple_choice' && q.options?.length) {
-                // A / B / C / D options — student circles one
-                choicesHtml = q.options.map((o, j) =>
-                  `<p style="margin:4px 0;font-size:13px;color:#475569">&#9675; ${String.fromCharCode(65+j)}. ${o}</p>`
-                ).join('');
-              } else if (q.type === 'fill_blank_options' && q.options?.length) {
-                // Word bank — show all words shuffled, student writes into blanks
-                const shuffled = [...q.options].sort(() => Math.random() - 0.5);
-                choicesHtml = `<p style="margin:8px 0 3px;font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Word bank:</p>`
-                  + `<p style="font-size:13px;color:#475569;line-height:1.8">${shuffled.map(w => `<span style="display:inline-block;border:1px solid #cbd5e1;border-radius:4px;padding:1px 8px;margin:2px 4px 2px 0">${w}</span>`).join('')}</p>`;
-              } else if (q.type === 'true_false') {
-                // True / False radio circles
-                choicesHtml = `<p style="margin:6px 0;font-size:13px;color:#475569">&#9675; True &nbsp;&nbsp;&nbsp; &#9675; False</p>`;
-              }
-              // fill_blank → blanks already in question text as ___; no options to show
-              // translate_to_arabic / translate_to_english → open answer line only
-
-              return `
-              <div style="margin-bottom:20px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;page-break-inside:avoid">
-                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${QUESTION_TYPE_LABELS[q.type]}</div>
-                <p style="font-size:15px;font-weight:600;color:#1e293b;margin:0 0 8px 0">${i + 1}. ${q.question}</p>
-                ${choicesHtml}
-                <div style="margin-top:12px;height:32px;border-bottom:1px solid #cbd5e1;"></div>
-              </div>`;
-            }).join('');
-            win.document.write(`<!DOCTYPE html><html><head><title>Homework — ${lessonId}</title>
-              <style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:20px}h1{font-size:22px;margin-bottom:24px}@media print{button{display:none}}</style></head>
-              <body><button onclick="window.print()" style="margin-bottom:24px;padding:8px 20px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">🖨 Print / Save as PDF</button>
-              <h1>📝 Homework Questions</h1>${rows}</body></html>`);
-            win.document.close();
-          }}
-          className="w-full py-4 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 text-slate-700 dark:text-slate-300 font-semibold rounded-xl transition-colors text-base flex items-center justify-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          {t('arabicLessonDetail.exportHomework')}
-        </button>
       )}
     </div>
   );
 };
 
-// ── Add / Edit Homework Question Form ─────────────────────────────────────────
+// ── Homework Question Form (mirrors ExamQuestionForm) ─────────────────────────
 
-interface AddHWProps {
+const HomeworkQuestionForm: React.FC<{
   lessonId: string;
-  existingQuestion?: HomeworkQuestion;
-  onCreated: (q: HomeworkQuestion) => void;
-  onUpdated: (q: HomeworkQuestion) => void;
+  existing?: HomeworkItem;
+  onDone: () => void;
   onCancel: () => void;
-}
-
-const AddHomeworkQuestionForm: React.FC<AddHWProps> = ({
-  lessonId, existingQuestion, onCreated, onUpdated, onCancel,
-}) => {
-  const { t } = useI18n();
-  const isEdit = !!existingQuestion;
-  const [type, setType]               = useState<HomeworkQuestionType>(existingQuestion?.type ?? 'multiple_choice');
-  const [question, setQuestion]       = useState(
-    existingQuestion?.type === 'fill_blank' ? '' : (existingQuestion?.question ?? '')
+}> = ({ lessonId, existing, onDone, onCancel }) => {
+  const isEdit = !!existing;
+  const [type, setType]   = useState<HomeworkQuestionType>(
+    existing?.questionType === 'fill_blank_options' ? 'fill_blank' : (existing?.questionType ?? 'multiple_choice'),
   );
-  const [correctAnswer, setCorrectAnswer] = useState(existingQuestion?.correctAnswer ?? '');
-  const [options, setOptions]         = useState<string[]>(existingQuestion?.options ?? ['', '', '', '']);
-  const [fbSegments, setFbSegments]   = useState<FBSegment[]>(() => {
-    if (existingQuestion?.type === 'fill_blank') {
-      return questionToSegments(existingQuestion.question, existingQuestion.options);
+  const [question, setQuestion]       = useState(existing?.content ?? '');
+  const [options, setOptions]   = useState<string[]>(existing?.options ?? ['', '', '', '']);
+  const [correct, setCorrect]   = useState(existing?.correctAnswer ?? '');
+  const [marks, setMarks]       = useState<number>(existing?.marks ?? 1);
+  const [saving, setSaving]     = useState(false);
+  const [err, setErr]           = useState('');
+  const [showChoices, setShowChoices] = useState(
+    existing?.questionType === 'fill_blank_options' ||
+    (existing?.questionType === 'fill_blank' && (existing.options?.length ?? 0) > 0),
+  );
+  const [pairs, setPairs] = useState<{ left: string; right: string }[]>(() => {
+    if (existing?.questionType === 'matching' && existing.correctAnswer) {
+      try { return (JSON.parse(existing.correctAnswer) as [string, string][]).map(([l, r]) => ({ left: l, right: r })); }
+      catch { /* fall through */ }
     }
-    return [{ id: genId(), type: 'text', value: '' }];
+    return [{ left: '', right: '' }, { left: '', right: '' }];
   });
-  const [saving, setSaving]           = useState(false);
-  const [err, setErr]                 = useState('');
-
-  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setErr('');
-    let finalQuestion = question.trim();
-    let finalOptions: string[] | undefined;
-    let finalCorrect = correctAnswer.trim();
-
-    if (type === 'fill_blank') {
-      const { question: q, options: opts } = segmentsToQuestion(fbSegments);
-      finalQuestion = q;
-      finalOptions = opts;
-      finalCorrect = opts.join(' | ');
-      if (!finalQuestion.includes('___')) { setErr(t('arabicLessonDetail.errAddBlank')); return; }
-      if (opts.some(o => !o.trim())) { setErr(t('arabicLessonDetail.errFillBlanks')); return; }
-    } else {
-      if (!finalQuestion) { setErr(t('arabicLessonDetail.errQuestionRequired')); return; }
-    }
-
-    if (type === 'multiple_choice' || type === 'fill_blank_options') {
-      finalOptions = options.map(o => o.trim());
-      if (finalOptions.some(o => !o)) { setErr(t('arabicLessonDetail.errAllOptions')); return; }
-      if (!finalCorrect) { setErr(t('arabicLessonDetail.errSelectCorrect')); return; }
-      if (!finalOptions.includes(finalCorrect)) { setErr(t('arabicLessonDetail.errCorrectMatch')); return; }
-    } else if (type === 'true_false') {
-      if (!finalCorrect) { setErr(t('arabicLessonDetail.errSelectTrueFalse')); return; }
-    } else if (type !== 'fill_blank') {
-      if (!finalCorrect) { setErr(t('arabicLessonDetail.errCorrectRequired')); return; }
-    }
-
-    setSaving(true);
-    if (isEdit && existingQuestion) {
-      const patch = { question: finalQuestion, options: finalOptions, correctAnswer: finalCorrect };
-      const ok = await updateHWQ(existingQuestion.id, patch);
-      setSaving(false);
-      if (!ok) { setErr(t('arabicLessonDetail.errSaveFailed')); return; }
-      onUpdated({ ...existingQuestion, ...patch });
-    } else {
-      const q = await createHomeworkQuestion({ lessonId, type, question: finalQuestion, options: finalOptions, correctAnswer: finalCorrect });
-      setSaving(false);
-      if (!q) { setErr(t('arabicLessonDetail.errSaveRetry')); return; }
-      onCreated(q);
-    }
-  };
-
-  const needsOptions = type === 'multiple_choice' || type === 'fill_blank_options';
   const isArabicAnswer = type === 'translate_to_arabic';
 
-  return (
-    <form onSubmit={handleSubmit} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4">
-      <h3 className="font-bold text-amber-800 dark:text-amber-300">{isEdit ? t('arabicLessonDetail.editQuestion') : t('arabicLessonDetail.newQuestion')}</h3>
+  const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
+  const lbl = 'block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide';
 
-      {!isEdit && (
+  const handleTypeChange = (newType: HomeworkQuestionType) => {
+    setType(newType); setShowChoices(false); setCorrect('');
+    if (newType === 'multi_answer') setOptions(['', '']);
+    else if (newType === 'multiple_choice') setOptions(['', '', '', '']);
+    else if (newType === 'fill_blank') setOptions(['', '', '']);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr('');
+    const q = question.trim();
+    if (!q) { setErr('Question text is required.'); return; }
+    let finalOptions: string[] | undefined;
+    let finalCorrect = correct.trim();
+
+    if (type === 'multiple_choice') {
+      finalOptions = options.map(o => o.trim());
+      if (finalOptions.some(o => !o)) { setErr('Fill all options.'); return; }
+      if (!finalCorrect || !finalOptions.includes(finalCorrect)) { setErr('Pick the correct option.'); return; }
+    } else if (type === 'true_false') {
+      if (!finalCorrect) { setErr('Choose True or False.'); return; }
+    } else if (type === 'fill_blank') {
+      if (!q.includes('___')) { setErr('Use ___ to mark the blank(s).'); return; }
+      if (showChoices) {
+        finalOptions = options.filter(o => o.trim());
+        if (finalOptions.length < 2) { setErr('Add at least 2 choices.'); return; }
+      }
+    } else if (type === 'matching') {
+      const validPairs = pairs.filter(p => p.left.trim() && p.right.trim());
+      if (validPairs.length < 2) { setErr('Add at least 2 complete pairs.'); return; }
+      finalCorrect = JSON.stringify(validPairs.map(p => [p.left.trim(), p.right.trim()]));
+    } else if (type === 'short_answer') {
+      finalCorrect = '';
+    } else if (type === 'multi_answer') {
+      finalOptions = options.filter(o => o.trim());
+      if (finalOptions.length < 1) { setErr('Add at least one word.'); return; }
+      finalCorrect = '';
+    } else {
+      if (!finalCorrect) { setErr('Provide the correct answer.'); return; }
+    }
+    if (marks < 0) { setErr('Marks must be 0 or more.'); return; }
+
+    setSaving(true);
+    const payload = { content: q, questionType: type, options: finalOptions, correctAnswer: finalCorrect || undefined, marks };
+    if (isEdit && existing) {
+      await updateHomeworkItem(existing.id, payload);
+    } else {
+      await createHomeworkItem({ lessonId, itemType: 'question', ...payload });
+    }
+    setSaving(false);
+    onDone();
+  };
+
+  return (
+    <form onSubmit={submit} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-4 mb-4">
+      <h3 className="font-bold text-amber-800 dark:text-amber-300">{isEdit ? 'Edit question' : 'New question'}</h3>
+
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">{t('arabicLessonDetail.questionType')}</label>
-          <select value={type} onChange={e => setType(e.target.value as HomeworkQuestionType)} className={inp}>
-            {(Object.entries(QUESTION_TYPE_LABELS) as [HomeworkQuestionType, string][]).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
+          <label className={lbl}>Type</label>
+          <select value={type} onChange={e => handleTypeChange(e.target.value as HomeworkQuestionType)} disabled={isEdit} className={inp}>
+            {ADMIN_QUESTION_TYPES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
-      )}
-
-      {/* Question text input — not shown for fill_blank (built via segments) */}
-      {type !== 'fill_blank' && (
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">
-            {type === 'translate_to_english' ? 'Arabic text to translate' : 'Question / Statement'}
-          </label>
-          <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2}
-            dir={type === 'translate_to_english' ? 'rtl' : 'ltr'}
-            placeholder={type === 'fill_blank_options' ? 'e.g. The word for "book" is ___.  (use ___ for the blank)' : 'Enter question…'}
-            className={inp} />
+          <label className={lbl}>Marks</label>
+          <input type="number" min={0} value={marks} onChange={e => setMarks(Number(e.target.value))} className={inp} />
         </div>
-      )}
+      </div>
 
-      {/* Fill-in-blank segment builder */}
-      {type === 'fill_blank' && (
-        <FillBlankEditor segments={fbSegments} onChange={setFbSegments} />
-      )}
+      <div>
+        <label className={lbl}>
+          {type === 'translate_to_english' ? 'Arabic text to translate'
+            : type === 'fill_blank' ? 'Question (use ___ for each blank)'
+            : type === 'matching' ? 'Question / instruction (optional)'
+            : 'Question / statement'}
+        </label>
+        <textarea value={question} onChange={e => setQuestion(e.target.value)} rows={2} dir="auto" className={inp} />
+      </div>
 
-      {/* Options (multiple choice / fill_blank_options) */}
-      {needsOptions && (
+      {type === 'multiple_choice' && (
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">
-            Options — <span className="normal-case font-normal text-slate-400">click the correct answer to mark it</span>
-          </label>
+          <label className={lbl}>Options — click the dot to mark the correct one</label>
           <div className="space-y-2">
             {options.map((opt, i) => (
               <div key={i} className="flex items-center gap-2">
-                <button type="button" onClick={() => setCorrectAnswer(opt)}
-                  className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                    correctAnswer === opt && opt.trim()
-                      ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : 'border-slate-300 hover:border-emerald-400'
-                  }`}>
-                  {correctAnswer === opt && opt.trim() && (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                    </svg>
-                  )}
+                <button type="button" onClick={() => setCorrect(opt)}
+                  className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${correct === opt && opt.trim() ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 hover:border-emerald-400'}`}>
+                  {correct === opt && opt.trim() && '✓'}
                 </button>
                 <span className="text-xs font-bold text-slate-500 w-5">{String.fromCharCode(65 + i)}.</span>
                 <input value={opt}
-                  onChange={e => {
-                    const prev = opt;
-                    const updated = options.map((o, j) => j === i ? e.target.value : o);
-                    setOptions(updated);
-                    if (correctAnswer === prev) setCorrectAnswer(e.target.value);
-                  }}
-                  dir={isArabicAnswer ? 'rtl' : 'ltr'}
-                  placeholder={`Option ${String.fromCharCode(65 + i)}`}
-                  className={`flex-1 ${inp}`} />
+                  onChange={e => { const prev = opt; setOptions(options.map((o, j) => j === i ? e.target.value : o)); if (correct === prev) setCorrect(e.target.value); }}
+                  dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder={`Option ${String.fromCharCode(65 + i)}`} className={`flex-1 ${inp}`} />
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* True/False */}
       {type === 'true_false' && (
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">Correct answer</label>
+          <label className={lbl}>Correct answer</label>
           <div className="flex gap-3">
             {['True', 'False'].map(v => (
-              <button key={v} type="button" onClick={() => setCorrectAnswer(v)}
-                className={`flex-1 py-2 rounded-lg border-2 text-sm font-semibold transition-colors ${
-                  correctAnswer === v
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
-                    : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'
-                }`}>{v}
-              </button>
+              <button key={v} type="button" onClick={() => setCorrect(v)}
+                className={`flex-1 py-2 rounded-lg border-2 text-sm font-semibold ${correct === v ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>{v}</button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Free-text correct answer */}
-      {!needsOptions && type !== 'true_false' && type !== 'fill_blank' && (
+      {type === 'fill_blank' && (
         <div>
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 uppercase tracking-wide">Correct answer</label>
-          <input value={correctAnswer} onChange={e => setCorrectAnswer(e.target.value)}
-            dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder="Enter the correct answer…" className={inp} />
+          <div className="flex items-center justify-between mb-2">
+            <label className={lbl + ' mb-0'}>Choices (optional)</label>
+            <button type="button" onClick={() => { setShowChoices(!showChoices); setOptions(['', '', '']); }}
+              className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline">
+              {showChoices ? '− Remove choices' : '+ Add choices'}
+            </button>
+          </div>
+          {showChoices && (
+            <div className="space-y-2">
+              {options.map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400 w-5">{String.fromCharCode(65 + i)}.</span>
+                  <input value={opt} onChange={e => setOptions(options.map((o, j) => j === i ? e.target.value : o))}
+                    dir="auto" placeholder={`Choice ${String.fromCharCode(65 + i)}`} className={`flex-1 ${inp}`} />
+                  {options.length > 2 && (
+                    <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => setOptions([...options, ''])} className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add choice</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {type === 'matching' && (
+        <div>
+          <label className={lbl}>Word pairs</label>
+          <div className="space-y-2">
+            {pairs.map((pair, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={pair.left} onChange={e => setPairs(ps => ps.map((p, j) => j === i ? { ...p, left: e.target.value } : p))}
+                  dir="auto" placeholder="Word / phrase" className={`flex-1 ${inp}`} />
+                <span className="text-slate-400 flex-shrink-0">↔</span>
+                <input value={pair.right} onChange={e => setPairs(ps => ps.map((p, j) => j === i ? { ...p, right: e.target.value } : p))}
+                  dir="auto" placeholder="Matching word" className={`flex-1 ${inp}`} />
+                {pairs.length > 2 && (
+                  <button type="button" onClick={() => setPairs(ps => ps.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setPairs(ps => [...ps, { left: '', right: '' }])}
+            className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add pair</button>
+        </div>
+      )}
+
+      {type === 'short_answer' && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 border border-slate-200 dark:border-gray-600">
+          Student types a free-text answer. Tutor marks manually.
+        </p>
+      )}
+
+      {type === 'multi_answer' && (
+        <div>
+          <label className={lbl}>Words — student writes an answer next to each</label>
+          <div className="space-y-2">
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 w-5">{i + 1}.</span>
+                <input value={opt} onChange={e => setOptions(options.map((o, j) => j === i ? e.target.value : o))}
+                  dir="auto" placeholder={`Word ${i + 1}`} className={`flex-1 ${inp}`} />
+                {options.length > 1 && (
+                  <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setOptions([...options, ''])}
+            className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">+ Add word</button>
+        </div>
+      )}
+
+      {(type === 'translate_to_arabic' || type === 'translate_to_english') && (
+        <div>
+          <label className={lbl}>Correct answer</label>
+          <input value={correct} onChange={e => setCorrect(e.target.value)}
+            dir={isArabicAnswer ? 'rtl' : 'ltr'} placeholder="Correct answer…" className={inp} />
+        </div>
+      )}
+      {type === 'fill_blank' && (
+        <div>
+          <label className={lbl}>Correct answer <span className="normal-case font-normal text-slate-400">(optional — tutor marks)</span></label>
+          <input value={correct} onChange={e => setCorrect(e.target.value)} dir="auto" placeholder="Model answer…" className={inp} />
         </div>
       )}
 
       {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
       <div className="flex gap-3">
-        <button type="button" onClick={onCancel}
-          className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors">
-          {t('arabicLessonDetail.cancel')}
-        </button>
-        <button type="submit" disabled={saving}
-          className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors">
-          {saving ? t('arabicLessonDetail.savingEllipsis') : isEdit ? t('arabicLessonDetail.saveChanges') : t('arabicLessonDetail.addQuestion')}
-        </button>
+        <button type="button" onClick={onCancel} className="flex-1 py-2 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-gray-600 rounded-lg text-sm font-semibold">Cancel</button>
+        <button type="submit" disabled={saving} className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm disabled:opacity-50">{saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add question'}</button>
       </div>
     </form>
-  );
-};
-
-// ── Fill-in-blank segment editor ──────────────────────────────────────────────
-
-const FillBlankEditor: React.FC<{ segments: FBSegment[]; onChange: (s: FBSegment[]) => void }> = ({ segments, onChange }) => {
-  const { t } = useI18n();
-  const addText  = () => onChange([...segments, { id: genId(), type: 'text',  value: '' }]);
-  const addBlank = () => onChange([...segments, { id: genId(), type: 'blank', answer: '' }]);
-  const removeSeg = (id: string) => onChange(segments.filter(s => s.id !== id));
-  const updateSeg = (id: string, patch: Partial<FBSegment>) =>
-    onChange(segments.map(s => s.id === id ? { ...s, ...patch } as FBSegment : s));
-
-  const inp = 'px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
-
-  return (
-    <div className="space-y-2">
-      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">{t('arabicLessonDetail.buildQuestion')}</label>
-      <p className="text-xs text-slate-400">{t('arabicLessonDetail.buildQuestionHint')}</p>
-
-      {segments.length === 0 && (
-        <p className="text-xs text-slate-400 italic">{t('arabicLessonDetail.buildQuestionEmpty')}</p>
-      )}
-
-      <div className="space-y-2">
-        {segments.map((seg, idx) => (
-          <div key={seg.id} className="flex items-center gap-2">
-            <span className="flex-shrink-0 text-xs text-slate-400 w-4">{idx + 1}.</span>
-            {seg.type === 'text' ? (
-              <>
-                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-500 rounded font-semibold">{t('arabicLessonDetail.segText')}</span>
-                <input value={seg.value}
-                  onChange={e => updateSeg(seg.id, { value: e.target.value })}
-                  placeholder="Type text here…"
-                  className={`flex-1 ${inp}`} />
-              </>
-            ) : (
-              <>
-                <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded font-semibold">{t('arabicLessonDetail.segBlank')}</span>
-                <input value={seg.answer}
-                  onChange={e => updateSeg(seg.id, { answer: e.target.value })}
-                  placeholder="Answer for this blank…"
-                  className={`flex-1 ${inp} border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20`} />
-              </>
-            )}
-            <button type="button" onClick={() => removeSeg(seg.id)}
-              className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none">×</button>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={addText}
-          className="px-3 py-1.5 text-xs border border-dashed border-slate-300 dark:border-gray-600 rounded-lg text-slate-500 dark:text-slate-400 hover:border-slate-400 transition-colors">
-          + {t('arabicLessonDetail.addTextSeg')}
-        </button>
-        <button type="button" onClick={addBlank}
-          className="px-3 py-1.5 text-xs border border-dashed border-amber-400 dark:border-amber-600 rounded-lg text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/10 hover:border-amber-500 transition-colors">
-          + {t('arabicLessonDetail.addBlank')}
-        </button>
-      </div>
-
-      {/* Live preview */}
-      {segments.length > 0 && (
-        <div className="mt-2 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg text-sm text-slate-700 dark:text-slate-200">
-          <span className="text-xs font-semibold text-slate-400 block mb-1">{t('arabicLessonDetail.preview')}</span>
-          {segments.map((s, i) => (
-            <span key={i}>{s.type === 'text' ? s.value : <span className="px-1 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded">___</span>}</span>
-          ))}
-        </div>
-      )}
-    </div>
   );
 };
 
