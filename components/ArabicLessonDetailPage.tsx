@@ -367,7 +367,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
               value={grammarSummary}
               saveStatus={grammarSaveStatus}
               onChange={handleGrammarChange}
-              readOnly={studentMode}
+              readOnly={!isAdmin}
             />
           </div>
         )}
