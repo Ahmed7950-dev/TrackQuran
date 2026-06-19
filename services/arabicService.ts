@@ -517,6 +517,7 @@ export interface HomeworkSubmission {
   lessonId: string;
   studentId: string;
   teacherId: string;
+  attemptNumber: number;
   answers: Record<string, string>;
   subAnswers: Record<string, Record<number, string>>;
   grading: Record<string, { correct: boolean; note?: string }>;
@@ -529,6 +530,7 @@ interface HWSubmissionRow {
   lesson_id: string;
   student_id: string;
   teacher_id: string;
+  attempt_number: number;
   answers: Record<string, string>;
   sub_answers: Record<string, Record<number, string>>;
   grading: Record<string, { correct: boolean; note?: string }>;
@@ -542,6 +544,7 @@ function rowToSubmission(r: HWSubmissionRow): HomeworkSubmission {
     lessonId: r.lesson_id,
     studentId: r.student_id,
     teacherId: r.teacher_id,
+    attemptNumber: r.attempt_number ?? 1,
     answers: r.answers ?? {},
     subAnswers: r.sub_answers ?? {},
     grading: r.grading ?? {},
@@ -557,21 +560,45 @@ export async function saveHomeworkSubmission(
   answers: Record<string, string>,
   subAnswers: Record<string, Record<number, string>>,
 ): Promise<void> {
-  await supabase.from('homework_submissions').upsert(
-    {
-      lesson_id: lessonId,
-      student_id: studentId,
-      teacher_id: teacherId,
-      answers,
-      sub_answers: subAnswers,
-      grading: {},
-      submitted_at: new Date().toISOString(),
-      graded_at: null,
-    },
-    { onConflict: 'lesson_id,student_id' },
-  );
+  // Get current max attempt number for this student+lesson
+  const { data: existing } = await supabase
+    .from('homework_submissions')
+    .select('attempt_number')
+    .eq('lesson_id', lessonId)
+    .eq('student_id', studentId)
+    .order('attempt_number', { ascending: false })
+    .limit(1);
+  const nextAttempt = ((existing?.[0] as { attempt_number: number } | undefined)?.attempt_number ?? 0) + 1;
+
+  await supabase.from('homework_submissions').insert({
+    lesson_id: lessonId,
+    student_id: studentId,
+    teacher_id: teacherId,
+    attempt_number: nextAttempt,
+    answers,
+    sub_answers: subAnswers,
+    grading: {},
+    submitted_at: new Date().toISOString(),
+    graded_at: null,
+  });
 }
 
+/** Returns all attempts for a student on a lesson, newest first */
+export async function getHomeworkSubmissions(
+  lessonId: string,
+  studentId: string,
+): Promise<HomeworkSubmission[]> {
+  const { data, error } = await supabase
+    .from('homework_submissions')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .eq('student_id', studentId)
+    .order('attempt_number', { ascending: false });
+  if (error || !data) return [];
+  return (data as HWSubmissionRow[]).map(rowToSubmission);
+}
+
+/** Returns the latest attempt only (for tutor review) */
 export async function getHomeworkSubmission(
   lessonId: string,
   studentId: string,
@@ -581,21 +608,21 @@ export async function getHomeworkSubmission(
     .select('*')
     .eq('lesson_id', lessonId)
     .eq('student_id', studentId)
+    .order('attempt_number', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error || !data) return null;
   return rowToSubmission(data as HWSubmissionRow);
 }
 
 export async function updateHomeworkGrading(
-  lessonId: string,
-  studentId: string,
+  submissionId: string,
   grading: Record<string, { correct: boolean; note?: string }>,
 ): Promise<void> {
   await supabase
     .from('homework_submissions')
     .update({ grading, graded_at: new Date().toISOString() })
-    .eq('lesson_id', lessonId)
-    .eq('student_id', studentId);
+    .eq('id', submissionId);
 }
 
 // ── Vocabulary words ─────────────────────────────────────────────────────────

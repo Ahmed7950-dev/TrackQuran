@@ -21,7 +21,7 @@ import {
   deleteHomeworkQuestion,
   getHomeworkItems, createHomeworkItem, updateHomeworkItem,
   deleteHomeworkItem, reorderHomeworkItems, uploadHomeworkImage,
-  saveHomeworkSubmission, getHomeworkSubmission, updateHomeworkGrading,
+  saveHomeworkSubmission, getHomeworkSubmission, getHomeworkSubmissions, updateHomeworkGrading,
   HomeworkSubmission,
   getVocabWords, createVocabWord, deleteVocabWord,
   getVocabAttempts, saveVocabAttempts,
@@ -612,9 +612,13 @@ const HomeworkTab: React.FC<{
   const [results, setResults]     = useState<Record<string, 'correct' | 'wrong' | 'manual'>>({});
   const [hwScore, setHwScore]     = useState({ correct: 0, total: 0 });
   // tutor review
-  const [submission, setSubmission] = useState<HomeworkSubmission | null>(null);
-  const [grading, setGrading]       = useState<Record<string, { correct: boolean; note?: string }>>({});
+  const [submission, setSubmission]   = useState<HomeworkSubmission | null>(null);
+  const [grading, setGrading]         = useState<Record<string, { correct: boolean; note?: string }>>({});
+  const [noteInputs, setNoteInputs]   = useState<Record<string, string>>({});
   const [gradeSaving, setGradeSaving] = useState(false);
+  // student past attempts
+  const [pastAttempts, setPastAttempts]     = useState<HomeworkSubmission[]>([]);
+  const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const its = await getHomeworkItems(lessonId);
@@ -624,16 +628,28 @@ const HomeworkTab: React.FC<{
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Load student submission when tutor is reviewing (teacher role, not admin, not studentMode)
+  // Load latest submission + initialise grading/notes when tutor is reviewing
   useEffect(() => {
     if (isAdmin || studentMode || !studentId) return;
     getHomeworkSubmission(lessonId, studentId).then(sub => {
       if (sub) {
         setSubmission(sub);
         setGrading(sub.grading ?? {});
+        // Pre-fill note inputs from saved grading
+        const notes: Record<string, string> = {};
+        Object.entries(sub.grading ?? {}).forEach(([id, g]) => {
+          if (g.note) notes[id] = g.note;
+        });
+        setNoteInputs(notes);
       }
     });
   }, [isAdmin, studentMode, studentId, lessonId]);
+
+  // Load all past attempts for the student
+  useEffect(() => {
+    if (!studentMode || !studentId) return;
+    getHomeworkSubmissions(lessonId, studentId).then(setPastAttempts);
+  }, [studentMode, studentId, lessonId]);
 
   const practiceItems = items.filter(i => i.itemType === 'question');
 
@@ -674,8 +690,10 @@ const HomeworkTab: React.FC<{
     if (studentId) {
       markHomeworkComplete(studentId, lessonId).catch(console.error);
       onHomeworkComplete?.(lessonId);
-      // Save answers to Supabase so tutor can review them
-      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers).catch(console.error);
+      // Save answers to Supabase so tutor can review them, then refresh attempts list
+      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers)
+        .then(() => getHomeworkSubmissions(lessonId, studentId).then(setPastAttempts))
+        .catch(console.error);
       // Notify the tutor
       createNotification({
         teacherId,
@@ -691,9 +709,9 @@ const HomeworkTab: React.FC<{
   };
 
   const saveGrading = async (newGrading: Record<string, { correct: boolean; note?: string }>) => {
-    if (!studentId) return;
+    if (!submission) return;
     setGradeSaving(true);
-    await updateHomeworkGrading(lessonId, studentId, newGrading);
+    await updateHomeworkGrading(submission.id, newGrading);
     setGradeSaving(false);
   };
 
@@ -966,6 +984,7 @@ const HomeworkTab: React.FC<{
               <div className="absolute inset-0 backdrop-blur-sm bg-white/70 dark:bg-gray-900/70 z-10 flex flex-col items-center justify-center gap-4 rounded-2xl">
                 <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">
                   {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''} ready
+                  {pastAttempts.length > 0 && ` · Attempt ${pastAttempts.length + 1}`}
                 </p>
                 <button onClick={() => setHwMode('answering')}
                   className="px-8 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-xl shadow-lg transition-colors">
@@ -983,6 +1002,89 @@ const HomeworkTab: React.FC<{
               </div>
             </div>
           )}
+
+          {/* Previous attempts shown in preview mode */}
+          {pastAttempts.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Previous Attempts ({pastAttempts.length})
+              </h3>
+              {pastAttempts.map(attempt => {
+                const isExpanded = expandedAttempt === attempt.id;
+                const gradingEntries = Object.entries(attempt.grading ?? {});
+                const gradedCount   = gradingEntries.filter(([, g]) => g.correct !== undefined).length;
+                const correctCount  = gradingEntries.filter(([, g]) => g.correct).length;
+                const hasNotes      = gradingEntries.some(([, g]) => g.note);
+
+                return (
+                  <div key={attempt.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                      onClick={() => setExpandedAttempt(isExpanded ? null : attempt.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Attempt {attempt.attemptNumber}</span>
+                        <span className="text-xs text-slate-400">
+                          {new Date(attempt.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                        {hasNotes && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">💬 Tutor feedback</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {gradedCount > 0
+                          ? <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">{correctCount}/{gradedCount} ✅</span>
+                          : <span className="text-xs text-slate-400">Awaiting marking</span>
+                        }
+                        <span className="text-slate-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700">
+                        {practiceItems.map((q, qi) => {
+                          const g   = attempt.grading?.[q.id];
+                          const ans = attempt.answers?.[q.id];
+                          const sub = attempt.subAnswers?.[q.id];
+                          let ansDisplay: React.ReactNode = <span dir="auto">{ans || '—'}</span>;
+                          if (q.questionType === 'fill_blank' && sub) {
+                            const parts = (q.content ?? '').split('___');
+                            ansDisplay = <span dir="auto">{parts.map((p, i) => <span key={i}>{p}{i < parts.length - 1 && <span className="font-bold mx-0.5 text-amber-600">[{sub[i] ?? '—'}]</span>}</span>)}</span>;
+                          } else if ((q.questionType === 'matching' || q.questionType === 'multi_answer') && sub) {
+                            const labels = q.questionType === 'matching'
+                              ? (() => { try { return (JSON.parse(q.correctAnswer ?? '[]') as [string,string][]).map(p => p[0]); } catch { return []; } })()
+                              : (q.options ?? []);
+                            ansDisplay = <span className="flex flex-col gap-0.5">{labels.map((label, i) => <span key={i} dir="auto">{label}: {sub[i] ?? '—'}</span>)}</span>;
+                          }
+                          return (
+                            <div key={q.id} className="px-5 py-3 space-y-1.5">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex-1" dir="auto">
+                                  <span className="text-slate-400 text-xs font-bold mr-2">Q{qi + 1}</span>{q.content}
+                                </p>
+                                {g !== undefined
+                                  ? (g.correct ? <span className="text-xs font-bold text-emerald-600 flex-shrink-0">✅</span> : <span className="text-xs font-bold text-red-500 flex-shrink-0">❌</span>)
+                                  : <span className="text-xs text-slate-400 flex-shrink-0">⏳</span>}
+                              </div>
+                              <div className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-0.5">Your answer</span>
+                                {ansDisplay}
+                              </div>
+                              {g?.note && (
+                                <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                                  <span className="flex-shrink-0">💬</span>
+                                  <span dir="auto">{g.note}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
@@ -990,6 +1092,119 @@ const HomeworkTab: React.FC<{
     // ── Answering / Submitted mode ────────────────────────────────────────────
     let qNum = 0;
     const pct = submitted ? Math.round((hwScore.correct / (hwScore.total || 1)) * 100) : 0;
+
+    // Helper: render a single past attempt expandable card
+    const renderAttemptCard = (attempt: HomeworkSubmission) => {
+      const isExpanded = expandedAttempt === attempt.id;
+      const gradingEntries = Object.entries(attempt.grading ?? {});
+      const gradedCount   = gradingEntries.filter(([, g]) => g.correct !== undefined).length;
+      const correctCount  = gradingEntries.filter(([, g]) => g.correct).length;
+      const hasGrading    = gradedCount > 0;
+      const hasTutorNotes = gradingEntries.some(([, g]) => g.note);
+
+      return (
+        <div key={attempt.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+          {/* Attempt header — always visible */}
+          <button
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+            onClick={() => setExpandedAttempt(isExpanded ? null : attempt.id)}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                Attempt {attempt.attemptNumber}
+              </span>
+              <span className="text-xs text-slate-400">
+                {new Date(attempt.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+              {hasTutorNotes && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
+                  💬 Tutor feedback
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {hasGrading ? (
+                <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
+                  {correctCount}/{gradedCount} marked ✅
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400">Awaiting tutor marking</span>
+              )}
+              <span className="text-slate-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
+            </div>
+          </button>
+
+          {/* Expanded: per-question results */}
+          {isExpanded && (
+            <div className="border-t border-slate-100 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700">
+              {practiceItems.map((q, qi) => {
+                const qtype = q.questionType;
+                const g = attempt.grading?.[q.id];
+                const ans = attempt.answers?.[q.id];
+                const sub = attempt.subAnswers?.[q.id];
+
+                // Determine display answer text
+                let answerDisplay: React.ReactNode = null;
+                if (qtype === 'fill_blank' && sub) {
+                  const parts = (q.content ?? '').split('___');
+                  answerDisplay = (
+                    <span dir="auto">
+                      {parts.map((part, i) => (
+                        <span key={i}>{part}{i < parts.length - 1 && <span className="font-bold mx-0.5 text-amber-600">[{sub[i] ?? '—'}]</span>}</span>
+                      ))}
+                    </span>
+                  );
+                } else if (qtype === 'matching' && sub) {
+                  let pairs: [string, string][] = [];
+                  try { pairs = JSON.parse(q.correctAnswer ?? '[]'); } catch { /* */ }
+                  answerDisplay = (
+                    <span className="flex flex-col gap-0.5">
+                      {pairs.map((pair, i) => <span key={i} dir="auto">{pair[0]} → {sub[i] ?? '—'}</span>)}
+                    </span>
+                  );
+                } else if (qtype === 'multi_answer' && sub) {
+                  answerDisplay = (
+                    <span className="flex flex-col gap-0.5">
+                      {(q.options ?? []).map((word, i) => <span key={i} dir="auto">{word}: {sub[i] ?? '—'}</span>)}
+                    </span>
+                  );
+                } else {
+                  answerDisplay = <span dir="auto">{ans || '—'}</span>;
+                }
+
+                return (
+                  <div key={q.id} className="px-5 py-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex-1" dir="auto">
+                        <span className="text-slate-400 text-xs font-bold mr-2">Q{qi + 1}</span>
+                        {q.content}
+                      </p>
+                      {g !== undefined ? (
+                        g.correct
+                          ? <span className="text-xs font-bold text-emerald-600 flex-shrink-0">✅ Correct</span>
+                          : <span className="text-xs font-bold text-red-500 flex-shrink-0">❌ Incorrect</span>
+                      ) : (
+                        <span className="text-xs text-slate-400 flex-shrink-0">⏳ Pending</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Your answer</span>
+                      {answerDisplay}
+                    </div>
+                    {g?.note && (
+                      <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                        <span className="flex-shrink-0">💬</span>
+                        <span dir="auto">{g.note}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="max-w-3xl mx-auto p-8 space-y-5">
@@ -1021,6 +1236,16 @@ const HomeworkTab: React.FC<{
             className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-base shadow">
             Submit Homework
           </button>
+        )}
+
+        {/* Past attempts */}
+        {submitted && pastAttempts.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+              Previous Attempts ({pastAttempts.length})
+            </h3>
+            {pastAttempts.map(renderAttemptCard)}
+          </div>
         )}
       </div>
     );
@@ -1276,35 +1501,75 @@ const HomeworkTab: React.FC<{
 
               {/* Manual marking buttons */}
               {isManual && (
-                <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={() => {
-                      const ng = { ...grading, [item.id]: { correct: true } };
+                <div className="space-y-3 pt-1">
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        const note = noteInputs[item.id] ?? g?.note ?? '';
+                        const ng = { ...grading, [item.id]: { correct: true, ...(note ? { note } : {}) } };
+                        setGrading(ng);
+                        saveGrading(ng);
+                      }}
+                      className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
+                        g?.correct === true
+                          ? 'bg-emerald-500 text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700'
+                      }`}
+                    >
+                      ✅ Correct
+                    </button>
+                    <button
+                      onClick={() => {
+                        const note = noteInputs[item.id] ?? g?.note ?? '';
+                        const ng = { ...grading, [item.id]: { correct: false, ...(note ? { note } : {}) } };
+                        setGrading(ng);
+                        saveGrading(ng);
+                      }}
+                      className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
+                        g?.correct === false
+                          ? 'bg-red-500 text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700'
+                      }`}
+                    >
+                      ❌ Incorrect
+                    </button>
+                  </div>
+                  {/* Correction / comment textarea */}
+                  <textarea
+                    rows={2}
+                    value={noteInputs[item.id] ?? ''}
+                    onChange={e => setNoteInputs(p => ({ ...p, [item.id]: e.target.value }))}
+                    onBlur={() => {
+                      if (g === undefined) return; // don't save note until marked
+                      const note = noteInputs[item.id] ?? '';
+                      const ng = { ...grading, [item.id]: { ...g, note: note || undefined } };
                       setGrading(ng);
                       saveGrading(ng);
                     }}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
-                      g?.correct === true
-                        ? 'bg-emerald-500 text-white shadow-sm'
-                        : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700'
-                    }`}
-                  >
-                    ✅ Correct
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ng = { ...grading, [item.id]: { correct: false } };
+                    placeholder="Add a correction or comment for the student… (optional)"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                    dir="auto"
+                  />
+                </div>
+              )}
+
+              {/* Tutor note for auto-graded questions (optional correction) */}
+              {!isManual && g !== undefined && (
+                <div className="pt-1">
+                  <textarea
+                    rows={2}
+                    value={noteInputs[item.id] ?? ''}
+                    onChange={e => setNoteInputs(p => ({ ...p, [item.id]: e.target.value }))}
+                    onBlur={() => {
+                      const note = noteInputs[item.id] ?? '';
+                      const ng = { ...grading, [item.id]: { ...g, note: note || undefined } };
                       setGrading(ng);
                       saveGrading(ng);
                     }}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${
-                      g?.correct === false
-                        ? 'bg-red-500 text-white shadow-sm'
-                        : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700'
-                    }`}
-                  >
-                    ❌ Incorrect
-                  </button>
+                    placeholder="Add a comment for the student… (optional)"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                    dir="auto"
+                  />
                 </div>
               )}
             </div>
