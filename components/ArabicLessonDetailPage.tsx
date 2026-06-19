@@ -348,12 +348,12 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         {/* ── Grammar Summary tab ── */}
         {activeTab === 'grammar' && (
           <div className="h-full overflow-y-auto p-6">
-            <NoteTab
+            <GrammarTab
               label={t('arabicLessonDetail.tabGrammar')}
-              icon="📐"
               description={studentMode
                 ? t('arabicLessonDetail.grammarDescStudent')
                 : t('arabicLessonDetail.grammarDescAdmin')}
+              lessonNumber={lesson.orderIndex}
               value={grammarSummary}
               saveStatus={grammarSaveStatus}
               onChange={handleGrammarChange}
@@ -442,6 +442,128 @@ const NoteTab: React.FC<{
       </>
     )}
   </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════
+// GRAMMAR TAB  (numbered grammar points: 1.1, 1.2, …)
+// ═══════════════════════════════════════════════════════
+
+/** Grammar points are stored in the `grammar_summary` column as a JSON array of
+ *  strings. Legacy plain-text values are treated as a single point. */
+function parseGrammarRows(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every(x => typeof x === 'string')) return parsed;
+  } catch { /* not JSON → legacy plain text */ }
+  return [raw];
+}
+
+const GrammarTab: React.FC<{
+  label: string;
+  description: string;
+  lessonNumber: number;
+  value: string;
+  saveStatus: 'saved' | 'saving' | null;
+  onChange: (val: string) => void;
+  readOnly?: boolean;
+}> = ({ label, description, lessonNumber, value, saveStatus, onChange, readOnly = false }) => {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<string[]>(() => {
+    const parsed = parseGrammarRows(value);
+    return parsed.length ? parsed : (readOnly ? [] : ['']);
+  });
+
+  const commit = (next: string[]) => { setRows(next); onChange(JSON.stringify(next)); };
+  const updateRow = (i: number, val: string) => { const next = rows.slice(); next[i] = val; commit(next); };
+  const addRow    = () => commit([...rows, '']);
+  const removeRow = (i: number) => { const next = rows.filter((_, idx) => idx !== i); commit(next.length ? next : ['']); };
+
+  const NumberBadge: React.FC<{ i: number }> = ({ i }) => (
+    <div className="flex-shrink-0 w-14 h-11 flex items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 font-bold text-sm text-amber-700 dark:text-amber-300 select-none">
+      {lessonNumber}.{i + 1}
+    </div>
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <span>📐</span>{label}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+        </div>
+        {!readOnly && (
+          <div className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold mt-1">
+            {saveStatus === 'saving' && (
+              <>
+                <div className="w-3 h-3 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+                <span className="text-amber-600 dark:text-amber-400">{t('arabicLessonDetail.saving')}</span>
+              </>
+            )}
+            {saveStatus === 'saved' && (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500">
+                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                </svg>
+                <span className="text-emerald-600 dark:text-emerald-400">{t('arabicLessonDetail.saved')}</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {readOnly ? (
+        rows.some(r => r.trim()) ? (
+          <div className="space-y-3">
+            {rows.filter(r => r.trim()).map((row, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <NumberBadge i={i} />
+                <div dir="auto" className="flex-1 p-3 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm leading-relaxed whitespace-pre-wrap">
+                  {row}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="w-full min-h-[200px] flex items-center justify-center bg-slate-50 dark:bg-gray-800 border border-dashed border-slate-200 dark:border-gray-700 rounded-xl">
+            <p className="text-sm text-slate-400 dark:text-slate-500 italic">{t('arabicLessonDetail.noGrammar')}</p>
+          </div>
+        )
+      ) : (
+        <>
+          <div className="space-y-3">
+            {rows.map((row, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <NumberBadge i={i} />
+                <textarea
+                  value={row}
+                  onChange={e => updateRow(i, e.target.value)}
+                  placeholder={`Grammar point ${lessonNumber}.${i + 1}…`}
+                  rows={2}
+                  className="flex-1 p-3 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-500 resize-y leading-relaxed placeholder-slate-300 dark:placeholder-slate-600"
+                  dir="auto"
+                />
+                <button
+                  onClick={() => removeRow(i)}
+                  title="Remove"
+                  className="flex-shrink-0 w-9 h-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                  🗑
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addRow}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold shadow-sm active:scale-95 transition-all">
+            <span className="text-base leading-none">＋</span> Add grammar point ({lessonNumber}.{rows.length + 1})
+          </button>
+        </>
+      )}
+    </div>
   );
 };
 
