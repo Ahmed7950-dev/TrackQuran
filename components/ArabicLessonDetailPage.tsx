@@ -624,16 +624,16 @@ const HomeworkTab: React.FC<{
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Load student submission when tutor is reviewing
+  // Load student submission when tutor is reviewing (teacher role, not admin, not studentMode)
   useEffect(() => {
-    if (!isAdmin || !studentId) return;
+    if (isAdmin || studentMode || !studentId) return;
     getHomeworkSubmission(lessonId, studentId).then(sub => {
       if (sub) {
         setSubmission(sub);
         setGrading(sub.grading ?? {});
       }
     });
-  }, [isAdmin, studentId, lessonId]);
+  }, [isAdmin, studentMode, studentId, lessonId]);
 
   const practiceItems = items.filter(i => i.itemType === 'question');
 

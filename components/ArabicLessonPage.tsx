@@ -361,12 +361,17 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       : []
   );
 
+  // Track whether the currently-open lesson was launched from a deep-link
+  // (so we can pass initialTab='homework' even after deepLinkLessonId is cleared)
+  const [viewingFromDeepLink, setViewingFromDeepLink] = useState(false);
+
   // Auto-open lesson from deep-link (homework notification click)
   useEffect(() => {
     if (!deepLinkLessonId || lessons.length === 0) return;
     const target = lessons.find(l => l.id === deepLinkLessonId);
     if (target) {
       setViewing(target);
+      setViewingFromDeepLink(true);
       onDeepLinkConsumed?.();
     }
   }, [deepLinkLessonId, lessons, onDeepLinkConsumed]);
@@ -712,9 +717,10 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
           teacherId={teacherId}
           preSelectedStudentId={preSelectedStudentId}
           studentMode={studentMode}
-          initialTab={deepLinkLessonId === viewing.id ? 'homework' : undefined}
+          initialTab={viewingFromDeepLink ? 'homework' : undefined}
           onClose={async () => {
             setViewing(null);
+            setViewingFromDeepLink(false);
             if (preSelectedStudentId) {
               const [dbDone, dbRounds] = await Promise.all([
                 getHomeworkCompletionsForStudent(preSelectedStudentId),
