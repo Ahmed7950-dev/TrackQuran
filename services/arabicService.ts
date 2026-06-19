@@ -559,28 +559,38 @@ export async function saveHomeworkSubmission(
   teacherId: string,
   answers: Record<string, string>,
   subAnswers: Record<string, Record<number, string>>,
+  autoGrading: Record<string, { correct: boolean }> = {},
 ): Promise<void> {
-  // Get current max attempt number for this student+lesson
-  const { data: existing } = await supabase
+  // Count existing attempts to derive next attempt number (avoids ordering by attempt_number column
+  // which may not exist yet if the v2 migration hasn't been run).
+  const { count } = await supabase
     .from('homework_submissions')
-    .select('attempt_number')
+    .select('*', { count: 'exact', head: true })
     .eq('lesson_id', lessonId)
-    .eq('student_id', studentId)
-    .order('attempt_number', { ascending: false })
-    .limit(1);
-  const nextAttempt = ((existing?.[0] as { attempt_number: number } | undefined)?.attempt_number ?? 0) + 1;
+    .eq('student_id', studentId);
+  const nextAttempt = (count ?? 0) + 1;
 
-  await supabase.from('homework_submissions').insert({
+  const row = {
     lesson_id: lessonId,
     student_id: studentId,
     teacher_id: teacherId,
     attempt_number: nextAttempt,
     answers,
     sub_answers: subAnswers,
-    grading: {},
+    grading: autoGrading,
     submitted_at: new Date().toISOString(),
     graded_at: null,
-  });
+  };
+
+  // Try INSERT first (works after v2 migration that drops the old unique(lesson_id, student_id) constraint).
+  const { error } = await supabase.from('homework_submissions').insert(row);
+  if (error) {
+    // Fallback: upsert without attempt_number for when the migration hasn't been run yet.
+    const { attempt_number: _drop, ...rowWithout } = row;
+    await supabase
+      .from('homework_submissions')
+      .upsert(rowWithout, { onConflict: 'lesson_id,student_id' });
+  }
 }
 
 /** Returns all attempts for a student on a lesson, newest first */
@@ -593,9 +603,13 @@ export async function getHomeworkSubmissions(
     .select('*')
     .eq('lesson_id', lessonId)
     .eq('student_id', studentId)
-    .order('attempt_number', { ascending: false });
+    .order('submitted_at', { ascending: true });
   if (error || !data) return [];
-  return (data as HWSubmissionRow[]).map(rowToSubmission);
+  // Assign attempt numbers based on chronological order (oldest = 1)
+  return (data as HWSubmissionRow[]).map((row, i) => ({
+    ...rowToSubmission(row),
+    attemptNumber: i + 1,
+  })).reverse(); // return newest first
 }
 
 /** Returns the latest attempt only (for tutor review) */
@@ -608,7 +622,7 @@ export async function getHomeworkSubmission(
     .select('*')
     .eq('lesson_id', lessonId)
     .eq('student_id', studentId)
-    .order('attempt_number', { ascending: false })
+    .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;

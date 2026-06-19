@@ -655,7 +655,9 @@ const HomeworkTab: React.FC<{
 
   const submitHomework = () => {
     const res: Record<string, 'correct' | 'wrong' | 'manual'> = {};
+    const autoGrading: Record<string, { correct: boolean }> = {};
     let correct = 0;
+    let autoTotal = 0;
     for (const q of practiceItems) {
       const qtype = q.questionType;
       if (qtype === 'short_answer' || qtype === 'multi_answer') {
@@ -665,7 +667,9 @@ const HomeworkTab: React.FC<{
           const pairs: [string, string][] = JSON.parse(q.correctAnswer ?? '[]');
           const all = pairs.every((pair, i) => answersMatch(pair[1], subAnswers[q.id]?.[i] ?? ''));
           res[q.id] = all ? 'correct' : 'wrong';
+          autoGrading[q.id] = { correct: all };
           if (all) correct++;
+          autoTotal++;
         } catch { res[q.id] = 'manual'; }
       } else if (qtype === 'fill_blank') {
         const blanksCount = (q.content ?? '').split('___').length - 1;
@@ -673,25 +677,32 @@ const HomeworkTab: React.FC<{
         const all = Array.from({ length: blanksCount }, (_, i) => i)
           .every(i => answersMatch(fbAnswers[i] ?? '', subAnswers[q.id]?.[i] ?? ''));
         res[q.id] = all ? 'correct' : 'wrong';
+        autoGrading[q.id] = { correct: all };
         if (all) correct++;
+        autoTotal++;
       } else if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
         const ok = answers[q.id] === q.correctAnswer;
         res[q.id] = ok ? 'correct' : 'wrong';
+        autoGrading[q.id] = { correct: ok };
         if (ok) correct++;
+        autoTotal++;
       } else {
         const ok = answersMatch(q.correctAnswer ?? '', answers[q.id] ?? '');
         res[q.id] = ok ? 'correct' : 'wrong';
+        autoGrading[q.id] = { correct: ok };
         if (ok) correct++;
+        autoTotal++;
       }
     }
     setResults(res);
-    setHwScore({ correct, total: practiceItems.length });
+    // total = auto-graded count only; manual questions are not included in the immediate score
+    setHwScore({ correct, total: autoTotal });
     setHwMode('submitted');
     if (studentId) {
       markHomeworkComplete(studentId, lessonId).catch(console.error);
       onHomeworkComplete?.(lessonId);
-      // Save answers to Supabase so tutor can review them, then refresh attempts list
-      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers)
+      // Save answers + auto-grading to Supabase so tutor can review, then refresh attempts list
+      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers, autoGrading)
         .then(() => getHomeworkSubmissions(lessonId, studentId).then(setPastAttempts))
         .catch(console.error);
       // Notify the tutor
@@ -1011,10 +1022,15 @@ const HomeworkTab: React.FC<{
               </h3>
               {pastAttempts.map(attempt => {
                 const isExpanded = expandedAttempt === attempt.id;
-                const gradingEntries = Object.entries(attempt.grading ?? {});
+                const gradingEntries = Object.entries(attempt.grading ?? {}) as [string, { correct: boolean; note?: string }][];
                 const gradedCount   = gradingEntries.filter(([, g]) => g.correct !== undefined).length;
                 const correctCount  = gradingEntries.filter(([, g]) => g.correct).length;
                 const hasNotes      = gradingEntries.some(([, g]) => g.note);
+                const allGradedPrev = practiceItems.length > 0 && gradedCount >= practiceItems.length;
+                const pendingPrev   = practiceItems.filter(q =>
+                  (q.questionType === 'short_answer' || q.questionType === 'multi_answer') &&
+                  attempt.grading?.[q.id] === undefined
+                ).length;
 
                 return (
                   <div key={attempt.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
@@ -1032,9 +1048,13 @@ const HomeworkTab: React.FC<{
                         )}
                       </div>
                       <div className="flex items-center gap-3">
-                        {gradedCount > 0
+                        {allGradedPrev
                           ? <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">{correctCount}/{gradedCount} ✅</span>
-                          : <span className="text-xs text-slate-400">Awaiting marking</span>
+                          : pendingPrev > 0
+                            ? <span className="text-xs text-sky-600 dark:text-sky-400">⏳ {pendingPrev} pending tutor review</span>
+                            : gradedCount > 0
+                              ? <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">{correctCount}/{gradedCount} ✅</span>
+                              : <span className="text-xs text-slate-400">Awaiting marking</span>
                         }
                         <span className="text-slate-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
                       </div>
@@ -1091,7 +1111,8 @@ const HomeworkTab: React.FC<{
 
     // ── Answering / Submitted mode ────────────────────────────────────────────
     let qNum = 0;
-    const pct = submitted ? Math.round((hwScore.correct / (hwScore.total || 1)) * 100) : 0;
+    const manualCount = practiceItems.filter(q => q.questionType === 'short_answer' || q.questionType === 'multi_answer').length;
+    const pct = submitted && hwScore.total > 0 ? Math.round((hwScore.correct / hwScore.total) * 100) : 0;
 
     // Helper: render a single past attempt expandable card
     const renderAttemptCard = (attempt: HomeworkSubmission) => {
@@ -1099,8 +1120,14 @@ const HomeworkTab: React.FC<{
       const gradingEntries = Object.entries(attempt.grading ?? {});
       const gradedCount   = gradingEntries.filter(([, g]) => g.correct !== undefined).length;
       const correctCount  = gradingEntries.filter(([, g]) => g.correct).length;
-      const hasGrading    = gradedCount > 0;
       const hasTutorNotes = gradingEntries.some(([, g]) => g.note);
+      // "Full score" is only shown when every question has a grading entry (auto + tutor-marked)
+      const allGraded     = practiceItems.length > 0 && gradedCount >= practiceItems.length;
+      // Pending = manual questions not yet marked by tutor
+      const pendingCount  = practiceItems.filter(q =>
+        (q.questionType === 'short_answer' || q.questionType === 'multi_answer') &&
+        attempt.grading?.[q.id] === undefined
+      ).length;
 
       return (
         <div key={attempt.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
@@ -1123,9 +1150,15 @@ const HomeworkTab: React.FC<{
               )}
             </div>
             <div className="flex items-center gap-3">
-              {hasGrading ? (
+              {allGraded ? (
                 <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
-                  {correctCount}/{gradedCount} marked ✅
+                  {correctCount}/{gradedCount} ✅
+                </span>
+              ) : pendingCount > 0 ? (
+                <span className="text-xs text-sky-600 dark:text-sky-400">⏳ {pendingCount} pending tutor review</span>
+              ) : gradedCount > 0 ? (
+                <span className="text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
+                  {correctCount}/{gradedCount} ✅
                 </span>
               ) : (
                 <span className="text-xs text-slate-400">Awaiting tutor marking</span>
@@ -1211,12 +1244,18 @@ const HomeworkTab: React.FC<{
         {/* Submitted summary */}
         {submitted && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 text-center space-y-3">
-            <div className="text-5xl">{pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
+            <div className="text-5xl">{hwScore.total === 0 ? '📋' : pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'}</div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Homework submitted!</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">
-              {hwScore.correct} / {hwScore.total} auto-graded correct
-              {hwScore.total < practiceItems.length ? ` · ${practiceItems.length - hwScore.total} sent for tutor review` : ''}
-            </p>
+            {hwScore.total > 0 && (
+              <p className="text-slate-500 dark:text-slate-400 text-sm">
+                {hwScore.correct} / {hwScore.total} auto-graded correct
+              </p>
+            )}
+            {manualCount > 0 && (
+              <p className="text-sky-600 dark:text-sky-400 text-sm font-medium">
+                ⏳ {manualCount} question{manualCount !== 1 ? 's' : ''} sent to your tutor for review
+              </p>
+            )}
             <button onClick={() => { setHwMode('preview'); setAnswers({}); setSubAnswers({}); setResults({}); }}
               className="mt-1 px-6 py-2 bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-300 font-semibold rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
               ↩ Redo homework
@@ -1256,7 +1295,7 @@ const HomeworkTab: React.FC<{
     const manualTypes: HomeworkQuestionType[] = ['short_answer', 'multi_answer'];
     let reviewQNum = 0;
     const totalMarked = Object.keys(grading).length;
-    const totalCorrect = Object.values(grading).filter(g => g.correct).length;
+    const totalCorrect = (Object.values(grading) as { correct: boolean; note?: string }[]).filter(g => g.correct).length;
 
     const renderStudentAnswer = (item: HomeworkItem) => {
       const qtype = item.questionType;
