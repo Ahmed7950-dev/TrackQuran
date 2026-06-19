@@ -146,6 +146,17 @@ const PdfPager: React.FC<Props> = ({
     return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, [renderPage]);
 
+  // ── Keyboard arrow navigation ──────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(pageRef.current + 1); }
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); go(pageRef.current - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [numPages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Auto-scroll thumbnail strip to keep current page visible ───────────────
   useEffect(() => {
     const strip = thumbStripRef.current;
