@@ -13,6 +13,7 @@ import {
   ArabicLevelPlan,
   HomeworkQuestion, HomeworkQuestionType,
   VocabWord, VocabMode, VocabAttempt, VocabMistakeDetail,
+  ArabicLessonProgress, ArabicLessonLog,
 } from '../types';
 
 const PDF_BUCKET = 'tajweed-assets';
@@ -525,6 +526,99 @@ export async function setArabicLessonCompletion(
     .eq('id', studentId)
     .eq('teacher_id', teacherId);
   if (updateError) console.error('setArabicLessonCompletion update:', updateError.message);
+}
+
+// ── Lesson progress & dated activity logs ────────────────────────────────────
+// Backed by arabic_lesson_progress + arabic_lesson_logs
+// (migration: supabase/migrations/20260301_arabic_lesson_progress.sql)
+
+function mapProgress(r: any): ArabicLessonProgress {
+  return {
+    studentId:     r.student_id,
+    lessonId:      r.lesson_id,
+    status:        r.status,
+    lastSlide:     r.last_slide ?? 1,
+    totalSlides:   r.total_slides ?? undefined,
+    revisionCount: r.revision_count ?? 0,
+    updatedAt:     r.updated_at,
+  };
+}
+
+/** All lesson-progress rows for a student, keyed by lessonId. */
+export async function getLessonProgressForStudent(studentId: string): Promise<Map<string, ArabicLessonProgress>> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_progress')
+    .select('*')
+    .eq('student_id', studentId);
+  if (error) { console.error('getLessonProgressForStudent:', error.message); return new Map(); }
+  return new Map((data ?? []).map((r: any) => [r.lesson_id as string, mapProgress(r)]));
+}
+
+/** Append-only dated activity log for a student (newest first). Feeds the calendar. */
+export async function getLessonLogsForStudent(studentId: string): Promise<ArabicLessonLog[]> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_logs')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('getLessonLogsForStudent:', error.message); return []; }
+  return (data ?? []).map((r: any) => ({
+    id: r.id, studentId: r.student_id, lessonId: r.lesson_id,
+    kind: r.kind, slide: r.slide ?? undefined, createdAt: r.created_at,
+  }));
+}
+
+async function appendLessonLog(studentId: string, lessonId: string, kind: ArabicLessonLog['kind'], slide?: number): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_logs')
+    .insert({ student_id: studentId, lesson_id: lessonId, kind, slide: slide ?? null });
+  if (error) console.error('appendLessonLog:', error.message);
+}
+
+/** Save in-progress position on a non-final slide and log a 'progress' event. */
+export async function markLessonProgress(studentId: string, lessonId: string, slide: number, totalSlides?: number): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_progress')
+    .upsert({
+      student_id: studentId, lesson_id: lessonId,
+      status: 'in_progress', last_slide: slide, total_slides: totalSlides ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'student_id,lesson_id' });
+  if (error) { console.error('markLessonProgress:', error.message); return; }
+  await appendLessonLog(studentId, lessonId, 'progress', slide);
+}
+
+/** First completion: mark 'done', log a 'done' event, and keep completed_lesson_ids in sync. */
+export async function markLessonDone(teacherId: string | null, studentId: string, lessonId: string, totalSlides?: number): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_progress')
+    .upsert({
+      student_id: studentId, lesson_id: lessonId,
+      status: 'done', last_slide: totalSlides ?? 1, total_slides: totalSlides ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'student_id,lesson_id' });
+  if (error) { console.error('markLessonDone:', error.message); return; }
+  await appendLessonLog(studentId, lessonId, 'done', totalSlides);
+  if (teacherId) await setArabicLessonCompletion(teacherId, studentId, lessonId, true);
+}
+
+/** A revision of an already-done lesson: bump revision_count and log a 'revision' event. */
+export async function logLessonRevision(studentId: string, lessonId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_progress')
+    .select('revision_count')
+    .eq('student_id', studentId)
+    .eq('lesson_id', lessonId)
+    .single();
+  if (error || !data) { console.error('logLessonRevision fetch:', error?.message); return; }
+  const next = ((data as any).revision_count ?? 0) + 1;
+  const { error: upErr } = await supabase
+    .from('arabic_lesson_progress')
+    .update({ status: 'done', revision_count: next, updated_at: new Date().toISOString() })
+    .eq('student_id', studentId)
+    .eq('lesson_id', lessonId);
+  if (upErr) { console.error('logLessonRevision update:', upErr.message); return; }
+  await appendLessonLog(studentId, lessonId, 'revision');
 }
 
 // ── All vocab attempts for a student (cross-lesson) ──────────────────────────

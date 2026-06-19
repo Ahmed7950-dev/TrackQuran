@@ -266,6 +266,30 @@ export interface ArabicLesson {
   updatedAt: string;
 }
 
+// ── Arabic lesson progress (per student per lesson) ──────────────────────────
+export type ArabicLessonStatus = 'not_started' | 'in_progress' | 'done';
+
+export interface ArabicLessonProgress {
+  studentId: string;
+  lessonId: string;
+  status: 'in_progress' | 'done';   // absence of a record = 'not_started'
+  lastSlide: number;                // 1-based page to resume on
+  totalSlides?: number;
+  revisionCount: number;            // completed revisions after the first 'done'
+  updatedAt: string;
+}
+
+export type ArabicLessonLogKind = 'progress' | 'done' | 'revision';
+
+export interface ArabicLessonLog {
+  id: string;
+  studentId: string;
+  lessonId: string;
+  kind: ArabicLessonLogKind;
+  slide?: number;
+  createdAt: string;
+}
+
 export interface ArabicLevelPlan {
   level: 1 | 2 | 3;
   dialect: ArabicCourseDialect;
