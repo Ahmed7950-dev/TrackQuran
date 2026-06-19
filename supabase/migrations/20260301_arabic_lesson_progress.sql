@@ -10,12 +10,12 @@
 -- calendar (one row per "Mark progress" / "Mark done" / "Log revision" action).
 --
 -- arabic_students.id is TEXT (see arabic_lesson_sessions_migration.sql);
--- arabic_lessons.id is uuid.
+-- arabic_lessons.id is TEXT.
 
 create table if not exists public.arabic_lesson_progress (
   id             uuid primary key default gen_random_uuid(),
   student_id     text not null references public.arabic_students(id) on delete cascade,
-  lesson_id      uuid not null references public.arabic_lessons(id)  on delete cascade,
+  lesson_id      text not null references public.arabic_lessons(id)  on delete cascade,
   status         text not null default 'in_progress',  -- 'in_progress' | 'done'
   last_slide     int  not null default 1,
   total_slides   int,
@@ -27,7 +27,7 @@ create table if not exists public.arabic_lesson_progress (
 create table if not exists public.arabic_lesson_logs (
   id          uuid primary key default gen_random_uuid(),
   student_id  text not null references public.arabic_students(id) on delete cascade,
-  lesson_id   uuid not null references public.arabic_lessons(id)  on delete cascade,
+  lesson_id   text not null references public.arabic_lessons(id)  on delete cascade,
   kind        text not null,            -- 'progress' | 'done' | 'revision'
   slide       int,
   created_at  timestamptz not null default now()
