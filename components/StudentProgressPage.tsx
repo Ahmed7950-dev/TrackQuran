@@ -147,9 +147,6 @@ const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b 
 // drawn on top of the tanween, overlapping it. When a letter cluster contains
 // both, we strip the meem from the inline text (so the tanween renders cleanly)
 // and draw the meem ourselves in an absolutely-positioned overlay above it.
-const IQLAB_HIGH_MEEM = '\u06e2';
-const needsIqlabOverlay = (text: string): boolean =>
-    text.includes(IQLAB_HIGH_MEEM) && (text.includes('\u064b') || text.includes('\u064c'));
 
 // Unicode constants for Ghunnah rules
 const NOON = '\u0646'; // U+0646 - ن
@@ -1026,19 +1023,7 @@ const LetterWithError: React.FC<{
                 // box-decoration-break:clone keeps the highlight painting if a letter wraps.
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
-                {needsIqlabOverlay(letter) ? (
-                    <span style={{ position: 'relative', display: 'inline-block', verticalAlign: 'baseline' }}>
-                        {letter.replace(new RegExp(IQLAB_HIGH_MEEM, 'g'), '')}
-                        {/* Hafs renders a clean tail-less small meem for standalone
-                            U+06E2; forced here so the glyph is identical whichever
-                            Quranic font the user selected. inline-block gives a
-                            reliable containing block so the absolute child positions
-                            correctly in Safari. */}
-                        <span style={{ position: 'absolute', top: '-0.55em', left: '50%', transform: 'translateX(-50%)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif", zIndex: 1 }}>{IQLAB_HIGH_MEEM}</span>
-                    </span>
-                ) : (
-                    letter
-                )}
+                {letter}
             </span>
         </span>
     );
