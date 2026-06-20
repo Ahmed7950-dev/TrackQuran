@@ -101,12 +101,32 @@ export type WordMarkPlan =
   | { mode: 'wholeWord'; font: string }; // switch the whole word
 
 /**
+ * iOS / iPadOS WebKit does not shape Arabic across an inline font boundary: any
+ * letter rendered in a different font than its neighbours detaches from them —
+ * even at boundaries that should be safe. Desktop Safari / Chrome shape across
+ * the boundary fine. So on iOS we never use the per-letter switch; we render the
+ * whole marked word in the corrective font (one font run → letters stay joined).
+ * iPadOS reports as "MacIntel", so it's distinguished from a real Mac by touch.
+ */
+const isIOSWebKit = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isAppleTouch =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1);
+  // Chrome/Firefox on iOS are still WebKit under the hood, so don't exclude them.
+  return isAppleTouch;
+};
+
+/**
  * Decide how to render a word's marks: leave it alone, switch only the marked
  * letters (when each is isolatable without breaking a join), or switch the
- * whole word (when a marked letter connects to its neighbour).
+ * whole word (when a marked letter connects to its neighbour, or always on iOS).
  */
 export const wordMarkPlan = (word: string): WordMarkPlan => {
   if (!hasSpecialQuranMark(word)) return { mode: 'none' };
+  // iOS can't keep letters joined across a per-letter font switch — use whole word.
+  if (isIOSWebKit()) return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
   const units = splitLetterUnits(word);
   for (let i = 0; i < units.length; i++) {
     if (!correctiveFontForUnit(units[i])) continue; // not a marked unit
