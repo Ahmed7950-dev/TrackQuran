@@ -148,6 +148,36 @@ const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b 
 // both, we strip the meem from the inline text (so the tanween renders cleanly)
 // and draw the meem ourselves in an absolutely-positioned overlay above it.
 
+const IQLAB_HIGH_MEEM = '\u06e2';
+const hasIqlabMeem = (text: string): boolean =>
+    text.includes(IQLAB_HIGH_MEEM) && (text.includes('\u064b') || text.includes('\u064c'));
+
+// ── Temporary debug component — remove after offset is confirmed ───────────
+const _iqlabPos = { top: -0.55, left: 50 };
+const IqlabDebug: React.FC<{ letter: string }> = ({ letter }) => {
+    const [pos, setPos] = React.useState({ ..._iqlabPos });
+    const update = (p: { top: number; left: number }) => { Object.assign(_iqlabPos, p); setPos({ ...p }); };
+    const stripped = letter.replace(/\u06e2/g, '');
+    return (
+        <span style={{ position: 'relative', display: 'inline' }}>
+            {stripped}
+            <span style={{ position: 'absolute', top: `${pos.top}em`, left: `${pos.left}%`, transform: 'translateX(-50%)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif", zIndex: 10 }}>{IQLAB_HIGH_MEEM}</span>
+            <span style={{ position: 'fixed', top: 80, right: 20, background: '#fff', border: '2px solid #e44', borderRadius: 8, padding: '10px 14px', zIndex: 9999, fontFamily: 'monospace', fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, boxShadow: '0 4px 20px rgba(0,0,0,.25)', direction: 'ltr' }} onClickCapture={e => e.stopPropagation()}>
+                <b style={{ color: '#e44' }}>iqlab \u0645 position</b>
+                <span>top: <b>{pos.top.toFixed(2)}em</b></span>
+                <span>left: <b>{pos.left}%</b></span>
+                <button onClick={() => update({ ...pos, top: +(pos.top - 0.05).toFixed(2) })} style={{ width: 80, cursor: 'pointer' }}>&#8593; up</button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => update({ ...pos, left: pos.left - 5 })} style={{ cursor: 'pointer' }}>&#8592; left</button>
+                    <button onClick={() => update({ ...pos, left: pos.left + 5 })} style={{ cursor: 'pointer' }}>right &#8594;</button>
+                </div>
+                <button onClick={() => update({ ...pos, top: +(pos.top + 0.05).toFixed(2) })} style={{ width: 80, cursor: 'pointer' }}>&#8595; down</button>
+            </span>
+        </span>
+    );
+};
+// ── end debug ─────────────────────────────────────────────────────────────
+
 // Unicode constants for Ghunnah rules
 const NOON = '\u0646'; // U+0646 - ن
 const MEEM = '\u0645'; // U+0645 - م
@@ -1023,7 +1053,7 @@ const LetterWithError: React.FC<{
                 // box-decoration-break:clone keeps the highlight painting if a letter wraps.
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
-                {letter}
+                {hasIqlabMeem(letter) ? <IqlabDebug letter={letter} /> : letter}
             </span>
         </span>
     );
