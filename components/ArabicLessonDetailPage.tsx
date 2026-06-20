@@ -2106,6 +2106,18 @@ const HomeworkQuestionForm: React.FC<{
   );
 };
 
+// ─── Lottie icon helper (mounts animation when element appears) ──────────────
+const LottieIcon: React.FC<{ path: string; className?: string }> = ({ path, className }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const anim = lottie.loadAnimation({ container: ref.current, renderer: 'svg', loop: true, autoplay: true, path });
+    return () => anim.destroy();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <div ref={ref} className={className} />;
+};
+
 // ═══════════════════════════════════════════════════════
 // VOCABULARY TAB
 // ═══════════════════════════════════════════════════════
@@ -2140,10 +2152,6 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [saving, setSaving]         = useState(false);
   const [flipped, setFlipped]       = useState(false);
 
-  // Lottie refs for challenge buttons
-  const greetingLottieRef = useRef<HTMLDivElement>(null);
-  const planeLottieRef    = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     getVocabWords(lessonId).then(ws => { setWords(ws); setLoading(false); });
   }, [lessonId]);
@@ -2155,20 +2163,6 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   // Reset flip when card changes
   useEffect(() => { setFlipped(false); }, [cardIndex, phase]);
-
-  // Lottie: greeting card button
-  useEffect(() => {
-    if (!greetingLottieRef.current) return;
-    const anim = lottie.loadAnimation({ container: greetingLottieRef.current, renderer: 'svg', loop: true, autoplay: true, path: '/greeting-card.json' });
-    return () => anim.destroy();
-  }, [phase]);
-
-  // Lottie: plane button
-  useEffect(() => {
-    if (!planeLottieRef.current) return;
-    const anim = lottie.loadAnimation({ container: planeLottieRef.current, renderer: 'svg', loop: true, autoplay: true, path: '/plane.json' });
-    return () => anim.destroy();
-  }, [phase]);
 
   const startChallenge = () => {
     setShuffled(shuffleArray(words)); setCardIndex(0);
@@ -2502,22 +2496,35 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                   </select>
                 </div>
               )}
-              <button onClick={startChallenge}
-                className="w-full flex items-center gap-4 px-5 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg">
-                <div ref={greetingLottieRef} className="w-14 h-14 flex-shrink-0" />
-                <div className="text-left">
-                  <p className="text-base font-bold">{t('arabicLessonDetail.startFlashcard', { count: words.length })}</p>
-                  <p className="text-xs font-normal opacity-80">Flip cards to test your memory</p>
-                </div>
-              </button>
-              <button onClick={() => setShowWordFlight(true)}
-                className="w-full flex items-center gap-4 px-5 py-4 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl transition-colors shadow-md hover:shadow-lg">
-                <div ref={planeLottieRef} className="w-14 h-14 flex-shrink-0" />
-                <div className="text-left">
-                  <p className="text-base font-bold">Word Flight Game</p>
-                  <p className="text-xs font-normal opacity-80">Catch the falling Arabic words</p>
-                </div>
-              </button>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {/* Flashcard challenge button */}
+                <button onClick={startChallenge}
+                  className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 p-[2px] shadow-lg hover:shadow-amber-300/40 dark:hover:shadow-amber-900/40 hover:scale-[1.02] transition-all duration-200">
+                  <div className="flex flex-col items-center gap-2 rounded-[14px] bg-gradient-to-br from-amber-400 to-amber-600 px-4 py-5">
+                    <div className="w-20 h-20 rounded-xl bg-white/20 flex items-center justify-center shadow-inner">
+                      <LottieIcon path="/greeting-card.json" className="w-16 h-16" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-white leading-tight">{t('arabicLessonDetail.startFlashcard', { count: words.length })}</p>
+                      <p className="text-xs text-white/70 mt-0.5">Flip · memorise · repeat</p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Word Flight game button */}
+                <button onClick={() => setShowWordFlight(true)}
+                  className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-400 to-sky-600 p-[2px] shadow-lg hover:shadow-sky-300/40 dark:hover:shadow-sky-900/40 hover:scale-[1.02] transition-all duration-200">
+                  <div className="flex flex-col items-center gap-2 rounded-[14px] bg-gradient-to-br from-sky-400 to-sky-600 px-4 py-5">
+                    <div className="w-20 h-20 rounded-xl bg-white/20 flex items-center justify-center shadow-inner">
+                      <LottieIcon path="/plane.json" className="w-16 h-16" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-white leading-tight">Word Flight Game</p>
+                      <p className="text-xs text-white/70 mt-0.5">Catch the falling words</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
           )}
 
