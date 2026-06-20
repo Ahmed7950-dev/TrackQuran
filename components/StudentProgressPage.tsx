@@ -156,22 +156,30 @@ const hasIqlabMeem = (text: string): boolean =>
 const _iqlabPos = { top: -0.55, left: 50 };
 const IqlabDebug: React.FC<{ letter: string }> = ({ letter }) => {
     const [pos, setPos] = React.useState({ ..._iqlabPos });
-    const update = (p: { top: number; left: number }) => { Object.assign(_iqlabPos, p); setPos({ ...p }); };
+    const update = (e: React.MouseEvent, p: { top: number; left: number }) => {
+        e.stopPropagation(); e.preventDefault();
+        Object.assign(_iqlabPos, p); setPos({ ...p });
+    };
+    const block = (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); };
     const stripped = letter.replace(/\u06e2/g, '');
+    const btnStyle: React.CSSProperties = { padding: '6px 14px', cursor: 'pointer', fontSize: 16, userSelect: 'none' };
     return (
         <span style={{ position: 'relative', display: 'inline' }}>
             {stripped}
             <span style={{ position: 'absolute', top: `${pos.top}em`, left: `${pos.left}%`, transform: 'translateX(-50%)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif", zIndex: 10 }}>{IQLAB_HIGH_MEEM}</span>
-            <span style={{ position: 'fixed', top: 80, right: 20, background: '#fff', border: '2px solid #e44', borderRadius: 8, padding: '10px 14px', zIndex: 9999, fontFamily: 'monospace', fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, boxShadow: '0 4px 20px rgba(0,0,0,.25)', direction: 'ltr' }} onClickCapture={e => e.stopPropagation()}>
-                <b style={{ color: '#e44' }}>iqlab \u0645 position</b>
+            <span
+                style={{ position: 'fixed', top: 80, right: 20, background: '#fff', border: '2px solid #e44', borderRadius: 8, padding: '10px 14px', zIndex: 9999, fontFamily: 'monospace', fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(0,0,0,.25)', direction: 'ltr', pointerEvents: 'auto' }}
+                onClick={block} onMouseDown={block} onTouchStart={block}
+            >
+                <b style={{ color: '#e44' }}>iqlab م position</b>
                 <span>top: <b>{pos.top.toFixed(2)}em</b></span>
                 <span>left: <b>{pos.left}%</b></span>
-                <button onClick={() => update({ ...pos, top: +(pos.top - 0.05).toFixed(2) })} style={{ width: 80, cursor: 'pointer' }}>&#8593; up</button>
+                <button onMouseDown={block} onClick={e => update(e, { ...pos, top: +(pos.top - 0.05).toFixed(2) })} style={btnStyle}>&#8593; up</button>
                 <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => update({ ...pos, left: pos.left - 5 })} style={{ cursor: 'pointer' }}>&#8592; left</button>
-                    <button onClick={() => update({ ...pos, left: pos.left + 5 })} style={{ cursor: 'pointer' }}>right &#8594;</button>
+                    <button onMouseDown={block} onClick={e => update(e, { ...pos, left: pos.left - 5 })} style={btnStyle}>&#8592; left</button>
+                    <button onMouseDown={block} onClick={e => update(e, { ...pos, left: pos.left + 5 })} style={btnStyle}>right &#8594;</button>
                 </div>
-                <button onClick={() => update({ ...pos, top: +(pos.top + 0.05).toFixed(2) })} style={{ width: 80, cursor: 'pointer' }}>&#8595; down</button>
+                <button onMouseDown={block} onClick={e => update(e, { ...pos, top: +(pos.top + 0.05).toFixed(2) })} style={btnStyle}>&#8595; down</button>
             </span>
         </span>
     );
