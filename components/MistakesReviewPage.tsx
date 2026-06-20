@@ -6,7 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, hasSilentMark, renderSilentLetter } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -705,8 +705,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         letter: string;
         letterKey: string;
         mistake: Mistake | undefined;
-        silentOverlay?: boolean;
-    }> = ({ letter, letterKey, mistake, silentOverlay }) => {
+    }> = ({ letter, letterKey, mistake }) => {
         const getLetterColor = () => {
             if (mistake && mistake.errorText) {
                 if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
@@ -761,7 +760,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         padding: '0'
                     }}
                 >
-                    {silentOverlay && hasSilentMark(letter) ? renderSilentLetter(letter) : letter}
+                    {letter}
                 </span>
             </span>
         );
@@ -822,7 +821,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 letter={letter}
                                 letterKey={letterKey}
                                 mistake={mistake}
-                                silentOverlay={markPlan.mode === 'overlay'}
                             />
                         );
                     })}

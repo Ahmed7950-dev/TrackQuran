@@ -8,7 +8,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, hasSilentMark, renderSilentLetter, correctiveWordFont } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -841,7 +841,6 @@ const LetterWithError: React.FC<{
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
     isCursorActive?: boolean;
-    silentOverlay?: boolean; // draw U+06DF as an overlay circle (keep base font)
 }> = ({
     letter,
     letterKey,
@@ -865,7 +864,6 @@ const LetterWithError: React.FC<{
     onLongPress,
     isFocused,
     isCursorActive,
-    silentOverlay,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
@@ -1036,10 +1034,6 @@ const LetterWithError: React.FC<{
                             Quranic font the user selected. */}
                         <span style={{ position: 'absolute', top: '-0.3em', right: 0, fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
-                ) : silentOverlay && hasSilentMark(letter) ? (
-                    // Keep the base letter in the selected font (joins on iOS) and
-                    // draw the silent circle (U+06DF) as an overlay above it.
-                    renderSilentLetter(letter)
                 ) : (
                     letter
                 )}
@@ -3065,7 +3059,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
-                                    silentOverlay={markPlan.mode === 'overlay'}
                                 />
                             );
                         })}
@@ -3687,7 +3680,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
-                                                                            silentOverlay={fwPlan.mode === 'overlay'}
                                                                         />
                                                                     );
                                                                 })}

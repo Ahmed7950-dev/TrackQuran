@@ -10,7 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
-import { renderWordWithMarks, wordMarkPlan, hasSilentMark, renderSilentLetter } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -152,7 +152,7 @@ const MistakesTab: React.FC<{
                 : lm ? getMistakeBg(lm.level) : '';
               return (
                 <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
-                  {markPlan.mode === 'overlay' && hasSilentMark(letter) ? renderSilentLetter(letter) : letter}
+                  {letter}
                 </span>
               );
             })}

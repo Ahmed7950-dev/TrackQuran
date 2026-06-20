@@ -1,192 +1,55 @@
 import React from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Corrective rendering for three Quranic marks the bundled fonts get wrong:
-//   • U+06DF silent marker (Small High Rounded Zero) — a small circle above the
-//     letter. Hafs / Uthmanic HAFS v22 render it as a detached "dotted circle".
-//   • U+06EA imāla  (only Hud 11:41 مَجْر۪ىٰهَا) — a dot under the letter; only
-//     'Uthmanic HAFS v22' draws it correctly.
-//   • U+06EB ishmām (only Yusuf 12:11 تَأْمَ۫نَّا) — Amiri renders it correctly.
+// Quranic mark handling.
 //
-// Approach
-// --------
-// We must never change the font of a single letter inside a word: iOS/iPadOS
-// WebKit refuses to shape Arabic across an inline font boundary, so the marked
-// letter detaches from its neighbours on iPad.
+// U+06DF (silent circle) used to render wrong in the bundled fonts (it shipped
+// as a full-width base glyph with no positioning). That is now fixed in the FONT
+// files themselves: the cmap entry for U+06DF was remapped to each font's own
+// sukun glyph — a proper zero-width, GPOS-anchored combining mark — so the
+// silent circle now renders correctly inline, on every base letter, in every
+// font, on every platform (incl. iOS). No special-casing needed for it here.
 //
-//   • U+06DF (the common case): keep the ENTIRE word in the user's selected
-//     font (one font run → letters stay joined on every platform), strip the
-//     U+06DF code point so the wrong glyph never renders, and draw the little
-//     circle as an absolutely-positioned overlay above the letter (font-family
-//     only affects the overlay, which is decorative and outside the text run).
-//     → mode 'overlay'.
-//   • U+06EA / U+06EB (only two verses in the muṣḥaf): render the WHOLE word in
-//     the corrective font. One font run, so letters stay joined, and the mark
-//     renders correctly. → mode 'wholeWord'.
+// The only marks still wrong in the bundled fonts are imāla (U+06EA, Hud 11:41)
+// and ishmām (U+06EB, Yusuf 12:11) — two words in the whole muṣḥaf. For those we
+// render the WHOLE word in a corrective font (a single font run keeps the
+// letters joined and the mark renders correctly).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SILENT_MARK = '۟'; // U+06DF
 const IMALA_MARK  = '۪'; // U+06EA
 const ISHMAM_MARK = '۫'; // U+06EB
 
-const AMIRI_REGULAR_STACK = "'Amiri Regular', 'Amiri Quran', serif";   // silent circle + ishmām
+const AMIRI_REGULAR_STACK = "'Amiri Regular', 'Amiri Quran', serif";   // ishmām
 const UTHMANIC_V22_STACK  = "'Uthmanic HAFS v22', 'Amiri Quran', serif"; // imāla dot
 
-const isCombiningMark = (cp: number): boolean =>
-  (cp >= 0x0610 && cp <= 0x061a) ||
-  (cp >= 0x064b && cp <= 0x065f) ||
-  cp === 0x0670 ||
-  (cp >= 0x06d6 && cp <= 0x06ed);
-
-/** True if the text contains any mark that needs corrective handling. */
+/** True if the word needs the whole-word corrective font (imāla / ishmām). */
 export const hasSpecialQuranMark = (text: string): boolean =>
-  text.includes(IMALA_MARK) || text.includes(ISHMAM_MARK) || text.includes(SILENT_MARK);
+  text.includes(IMALA_MARK) || text.includes(ISHMAM_MARK);
 
-/** Split a word into letter units: each base letter plus its trailing marks. */
-const splitLetterUnits = (text: string): string[] => {
-  const parts: string[] = [];
-  let cur = '';
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (isCombiningMark(cp) && cur) cur += ch;
-    else { if (cur) parts.push(cur); cur = ch; }
-  }
-  if (cur) parts.push(cur);
-  return parts;
-};
-
-/** First base (non-combining, non-space) letter in a unit, if any. */
-const firstBaseLetter = (unit: string): string | undefined => {
-  for (const ch of unit) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (!isCombiningMark(cp) && ch !== ' ') return ch;
-  }
-  return undefined;
-};
-
-// Letters that never connect to the FOLLOWING letter (right-joining / non-joining).
-const NON_JOINING_TO_NEXT = new Set([
-  'ا', 'أ', 'إ', 'آ', 'ٱ', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ة', 'ى', 'ء',
-]);
-
-/** Whole-word corrective font (imāla / ishmām verses). */
+/** Corrective font stack for a word carrying imāla / ishmām, else null. */
 export const correctiveWordFont = (word: string): string | null => {
   if (word.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
   if (word.includes(ISHMAM_MARK)) return AMIRI_REGULAR_STACK;
-  if (word.includes(SILENT_MARK)) return AMIRI_REGULAR_STACK;
   return null;
 };
 
 export type WordMarkPlan =
   | { mode: 'none' }
-  | { mode: 'overlay' }                   // selected font + overlaid silent circle(s)
-  | { mode: 'wholeWord'; font: string };  // whole word in a corrective font
+  | { mode: 'wholeWord'; font: string };
 
-/**
- * Decide how to render a word's marks.
- *  • imāla / ishmām  → wholeWord (corrective font).
- *  • silent marker only, every marked letter isolatable → overlay.
- *  • silent marker on a connecting letter (rare) → wholeWord, so the inline-block
- *    overlay box can't detach a real join.
- */
+/** Decide how to render a word: untouched, or whole word in a corrective font. */
 export const wordMarkPlan = (word: string): WordMarkPlan => {
-  if (!hasSpecialQuranMark(word)) return { mode: 'none' };
-  if (word.includes(IMALA_MARK) || word.includes(ISHMAM_MARK)) {
-    return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
-  }
-  // Silent marker only. Overlay works when each marked letter is isolated from
-  // its neighbours (so the inline-block overlay box breaks no visible join).
-  const units = splitLetterUnits(word);
-  for (let i = 0; i < units.length; i++) {
-    if (!units[i].includes(SILENT_MARK)) continue;
-    const base = firstBaseLetter(units[i]);
-    const prevBase = i > 0 ? firstBaseLetter(units[i - 1]) : undefined;
-    const baseIsolatable = !!base && NON_JOINING_TO_NEXT.has(base);
-    const prevIsolatable = !prevBase || NON_JOINING_TO_NEXT.has(prevBase);
-    if (!(baseIsolatable && prevIsolatable)) {
-      return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
-    }
-  }
-  return { mode: 'overlay' };
+  const font = correctiveWordFont(word);
+  return font ? { mode: 'wholeWord', font } : { mode: 'none' };
 };
 
 /**
- * The silent-marker circle, drawn in Amiri as an absolute overlay above a
- * letter. The wrapping element must be position:relative; display:inline-block;
- * line-height:1 so the offset hugs the glyph. Colour inherits (so greyed silent
- * letters keep their colour).
- */
-export const SilentCircleOverlay: React.FC = () => (
-  <span
-    aria-hidden="true"
-    style={{
-      position: 'absolute',
-      left: '40%',
-      top: '0.16em',
-      transform: 'translate(-50%, -50%)',
-      fontFamily: AMIRI_REGULAR_STACK,
-      fontSize: '0.72em',
-      lineHeight: 1,
-      pointerEvents: 'none',
-    }}
-  >
-    {SILENT_MARK}
-  </span>
-);
-
-/**
- * Render one letter unit with the silent circle overlaid (U+06DF stripped from
- * the text so the wrong glyph never shows). Keeps the base letter in whatever
- * font it inherits. `className` is applied to the inline-block wrapper.
- */
-export const renderSilentLetter = (unit: string, key?: React.Key, className?: string): React.ReactNode => (
-  <span
-    key={key}
-    className={className}
-    style={{ position: 'relative', display: 'inline-block', lineHeight: 1 }}
-  >
-    {unit.replace(/۟/g, '')}
-    <SilentCircleOverlay />
-  </span>
-);
-
-/** True if this letter unit carries the silent marker. */
-export const hasSilentMark = (unit: string): boolean => unit.includes(SILENT_MARK);
-
-/**
- * Render a word as React nodes per its plan. Use at plain-text word render
- * sites (where the word would otherwise be printed as a single string).
- */
-export const renderWordWithMarks = (word: string, keyPrefix = ''): React.ReactNode => {
-  const plan = wordMarkPlan(word);
-  if (plan.mode === 'none') return word;
-  if (plan.mode === 'wholeWord') {
-    return <span style={{ fontFamily: plan.font }}>{word}</span>;
-  }
-  // overlay: keep the whole word in the selected font; overlay circles on the
-  // silent-marked letters. Unmarked runs stay as plain text (one shaping run).
-  const units = splitLetterUnits(word);
-  const out: React.ReactNode[] = [];
-  let buf = '';
-  let k = 0;
-  const flush = () => {
-    if (buf) { out.push(<React.Fragment key={`${keyPrefix}t${k++}`}>{buf}</React.Fragment>); buf = ''; }
-  };
-  for (const unit of units) {
-    if (hasSilentMark(unit)) {
-      flush();
-      out.push(renderSilentLetter(unit, `${keyPrefix}m${k++}`));
-    } else {
-      buf += unit;
-    }
-  }
-  flush();
-  return <>{out}</>;
-};
-
-/**
- * Returns the text unchanged. Kept for legacy call sites; new code should use
- * renderWordWithMarks / wordMarkPlan.
+ * Render a word as React nodes. Returns the plain string unless it carries an
+ * imāla / ishmām mark, in which case the whole word is wrapped in a corrective
+ * font. (U+06DF is handled by the font, so it needs nothing here.)
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const renderQuranicMarks = (text: string, _keyPrefix = ''): React.ReactNode => text;
+export const renderWordWithMarks = (word: string, _keyPrefix = ''): React.ReactNode => {
+  const font = correctiveWordFont(word);
+  return font ? <span style={{ fontFamily: font }}>{word}</span> : word;
+};
