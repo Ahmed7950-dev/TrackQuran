@@ -1,53 +1,36 @@
 import React from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Corrective-font handling for three Quranic marks the bundled fonts get wrong:
-//   • U+06DF silent marker (Small High Rounded Zero) — Hafs / Uthmanic HAFS v22
-//     render it as a detached "dotted circle" placeholder. Amiri Regular draws
-//     it as a clean circle.
-//   • U+06EA imāla  (only Hud 11:41 مَجْر۪ىٰهَا) — only 'Uthmanic HAFS v22' draws
-//     the authentic dot under the letter.
+// Corrective rendering for three Quranic marks the bundled fonts get wrong:
+//   • U+06DF silent marker (Small High Rounded Zero) — a small circle above the
+//     letter. Hafs / Uthmanic HAFS v22 render it as a detached "dotted circle".
+//   • U+06EA imāla  (only Hud 11:41 مَجْر۪ىٰهَا) — a dot under the letter; only
+//     'Uthmanic HAFS v22' draws it correctly.
 //   • U+06EB ishmām (only Yusuf 12:11 تَأْمَ۫نَّا) — Amiri renders it correctly.
 //
-// A combining mark only attaches to a base letter shaped in the SAME font run,
-// and iOS/Safari stops joining Arabic letters across a font boundary. So to fix
-// a mark we must render its base letter in the corrective font too — the open
-// question is how MUCH text to switch.
+// Approach
+// --------
+// We must never change the font of a single letter inside a word: iOS/iPadOS
+// WebKit refuses to shape Arabic across an inline font boundary, so the marked
+// letter detaches from its neighbours on iPad.
 //
-//   • If the marked letter does not join to its neighbours (e.g. a silent alif
-//     at word end, preceded by a wāw — as in قَالُوا۟), we can switch JUST that
-//     letter + its mark and leave the rest of the word in the selected font. No
-//     join is broken because none existed across those boundaries.
-//   • If a connecting letter sits right before the marked letter (e.g. the alif
-//     in أَنَا۟, preceded by a joining nūn), switching only that letter would
-//     break the join on Safari, so we fall back to rendering the WHOLE word in
-//     the corrective font (one font run → letters stay joined, mark attaches).
-//
-// wordMarkPlan() decides which case applies; renderWordWithMarks() applies it
-// for plain-text word render sites, and correctiveFontForUnit() + the plan let
-// per-letter render sites do the same.
+//   • U+06DF (the common case): keep the ENTIRE word in the user's selected
+//     font (one font run → letters stay joined on every platform), strip the
+//     U+06DF code point so the wrong glyph never renders, and draw the little
+//     circle as an absolutely-positioned overlay above the letter (font-family
+//     only affects the overlay, which is decorative and outside the text run).
+//     → mode 'overlay'.
+//   • U+06EA / U+06EB (only two verses in the muṣḥaf): render the WHOLE word in
+//     the corrective font. One font run, so letters stay joined, and the mark
+//     renders correctly. → mode 'wholeWord'.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SILENT_MARK = '۟'; // U+06DF
 const IMALA_MARK  = '۪'; // U+06EA
 const ISHMAM_MARK = '۫'; // U+06EB
 
-const AMIRI_REGULAR_STACK = "'Amiri Regular', 'Amiri Quran', serif";   // silent + ishmām
+const AMIRI_REGULAR_STACK = "'Amiri Regular', 'Amiri Quran', serif";   // silent circle + ishmām
 const UTHMANIC_V22_STACK  = "'Uthmanic HAFS v22', 'Amiri Quran', serif"; // imāla dot
-
-// Letters that never connect to the FOLLOWING letter (right-joining / non-joining
-// forms). If a marked letter is one of these AND the preceding base letter is too
-// (or the marked letter starts the word), the marked letter shares no join with
-// its neighbours and can be switched to a corrective font on its own.
-const NON_JOINING_TO_NEXT = new Set([
-  'ا', 'أ', 'إ', 'آ', 'ٱ', // alif forms (U+0627/0623/0625/0622/0671)
-  'د', 'ذ',                // dāl, dhāl
-  'ر', 'ز',                // rā, zāy
-  'و', 'ؤ',                // wāw, wāw-hamza
-  'ة',                     // tāʾ marbūṭa
-  'ى',                     // alif maqṣūra
-  'ء',                     // hamza
-]);
 
 const isCombiningMark = (cp: number): boolean =>
   (cp >= 0x0610 && cp <= 0x061a) ||
@@ -55,7 +38,7 @@ const isCombiningMark = (cp: number): boolean =>
   cp === 0x0670 ||
   (cp >= 0x06d6 && cp <= 0x06ed);
 
-/** True if the text contains any mark that needs a corrective font. */
+/** True if the text contains any mark that needs corrective handling. */
 export const hasSpecialQuranMark = (text: string): boolean =>
   text.includes(IMALA_MARK) || text.includes(ISHMAM_MARK) || text.includes(SILENT_MARK);
 
@@ -81,69 +64,98 @@ const firstBaseLetter = (unit: string): string | undefined => {
   return undefined;
 };
 
-/** Corrective font for a single letter unit based on the mark it carries, else null. */
-export const correctiveFontForUnit = (unit: string): string | null => {
-  if (unit.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
-  if (unit.includes(SILENT_MARK) || unit.includes(ISHMAM_MARK)) return AMIRI_REGULAR_STACK;
-  return null;
-};
+// Letters that never connect to the FOLLOWING letter (right-joining / non-joining).
+const NON_JOINING_TO_NEXT = new Set([
+  'ا', 'أ', 'إ', 'آ', 'ٱ', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ة', 'ى', 'ء',
+]);
 
-/** Whole-word corrective font (used when a marked letter can't be isolated). */
+/** Whole-word corrective font (imāla / ishmām verses). */
 export const correctiveWordFont = (word: string): string | null => {
   if (word.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
-  if (word.includes(SILENT_MARK) || word.includes(ISHMAM_MARK)) return AMIRI_REGULAR_STACK;
+  if (word.includes(ISHMAM_MARK)) return AMIRI_REGULAR_STACK;
+  if (word.includes(SILENT_MARK)) return AMIRI_REGULAR_STACK;
   return null;
 };
 
 export type WordMarkPlan =
   | { mode: 'none' }
-  | { mode: 'perLetter' }          // switch only the marked letter units
-  | { mode: 'wholeWord'; font: string }; // switch the whole word
+  | { mode: 'overlay' }                   // selected font + overlaid silent circle(s)
+  | { mode: 'wholeWord'; font: string };  // whole word in a corrective font
 
 /**
- * iOS / iPadOS WebKit does not shape Arabic across an inline font boundary: any
- * letter rendered in a different font than its neighbours detaches from them —
- * even at boundaries that should be safe. Desktop Safari / Chrome shape across
- * the boundary fine. So on iOS we never use the per-letter switch; we render the
- * whole marked word in the corrective font (one font run → letters stay joined).
- * iPadOS reports as "MacIntel", so it's distinguished from a real Mac by touch.
- */
-const isIOSWebKit = (): boolean => {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isAppleTouch =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1);
-  // Chrome/Firefox on iOS are still WebKit under the hood, so don't exclude them.
-  return isAppleTouch;
-};
-
-/**
- * Decide how to render a word's marks: leave it alone, switch only the marked
- * letters (when each is isolatable without breaking a join), or switch the
- * whole word (when a marked letter connects to its neighbour, or always on iOS).
+ * Decide how to render a word's marks.
+ *  • imāla / ishmām  → wholeWord (corrective font).
+ *  • silent marker only, every marked letter isolatable → overlay.
+ *  • silent marker on a connecting letter (rare) → wholeWord, so the inline-block
+ *    overlay box can't detach a real join.
  */
 export const wordMarkPlan = (word: string): WordMarkPlan => {
   if (!hasSpecialQuranMark(word)) return { mode: 'none' };
-  // iOS can't keep letters joined across a per-letter font switch — use whole word.
-  if (isIOSWebKit()) return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
+  if (word.includes(IMALA_MARK) || word.includes(ISHMAM_MARK)) {
+    return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
+  }
+  // Silent marker only. Overlay works when each marked letter is isolated from
+  // its neighbours (so the inline-block overlay box breaks no visible join).
   const units = splitLetterUnits(word);
   for (let i = 0; i < units.length; i++) {
-    if (!correctiveFontForUnit(units[i])) continue; // not a marked unit
+    if (!units[i].includes(SILENT_MARK)) continue;
     const base = firstBaseLetter(units[i]);
     const prevBase = i > 0 ? firstBaseLetter(units[i - 1]) : undefined;
-    const baseIsolatable = !!base && NON_JOINING_TO_NEXT.has(base); // doesn't join next
-    const prevIsolatable = !prevBase || NON_JOINING_TO_NEXT.has(prevBase); // prev doesn't join in
+    const baseIsolatable = !!base && NON_JOINING_TO_NEXT.has(base);
+    const prevIsolatable = !prevBase || NON_JOINING_TO_NEXT.has(prevBase);
     if (!(baseIsolatable && prevIsolatable)) {
       return { mode: 'wholeWord', font: correctiveWordFont(word) as string };
     }
   }
-  return { mode: 'perLetter' };
+  return { mode: 'overlay' };
 };
 
 /**
- * Render a word as React nodes, switching fonts per the plan. Use at plain-text
- * word render sites (where the word is otherwise printed as a single string).
+ * The silent-marker circle, drawn in Amiri as an absolute overlay above a
+ * letter. The wrapping element must be position:relative; display:inline-block;
+ * line-height:1 so the offset hugs the glyph. Colour inherits (so greyed silent
+ * letters keep their colour).
+ */
+export const SilentCircleOverlay: React.FC = () => (
+  <span
+    aria-hidden="true"
+    style={{
+      position: 'absolute',
+      left: '50%',
+      top: '0.06em',
+      transform: 'translate(-50%, -50%)',
+      fontFamily: AMIRI_REGULAR_STACK,
+      fontSize: '0.72em',
+      lineHeight: 1,
+      pointerEvents: 'none',
+    }}
+  >
+    {SILENT_MARK}
+  </span>
+);
+
+/**
+ * Render one letter unit with the silent circle overlaid (U+06DF stripped from
+ * the text so the wrong glyph never shows). Keeps the base letter in whatever
+ * font it inherits. `className` is applied to the inline-block wrapper.
+ */
+export const renderSilentLetter = (unit: string, key?: React.Key, className?: string): React.ReactNode => (
+  <span
+    key={key}
+    className={className}
+    style={{ position: 'relative', display: 'inline-block', lineHeight: 1 }}
+  >
+    {unit.replace(/۟/g, '')}
+    <SilentCircleOverlay />
+  </span>
+);
+
+/** True if this letter unit carries the silent marker. */
+export const hasSilentMark = (unit: string): boolean => unit.includes(SILENT_MARK);
+
+/**
+ * Render a word as React nodes per its plan. Use at plain-text word render
+ * sites (where the word would otherwise be printed as a single string).
  */
 export const renderWordWithMarks = (word: string, keyPrefix = ''): React.ReactNode => {
   const plan = wordMarkPlan(word);
@@ -151,7 +163,8 @@ export const renderWordWithMarks = (word: string, keyPrefix = ''): React.ReactNo
   if (plan.mode === 'wholeWord') {
     return <span style={{ fontFamily: plan.font }}>{word}</span>;
   }
-  // perLetter: keep unmarked runs in the selected font, switch only marked units.
+  // overlay: keep the whole word in the selected font; overlay circles on the
+  // silent-marked letters. Unmarked runs stay as plain text (one shaping run).
   const units = splitLetterUnits(word);
   const out: React.ReactNode[] = [];
   let buf = '';
@@ -160,10 +173,9 @@ export const renderWordWithMarks = (word: string, keyPrefix = ''): React.ReactNo
     if (buf) { out.push(<React.Fragment key={`${keyPrefix}t${k++}`}>{buf}</React.Fragment>); buf = ''; }
   };
   for (const unit of units) {
-    const font = correctiveFontForUnit(unit);
-    if (font) {
+    if (hasSilentMark(unit)) {
       flush();
-      out.push(<span key={`${keyPrefix}m${k++}`} style={{ fontFamily: font }}>{unit}</span>);
+      out.push(renderSilentLetter(unit, `${keyPrefix}m${k++}`));
     } else {
       buf += unit;
     }
@@ -173,8 +185,8 @@ export const renderWordWithMarks = (word: string, keyPrefix = ''): React.ReactNo
 };
 
 /**
- * Returns the text unchanged. Kept for legacy call sites that already wrap their
- * output appropriately; new code should use renderWordWithMarks / wordMarkPlan.
+ * Returns the text unchanged. Kept for legacy call sites; new code should use
+ * renderWordWithMarks / wordMarkPlan.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const renderQuranicMarks = (text: string, _keyPrefix = ''): React.ReactNode => text;

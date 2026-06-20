@@ -10,7 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
-import { renderWordWithMarks, wordMarkPlan, correctiveFontForUnit } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, hasSilentMark, renderSilentLetter } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -150,10 +150,9 @@ const MistakesTab: React.FC<{
               const letterBg = lm?.errorText
                 ? lm.errorType === 'tajweed' ? 'bg-green-200' : 'bg-red-200'
                 : lm ? getMistakeBg(lm.level) : '';
-              const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
               return (
-                <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: unitFont ?? 'inherit' }}>
-                  {letter}
+                <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
+                  {markPlan.mode === 'overlay' && hasSilentMark(letter) ? renderSilentLetter(letter) : letter}
                 </span>
               );
             })}

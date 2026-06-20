@@ -8,7 +8,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveFontForUnit, correctiveWordFont } from '../utils/quranicMarks';
+import { wordMarkPlan, hasSilentMark, renderSilentLetter, correctiveWordFont } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -841,6 +841,7 @@ const LetterWithError: React.FC<{
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
     isCursorActive?: boolean;
+    silentOverlay?: boolean; // draw U+06DF as an overlay circle (keep base font)
 }> = ({
     letter,
     letterKey,
@@ -864,6 +865,7 @@ const LetterWithError: React.FC<{
     onLongPress,
     isFocused,
     isCursorActive,
+    silentOverlay,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
@@ -1034,6 +1036,10 @@ const LetterWithError: React.FC<{
                             Quranic font the user selected. */}
                         <span style={{ position: 'absolute', top: '-0.3em', right: 0, fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
+                ) : silentOverlay && hasSilentMark(letter) ? (
+                    // Keep the base letter in the selected font (joins on iOS) and
+                    // draw the silent circle (U+06DF) as an overlay above it.
+                    renderSilentLetter(letter)
                 ) : (
                     letter
                 )}
@@ -3034,11 +3040,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             const isEditing = editingLetterKey === letterKey;
                             const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
                             const isLastLetterOfWord = letterIndex === letters.length - 1;
-                            // perLetter plan: switch only the marked letter (e.g. silent alif)
-                            // to its corrective font; the rest of the word stays in the
-                            // selected font. The letter span inside LetterWithError inherits.
-                            const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
-                            const letterNode = (
+                            return (
                                 <LetterWithError
                                     key={letterKey}
                                     letter={letter}
@@ -3063,11 +3065,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                    silentOverlay={markPlan.mode === 'overlay'}
                                 />
                             );
-                            return unitFont
-                                ? <span key={letterKey} style={{ fontFamily: unitFont }}>{letterNode}</span>
-                                : letterNode;
                         })}
                         {' '}
                     </span>
@@ -3662,8 +3662,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                     const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
                                                                     const mk = studentMistakes[lk];
                                                                     const cs = letterClickStates.current[lk] || (mk ? 2 : 0);
-                                                                    const unitFont = fwPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
-                                                                    const node = (
+                                                                    return (
                                                                         <LetterWithError
                                                                             key={lk}
                                                                             letter={letter}
@@ -3688,9 +3687,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                                                            silentOverlay={fwPlan.mode === 'overlay'}
                                                                         />
                                                                     );
-                                                                    return unitFont ? <span key={lk} style={{ fontFamily: unitFont }}>{node}</span> : node;
                                                                 })}
                                                             </span>
                                                             ); })()}

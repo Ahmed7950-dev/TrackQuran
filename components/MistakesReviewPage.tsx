@@ -6,7 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderQuranicMarks, renderWordWithMarks, wordMarkPlan, correctiveFontForUnit } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, hasSilentMark, renderSilentLetter } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -705,7 +705,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         letter: string;
         letterKey: string;
         mistake: Mistake | undefined;
-    }> = ({ letter, letterKey, mistake }) => {
+        silentOverlay?: boolean;
+    }> = ({ letter, letterKey, mistake, silentOverlay }) => {
         const getLetterColor = () => {
             if (mistake && mistake.errorText) {
                 if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
@@ -760,7 +761,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         padding: '0'
                     }}
                 >
-                    {renderQuranicMarks(letter)}
+                    {silentOverlay && hasSilentMark(letter) ? renderSilentLetter(letter) : letter}
                 </span>
             </span>
         );
@@ -815,16 +816,15 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     {letters.map(({ letter, index: letterIndex }) => {
                         const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
                         const mistake = student.mistakes[letterKey];
-                        const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
-                        const node = (
+                        return (
                             <LetterForPDF
                                 key={letterKey}
                                 letter={letter}
                                 letterKey={letterKey}
                                 mistake={mistake}
+                                silentOverlay={markPlan.mode === 'overlay'}
                             />
                         );
-                        return unitFont ? <span key={letterKey} style={{ fontFamily: unitFont }}>{node}</span> : node;
                     })}
                     {' '}
                 </span>
