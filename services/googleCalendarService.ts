@@ -158,7 +158,20 @@ export async function refreshAccessToken(): Promise<string | null> {
       error?: string;
     };
     if (data.error || !data.access_token) {
-      console.warn('[GCal] Silent token refresh failed:', data.error);
+      // `invalid_grant` means the refresh token is PERMANENTLY dead (revoked, or
+      // expired — Google expires refresh tokens after 7 days while the OAuth
+      // consent screen is in "Testing" mode). Retrying it is pointless and only
+      // spams 400s. Clear the dead token and stop the auto-refresh poller so the
+      // app shows ONE clean reconnect prompt instead of erroring every 60s.
+      // Other errors (network blips, 5xx) are transient — keep the token, retry.
+      if (data.error === 'invalid_grant') {
+        localStorage.removeItem(REFRESH_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(EXPIRY_KEY);
+        cancelAutoRefresh();
+      } else {
+        console.warn('[GCal] Silent token refresh failed (transient):', data.error);
+      }
       return null;
     }
     storeAccessToken(data.access_token, data.expires_in ?? 3600);
