@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
-import { getBirthdayStatus } from '../utils';
+import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import MilestoneBadge from './MilestoneBadge';
@@ -123,7 +123,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
             if (reportId) {
                 const link = `${window.location.origin}/report/${reportId}`;
                 setShareLink(link);
-                await navigator.clipboard.writeText(link).catch(() => {});
+                await safeCopy(link);
                 setShareState('copied');
                 setTimeout(() => setShareState('idle'), 3000);
             } else {

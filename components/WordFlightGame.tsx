@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
 import { supabase } from '../lib/supabase';
+import { safeCopy } from '../utils';
 
 declare global {
   namespace JSX {
@@ -1169,7 +1170,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     return { emoji:'🤝', msg:"It's a Draw!", color:'#8b5cf6' };
   };
   const shareLink = onlineRoomId ? `${ONLINE_SITE_URL}/word-flight/${onlineRoomId}` : '';
-  const copyLink  = () => { navigator.clipboard.writeText(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }); };
+  const copyLink  = () => { safeCopy(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }); };
 
   const GlowOverlay: React.FC<{ glow:'hit'|'collectible'|'mine'|null; x:number; y:number }> = ({ glow, x, y }) => {
     if (!glow) return null;

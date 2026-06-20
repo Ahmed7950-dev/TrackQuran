@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
+import { safeCopy } from '../utils';
 import { supabase } from '../lib/supabase';
 
 declare global {
@@ -1414,7 +1415,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   const shareLink = onlineRoomId ? `${ONLINE_SITE_URL}/letter-flight/${onlineRoomId}` : '';
   const copyLink = () => {
-    navigator.clipboard.writeText(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
+    safeCopy(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); });
   };
 
   // ── Glow overlay helper (expanding colored circle from plane center) ───────

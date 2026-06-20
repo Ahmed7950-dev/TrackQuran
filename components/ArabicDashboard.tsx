@@ -11,6 +11,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
+import { safeCopy } from '../utils';
 import { getTeacherBookings, updateBookingMeetUrl } from '../services/lessonBookingService';
 import {
   createGoogleMeetLink,
@@ -192,7 +193,7 @@ const ArabicDashboard: React.FC<Props> = ({
 
   async function handleCopyMeetLink() {
     if (!nextLesson?.meetUrl) return;
-    await navigator.clipboard.writeText(nextLesson.meetUrl);
+    await safeCopy(nextLesson.meetUrl);
     setMeetCopied(true);
     setTimeout(() => setMeetCopied(false), 2500);
   }
@@ -215,7 +216,7 @@ const ArabicDashboard: React.FC<Props> = ({
     try {
       const token = await ensureShareToken(student);
       if (!student.shareToken) onUpdateStudent({ ...student, shareToken: token });
-      await navigator.clipboard.writeText(`${SITE_URL}/arabic/s/${token}`);
+      await safeCopy(`${SITE_URL}/arabic/s/${token}`);
       setCopiedId(student.id);
       setTimeout(() => setCopiedId(null), 2500);
     } catch (err) {
