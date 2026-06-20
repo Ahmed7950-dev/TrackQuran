@@ -97,8 +97,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Fresh sign-in (email or Google OAuth). Pass ensureProfileExists=true so
         // first-time Google users get their profiles row created before any DB writes.
         resolveUser(session, true).catch(console.error);
-      } else if (event === 'TOKEN_REFRESHED' && session) {
-        resolveUser(session, false).catch(console.error);
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Supabase already updated its internal session — no need to touch
+        // currentUser here. Calling resolveUser / setCurrentUser would create
+        // a new object reference, retrigger the data-loading useEffect in App,
+        // and risk clearing the student list if that refetch returns empty.
       } else if (event === 'SIGNED_OUT') {
         if (!cancelled) setCurrentUser(null);
       }

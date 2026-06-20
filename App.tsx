@@ -577,15 +577,20 @@ const App: React.FC = () => {
   // State for live session tracking
   const [progress, setProgress] = useState<{[key: string]: Progress}>({});
 
-  // Load data from Supabase / localStorage when the logged-in teacher changes
+  // Load data from Supabase / localStorage when the logged-in teacher changes.
+  // Depends on id + role only — NOT the full currentUser object — so a token
+  // refresh (which creates a new object reference but same id/role) never
+  // triggers a redundant re-fetch that could return empty and clear the list.
+  const currentUserId   = currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? (currentUser as { id: string }).id : null;
+  const currentUserRole = currentUser?.role ?? null;
   useEffect(() => {
-    if (currentUser?.role !== 'teacher') {
+    if (currentUserRole !== 'teacher' || !currentUserId) {
       setStudents([]);
       setTajweedRules([]);
       setArabicStudents([]);
       return;
     }
-    const teacherId = currentUser.id;
+    const teacherId = currentUserId;
     getStudents(teacherId).then(setStudents);
     getTajweedRules(teacherId).then(setTajweedRules);
     // Fetch arabic students then compute total vocab counts (lesson words + custom list words)
@@ -602,7 +607,8 @@ const App: React.FC = () => {
       }
       setArabicVocabCounts(totals);
     });
-  }, [currentUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, currentUserRole]);
   
   // Initialize progress from recitation achievements
   useEffect(() => {
