@@ -3657,7 +3657,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                             style={{ ...slotStyle, fontSize: '10.5rem', lineHeight: 2.2 }}
                                                         >
                                                             {(() => { const fwPlan = wordMarkPlan(item.word); return (
-                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: fwPlan.mode === 'wholeWord' ? fwPlan.font : 'inherit' }}>
+                                                            <span dir="rtl" className="relative inline" style={{ display: 'inline', fontFamily: fwPlan.mode === 'wholeWord' ? fwPlan.font : 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
                                                                     const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
                                                                     const mk = studentMistakes[lk];

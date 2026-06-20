@@ -121,8 +121,8 @@ export const SilentCircleOverlay: React.FC = () => (
     aria-hidden="true"
     style={{
       position: 'absolute',
-      left: '50%',
-      top: '0.06em',
+      left: '40%',
+      top: '0.16em',
       transform: 'translate(-50%, -50%)',
       fontFamily: AMIRI_REGULAR_STACK,
       fontSize: '0.72em',
