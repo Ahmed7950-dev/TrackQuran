@@ -291,13 +291,21 @@ export function connectGoogleCalendar(
     return;
   }
 
-  // The GCalOAuthCallback page posts the code back via postMessage then closes itself
+  // The GCalOAuthCallback page posts the code back via postMessage then closes itself.
+  // We rely solely on that message to know auth finished — we deliberately do NOT
+  // poll `popup.closed`. Once the popup navigates to accounts.google.com (which
+  // sets Cross-Origin-Opener-Policy), the browser severs the opener link and logs
+  // a COOP warning on every `popup.closed` read — twice a second — even inside a
+  // try/catch. The only cleanup we need is a one-shot timeout to drop the listener
+  // if the user abandons the popup without completing consent.
+  let cleanupTimer: ReturnType<typeof setTimeout>;
+
   const handleMessage = async (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
     if (!event.data?.gcalCode && !event.data?.gcalError) return;
 
     window.removeEventListener('message', handleMessage);
-    clearInterval(closedChecker);
+    clearTimeout(cleanupTimer);
 
     if (event.data.gcalError) {
       onError(event.data.gcalError);
@@ -316,19 +324,11 @@ export function connectGoogleCalendar(
 
   window.addEventListener('message', handleMessage);
 
-  // Clean up if the user closes the popup without completing auth.
-  // Wrapped in try/catch because COOP headers can block popup.closed reads.
-  const closedChecker = setInterval(() => {
-    try {
-      if (popup.closed) {
-        clearInterval(closedChecker);
-        window.removeEventListener('message', handleMessage);
-      }
-    } catch {
-      clearInterval(closedChecker);
-      window.removeEventListener('message', handleMessage);
-    }
-  }, 500);
+  // If no message arrives within 5 minutes, the user abandoned the popup — drop
+  // the listener so it doesn't linger.
+  cleanupTimer = setTimeout(() => {
+    window.removeEventListener('message', handleMessage);
+  }, 5 * 60 * 1000);
 }
 
 /**
