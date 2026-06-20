@@ -1032,7 +1032,7 @@ const LetterWithError: React.FC<{
                         {/* Hafs renders a clean tail-less small meem for standalone
                             U+06E2; forced here so the glyph is identical whichever
                             Quranic font the user selected. */}
-                        <span style={{ position: 'absolute', top: '-0.3em', right: 0, fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
+                        <span style={{ position: 'absolute', top: '-0.3em', left: '50%', transform: 'translateX(-50%)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
                 ) : (
                     letter
