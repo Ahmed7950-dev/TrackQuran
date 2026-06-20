@@ -82,8 +82,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
         if (session) {
-          // Page refresh / tab restore — profile already exists, skip the upsert.
-          resolveUser(session, false).then(markDone).catch(markDone);
+          // Page refresh / tab restore — optimistically set user from session
+          // immediately so the app never flickers to the login page while the
+          // DB role fetch is in-flight (critical on slow mobile connections).
+          if (!cancelled) setCurrentUser(buildTeacherUser(session, 'teacher'));
+          resolveUser(session, false).then(markDone).catch(() => {
+            // Role fetch failed but session is valid — keep the optimistic user.
+            markDone();
+          });
         } else {
           markDone();
         }
@@ -98,8 +104,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    // Safety fallback: stop the spinner after 4 s if INITIAL_SESSION never fires.
-    const timer = setTimeout(markDone, 4000);
+    // Safety fallback: stop the spinner after 10 s if INITIAL_SESSION never fires.
+    const timer = setTimeout(markDone, 10000);
 
     return () => {
       cancelled = true;

@@ -10,4 +10,11 @@ if (!supabaseUrl || !supabaseAnon) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnon);
+export const supabase = createClient(supabaseUrl, supabaseAnon, {
+  auth: {
+    persistSession:     true,
+    autoRefreshToken:   true,
+    detectSessionInUrl: true,
+    storage:            typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});
