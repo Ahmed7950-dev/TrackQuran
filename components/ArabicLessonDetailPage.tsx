@@ -3,7 +3,6 @@
 //   📖 Lesson PDF  · 📝 Homework  · 🔤 Vocabulary  · 🎬 Dialogue Video
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import lottie from 'lottie-web';
 import {
   ArabicLesson, ArabicStudent,
   HomeworkQuestion, HomeworkQuestionType,
@@ -2106,16 +2105,22 @@ const HomeworkQuestionForm: React.FC<{
   );
 };
 
-// ─── Lottie icon helper (mounts animation when element appears) ──────────────
+// ─── Lottie icon helper (dynamic import normalises ESM/CJS interop) ──────────
 const LottieIcon: React.FC<{ path: string; className?: string }> = ({ path, className }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!ref.current) return;
-    const anim = lottie.loadAnimation({ container: ref.current, renderer: 'svg', loop: true, autoplay: true, path });
-    return () => anim.destroy();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return <div ref={ref} className={className} />;
+    let anim: { destroy: () => void } | undefined;
+    let cancelled = false;
+    import('lottie-web').then((mod) => {
+      const lottie = (mod as { default?: typeof mod }).default ?? mod;
+      if (cancelled || !ref.current) return;
+      anim = (lottie as { loadAnimation: (o: object) => { destroy: () => void } }).loadAnimation({
+        container: ref.current, renderer: 'svg', loop: true, autoplay: true, path,
+      });
+    });
+    return () => { cancelled = true; anim?.destroy(); };
+  }, [path]);
+  return <div ref={ref} className={className} aria-hidden="true" />;
 };
 
 // ═══════════════════════════════════════════════════════
@@ -2499,30 +2504,26 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {/* Flashcard challenge button */}
                 <button onClick={startChallenge}
-                  className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 p-[2px] shadow-lg hover:shadow-amber-300/40 dark:hover:shadow-amber-900/40 hover:scale-[1.02] transition-all duration-200">
-                  <div className="flex flex-col items-center gap-2 rounded-[14px] bg-gradient-to-br from-amber-400 to-amber-600 px-4 py-5">
-                    <div className="w-20 h-20 rounded-xl bg-white/20 flex items-center justify-center shadow-inner">
-                      <LottieIcon path="/greeting-card.json" className="w-16 h-16" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-white leading-tight">{t('arabicLessonDetail.startFlashcard', { count: words.length })}</p>
-                      <p className="text-xs text-white/70 mt-0.5">Flip · memorise · repeat</p>
-                    </div>
-                  </div>
+                  className="group flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-3 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/30 ring-1 ring-amber-200/60 dark:ring-amber-800/40 flex items-center justify-center overflow-hidden">
+                    <LottieIcon path="/greeting-card.json" className="w-10 h-10" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-amber-800 dark:text-amber-200 truncate">{t('arabicLessonDetail.startFlashcard', { count: words.length })}</span>
+                    <span className="block text-xs text-amber-600/70 dark:text-amber-300/60">Flip · memorise · repeat</span>
+                  </span>
                 </button>
 
                 {/* Word Flight game button */}
                 <button onClick={() => setShowWordFlight(true)}
-                  className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-400 to-sky-600 p-[2px] shadow-lg hover:shadow-sky-300/40 dark:hover:shadow-sky-900/40 hover:scale-[1.02] transition-all duration-200">
-                  <div className="flex flex-col items-center gap-2 rounded-[14px] bg-gradient-to-br from-sky-400 to-sky-600 px-4 py-5">
-                    <div className="w-20 h-20 rounded-xl bg-white/20 flex items-center justify-center shadow-inner">
-                      <LottieIcon path="/plane.json" className="w-16 h-16" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-white leading-tight">Word Flight Game</p>
-                      <p className="text-xs text-white/70 mt-0.5">Catch the falling words</p>
-                    </div>
-                  </div>
+                  className="group flex items-center gap-3 rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/60 dark:bg-sky-900/10 px-4 py-3 text-left hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-300 dark:hover:border-sky-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-sky-200 dark:bg-sky-800/40 ring-1 ring-sky-300/60 dark:ring-sky-700/40 flex items-center justify-center overflow-hidden">
+                    <LottieIcon path="/plane.json" className="w-10 h-10" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-sky-800 dark:text-sky-200 truncate">Word Flight Game</span>
+                    <span className="block text-xs text-sky-600/70 dark:text-sky-300/60">Catch the falling words</span>
+                  </span>
                 </button>
               </div>
             </div>
