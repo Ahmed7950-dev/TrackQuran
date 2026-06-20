@@ -6,7 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -768,7 +768,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
 
     const renderVerseContent = (verse: QuranVerse, forImageExport: boolean = false) => {
         const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-        const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+        const words = splitVerseWords(verse.text_uthmani);
 
         return words.map((word, wordIndex) => {
             const wordKey = `${surahNum}:${ayahNum}:${wordIndex}`;
@@ -995,7 +995,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     const mistakes = student.mistakes || {};
                     for (const verse of verses) {
                         const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-                        const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+                        const words = splitVerseWords(verse.text_uthmani);
                         
                         // Check letter-level mistakes first
                         for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
@@ -1040,7 +1040,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 const ayahNum = Number(verse.verse_key.split(':')[1]);
                                 // Check if this verse has any letter-level mistakes with annotation boxes
                                 const [surahNum, ayahNumCheck] = verse.verse_key.split(':').map(Number);
-                                const words = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ');
+                                const words = splitVerseWords(verse.text_uthmani);
                                 const hasLetterMistakes = words.some((word, wordIndex) => {
                                     const letters = parseWordIntoLetters(word);
                                     return letters.some(({ index: letterIndex }) => {

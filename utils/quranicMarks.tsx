@@ -16,6 +16,32 @@ import React from 'react';
 // letters joined and the mark renders correctly).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Waqf signs U+06D6–U+06DC are GDEF=3 combining marks in the bundled fonts.
+// Safari won't render them unless a base character precedes them in the same
+// text run. When the Quran API returns them as standalone space-delimited tokens
+// (e.g. ['رسالته', 'ۜ', 'سيصيب']), Safari drops them entirely. Fix: merge any
+// standalone waqf token into the end of the preceding word before splitting into
+// render units, so GPOS can anchor the mark above that word's final letter.
+const STANDALONE_WAQF_RE = /^[ۖ-ۜ]+$/;
+
+/**
+ * Split verse text on spaces, then merge any standalone waqf-sign tokens
+ * (U+06D6–U+06DC) into the end of the preceding word.
+ * Use this instead of a bare `.split(' ')` when splitting verse text.
+ */
+export const splitVerseWords = (textUthmani: string): string[] => {
+  const raw = textUthmani.replace(/ْ/g, 'ۡ').split(' ');
+  const out: string[] = [];
+  for (const w of raw) {
+    if (STANDALONE_WAQF_RE.test(w) && out.length > 0) {
+      out[out.length - 1] += w;
+    } else {
+      out.push(w);
+    }
+  }
+  return out;
+};
+
 const IMALA_MARK  = '۪'; // U+06EA
 const ISHMAM_MARK = '۫'; // U+06EB
 

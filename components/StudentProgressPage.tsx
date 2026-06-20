@@ -8,7 +8,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -1730,7 +1730,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const list: FocusItem[] = [];
         verses.forEach(verse => {
             const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-            const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ').filter(w => w.trim());
+            const words = splitVerseWords(verse.text_uthmani).filter(w => w.trim());
             words.forEach((word, wordIdx) => {
                 list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
             });
@@ -3013,7 +3013,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const isTafseer   = getTafseerRangeInfo(surahNum, ayahNum).isLogged;
             const isVerseHidden = hiddenRanges.some(range => isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, range.start) && isVerseAfterOrEqual(range.end, { surah: surahNum, ayah: ayahNum }));
 
-            const verseWords = verse.text_uthmani.replace(/\u0652/g, '\u06e1').split(' ').map((word, wordIndex, wordsArray) => {
+            const verseWords = splitVerseWords(verse.text_uthmani).map((word, wordIndex, wordsArray) => {
                 // Letter-based error marking (always shown)
                 const letters = parseWordIntoLetters(word);
                 if (letters.length === 0) {

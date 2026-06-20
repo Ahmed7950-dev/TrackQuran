@@ -10,7 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
-import { renderWordWithMarks, wordMarkPlan } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -112,7 +112,7 @@ const MistakesTab: React.FC<{
     const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
     // Replace standard sukun (U+0652) with Quranic small rounded zero (U+06E1)
     // so it renders correctly in all Quranic fonts (same fix as MistakesReviewPage).
-    const words = verse.text_uthmani.replace(/ْ/g, 'ۡ').split(' ');
+    const words = splitVerseWords(verse.text_uthmani);
 
     return words.map((word, wi) => {
       const wordKey = `${surahNum}:${ayahNum}:${wi}`;
