@@ -134,92 +134,11 @@ const SMALL_YEH = '\u06e6';        // ARABIC SMALL YEH \u2014 Madd \u1e62ilah / 
 const SILENT_MARKER = '\u06df';    // ARABIC SMALL HIGH ROUNDED ZERO \u2014 silent letter (Madinah Mushaf)
 const MADD_MARKERS = [MADDAH, SMALL_HIGH_MADDA, SMALL_WAW, SMALL_YEH];
 
-// Waqf (stopping) sign characters \u2014 U+06D6 through U+06DE.
-// These superscript marks must be rendered in 'Amiri Quran' because Safari/iOS
-// does not correctly fall back per-glyph within a span that already loaded a
-// custom Quranic font. Wrapping them explicitly guarantees they show on all
-// browsers, matching Chrome/Firefox behavior.
-const WAQF_SIGN_SET = new Set([
-  '\u06d6', // \u06d6 \u2014 Waqf Mujawwaz (permissible)
-  '\u06d7', // \u06d7 \u2014 Waqf Muraqqas (makruh)
-  '\u06d8', // \u06d8 \u2014 Waqf Musta\u1e25ab
-  '\u06d9', // \u06d9 \u2014 Waqf Mamnoo' (forbidden)
-  '\u06da', // \u06da \u2014 Waqf Jaiz (the \u062c sign the user reported missing)
-  '\u06db', // \u06db \u2014 Saktah (brief pause)
-  '\u06dc', // \u06dc \u2014 Waqf Musta\u1e25ab (High Seen)
-  '\u06dd', // \u06dd \u2014 End of Ayah circle
-  '\u06de', // \u06de \u2014 Rub el-Hizb
-  '\u06df', // \u06df \u2014 Silent letter (already handled separately, included for completeness)
-]);
-// Im\u0101la & Ishm\u0101m marks (Hafs \u02bfan \u02bf\u0100sim). These are the only two verses in the
-// mu\u1e63\u1e25af that use them, and the bundled Quranic fonts (Hafs, Elgharib KFGQPCHafs
-// V10, \u2026) ship broken glyphs for both (aliased to U+0600 at full advance), so
-// they render as a stray disc + dotted circle. Each needs a DIFFERENT corrective
-// font to match the printed mu\u1e63\u1e25af:
-//   \u2022 U+06EA im\u0101la  (Hud 11:41  \u0645\u064e\u062c\u0652\u0631\u06ea\u0649\u0670\u0647\u064e\u0627) \u2192 a small dot UNDER the letter.
-//     Only 'Uthmanic HAFS v22' draws it as that dot; Amiri draws a diamond.
-//   \u2022 U+06EB ishm\u0101m (Yusuf 12:11 \u062a\u064e\u0623\u0652\u0645\u064e\u06eb\u0646\u064e\u0651\u0627) \u2192 small mark above; 'Amiri Quran'
-//     renders this correctly.
-const IMALA_MARK  = '\u06ea'; // U+06EA ARABIC EMPTY CENTRE LOW STOP  \u2014 dot under \u0631
-const ISHMAM_MARK = '\u06eb'; // U+06EB ARABIC EMPTY CENTRE HIGH STOP
+// Waqf signs (U+06D6-U+06DF), imala (U+06EA), and ishmam (U+06EB) are now
+// handled by the 'QuranMarkFix' @font-face unicode-range rules in index.html.
+// Font substitution happens at the glyph level so Arabic text stays in a single
+// unbroken text run and Safari/iOS correctly connects letter forms.
 
-// Corrective font stacks (kept separate from WAQF_SIGN_SET so waqf logic is unaffected).
-const AMIRI_QURAN_STACK  = "'Amiri Quran', 'Amiri Regular', serif";   // waqf signs + ishm\u0101m
-const UTHMANIC_V22_STACK = "'Uthmanic HAFS v22', 'Amiri Quran', serif"; // im\u0101la (dot under)
-
-// Returns the corrective font stack for a grapheme cluster, or null to keep the
-// user-selected Quranic font.
-const overrideFontForSegment = (segment: string): string | null => {
-  const chars = [...segment];
-  if (chars.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
-  if (chars.some(ch => WAQF_SIGN_SET.has(ch) || ch === ISHMAM_MARK)) return AMIRI_QURAN_STACK;
-  return null;
-};
-const hasWaqfOrSpecialChar = (text: string): boolean => {
-  for (const ch of text) if (WAQF_SIGN_SET.has(ch) || ch === IMALA_MARK || ch === ISHMAM_MARK) return true;
-  return false;
-};
-
-// Segment a letter string into grapheme clusters so combining marks (harakat,
-// Waqf signs like U+06DF) stay attached to their base letter. Clusters that
-// contain a Waqf sign or an imāla/ishmām mark get a corrective font override
-// (see overrideFontForSegment) — base + mark must stay in one font to shape
-// correctly. Splitting by raw character (the old approach) detaches combining
-// marks from their base and causes glyphs like the circled sukoon to render
-// below the line.
-const segmentForWaqfFont = (text: string): Array<{ segment: string; overrideFont: string | null }> => {
-  let parts: string[];
-  if (typeof Intl !== 'undefined' && typeof (Intl as Record<string, unknown>).Segmenter === 'function') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seg = new (Intl as any).Segmenter('ar', { granularity: 'grapheme' });
-    parts = [...seg.segment(text)].map((s: { segment: string }) => s.segment);
-  } else {
-    // Fallback: manually group each Arabic base letter with all following
-    // combining marks (Arabic diacritics U+0610-U+061A, U+064B-U+065F, U+0670,
-    // and the Waqf/special range U+06D6-U+06ED).
-    parts = [];
-    let cur = '';
-    for (const ch of text) {
-      const cp = ch.codePointAt(0) ?? 0;
-      const isCombining =
-        (cp >= 0x0610 && cp <= 0x061a) ||
-        (cp >= 0x064b && cp <= 0x065f) ||
-        cp === 0x0670 ||
-        (cp >= 0x06d6 && cp <= 0x06ed);
-      if (isCombining && cur) {
-        cur += ch; // attach to current base cluster
-      } else {
-        if (cur) parts.push(cur);
-        cur = ch;
-      }
-    }
-    if (cur) parts.push(cur);
-  }
-  return parts.map(segment => ({
-    segment,
-    overrideFont: overrideFontForSegment(segment),
-  }));
-};
 const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
 
 // Iqlab: U+06E2 (small high meem) stacked on a tanween (U+064B/U+064C). None of
@@ -1114,22 +1033,6 @@ const LetterWithError: React.FC<{
                             Quranic font the user selected. */}
                         <span style={{ position: 'absolute', top: '-0.3em', right: 0, fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
-                ) : hasWaqfOrSpecialChar(letter) ? (
-                    // segmentForWaqfFont groups each Arabic base letter with its
-                    // combining marks (harakat, U+06DF silent marker, etc.) so that
-                    // combining chars are never split into their own span \u2014 doing so
-                    // detaches them from their base and causes them to render below
-                    // the line (the "alif with circled sukoon under the line" bug).
-                    segmentForWaqfFont(letter).map(({ segment, overrideFont }, idx) =>
-                        overrideFont ? (
-                            // lineHeight:1 + baseline: the corrective font box is much
-                            // taller than the Quranic fonts; combined with the outer
-                            // align-top span it pushes the glyph below the baseline.
-                            <span key={idx} style={{ fontFamily: overrideFont, lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
-                        ) : (
-                            <span key={idx}>{segment}</span>
-                        )
-                    )
                 ) : (
                     letter
                 )}
@@ -1158,32 +1061,8 @@ const TajweedWord: React.FC<{
         return null;
     };
 
-    // Helper: split unit text and wrap any Waqf/special-mark characters in
-    // 'Amiri Quran' so they render correctly on Safari/iOS (per-glyph fallback
-    // doesn't work in WebKit when the parent span already loaded a custom font).
-    // Uses segmentForWaqfFont so combining marks (e.g. U+06DF silent marker) stay
-    // attached to their base letter instead of being split into a separate span
-    // (which causes them to render below the baseline).
-    const processUnitWithSpecialChars = (unitText: string, unitIndex: number, className: string = '') => {
-        if (!hasWaqfOrSpecialChar(unitText)) {
-            return <span key={unitIndex} className={className}>{unitText}</span>;
-        }
-        const segs = segmentForWaqfFont(unitText);
-        return (
-            <React.Fragment key={unitIndex}>
-                {segs.map(({ segment, overrideFont }, i) =>
-                    overrideFont ? (
-                        // lineHeight:1 + baseline: see LetterWithError — prevents the
-                        // taller corrective font box from sinking the glyph below the line.
-                        <span key={i} className={className}
-                              style={{ fontFamily: overrideFont, lineHeight: 1, verticalAlign: 'baseline' }}>{segment}</span>
-                    ) : (
-                        <span key={i} className={className}>{segment}</span>
-                    )
-                )}
-            </React.Fragment>
-        );
-    };
+    const processUnitWithSpecialChars = (unitText: string, unitIndex: number, className: string = '') =>
+        <span key={unitIndex} className={className}>{unitText}</span>;
 
     const renderedUnits = units.map((unit, index) => {
 

@@ -211,8 +211,25 @@
         font-style: normal;
         font-display: swap;
       }
+      /* Per-codepoint corrective fonts via unicode-range — keeps all Arabic text
+         in a single text run so Safari/iOS shaping connects letters correctly. */
+      @font-face {
+        font-family: 'QuranMarkFix';
+        src: url('/Fonts/Amiri-Regular.ttf') format('truetype');
+        unicode-range: U+06D6-U+06DF; /* waqf signs + silent marker */
+      }
+      @font-face {
+        font-family: 'QuranMarkFix';
+        src: url('/Fonts/uthmanic_hafs_v22.ttf') format('truetype');
+        unicode-range: U+06EA; /* imāla dot (Hud 11:41) */
+      }
+      @font-face {
+        font-family: 'QuranMarkFix';
+        src: url('/Fonts/Amiri-Regular.ttf') format('truetype');
+        unicode-range: U+06EB; /* ishmam mark (Yusuf 12:11) */
+      }
       .font-quranic {
-        font-family: var(--quranic-font, 'Hafs'), 'Amiri Quran', serif;
+        font-family: 'QuranMarkFix', var(--quranic-font, 'Hafs'), 'Amiri Quran', serif;
       }
       @keyframes glow {
         0%, 100% { box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.6); }
