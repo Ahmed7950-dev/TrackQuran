@@ -297,8 +297,8 @@ const MistakesTab: React.FC<{
                     )}
 
                     <div
-                      className="text-slate-900 text-center select-none"
-                      style={{ fontFamily: quranicFont, fontSize: '4rem', lineHeight: '7rem' }}
+                      className="text-slate-900 text-center select-none font-quranic"
+                      style={{ fontSize: '4rem', lineHeight: '7rem' }}
                       dir="rtl"
                     >
                       {renderVerse(verse)}
