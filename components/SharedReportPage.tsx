@@ -10,7 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
-import { renderQuranicMarks } from '../utils/quranicMarks';
+import { renderQuranicMarks, correctiveWordFont } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -134,8 +134,8 @@ const MistakesTab: React.FC<{
       if (!hasLetterAnnotations) {
         return (
           <React.Fragment key={wordKey}>
-            <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`}>
-              {/* processTextWithU06DF ensures the silent-letter marker renders as a proper circle */}
+            <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`} style={{ fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
+              {/* correctiveWordFont renders silent/imāla/ishmām words in a font that draws the mark correctly */}
               {processTextWithU06DF(word)}
             </span>{' '}
           </React.Fragment>
@@ -150,7 +150,7 @@ const MistakesTab: React.FC<{
 
       return (
         <React.Fragment key={wordKey}>
-          <span style={{ display: 'inline', fontFamily: 'inherit', position: 'relative', whiteSpace: 'nowrap' }}>
+          <span style={{ display: 'inline', fontFamily: correctiveWordFont(word) ?? 'inherit', position: 'relative', whiteSpace: 'nowrap' }}>
             {letters.map(({ letter, index: li }) => {
               const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
               const lm = mistakes[lk];

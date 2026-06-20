@@ -6,7 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderQuranicMarks } from '../utils/quranicMarks';
+import { renderQuranicMarks, correctiveWordFont } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -794,7 +794,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 // Fallback to word-level rendering if no letters found or no letter-level mistakes
                 return (
                     <React.Fragment key={wordKey}>
-                        <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`}>
+                        <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`} style={{ fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
                             {processTextWithU06DF(word)}
                         </span>
                         {' '}
@@ -805,12 +805,12 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             // Render each letter individually - same for both normal display and image export
             // This ensures accurate highlighting that matches StudentProgressPage exactly
             return (
-                <span 
-                    key={wordKey} 
-                    className="relative inline" 
-                    style={{ 
-                        display: 'inline', 
-                        fontFamily: 'inherit',
+                <span
+                    key={wordKey}
+                    className="relative inline"
+                    style={{
+                        display: 'inline',
+                        fontFamily: correctiveWordFont(word) ?? 'inherit',
                         // Ensure letters stay together for proper Arabic ligatures
                         whiteSpace: 'nowrap',
                         letterSpacing: '0'

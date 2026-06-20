@@ -8,6 +8,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
+import { correctiveWordFont } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -1249,6 +1250,13 @@ const TajweedWord: React.FC<{
         return processUnitWithSpecialChars(unit, index);
     });
 
+    // If the word carries a mark the selected font renders wrong (silent U+06DF,
+    // imāla U+06EA, ishmām U+06EB), render the WHOLE word in the corrective font
+    // so letters stay joined and the mark attaches (see correctiveWordFont).
+    const wordFont = correctiveWordFont(word);
+    if (wordFont) {
+        return <span style={{ fontFamily: wordFont }}>{renderedUnits}</span>;
+    }
     return <>{renderedUnits}</>;
 });
 
@@ -3018,7 +3026,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
                 const isLastWordInVerse = wordIndex === wordsArray.length - 1;
                 return (
-                    <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
+                    <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
                         {letters.map(({ letter, index: letterIndex }) => {
                             const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
                             const mistake = studentMistakes[letterKey];
@@ -3640,7 +3648,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
                                                             style={{ ...slotStyle, fontSize: '10.5rem', lineHeight: 2.2 }}
                                                         >
-                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: 'inherit' }}>
+                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: correctiveWordFont(item.word) ?? 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
                                                                     const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
                                                                     const mk = studentMistakes[lk];
