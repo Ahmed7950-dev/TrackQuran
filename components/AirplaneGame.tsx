@@ -1775,9 +1775,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && (
         <div ref={planeRef} className="absolute pointer-events-none" style={{ left: `${planePos.current.x}%`, top: `${planePos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
           {is2p && <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#3b82f6', whiteSpace: 'nowrap' }}>{hn(p1Name)}</div>}
-          {p1CrashedRef.current
-            ? (p1CrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null)
-            : <JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} flameRef={p1FlameRef} />}
+          {p1CrashedRef.current && p1CrashAnim === 'explosion' && <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} />}
+          <div style={{ visibility: p1CrashedRef.current ? 'hidden' : 'visible' }}><JetPlane src={PLANES[p1Plane].url} shocked={p1Shocked} flameRef={p1FlameRef} /></div>
         </div>
       )}
 
@@ -1785,9 +1784,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {status === 'playing' && is2p && (
         <div ref={p2PlaneRef} className="absolute pointer-events-none" style={{ left: `${p2Pos.current.x}%`, top: `${p2Pos.current.y}%`, transform: 'translate(-50%,-50%)', zIndex: 20 }}>
           <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-extrabold text-white px-1.5 rounded-full" style={{ background: '#f97316', whiteSpace: 'nowrap' }}>{hn(p2Name)}</div>
-          {p2CrashedRef.current
-            ? (p2CrashAnim === 'explosion' ? <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} /> : null)
-            : <JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} flameRef={p2FlameRef} />}
+          {p2CrashedRef.current && p2CrashAnim === 'explosion' && <dotlottie-wc src="/sprites/explosion.json" autoplay style={{ width: 120, height: 120 } as React.CSSProperties} />}
+          <div style={{ visibility: p2CrashedRef.current ? 'hidden' : 'visible' }}><JetPlane src={PLANES[isOnline ? p2RemotePlane : p2Plane].url} shocked={p2Shocked} flameRef={p2FlameRef} /></div>
         </div>
       )}
 
