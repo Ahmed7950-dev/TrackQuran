@@ -493,6 +493,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const keysDown      = useRef<Record<string, boolean>>({});
   const rafRef        = useRef<number>(0);
   const audioRef      = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const bubblesRef    = useRef<Bubble[]>([]);
   const bubbleDomRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const collidingRef  = useRef(false);
@@ -650,10 +651,24 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   }, []);
 
   // ── Audio ──────────────────────────────────────────────────────────────────
+  // Preload every letter's audio file once at mount so playback is instant.
+  useEffect(() => {
+    const cache = audioCacheRef.current;
+    for (const letter of letters) {
+      if (cache.has(letter)) continue;
+      const url = letterAudioUrl(letter);
+      const el = new Audio(url);
+      el.preload = 'auto';
+      cache.set(letter, el);
+    }
+  }, [letters]);
+
   const playLetterAudio = useCallback((letter: string) => {
     if (!letter) return;
     audioRef.current?.pause(); window.speechSynthesis?.cancel();
-    const audio = new Audio(`${letterAudioUrl(letter)}?t=${Date.now() % 1e7}`);
+    const cached = audioCacheRef.current.get(letter);
+    const audio = cached ?? new Audio(letterAudioUrl(letter));
+    if (cached) { cached.currentTime = 0; }
     audioRef.current = audio;
     let fallbackUsed = false;
     const fallback = () => { if (!fallbackUsed) { fallbackUsed = true; speakLetter(letter); } };
