@@ -6,7 +6,7 @@ import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getShar
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderQuranicMarks, correctiveWordFont } from '../utils/quranicMarks';
+import { renderQuranicMarks, renderWordWithMarks, wordMarkPlan, correctiveFontForUnit } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -700,11 +700,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         }
     };
 
-    // Render text with corrective fonts for the silent marker (U+06DF) plus the
-    // im\u0101la (U+06EA, Hud 11:41) and ishm\u0101m (U+06EB, Yusuf 12:11) marks that the
-    // bundled Quranic fonts render incorrectly. See utils/quranicMarks.
-    const processTextWithU06DF = (text: string): React.ReactNode => renderQuranicMarks(text);
-
     // Letter component - matches StudentProgressPage exactly for accurate highlighting
     const LetterForPDF: React.FC<{
         letter: string;
@@ -794,8 +789,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 // Fallback to word-level rendering if no letters found or no letter-level mistakes
                 return (
                     <React.Fragment key={wordKey}>
-                        <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`} style={{ fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
-                            {processTextWithU06DF(word)}
+                        <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`}>
+                            {renderWordWithMarks(word, wordKey)}
                         </span>
                         {' '}
                     </React.Fragment>
@@ -804,13 +799,14 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             
             // Render each letter individually - same for both normal display and image export
             // This ensures accurate highlighting that matches StudentProgressPage exactly
+            const markPlan = wordMarkPlan(word);
             return (
                 <span
                     key={wordKey}
                     className="relative inline"
                     style={{
                         display: 'inline',
-                        fontFamily: correctiveWordFont(word) ?? 'inherit',
+                        fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit',
                         // Ensure letters stay together for proper Arabic ligatures
                         whiteSpace: 'nowrap',
                         letterSpacing: '0'
@@ -819,8 +815,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     {letters.map(({ letter, index: letterIndex }) => {
                         const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
                         const mistake = student.mistakes[letterKey];
-                        
-                        return (
+                        const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
+                        const node = (
                             <LetterForPDF
                                 key={letterKey}
                                 letter={letter}
@@ -828,6 +824,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 mistake={mistake}
                             />
                         );
+                        return unitFont ? <span key={letterKey} style={{ fontFamily: unitFont }}>{node}</span> : node;
                     })}
                     {' '}
                 </span>

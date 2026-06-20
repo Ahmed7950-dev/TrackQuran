@@ -8,7 +8,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { correctiveWordFont } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveFontForUnit, correctiveWordFont } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -3025,15 +3025,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     );
                 }
                 const isLastWordInVerse = wordIndex === wordsArray.length - 1;
+                const markPlan = wordMarkPlan(word);
                 return (
-                    <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
+                    <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit' }}>
                         {letters.map(({ letter, index: letterIndex }) => {
                             const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
                             const mistake = studentMistakes[letterKey];
                             const isEditing = editingLetterKey === letterKey;
                             const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
                             const isLastLetterOfWord = letterIndex === letters.length - 1;
-                            return (
+                            // perLetter plan: switch only the marked letter (e.g. silent alif)
+                            // to its corrective font; the rest of the word stays in the
+                            // selected font. The letter span inside LetterWithError inherits.
+                            const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
+                            const letterNode = (
                                 <LetterWithError
                                     key={letterKey}
                                     letter={letter}
@@ -3060,6 +3065,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                 />
                             );
+                            return unitFont
+                                ? <span key={letterKey} style={{ fontFamily: unitFont }}>{letterNode}</span>
+                                : letterNode;
                         })}
                         {' '}
                     </span>
@@ -3648,12 +3656,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                             className="font-quranic text-slate-900 dark:text-slate-100"
                                                             style={{ ...slotStyle, fontSize: '10.5rem', lineHeight: 2.2 }}
                                                         >
-                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: correctiveWordFont(item.word) ?? 'inherit' }}>
+                                                            {(() => { const fwPlan = wordMarkPlan(item.word); return (
+                                                            <span className="relative inline" style={{ display: 'inline', fontFamily: fwPlan.mode === 'wholeWord' ? fwPlan.font : 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
                                                                     const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
                                                                     const mk = studentMistakes[lk];
                                                                     const cs = letterClickStates.current[lk] || (mk ? 2 : 0);
-                                                                    return (
+                                                                    const unitFont = fwPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
+                                                                    const node = (
                                                                         <LetterWithError
                                                                             key={lk}
                                                                             letter={letter}
@@ -3680,8 +3690,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
                                                                         />
                                                                     );
+                                                                    return unitFont ? <span key={lk} style={{ fontFamily: unitFont }}>{node}</span> : node;
                                                                 })}
                                                             </span>
+                                                            ); })()}
                                                         </div>
                                                     );
                                                 })}

@@ -10,7 +10,7 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
-import { renderQuranicMarks, correctiveWordFont } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, correctiveFontForUnit } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
@@ -74,13 +74,6 @@ const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): nu
   return max;
 };
 
-/**
- * Renders Quranic text with corrective fonts for the silent marker (U+06DF) and
- * the imāla (U+06EA, Hud 11:41) / ishmām (U+06EB, Yusuf 12:11) marks that the
- * bundled Quranic fonts render incorrectly. See utils/quranicMarks.
- */
-const processTextWithU06DF = (text: string): React.ReactNode => renderQuranicMarks(text);
-
 // Quranic fonts (same list as main app)
 const QURANIC_FONTS = [
   { name: 'Hafs', displayName: 'Hafs' },
@@ -134,9 +127,8 @@ const MistakesTab: React.FC<{
       if (!hasLetterAnnotations) {
         return (
           <React.Fragment key={wordKey}>
-            <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`} style={{ fontFamily: correctiveWordFont(word) ?? 'inherit' }}>
-              {/* correctiveWordFont renders silent/imāla/ishmām words in a font that draws the mark correctly */}
-              {processTextWithU06DF(word)}
+            <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`}>
+              {renderWordWithMarks(word, wordKey)}
             </span>{' '}
           </React.Fragment>
         );
@@ -148,19 +140,20 @@ const MistakesTab: React.FC<{
         if (lm?.errorText) annotations.push({ label: lm.errorText, type: lm.errorType ?? 'tajweed' });
       });
 
+      const markPlan = wordMarkPlan(word);
       return (
         <React.Fragment key={wordKey}>
-          <span style={{ display: 'inline', fontFamily: correctiveWordFont(word) ?? 'inherit', position: 'relative', whiteSpace: 'nowrap' }}>
+          <span style={{ display: 'inline', fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit', position: 'relative', whiteSpace: 'nowrap' }}>
             {letters.map(({ letter, index: li }) => {
               const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
               const lm = mistakes[lk];
               const letterBg = lm?.errorText
                 ? lm.errorType === 'tajweed' ? 'bg-green-200' : 'bg-red-200'
                 : lm ? getMistakeBg(lm.level) : '';
+              const unitFont = markPlan.mode === 'perLetter' ? correctiveFontForUnit(letter) : null;
               return (
-                <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
-                  {/* Apply per-character U+06DF font switch inside letter spans too */}
-                  {processTextWithU06DF(letter)}
+                <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: unitFont ?? 'inherit' }}>
+                  {letter}
                 </span>
               );
             })}
