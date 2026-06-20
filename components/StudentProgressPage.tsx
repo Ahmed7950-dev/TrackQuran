@@ -152,8 +152,8 @@ const IQLAB_HIGH_MEEM = '\u06e2';
 const hasIqlabMeem = (text: string): boolean =>
     text.includes(IQLAB_HIGH_MEEM) && (text.includes('\u064b') || text.includes('\u064c'));
 
-// Iqlab high meem overlay: positioned at top -0.30em, left -105%
-// (user-confirmed offset, June 2026)
+// Iqlab high meem overlay: anchored to the horizontal centre of the unit (above
+// the tanween), width-independent. See the render site in LetterWithError.
 
 // Unicode constants for Ghunnah rules
 const NOON = '\u0646'; // U+0646 - ن
@@ -1031,9 +1031,18 @@ const LetterWithError: React.FC<{
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
                 {hasIqlabMeem(letter) ? (
+                    // Iqlab meem overlay. We strip the U+06E2 from the inline text (so the
+                    // tanween renders cleanly) and re-draw it ourselves above the tanween.
+                    // The tanween is a combining mark, so it always renders centred above its
+                    // base letter — i.e. at the HORIZONTAL CENTRE of this unit, regardless of
+                    // how wide the base letter is. So we anchor the meem to the centre with
+                    // left:0/right:0 + text-align:center (width-independent) rather than a
+                    // percentage offset (which only lands right for one specific letter width).
+                    // The small translateX nudges it slightly "after" the tanween (leftward in
+                    // RTL), and top raises it just above the tanween.
                     <span style={{ position: 'relative', display: 'inline' }}>
                         {letter.replace(/ۢ/g, '')}
-                        <span style={{ position: 'absolute', top: '-0.30em', left: '-105%', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
+                        <span style={{ position: 'absolute', top: '-0.34em', left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
                 ) : letter}
             </span>
