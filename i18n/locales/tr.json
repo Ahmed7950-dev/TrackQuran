@@ -156,7 +156,7 @@
         "tabMistakes": "Hata İncelemesi",
         "tabProgress": "İlerlemem",
         "shareToUnlock": "(açmak için bir kez paylaşın)",
-        "tabAvailability": "Öğretmen Müsaitliği",
+        "tabAvailability": "Takvim",
         "tabQuran": "Kur'an",
         "tabHomework": "Ödev",
         "tabTajweed": "Tecvid",
@@ -182,7 +182,8 @@
         "loadingReport": "Rapor yükleniyor…",
         "noCompletedYet": "Henüz tamamlanan ödev yok.",
         "allDone": "Hepsi tamam!",
-        "completedAllHomework": "Tüm ödevleri tamamladın."
+        "completedAllHomework": "Tüm ödevleri tamamladın.",
+        "youHaveLessons": "Derslerin var:"
     },
     "userMenu": {
         "logout": "Çıkış Yap",

@@ -156,7 +156,7 @@
         "tabMistakes": "مراجعة الأخطاء",
         "tabProgress": "تقدّمي",
         "shareToUnlock": "(شارِك مرة واحدة لفتحه)",
-        "tabAvailability": "أوقات المعلّم",
+        "tabAvailability": "التقويم",
         "tabQuran": "القرآن",
         "tabHomework": "الواجب",
         "tabTajweed": "التجويد",
@@ -182,7 +182,8 @@
         "loadingReport": "جارٍ تحميل التقرير…",
         "noCompletedYet": "لا يوجد واجب مكتمل بعد.",
         "allDone": "تم كل شيء!",
-        "completedAllHomework": "لقد أكملت كل الواجب."
+        "completedAllHomework": "لقد أكملت كل الواجب.",
+        "youHaveLessons": "لديك دروس في:"
     },
     "userMenu": {
         "logout": "تسجيل الخروج",

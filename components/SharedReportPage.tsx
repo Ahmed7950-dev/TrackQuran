@@ -10,6 +10,8 @@ import type { Student, AttendanceRecord, Progress, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
+import { getStudentUpcomingSessions } from '../services/lessonSessionService';
+import { LessonSession } from '../types';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
@@ -953,6 +955,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
   const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null>(null);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [studentLessons, setStudentLessons] = useState<LessonSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
@@ -1029,6 +1032,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
         if (r.report_data.quranHomework) setQuranHomework(r.report_data.quranHomework);
         // Load teacher's availability so student can see working hours
         if (r.teacher_id) getTeacherAvailability(r.teacher_id).then(setAvailabilitySlots);
+        // Load this student's own (linked) upcoming lessons — view-only on the calendar
+        if (r.student_id) getStudentUpcomingSessions(r.student_id).then(setStudentLessons).catch(() => {});
       }
       setLoading(false);
     });
@@ -1465,16 +1470,50 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
         ) : (
           <>
             {activeTab === 'calendar' && (
-              <CalendarPage
-                gcalToken={gcalToken}
-                onTokenChange={setGcalToken}
-                isStudentView={true}
-                availabilitySlots={availabilitySlots}
-                teacherId={report?.teacher_id}
-                studentId={report?.student_id}
-                studentName={report?.student_name}
-                portalType="quran"
-              />
+              <div className="space-y-4">
+                {/* Scheduled lessons list */}
+                {(() => {
+                  const upcoming = studentLessons
+                    .filter(l => l.startAt && new Date(l.startAt).getTime() > Date.now())
+                    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+                  if (upcoming.length === 0) return null;
+                  const ordinal = (n: number) => {
+                    const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+                    return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+                  };
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Istanbul' });
+                  return (
+                    <div className="rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 p-4">
+                      <p className="text-sm font-bold text-teal-700 dark:text-teal-300 mb-2">{t('studentPortal.youHaveLessons')}</p>
+                      <ul className="space-y-1.5">
+                        {upcoming.map(l => {
+                          const d = new Date(l.startAt);
+                          const dayLabel = `${ordinal(d.getDate())} of ${d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'Europe/Istanbul' })}`;
+                          const range = l.endAt ? `${fmtT(l.startAt)} to ${fmtT(l.endAt)}` : fmtT(l.startAt);
+                          return (
+                            <li key={l.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                              <span className="text-teal-500">📅</span>
+                              <span className="font-semibold">{dayLabel}</span>
+                              <span className="text-slate-500 dark:text-slate-400">{range}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })()}
+                <CalendarPage
+                  gcalToken={gcalToken}
+                  onTokenChange={setGcalToken}
+                  isStudentView={true}
+                  availabilitySlots={availabilitySlots}
+                  teacherId={report?.teacher_id}
+                  studentId={report?.student_id}
+                  studentName={report?.student_name}
+                  portalType="quran"
+                  studentLessons={studentLessons}
+                />
+              </div>
             )}
             {activeTab === 'mistakes' && (
               <MistakesTab

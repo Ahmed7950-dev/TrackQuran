@@ -225,6 +225,8 @@ interface CalendarPageProps {
   quranStudents?: Student[];
   /** Called when a GCal event is successfully linked to a student */
   onSessionLinked?: () => void;
+  /** Student's own linked lessons — rendered read-only on the grid (student view). */
+  studentLessons?: LessonSession[];
 }
 
 /** Chain-link icon for linked events (inherits text colour via currentColor). */
@@ -261,6 +263,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   arabicStudents = [],
   quranStudents = [],
   onSessionLinked,
+  studentLessons = [],
 }) => {
   // Unified linkable-student list — BOTH Quran and Arabic students, so the two
   // calendars act as one unit (same linked events + combined weekly earnings).
@@ -755,6 +758,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       if (!start) return false;
       return isSameDay(new Date(start), day);
     });
+
+  const lessonsForDay = (day: Date): LessonSession[] =>
+    studentLessons.filter(l => l.startAt && isSameDay(new Date(l.startAt), day));
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                            */
@@ -1268,6 +1274,28 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       {rateStr && (
                         <span className="absolute bottom-0.5 right-1.5 text-[9px] font-bold leading-none opacity-90">{rateStr}</span>
                       )}
+                    </div>
+                  );
+                })}
+
+                {/* Student's own linked lessons — read-only blocks (student view) */}
+                {lessonsForDay(day).map(lesson => {
+                  const top    = timeToOffsetInTZ(lesson.startAt, TUTOR_TIMEZONE);
+                  const height = lesson.endAt ? eventHeightInTZ(lesson.startAt, lesson.endAt) : (50 / 60) * HOUR_HEIGHT_PX;
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
+                  const range = lesson.endAt ? `${fmtT(lesson.startAt)} - ${fmtT(lesson.endAt)}` : fmtT(lesson.startAt);
+                  return (
+                    <div
+                      key={`lesson-${lesson.id}`}
+                      title={`${lesson.title ?? 'Lesson'}\n${range}`}
+                      className="absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-20 bg-teal-500 dark:bg-teal-600 text-white shadow-sm"
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      <div className="flex items-center gap-1 leading-tight">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                        <span className="text-[11px] font-bold truncate">{lesson.title ?? 'Lesson'}</span>
+                      </div>
+                      <p className="text-[10px] font-semibold leading-tight mt-0.5 opacity-90">{range}</p>
                     </div>
                   );
                 })}

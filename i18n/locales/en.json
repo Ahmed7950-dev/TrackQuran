@@ -156,7 +156,7 @@
         "tabMistakes": "Mistakes Review",
         "tabProgress": "My Progress",
         "shareToUnlock": "(share once to unlock)",
-        "tabAvailability": "Tutor's Availability",
+        "tabAvailability": "Calendar",
         "tabQuran": "Quran",
         "tabHomework": "Homework",
         "tabTajweed": "Tajweed",
@@ -182,7 +182,8 @@
         "loadingReport": "Loading report…",
         "noCompletedYet": "No completed homework yet.",
         "allDone": "All done!",
-        "completedAllHomework": "You've completed all homework."
+        "completedAllHomework": "You've completed all homework.",
+        "youHaveLessons": "You have lessons on:"
     },
     "userMenu": {
         "logout": "Logout",
