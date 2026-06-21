@@ -458,6 +458,13 @@ export const createOrUpdateSharedReport = async (
   return data.id as string;
 };
 
+/** Public (no-auth) read of a student's timezone for the shared portal calendar. */
+export const getStudentTimezonePublic = async (studentId: string): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('get_student_timezone', { p_student_id: studentId });
+  if (error) { console.error('getStudentTimezonePublic:', error.message); return null; }
+  return (data as string | null) ?? null;
+};
+
 /** Returns the existing report UUID for this student, or null if none exists yet. */
 export const getStudentReportId = async (teacherId: string, studentId: string): Promise<string | null> => {
   const { data } = await supabase

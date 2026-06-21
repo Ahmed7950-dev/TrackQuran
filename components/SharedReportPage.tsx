@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
-import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah, getReportPlays } from '../services/dataService';
+import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah, getReportPlays, getStudentTimezonePublic } from '../services/dataService';
 import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
 import { QURAN_METADATA, MILESTONES, TOTAL_QURAN_PAGES } from '../constants';
@@ -956,6 +956,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null>(null);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [studentLessons, setStudentLessons] = useState<LessonSession[]>([]);
+  const [studentTZ, setStudentTZ] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
@@ -1034,6 +1035,13 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
         if (r.teacher_id) getTeacherAvailability(r.teacher_id).then(setAvailabilitySlots);
         // Load this student's own (linked) upcoming lessons — view-only on the calendar
         if (r.student_id) getStudentUpcomingSessions(r.student_id).then(setStudentLessons).catch(() => {});
+        // Resolve the student's timezone (live, so existing reports work without re-share);
+        // fall back to whatever was stamped into the report.
+        if (r.student_id) {
+          getStudentTimezonePublic(r.student_id)
+            .then(tz => setStudentTZ(tz || r.report_data.timezone || null))
+            .catch(() => setStudentTZ(r.report_data.timezone || null));
+        }
       }
       setLoading(false);
     });
@@ -1477,13 +1485,13 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     .filter(l => l.startAt && new Date(l.startAt).getTime() > Date.now())
                     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
                   if (upcoming.length === 0) return null;
-                  const studentTZ = report?.report_data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                  const tz = studentTZ || report?.report_data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
                   const ordinal = (n: number) => {
                     const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
                     return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
                   };
-                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: studentTZ });
-                  const tzLabel = studentTZ.split('/').pop()?.replace(/_/g, ' ') ?? studentTZ;
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz });
+                  const tzLabel = tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
                   return (
                     <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
                       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -1495,7 +1503,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                       <ul className="space-y-1.5">
                         {upcoming.map(l => {
                           const dayLabel = (() => {
-                            const parts = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: studentTZ }).formatToParts(new Date(l.startAt));
+                            const parts = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).formatToParts(new Date(l.startAt));
                             const day = Number(parts.find(p => p.type === 'day')?.value ?? '1');
                             const mon = parts.find(p => p.type === 'month')?.value ?? '';
                             return `${ordinal(day)} of ${mon}`;
@@ -1521,7 +1529,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                   teacherId={report?.teacher_id}
                   studentId={report?.student_id}
                   studentName={report?.student_name}
-                  studentTimezone={report?.report_data.timezone}
+                  studentTimezone={studentTZ || report?.report_data.timezone}
                   portalType="quran"
                   studentLessons={studentLessons}
                 />
