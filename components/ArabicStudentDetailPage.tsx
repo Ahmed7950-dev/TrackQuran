@@ -1085,8 +1085,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
-    { key: 'schedule', label: '🗓 Schedule', mobileLabel: 'Schedule' },
-    ...(studentMode ? [] : [{ key: 'exams' as const, label: '📝 Exams', mobileLabel: 'Exams' }]),
+    { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
+    ...(studentMode ? [] : [{ key: 'exams' as const, label: 'Exams', mobileLabel: 'Exams' }]),
     { key: 'profile',          label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
     ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
@@ -1199,7 +1199,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             const lvlLessons   = dialectLessons
               .filter(l => l.level === currentLevel)
               .sort((a, b) => a.orderIndex - b.orderIndex);
-            const firstIncompleteIdx = lvlLessons.findIndex(l => !completedSet.has(l.id));
 
             return (
               <>
@@ -1225,51 +1224,50 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                   </span>
                 </div>
 
-                {/* Station track */}
-                {lvlLessons.length === 0 ? (
-                  <p className="text-xs text-slate-400 dark:text-slate-500 italic">
-                    No lessons added to Level {currentLevel} yet.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto -mx-1 px-1 pb-1">
-                    <div className="flex items-start" style={{ minWidth: 'max-content' }}>
-                      {lvlLessons.map((lesson, idx) => {
-                        const isDone    = completedSet.has(lesson.id);
-                        const isCurrent = !isDone && idx === firstIncompleteIdx;
-                        const isLast    = idx === lvlLessons.length - 1;
-                        return (
-                          <div key={lesson.id} className="flex items-start">
-                            {/* Station */}
-                            <div className="flex flex-col items-center" style={{ width: 68 }}>
-                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 shadow-sm ${
-                                isDone
-                                  ? 'bg-emerald-400 dark:bg-emerald-500 text-white'
-                                  : isCurrent
-                                  ? 'bg-amber-400 text-white ring-2 ring-amber-300 dark:ring-amber-500'
-                                  : 'bg-slate-200 dark:bg-gray-600 text-slate-400 dark:text-slate-300'
-                              }`}>
-                                {isDone ? '✓' : idx + 1}
+                {/* Station tracks — every level's lessons, wrapped to fit the
+                    container (no left/right scrolling). */}
+                <div className="space-y-3">
+                  {([1, 2, 3] as const).map(lvl => {
+                    const levelLessons = dialectLessons
+                      .filter(l => l.level === lvl)
+                      .sort((a, b) => a.orderIndex - b.orderIndex);
+                    if (levelLessons.length === 0) return null;
+                    const firstInc = levelLessons.findIndex(l => !completedSet.has(l.id));
+                    return (
+                      <div key={lvl}>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
+                          Level {lvl}
+                        </p>
+                        <div className="flex flex-wrap items-start gap-x-1 gap-y-2">
+                          {levelLessons.map((lesson, idx) => {
+                            const isDone    = completedSet.has(lesson.id);
+                            const isCurrent = lvl === currentLevel && !isDone && idx === firstInc;
+                            return (
+                              <div key={lesson.id} className="flex flex-col items-center" style={{ width: 60 }}>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 shadow-sm ${
+                                  isDone
+                                    ? 'bg-emerald-400 dark:bg-emerald-500 text-white'
+                                    : isCurrent
+                                    ? 'bg-amber-400 text-white ring-2 ring-amber-300 dark:ring-amber-500'
+                                    : 'bg-slate-200 dark:bg-gray-600 text-slate-400 dark:text-slate-300'
+                                }`}>
+                                  {isDone ? '✓' : idx + 1}
+                                </div>
+                                <p className={`mt-1 text-center leading-tight px-0.5 ${
+                                  isDone    ? 'text-emerald-600 dark:text-emerald-400' :
+                                  isCurrent ? 'text-amber-700 dark:text-amber-300 font-semibold' :
+                                              'text-slate-400 dark:text-slate-500'
+                                }`} style={{ fontSize: 9, width: 58, wordBreak: 'break-word' }}>
+                                  {lesson.title}
+                                </p>
                               </div>
-                              <p className={`mt-1 text-center leading-tight px-0.5 ${
-                                isDone    ? 'text-emerald-600 dark:text-emerald-400' :
-                                isCurrent ? 'text-amber-700 dark:text-amber-300 font-semibold' :
-                                            'text-slate-400 dark:text-slate-500'
-                              }`} style={{ fontSize: 9, width: 68, wordBreak: 'break-word' }}>
-                                {lesson.title}
-                              </p>
-                            </div>
-                            {/* Connector */}
-                            {!isLast && (
-                              <div className={`flex-shrink-0 mt-3 ${
-                                isDone ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-slate-200 dark:bg-gray-600'
-                              }`} style={{ height: 2, width: 12 }} />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             );
           })()}
