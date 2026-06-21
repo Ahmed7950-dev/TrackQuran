@@ -1496,21 +1496,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
               {(() => {
                 const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
-                // Exclude already-linked students. Both Preply and Platform students
-                // can be linked (Preply events show pink, Platform events green).
+                // Show ALL students of the selected group. A student may already be
+                // linked to a different event title — we still list them (with a
+                // "Linked" badge) so they can be linked to this event too.
                 const q = linkSearch.trim().toLowerCase();
                 const available = linkStudents.filter(s =>
                   s.kind === linkGroup &&
-                  !linkedStudentIds.has(s.id) &&
                   (!q || s.name.toLowerCase().includes(q)));
                 if (available.length === 0) {
                   return (
                     <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                      {q ? 'No students match your search.' : `No ${linkGroup === 'quran' ? 'Quran' : 'Arabic'} students available to link.`}
+                      {q ? 'No students match your search.' : `No ${linkGroup === 'quran' ? 'Quran' : 'Arabic'} students yet.`}
                     </div>
                   );
                 }
-                return available.map(s => (
+                return available.map(s => {
+                  const alreadyLinked = linkedStudentIds.has(s.id);
+                  return (
                   <button
                     key={s.id}
                     onClick={() => handleLinkToStudent(s.id)}
@@ -1521,9 +1523,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       {s.name.charAt(0).toUpperCase()}
                     </div>
                     <span className="font-medium text-slate-800 dark:text-slate-100 text-sm">{s.name}</span>
+                    {alreadyLinked && !linking && (
+                      <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">Linked</span>
+                    )}
                     {linking && <svg className="ml-auto w-4 h-4 animate-spin text-violet-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
                   </button>
-                ));
+                  );
+                });
               })()}
             </div>
             {/* Cancel */}
