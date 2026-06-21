@@ -18,6 +18,7 @@ import AlphabetTrainerPage from './AlphabetTrainerPage';
 import LettersTrainerPage from './LettersTrainerPage';
 import StudentProgressPage from './StudentProgressPage';
 import VerseAudioPlayer from './VerseAudioPlayer';
+import { useI18n } from '../context/I18nProvider';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ const MistakesTab: React.FC<{
   handleVersePlay: (verseKey: string) => void;
   versePlays: { [verseKey: string]: number };
 }> = ({ report, reportId, quranicFont, handleVersePlay, versePlays }) => {
+  const { t } = useI18n();
   const { student_name, report_data } = report;
   const { mistakes, verses, generatedAt, homeworkVerses = [] } = report_data;
 
@@ -184,7 +186,7 @@ const MistakesTab: React.FC<{
     return (
       <div className="text-center py-16 text-slate-400">
         <p className="text-4xl mb-3">📖</p>
-        <p>No mistakes recorded yet.</p>
+        <p>{t('studentPortal.noMistakes')}</p>
       </div>
     );
   }
@@ -210,13 +212,13 @@ const MistakesTab: React.FC<{
           <div className="flex-1 min-w-0">
             <p className={`font-semibold text-sm ${homeworkDoneCount === homeworkCount ? 'text-green-800' : 'text-amber-800'}`}>
               {homeworkDoneCount === homeworkCount
-                ? '✓ All homework complete — great work!'
-                : `📌 Homework — ${homeworkCount} verse${homeworkCount !== 1 ? 's' : ''} assigned`}
+                ? t('studentPortal.hwAllComplete')
+                : t('studentPortal.hwAssigned', { count: homeworkCount })}
             </p>
             <p className={`text-xs mt-0.5 ${homeworkDoneCount === homeworkCount ? 'text-green-700' : 'text-amber-700'}`}>
               {homeworkDoneCount === homeworkCount
-                ? `You listened to all ${homeworkCount} verses 3 times each.`
-                : `Listen to each marked verse 3 times to complete your homework. (${homeworkDoneCount}/${homeworkCount} done)`}
+                ? t('studentPortal.hwListenedAll', { count: homeworkCount })
+                : t('studentPortal.hwListenInstruction', { done: homeworkDoneCount, total: homeworkCount })}
             </p>
           </div>
         </div>
@@ -224,8 +226,8 @@ const MistakesTab: React.FC<{
 
       {/* Info banner */}
       <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-sm text-teal-800" dir="ltr">
-        <p className="font-semibold mb-1">📖 How to use this review</p>
-        <p>Highlighted words and letters are the mistakes from your lesson. Click <strong>▶ Play</strong> on any verse to hear the correct recitation by Sheikh Al-Minshawi.</p>
+        <p className="font-semibold mb-1">📖 {t('studentPortal.howToUseTitle')}</p>
+        <p>{t('studentPortal.howToUseBody')}</p>
       </div>
 
       {Object.entries(versesBySurah)
@@ -946,6 +948,7 @@ const ProgressTab: React.FC<{
 // ── main page ─────────────────────────────────────────────────────────────────
 
 const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
+  const { t, language, setLanguage } = useI18n();
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
   const [report, setReport] = useState<{ student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null>(null);
@@ -1140,7 +1143,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       <div className="min-h-screen bg-slate-100 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Logo />
-          <p className="text-slate-500">Loading report…</p>
+          <p className="text-slate-500">{t('studentPortal.loadingReport')}</p>
         </div>
       </div>
     );
@@ -1151,8 +1154,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow p-8 text-center max-w-sm w-full">
           <Logo />
-          <h1 className="mt-6 text-xl font-bold text-slate-800">Report not found</h1>
-          <p className="mt-2 text-slate-500 text-sm">This link may have expired or been removed by the teacher.</p>
+          <h1 className="mt-6 text-xl font-bold text-slate-800">{t('studentPortal.reportNotFound')}</h1>
+          <p className="mt-2 text-slate-500 text-sm">{t('studentPortal.reportNotFoundDesc')}</p>
         </div>
       </div>
     );
@@ -1163,7 +1166,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
   const hasProgress = !!studentProgress;
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
@@ -1178,7 +1181,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
               </svg>
-              <span className="hidden sm:inline">Family</span>
+              <span className="hidden sm:inline">{t('studentPortal.family')}</span>
             </a>
           )}
 
@@ -1189,26 +1192,40 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
 
           {/* Student Portal badge */}
           <span className="hidden sm:block text-xs font-bold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-3 py-1 rounded-full flex-shrink-0 border border-teal-200 dark:border-teal-800">
-            🎓 Student Portal
+            🎓 {t('studentPortal.badge')}
           </span>
 
           {/* Desktop nav links */}
           <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
             <button
-              onClick={() => setPortalTab(t => t === 'about' ? 'content' : 'about')}
+              onClick={() => setPortalTab(p => p === 'about' ? 'content' : 'about')}
               className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400'}`}
             >
-              About Us
+              {t('header.aboutUs')}
             </button>
             <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400 transition-colors">
-              Contact Us
+              {t('header.contactUs')}
             </a>
             <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
-              Support Us
+              {t('header.supportUs')}
             </a>
           </nav>
 
           <div className="flex-1 md:hidden" />
+
+          {/* Language switcher */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 dark:bg-gray-700 rounded-lg flex-shrink-0" dir="ltr">
+            {(['en', 'ar', 'tr'] as const).map(lng => (
+              <button
+                key={lng}
+                onClick={() => setLanguage(lng)}
+                className={`px-2 py-1 text-[11px] rounded-md font-bold transition-colors ${language === lng ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-400 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                aria-label={`Switch language to ${lng.toUpperCase()}`}
+              >
+                {lng.toUpperCase()}
+              </button>
+            ))}
+          </div>
 
           <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
 
@@ -1253,7 +1270,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
             {isFontMenuOpen && (
               <div className="sr-font-menu absolute end-0 mt-2 w-52 sm:w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                 <div className="py-1">
-                  <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">Quranic Font</div>
+                  <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">{t('common.quranicFont')}</div>
                   {QURANIC_FONTS.map(f => (
                     <button
                       key={f.name}
@@ -1280,13 +1297,13 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           {/* Mobile nav links */}
           <div className="flex md:hidden items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => setPortalTab(t => t === 'about' ? 'content' : 'about')}
+              onClick={() => setPortalTab(p => p === 'about' ? 'content' : 'about')}
               className={`text-xs font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400'}`}
             >
-              About
+              {t('header.aboutUs')}
             </button>
             <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
-              Support
+              {t('header.supportUs')}
             </a>
           </div>
         </div>
@@ -1306,7 +1323,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                 </svg>
-                Mistakes Review
+                {t('studentPortal.tabMistakes')}
               </button>
               <button
                 onClick={() => setActiveTab('progress')}
@@ -1320,8 +1337,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                 </svg>
-                My Progress
-                {!hasProgress && <span className="text-xs ml-1 opacity-70">(share once to unlock)</span>}
+                {t('studentPortal.tabProgress')}
+                {!hasProgress && <span className="text-xs ml-1 opacity-70">{t('studentPortal.shareToUnlock')}</span>}
               </button>
               <button
                 onClick={() => setActiveTab('calendar')}
@@ -1334,7 +1351,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                 </svg>
-                Tutor's Availability
+                {t('studentPortal.tabAvailability')}
               </button>
               <button
                 onClick={() => setActiveTab('quran')}
@@ -1347,7 +1364,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                 </svg>
-                Quran
+                {t('studentPortal.tabQuran')}
               </button>
               <button
                 onClick={() => setActiveTab('homework')}
@@ -1360,7 +1377,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                 </svg>
-                Homework
+                {t('studentPortal.tabHomework')}
                 {(() => {
                   const activeCount = quranHomework.filter(hw => !hw.isDone).length;
                   return activeCount > 0 ? (
@@ -1381,7 +1398,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                 </svg>
-                Tajweed
+                {t('studentPortal.tabTajweed')}
               </button>
               <button
                 onClick={() => setActiveTab('qaedah')}
@@ -1394,7 +1411,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                 </svg>
-                Qaedah
+                {t('studentPortal.tabQaedah')}
               </button>
               <button
                 onClick={() => setActiveTab('alphabetTrainer')}
@@ -1407,7 +1424,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" />
                 </svg>
-                Alphabet
+                {t('studentPortal.tabAlphabet')}
               </button>
               <button
                 onClick={() => setActiveTab('lettersTrainer')}
@@ -1420,7 +1437,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
                 </svg>
-                Letters Trainer
+                {t('studentPortal.tabLetters')}
               </button>
             </div>
           </div>
@@ -1608,7 +1625,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                           {showHistory ? (
                             <div className="px-4 py-3 space-y-2 max-h-56 overflow-y-auto">
                               {doneHwList.length === 0 ? (
-                                <p className="text-slate-400 dark:text-slate-500 text-sm italic text-center py-2">No completed homework yet.</p>
+                                <p className="text-slate-400 dark:text-slate-500 text-sm italic text-center py-2">{t('studentPortal.noCompletedYet')}</p>
                               ) : doneHwList.map(hw => (
                                 <div key={hw.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50">
                                   <span className="text-base mt-0.5">✅</span>
@@ -1626,8 +1643,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                               {activeHwList.length === 0 ? (
                                 <div className="px-4 py-5 text-center">
                                   <p className="text-2xl mb-1">🎉</p>
-                                  <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">All done!</p>
-                                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">You've completed all homework.</p>
+                                  <p className="text-sm font-semibold text-teal-700 dark:text-teal-400">{t('studentPortal.allDone')}</p>
+                                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{t('studentPortal.completedAllHomework')}</p>
                                 </div>
                               ) : (
                                 <>
@@ -1733,7 +1750,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   <section>
                     <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                       <span className="text-xl">📝</span>
-                      Current Homework
+                      {t('studentPortal.currentHomework')}
                       {activeHw.length > 0 && (
                         <span className="bg-violet-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
                           {activeHw.length}
@@ -1744,8 +1761,8 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                     {activeHw.length === 0 ? (
                       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
                         <p className="text-3xl mb-2">🎉</p>
-                        <p className="font-semibold text-slate-700 dark:text-slate-200">All caught up!</p>
-                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">No pending homework right now.</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{t('studentPortal.allCaughtUp')}</p>
+                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">{t('studentPortal.noPendingHomework')}</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -1769,10 +1786,10 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                                       {hw.note}
                                     </p>
                                   ) : (
-                                    <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">No instructions — practise the assigned verses.</p>
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">{t('studentPortal.noInstructions')}</p>
                                   )}
                                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-                                    Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    {t('studentPortal.assignedOn', { date: new Date(hw.assignedAt).toLocaleDateString(language === 'ar' ? 'ar' : language === 'tr' ? 'tr' : undefined, { day: 'numeric', month: 'short', year: 'numeric' }) })}
                                   </p>
                                 </div>
                               </div>
@@ -1787,7 +1804,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                                   }}
                                   className="flex-1 py-2 px-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-semibold border border-violet-200 dark:border-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
                                 >
-                                  📖 Go to verses
+                                  📖 {t('studentPortal.goToVerses')}
                                 </button>
                                 <button
                                   onClick={() => {
@@ -1803,7 +1820,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                                   }}
                                   className="py-2 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-sm transition-all shadow-sm"
                                 >
-                                  ✅ Mark Done
+                                  ✅ {t('studentPortal.markDone')}
                                 </button>
                               </div>
                             </div>
@@ -1817,7 +1834,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   <section>
                     <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                       <span className="text-xl">✅</span>
-                      Completed
+                      {t('studentPortal.completed')}
                       {doneHw.length > 0 && (
                         <span className="bg-slate-400 dark:bg-slate-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
                           {doneHw.length}
@@ -1827,7 +1844,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
 
                     {doneHw.length === 0 ? (
                       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
-                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">Completed homework will appear here.</p>
+                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">{t('studentPortal.completedWillAppear')}</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
