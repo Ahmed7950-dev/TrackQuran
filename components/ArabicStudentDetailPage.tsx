@@ -1440,6 +1440,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         isOpen={editOpen}
         teacherId={teacherId}
         existing={student}
+        hideBilling={studentMode}
         onClose={() => setEditOpen(false)}
         onSave={updated => { onUpdateStudent(updated); setEditOpen(false); }}
       />

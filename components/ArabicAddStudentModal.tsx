@@ -15,6 +15,7 @@ interface Props {
   onClose: () => void;
   onSave: (student: ArabicStudent) => void;
   existing?: ArabicStudent; // edit mode
+  hideBilling?: boolean; // hide tutor-only billing fields (student self-edit)
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -197,7 +198,7 @@ const TagInput: React.FC<{
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, onSave, existing }) => {
+const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, onSave, existing, hideBilling = false }) => {
   const { t } = useI18n();
   const isEdit = !!existing;
 
@@ -487,7 +488,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
             </div>
             {/* Billing (timezone handled by the field above) */}
             <div className="mt-4">
-              <StudentBillingFields value={billing} onChange={setBilling} showTimezone={false} />
+              {!hideBilling && <StudentBillingFields value={billing} onChange={setBilling} showTimezone={false} />}
             </div>
           </Section>
 
