@@ -276,6 +276,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     linkStudents.forEach(s => m.set(s.id, s));
     return m;
   }, [linkStudents]);
+  // Tutor with a connected calendar + students can link by clicking an event
+  // directly (no separate "link mode" toggle).
+  const canLink = !isStudentView && !!gcalToken && linkStudents.length > 0;
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
   const [loading,     setLoading]     = useState(false);
@@ -283,8 +286,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [connecting,  setConnecting]  = useState(false);
   const [exporting,   setExporting]   = useState(false);
   // ── GCal event linking (tutor only) ──────────────────────────────────────
-  const [linkMode,          setLinkMode]          = useState(false);
   const [linkTarget,        setLinkTarget]        = useState<{ id: string; summary: string } | null>(null);
+  const [linkSearch,        setLinkSearch]        = useState('');
   const [linking,           setLinking]           = useState(false);
   const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession>>({});
   const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
@@ -459,13 +462,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     return () => { supabase.removeChannel(channel); };
   }, [teacherId, isStudentView, studentId, loadBookings]);
 
-  // Load already-linked sessions whenever link mode is toggled on
+  // Load already-linked sessions so linked events render coloured.
   useEffect(() => {
-    if (!linkMode || !teacherId) return;
+    if (!canLink || !teacherId) return;
     getSessionsByGcalId(teacherId).then(map => {
       setLinkedSessions(map);
     }).catch(console.error);
-  }, [linkMode, teacherId]);
+  }, [canLink, teacherId]);
 
   // Build a studentName lookup from linkedSessions
   useEffect(() => {
@@ -618,7 +621,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       }
       onSessionLinked?.();
       setLinkTarget(null);
-      setLinkMode(false);
+      setLinkSearch('');
     } catch (err) {
       console.error('[Link] failed:', err);
     } finally {
@@ -796,23 +799,6 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           )}
         </div>
 
-        {/* Link GCal Events button — tutor only, when connected */}
-        {!isStudentView && gcalToken && linkStudents.length > 0 && (
-          <button
-            onClick={() => { setLinkMode(v => !v); setLinkTarget(null); }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-              linkMode
-                ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300'
-                : 'bg-white dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-700 dark:hover:text-violet-300'
-            }`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-            </svg>
-            {linkMode ? 'Cancel Linking' : 'Link Events'}
-          </button>
-        )}
-
         {/* Connect / disconnect (tutor only) */}
         {!isStudentView && (
           gcalToken ? (
@@ -926,13 +912,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         </div>
       )}
 
-      {/* Link mode banner */}
-      {linkMode && (
+      {/* Linking hint */}
+      {canLink && (
         <div className="mx-0 mb-2 px-4 py-2.5 bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 rounded-xl text-sm text-violet-700 dark:text-violet-300 font-medium flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 flex-shrink-0">
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
           </svg>
-          Click any Google Calendar event to link it (and all events with the same title) to a student.
+          Click any Google Calendar event to link it (and all events with the same title) to a student. Click a linked event to unlink.
         </div>
       )}
 
@@ -1187,7 +1173,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   const linkedBilling = linkedSession ? linkStudentById.get(linkedSession.studentId) : undefined;
 
                   const handleEvClick = () => {
-                    if (!linkMode) return;
+                    if (!canLink) return;
                     if (isLinked && linkedSession && linkedName) {
                       // Show unlink confirmation instead of link picker
                       setUnlinkTarget({
@@ -1207,41 +1193,40 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       title={isLinked && linkedName
                         ? `🔗 ${linkedName}\n${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`
                         : `${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`}
-                      onClick={linkMode ? handleEvClick : undefined}
+                      onClick={canLink ? handleEvClick : undefined}
                       className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 transition-opacity border-l-2 border-dashed border-white/50
                         ${isLinked
                           ? 'bg-green-500 opacity-90 hover:opacity-100'
                           : `${colourClass} opacity-75 hover:opacity-90`}
-                        ${linkMode && !isLinked ? 'cursor-pointer ring-2 ring-violet-400 ring-offset-1' : ''}
-                        ${linkMode && isLinked ? 'cursor-pointer ring-2 ring-red-400 ring-offset-1' : ''}
-                        ${!linkMode ? 'cursor-default' : ''}
+                        ${canLink && !isLinked ? 'cursor-pointer hover:ring-2 hover:ring-violet-400 hover:ring-offset-1' : ''}
+                        ${canLink && isLinked ? 'cursor-pointer hover:ring-2 hover:ring-red-400 hover:ring-offset-1' : ''}
+                        ${!canLink ? 'cursor-default' : ''}
                       `}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
                       {isLinked && linkedName ? (
                         <>
-                          <p className="text-[10px] font-bold text-white leading-tight truncate">🔗 {linkedName}</p>
-                          {linkedBilling && (linkedBilling.hourlyRate || linkedBilling.timezone) && (
-                            <p className="text-[9px] text-white/90 leading-tight truncate">
-                              {linkedBilling.hourlyRate ? `${linkedBilling.hourlyRate}/h` : ''}
-                              {linkedBilling.hourlyRate && linkedBilling.timezone ? ' · ' : ''}
-                              {linkedBilling.timezone ? `🕒 ${currentTimeInZone(linkedBilling.timezone)}` : ''}
-                            </p>
+                          <p className="text-[11px] font-bold text-white leading-tight truncate">🔗 {linkedName}</p>
+                          {linkedBilling?.hourlyRate ? (
+                            <p className="text-sm font-extrabold text-white leading-tight">{linkedBilling.hourlyRate}/h</p>
+                          ) : null}
+                          <p className="text-xs font-semibold text-white leading-snug">
+                            🕒 {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
+                          </p>
+                          {linkedBilling?.timezone && (
+                            <p className="text-[11px] font-medium text-white/85 leading-tight truncate">👤 {currentTimeInZone(linkedBilling.timezone)} now</p>
                           )}
                           {linkedBilling?.studentType && (
-                            <span className={`inline-block text-[8px] font-bold leading-none px-1 py-0.5 rounded ${linkedBilling.studentType === 'preply' ? 'bg-white/25 text-white' : 'bg-amber-300/90 text-amber-900'}`}>
+                            <span className={`inline-block mt-0.5 text-[9px] font-bold leading-none px-1.5 py-0.5 rounded ${linkedBilling.studentType === 'preply' ? 'bg-white/25 text-white' : 'bg-amber-300/90 text-amber-900'}`}>
                               {linkedBilling.studentType === 'preply' ? 'Preply' : 'Platform'}
                             </span>
                           )}
-                          <p className="text-[9px] text-white/70 leading-tight">
-                            {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
-                          </p>
                         </>
                       ) : (
                         <>
-                          <p className="text-[10px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
-                          <p className="text-[9px] text-white/80 leading-tight">
-                            {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
+                          <p className="text-[11px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
+                          <p className="text-xs font-semibold text-white/90 leading-snug">
+                            🕒 {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
                           </p>
                           <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
                         </>
@@ -1477,6 +1462,15 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
               <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">Link events to student</p>
               <p className="font-bold text-slate-800 dark:text-slate-100 truncate">"{linkTarget.summary}"</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All events with this title (next 60 days) will be linked.</p>
+              {/* Search */}
+              <input
+                type="text"
+                autoFocus
+                value={linkSearch}
+                onChange={e => setLinkSearch(e.target.value)}
+                placeholder="Search students…"
+                className="mt-3 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+              />
             </div>
             {/* Student list */}
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
@@ -1484,11 +1478,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
                 // Exclude already-linked students AND Platform students — Platform
                 // lessons come from the booking/schedule system, not GCal links.
-                const available = linkStudents.filter(s => !linkedStudentIds.has(s.id) && s.studentType !== 'platform');
+                const q = linkSearch.trim().toLowerCase();
+                const available = linkStudents.filter(s =>
+                  !linkedStudentIds.has(s.id) && s.studentType !== 'platform' &&
+                  (!q || s.name.toLowerCase().includes(q)));
                 if (available.length === 0) {
                   return (
                     <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                      No students available to link (Platform students are scheduled via bookings).
+                      {q ? 'No students match your search.' : 'No students available to link (Platform students are scheduled via bookings).'}
                     </div>
                   );
                 }
@@ -1511,7 +1508,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             {/* Cancel */}
             <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700">
               <button
-                onClick={() => setLinkTarget(null)}
+                onClick={() => { setLinkTarget(null); setLinkSearch(''); }}
                 className="w-full py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
