@@ -1393,6 +1393,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
+    const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+    const surahNavScrollRef = useRef<HTMLDivElement | null>(null);
     const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
     const [tadabburMode, setTadabburMode] = useState(false);
@@ -3377,17 +3379,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div className="flex items-center gap-2 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
-                        <div className="flex items-center gap-0.5 flex-shrink-0 bg-slate-100 dark:bg-gray-700/60 rounded-full px-1.5 py-0.5 h-7" dir="ltr">
-                            <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none mr-0.5">🔊</span>
-                            {[0.5, 0.75, 1, 1.25, 1.5].map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setReadOnlySpeed(s)}
-                                    className={`px-1 py-0.5 rounded-full text-[9px] font-bold transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
-                                >
-                                    {s}×
-                                </button>
-                            ))}
+                        <div className="relative flex-shrink-0" dir="ltr">
+                            {/* Speed: a single circle showing the current rate; click to pick. */}
+                            <button
+                                onClick={() => setSpeedMenuOpen(o => !o)}
+                                title="Recitation speed"
+                                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                            >
+                                {readOnlySpeed}×
+                            </button>
+                            {speedMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-30" onClick={() => setSpeedMenuOpen(false)} />
+                                    <div className="absolute top-full left-0 mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1">
+                                        <span className="px-2 pt-0.5 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🔊 Speed</span>
+                                        {[0.5, 0.75, 1, 1.25, 1.5].map(s => (
+                                            <button
+                                                key={s}
+                                                onClick={() => { setReadOnlySpeed(s); setSpeedMenuOpen(false); }}
+                                                className={`px-4 py-1.5 rounded-lg text-xs font-bold text-center transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                            >
+                                                {s}×
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                         </div>
                         ) : (
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -3434,8 +3451,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </button>
                             )}
                             <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
+                            {/* Scroll-left arrow */}
+                            <button
+                                onClick={() => surahNavScrollRef.current?.scrollBy({ left: -220, behavior: 'smooth' })}
+                                aria-label="Scroll surahs left"
+                                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base leading-none"
+                            >‹</button>
                             {/* Surahs 2–113 — scrollable */}
-                            <div className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
+                            <div ref={surahNavScrollRef} className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
                                 <div className="flex items-center gap-2 pb-0.5">
                                     {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status, memStatus }) => (
                                         <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
@@ -3447,6 +3470,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ))}
                                 </div>
                             </div>
+                            {/* Scroll-right arrow */}
+                            <button
+                                onClick={() => surahNavScrollRef.current?.scrollBy({ left: 220, behavior: 'smooth' })}
+                                aria-label="Scroll surahs right"
+                                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base leading-none"
+                            >›</button>
                             <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
                             {/* Last surah (An-Nas) — pinned */}
                             {surahStatuses.length > 1 && surahStatuses[surahStatuses.length - 1] && (
