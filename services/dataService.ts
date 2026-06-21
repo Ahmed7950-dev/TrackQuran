@@ -407,17 +407,33 @@ export const resetVersePlayCount = async (reportId: string, verseKey: string): P
   if (error) console.error('resetVersePlayCount:', error.message);
 };
 
-/** Upsert the shared report for a student — always returns the same UUID. */
+/**
+ * Upsert the shared report for a student — always returns the same UUID.
+ *
+ * MERGES the given fields into any existing report_data instead of replacing the
+ * whole object, so a partial update (e.g. the copy-link button, which has no
+ * verse text) doesn't wipe fields written by another path (verses + mistakes
+ * from the mistakes-review auto-sync, homework, ranks). Callers should only pass
+ * the fields they own and omit the rest.
+ */
 export const createOrUpdateSharedReport = async (
   teacherId: string,
   studentId: string,
   studentName: string,
-  reportData: SharedReportData,
+  reportData: Partial<SharedReportData>,
 ): Promise<string | null> => {
+  const existingId = await getStudentReportId(teacherId, studentId);
+  let merged: SharedReportData = reportData as SharedReportData;
+  if (existingId) {
+    const existing = await getSharedReport(existingId);
+    if (existing?.report_data) {
+      merged = { ...existing.report_data, ...reportData } as SharedReportData;
+    }
+  }
   const { data, error } = await supabase
     .from('shared_reports')
     .upsert(
-      { teacher_id: teacherId, student_id: studentId, student_name: studentName, report_data: reportData },
+      { teacher_id: teacherId, student_id: studentId, student_name: studentName, report_data: merged },
       { onConflict: 'teacher_id,student_id' },
     )
     .select('id')

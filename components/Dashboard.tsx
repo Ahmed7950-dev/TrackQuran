@@ -103,15 +103,12 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
         if (!teacherId || shareState === 'loading') return;
         setShareState('loading');
         try {
-            const verseList: Array<{ verse_key: string; text_uthmani: string }> = [];
             const reportId = await createOrUpdateSharedReport(teacherId, student.id, student.name, {
                 studentName: student.name,
                 generatedAt: new Date().toISOString(),
                 mistakes: student.mistakes || {},
-                verses: verseList,
-                homeworkVerses: [],
-                // Include assigned homework so (re)creating the report doesn't wipe it
-                // from the student's portal link.
+                // omit verses/homeworkVerses — merged, so the auto-sync's verse text
+                // and homework are preserved rather than wiped.
                 quranHomework: student.quranHomework || [],
                 ranks: computeReportRanks(student, allStudents),
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',

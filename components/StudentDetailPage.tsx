@@ -76,10 +76,9 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 studentName: student.name,
                 generatedAt: new Date().toISOString(),
                 mistakes: student.mistakes || {},
-                verses: [],
-                homeworkVerses: [],
-                // Include assigned homework so (re)creating the report doesn't wipe it
-                // from the student's portal (the report is the student's link).
+                // NOTE: omit `verses`/`homeworkVerses` — we don't have the verse text
+                // here; createOrUpdateSharedReport merges, so they're preserved from
+                // the mistakes-review auto-sync instead of being wiped.
                 quranHomework: student.quranHomework || [],
                 ranks: computeReportRanks(student, students),
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
