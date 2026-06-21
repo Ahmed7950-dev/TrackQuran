@@ -120,9 +120,11 @@ export async function linkAllEventsByTitle(
 ): Promise<number> {
   // Import fetchGCalEvents dynamically to avoid circular deps
   const { fetchGCalEvents } = await import('./googleCalendarService');
-  const now = new Date();
-  const max = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
-  const allEvents = await fetchGCalEvents(gcalToken, now, max);
+  // Search a wide window around now (incl. recent past) so the event the tutor
+  // just clicked in the current week is found, plus the future recurring series.
+  const min = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);  // 31 days back
+  const max = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000); // 120 days ahead
+  const allEvents = await fetchGCalEvents(gcalToken, min, max);
   const matching  = allEvents.filter(ev => ev.summary === eventTitle);
   if (!matching.length) return 0;
 
@@ -139,9 +141,19 @@ export async function linkAllEventsByTitle(
  * Used by CalendarPage to show which events are already linked.
  */
 export async function getSessionsByGcalId(teacherId: string): Promise<Record<string, LessonSession>> {
-  const sessions = await getUpcomingSessions(teacherId);
+  // Wide window (not just "upcoming") so linked events in the current week —
+  // including earlier days — still render as linked.
+  const since = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .neq('status', 'cancelled')
+    .gte('start_at', since);
+  if (error) throw error;
   const map: Record<string, LessonSession> = {};
-  for (const s of sessions) {
+  for (const r of data as SessionRow[]) {
+    const s = rowToSession(r);
     if (s.gcalEventId) map[s.gcalEventId] = s;
   }
   return map;

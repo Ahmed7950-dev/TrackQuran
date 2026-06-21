@@ -22,7 +22,7 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
-import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession } from '../services/lessonSessionService';
 import { netEarning, currentTimeInZone } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
@@ -587,7 +587,20 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     setLinking(true);
     try {
       const student = linkStudentById.get(studentId);
-      await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
+      // Always link the clicked event itself (it's in the current view), then link
+      // the rest of the same-named series across the wider window.
+      const clicked = events.find(e => e.id === linkTarget.id);
+      if (clicked) {
+        await linkGCalSession(
+          teacherId, studentId, clicked.id, clicked.summary,
+          clicked.start.dateTime ?? clicked.start.date ?? '',
+          clicked.end.dateTime ?? clicked.end.date ?? undefined,
+        );
+      }
+      const count = await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
+      if (!clicked && count === 0) {
+        setError(`No calendar events titled "${linkTarget.summary}" were found to link.`);
+      }
       // Refresh linked sessions map
       const map = await getSessionsByGcalId(teacherId);
       setLinkedSessions(map);
