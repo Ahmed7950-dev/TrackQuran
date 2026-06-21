@@ -23,7 +23,7 @@ import {
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
 import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession } from '../services/lessonSessionService';
-import { netEarning, currentTimeInZone } from '../utils/timezones';
+import { netEarning } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
 
@@ -37,19 +37,6 @@ const DAYS            = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const TUTOR_TIMEZONE  = 'Europe/Istanbul'; // always UTC+3 (Turkey abolished DST 2016)
 
 /** Google Calendar colorId → Tailwind background class */
-const GCAL_COLOURS: Record<string, string> = {
-  '1': 'bg-sky-400',
-  '2': 'bg-green-400',
-  '3': 'bg-violet-400',
-  '4': 'bg-rose-400',
-  '5': 'bg-yellow-400',
-  '6': 'bg-orange-400',
-  '7': 'bg-teal-400',
-  '8': 'bg-slate-500',
-  '9': 'bg-blue-500',
-  '10': 'bg-emerald-500',
-  '11': 'bg-red-500',
-};
 
 /* ------------------------------------------------------------------ */
 /*  Timezone helpers                                                    */
@@ -237,6 +224,14 @@ interface CalendarPageProps {
   /** Called when a GCal event is successfully linked to a student */
   onSessionLinked?: () => void;
 }
+
+/** Chain-link icon for linked events (inherits text colour via currentColor). */
+const ChainLinkIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 32 32" fill="currentColor" className={className} aria-hidden="true">
+    <path d="m26.60645 5.39355a7.50909 7.50909 0 0 0 -10.60645 0l-.70721.707a1 1 0 0 0 -.00013 1.41431l1.41394 1.41391a1 1 0 0 0 1.41407.00012l.70745-.70721a3.50032 3.50032 0 0 1 4.9502 4.9502l-3.53613 3.53512a3.52193 3.52193 0 0 1 -4.7124.2168l-.7674-.64093a.99994.99994 0 0 0 -1.40875.12671l-1.28164 1.53555a1.00009 1.00009 0 0 0 .12695 1.40857l.7674.64044a7.458 7.458 0 0 0 10.10449-.459l3.53609-3.53514a7.50023 7.50023 0 0 0 -.00048-10.60645z" />
+    <path d="m15.2934 23.07123a1 1 0 0 0 -1.41407-.00012l-.70745.70721a3.50032 3.50032 0 0 1 -4.9502-4.9502l3.53613-3.53512a3.51972 3.51972 0 0 1 4.7124-.2168l.7674.64093a.99994.99994 0 0 0 1.40875-.12671l1.28164-1.53555a1.00009 1.00009 0 0 0 -.127-1.40857l-.7674-.64044a7.4576 7.4576 0 0 0 -10.10449.459l-3.53604 3.53514a7.50006 7.50006 0 0 0 10.60693 10.60645l.70721-.707a1 1 0 0 0 .00013-1.41431z" />
+  </svg>
+);
 
 /** Unified shape used for GCal event linking + earnings, from either list. */
 interface LinkStudent {
@@ -672,31 +667,35 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const weekDays: Date[] = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const today            = new Date();
 
-  // Tutor's net earnings for the selected week: linked GCal events (Preply) +
-  // Platform students' scheduled bookings. Platform bookings are matched to a
-  // student by name (booking.studentId is an opaque report id for Quran).
+  // Tutor's net earnings for the selected week: linked GCal events + Platform
+  // students' scheduled bookings. A lesson is billed in 50-minute units, so a
+  // 25-min event = half the net rate (e.g. 15/h, 18% Preply → 12.30 net; a
+  // 25-min lesson → 6.15). Platform bookings are matched to a student by name.
   const weekEarnings = useMemo(() => {
     if (isStudentView) return null;
     let total = 0;
+    const linkedNames = new Set<string>();
     // Linked GCal events in this week (the `events` state holds this week's events)
     for (const ev of events) {
       const session = linkedSessions[ev.id];
       if (!session) continue;
       const b = linkStudentById.get(session.studentId);
       if (!b?.hourlyRate) continue;
+      linkedNames.add(b.name);
       const startMs = new Date(ev.start.dateTime ?? ev.start.date ?? '').getTime();
       const endMs   = new Date(ev.end.dateTime   ?? ev.end.date   ?? '').getTime();
-      const hours = endMs > startMs ? (endMs - startMs) / 3_600_000 : 1;
-      total += netEarning(b.hourlyRate, b.studentType, b.preplyPercentage) * hours;
+      const minutes = endMs > startMs ? (endMs - startMs) / 60_000 : 50;
+      total += netEarning(b.hourlyRate, b.studentType, b.preplyPercentage) * (minutes / 50);
     }
-    // Platform students' confirmed bookings this week
+    // Platform students' confirmed bookings this week — skip any whose lessons are
+    // already counted via a linked GCal event (avoid double-counting).
     for (let i = 0; i < 7; i++) {
       const day = addDays(monday, i);
       for (const bk of bookingsForDay(myBookings, day, i)) {
-        if (bk.status !== 'confirmed') continue;
+        if (bk.status !== 'confirmed' || linkedNames.has(bk.studentName)) continue;
         const stu = linkStudents.find(s => s.studentType === 'platform' && s.name === bk.studentName && s.hourlyRate);
         if (!stu?.hourlyRate) continue;
-        total += netEarning(stu.hourlyRate, 'platform', undefined) * (bk.durationMinutes / 60);
+        total += netEarning(stu.hourlyRate, 'platform', undefined) * (bk.durationMinutes / 50);
       }
     }
     return total;
@@ -1166,11 +1165,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                     );
                   }
 
-                  const colourClass = GCAL_COLOURS[ev.colorId ?? ''] ?? 'bg-teal-400';
                   const isLinked    = !!linkedSessions[ev.id];
                   const linkedName  = linkedStudentNames[ev.id];
                   const linkedSession = linkedSessions[ev.id];
                   const linkedBilling = linkedSession ? linkStudentById.get(linkedSession.studentId) : undefined;
+
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
+                  const timeRange = `${fmtT(startDT)} - ${fmtT(endDT)}`;
+                  const rateStr = linkedBilling?.hourlyRate != null ? `${linkedBilling.hourlyRate}$/h` : null;
+                  // Background by state: Platform-linked = green, Preply-linked = pink, unlinked = white.
+                  const isPlatform     = isLinked && linkedBilling?.studentType === 'platform';
+                  const isPreplyLinked = isLinked && !isPlatform;
 
                   const handleEvClick = () => {
                     if (!canLink) return;
@@ -1190,46 +1195,31 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                     <div
                       key={ev.id}
-                      title={isLinked && linkedName
-                        ? `🔗 ${linkedName}\n${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`
-                        : `${ev.summary}\n${new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })} – ${new Date(endDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}`}
+                      title={`${isLinked && linkedName ? linkedName + ' — ' : ''}${ev.summary}\n${timeRange}${rateStr ? `\n${rateStr}` : ''}`}
                       onClick={canLink ? handleEvClick : undefined}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-1 overflow-hidden z-10 transition-opacity border-l-2 border-dashed border-white/50
-                        ${isLinked
-                          ? 'bg-green-500 opacity-90 hover:opacity-100'
-                          : `${colourClass} opacity-75 hover:opacity-90`}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 shadow-sm transition-all
+                        ${isPlatform
+                          ? 'bg-green-500 text-white'
+                          : isPreplyLinked
+                          ? 'text-rose-950'
+                          : 'bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-gray-500'}
                         ${canLink && !isLinked ? 'cursor-pointer hover:ring-2 hover:ring-violet-400 hover:ring-offset-1' : ''}
                         ${canLink && isLinked ? 'cursor-pointer hover:ring-2 hover:ring-red-400 hover:ring-offset-1' : ''}
                         ${!canLink ? 'cursor-default' : ''}
                       `}
-                      style={{ top: `${top}px`, height: `${height}px` }}
+                      style={{ top: `${top}px`, height: `${height}px`, ...(isPreplyLinked ? { background: '#FE9FC3' } : {}) }}
                     >
                       {isLinked && linkedName ? (
-                        <>
-                          <p className="text-[11px] font-bold text-white leading-tight truncate">🔗 {linkedName}</p>
-                          {linkedBilling?.hourlyRate ? (
-                            <p className="text-sm font-extrabold text-white leading-tight">{linkedBilling.hourlyRate}/h</p>
-                          ) : null}
-                          <p className="text-xs font-semibold text-white leading-snug">
-                            🕒 {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
-                          </p>
-                          {linkedBilling?.timezone && (
-                            <p className="text-[11px] font-medium text-white/85 leading-tight truncate">👤 {currentTimeInZone(linkedBilling.timezone)} now</p>
-                          )}
-                          {linkedBilling?.studentType && (
-                            <span className={`inline-block mt-0.5 text-[9px] font-bold leading-none px-1.5 py-0.5 rounded ${linkedBilling.studentType === 'preply' ? 'bg-white/25 text-white' : 'bg-amber-300/90 text-amber-900'}`}>
-                              {linkedBilling.studentType === 'preply' ? 'Preply' : 'Platform'}
-                            </span>
-                          )}
-                        </>
+                        <div className="flex items-center gap-1 leading-tight">
+                          <ChainLinkIcon className="w-3 h-3 flex-shrink-0" />
+                          <span className="text-[11px] font-bold truncate">{linkedName}</span>
+                        </div>
                       ) : (
-                        <>
-                          <p className="text-[11px] font-bold text-white leading-tight truncate pr-3">{ev.summary}</p>
-                          <p className="text-xs font-semibold text-white/90 leading-snug">
-                            🕒 {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
-                          </p>
-                          <span className="absolute top-0.5 right-1 text-[8px] text-white/60 font-bold leading-none">G</span>
-                        </>
+                        <p className="text-[11px] font-bold leading-tight truncate">{ev.summary}</p>
+                      )}
+                      <p className={`text-[11px] font-semibold leading-tight mt-0.5 ${isLinked ? '' : 'opacity-80'}`}>{timeRange}</p>
+                      {rateStr && (
+                        <span className="absolute bottom-0.5 right-1.5 text-[9px] font-bold leading-none opacity-90">{rateStr}</span>
                       )}
                     </div>
                   );
@@ -1476,16 +1466,16 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
               {(() => {
                 const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
-                // Exclude already-linked students AND Platform students — Platform
-                // lessons come from the booking/schedule system, not GCal links.
+                // Exclude already-linked students. Both Preply and Platform students
+                // can be linked (Preply events show pink, Platform events green).
                 const q = linkSearch.trim().toLowerCase();
                 const available = linkStudents.filter(s =>
-                  !linkedStudentIds.has(s.id) && s.studentType !== 'platform' &&
+                  !linkedStudentIds.has(s.id) &&
                   (!q || s.name.toLowerCase().includes(q)));
                 if (available.length === 0) {
                   return (
                     <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                      {q ? 'No students match your search.' : 'No students available to link (Platform students are scheduled via bookings).'}
+                      {q ? 'No students match your search.' : 'All students are already linked.'}
                     </div>
                   );
                 }
