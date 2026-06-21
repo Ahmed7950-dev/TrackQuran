@@ -3,7 +3,8 @@ import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchieve
 import { getStudentCompletions } from '../services/tajweedService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
-import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah } from '../services/dataService';
+import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport } from '../services/dataService';
+import { safeCopy } from '../utils';
 import { getStudentRankAndProgress } from '../services/rankingService';
 import AddTafsirAchievementModal from './AddTafsirAchievementModal';
 import EditStudentDataModal from './EditStudentModal';
@@ -25,6 +26,8 @@ interface StudentDetailPageProps {
     tajweedRules?: string[];
     onUpdateTajweedRules?: (rules: string[]) => void;
     onReviewMistakes?: () => void;
+    /** Teacher id — needed to create/copy the student's shareable report link. */
+    teacherId?: string;
     /** When true: hides all action buttons, modals, and the Add Achievement bar */
     readOnly?: boolean;
 }
@@ -56,9 +59,44 @@ const StatCard: React.FC<{ title: string; value: string | number; subtext?: stri
     </div>
 );
 
-const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, readOnly = false }) => {
+const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, readOnly = false }) => {
     // Fix: Replaced 'a.useState' with 'useState'.
     const [timePeriod, setTimePeriod] = useState<TimePeriod>(TimePeriod.AllTime);
+
+    // ── Copy student's shareable report link (same link the Dashboard share button makes) ──
+    const [shareState, setShareState] = useState<'idle' | 'loading' | 'copied'>('idle');
+    const handleShareLink = async () => {
+        if (!teacherId || shareState === 'loading') return;
+        setShareState('loading');
+        try {
+            const reportId = await createOrUpdateSharedReport(teacherId, student.id, student.name, {
+                studentName: student.name,
+                generatedAt: new Date().toISOString(),
+                mistakes: student.mistakes || {},
+                verses: [],
+                homeworkVerses: [],
+                quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
+                studentProgress: {
+                    recitationAchievements: student.recitationAchievements || [],
+                    memorizationAchievements: student.memorizationAchievements || [],
+                    attendance: student.attendance || [],
+                    masteredTajweedRules: student.masteredTajweedRules || [],
+                    dob: student.dob,
+                    tafsirReviews: student.tafsirReviews || [],
+                    tafsirMemorizationReviews: student.tafsirMemorizationReviews || [],
+                },
+            });
+            if (reportId) {
+                await safeCopy(`${window.location.origin}/report/${reportId}`);
+                setShareState('copied');
+                setTimeout(() => setShareState('idle'), 3000);
+            } else {
+                setShareState('idle');
+            }
+        } catch {
+            setShareState('idle');
+        }
+    };
     // Fix: Replaced 'a.useState' with 'useState'.
     const [activeModal, setActiveModal] = useState<string | null>(null);
     // Fix: Replaced 'a.useState' with 'useState'.
@@ -678,6 +716,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     hifdhPagesToNext={hifdhPagesToNext}
                     hifdhNextStudentName={hifdhNextStudentName}
                     onReviewMistakes={onReviewMistakes ?? (() => {})}
+                    onShareLink={teacherId ? handleShareLink : undefined}
+                    shareState={shareState}
                 />
             )}
 

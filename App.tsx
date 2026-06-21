@@ -377,7 +377,9 @@ const App: React.FC = () => {
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  // Navigation state is persisted to localStorage (see effect below) so a page
+  // refresh keeps you on the same student / tab instead of dropping back to the list.
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(() => localStorage.getItem('nav_selectedStudentId'));
   // Tracks homework updates made by the student so they persist within the session
   // without needing to expose setCurrentUser from AuthProvider.
   const [studentHomeworkUpdates, setStudentHomeworkUpdates] = useState<QuranHomework[] | null>(null);
@@ -401,7 +403,7 @@ const App: React.FC = () => {
 
   // ── Arabic students ───────────────────────────────────────────────────────
   const [arabicStudents, setArabicStudents] = useState<ArabicStudent[]>([]);
-  const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(null);
+  const [selectedArabicStudentId, setSelectedArabicStudentId] = useState<string | null>(() => localStorage.getItem('nav_selectedArabicStudentId'));
   const [arabicVocabCounts, setArabicVocabCounts] = useState<Record<string, number>>({});
   const [hwDeepLink, setHwDeepLink] = useState<{ studentId: string; lessonId: string } | null>(null);
 
@@ -489,9 +491,29 @@ const App: React.FC = () => {
       setAvailabilitySlots([]);
     }
   }, [currentUser]);
-  const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>('details');
-  const [activeTab, setActiveTab] = useState<'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework'>('main');
+  const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>(
+    () => (localStorage.getItem('nav_currentStudentView') === 'mistakes' ? 'mistakes' : 'details'),
+  );
+  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework';
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    const saved = localStorage.getItem('nav_activeTab');
+    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework'];
+    return saved && (allowed as string[]).includes(saved) ? (saved as ActiveTab) : 'main';
+  });
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Persist navigation state so a refresh restores the same student / tab / view
+  // (subjectMode is persisted separately in its own initializer).
+  useEffect(() => {
+    if (selectedStudentId) localStorage.setItem('nav_selectedStudentId', selectedStudentId);
+    else localStorage.removeItem('nav_selectedStudentId');
+  }, [selectedStudentId]);
+  useEffect(() => {
+    if (selectedArabicStudentId) localStorage.setItem('nav_selectedArabicStudentId', selectedArabicStudentId);
+    else localStorage.removeItem('nav_selectedArabicStudentId');
+  }, [selectedArabicStudentId]);
+  useEffect(() => { localStorage.setItem('nav_currentStudentView', currentStudentView); }, [currentStudentView]);
+  useEffect(() => { localStorage.setItem('nav_activeTab', activeTab); }, [activeTab]);
 
   // Measure the sticky header so the tools bar sits exactly below it
   const headerRef = useRef<HTMLElement>(null);
@@ -1770,6 +1792,7 @@ const App: React.FC = () => {
               tajweedRules={tajweedRules}
               onUpdateTajweedRules={handleSaveTajweedRules}
               onReviewMistakes={() => setCurrentStudentView('mistakes')}
+              teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined}
             />
           )
         ) : (

@@ -170,12 +170,17 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
 
       if (sessions.length < 2) return null;
 
+      // Compare the cumulative err/pg NOW vs. how it stood BEFORE the most recent
+      // day of logging. We bucket by the most-recent calendar DAY (not by a single
+      // session) so that logging a second session on the same day STILL updates the
+      // trend — the old code returned null whenever the two latest sessions shared a
+      // day, which hid the indicator for same-day logs. (Sessions only store a date,
+      // not a time, so the day is the finest bucket their timestamps allow.)
       const lastDateStr = new Date(sessions[0].date).toDateString();
-      const prevDateStr = new Date(sessions[1].date).toDateString();
-      if (lastDateStr === prevDateStr) return null; // same-day sessions — skip
-
-      const lastSessionPages = sessions[0].pagesCompleted ?? 0;
-      if (lastSessionPages === 0) return null;
+      const lastDayPages = sessions
+        .filter(s => new Date(s.date).toDateString() === lastDateStr)
+        .reduce((sum, s) => sum + (s.pagesCompleted ?? 0), 0);
+      if (lastDayPages === 0) return null;
 
       // Re-derive the same valid-mistake set used for the displayed readingRate / tajweedRate
       const recitedPages = getRecitedPagesSet(student);
@@ -189,7 +194,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       const nowTajweed = allValidEntries.filter(([, m]) => m.errorType === 'tajweed').length;
       const nowPages   = recitedPages.size; // total unique recited pages
 
-      // Mistakes attributed to the most recent session
+      // Mistakes attributed to the most recent day (all of that day's sessions)
       const lastReading = allValidEntries.filter(([, m]) =>
         m.date && new Date(m.date).toDateString() === lastDateStr &&
         (!m.errorType || m.errorType === 'reading')
@@ -199,8 +204,8 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
         m.errorType === 'tajweed'
       ).length;
 
-      // Pages before last session (approximation: subtract session page count)
-      const prevPages = nowPages - lastSessionPages;
+      // Pages recited before the most recent day
+      const prevPages = nowPages - lastDayPages;
       if (prevPages <= 0) return null;
 
       // Current cumulative rates (= what is displayed)

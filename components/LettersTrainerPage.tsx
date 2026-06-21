@@ -428,6 +428,7 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
         onEditTajweed={c => { editingTajweedRef.current = c; setView({ name: 'newTajweed', studentId: student.id }); }}
         onStartChallenge={c => setView({ name: 'runner', studentId: student.id, challengeId: c.id })}
         onStartTajweed={c => setView({ name: 'tajweedRunner', studentId: student.id, tajweedId: c.id })}
+        locked={!!preSelectedStudent}
       />
     );
   } else if (view.name === 'newChallenge') {
@@ -693,7 +694,10 @@ const StudentView: React.FC<{
   onEditTajweed: (c: TajweedChallenge) => void;
   onStartChallenge: (c: LetterChallenge) => void;
   onStartTajweed: (c: TajweedChallenge) => void;
-}> = ({ state, student, onHome, onRename, onPrev, onAddChallenge, onAddTajweed, onEditChallenge, onEditTajweed, onStartChallenge, onStartTajweed }) => {
+  /** When true the trainer is scoped to this one student: hide the student
+   *  switcher (prev/next) and the "all students" breadcrumb. */
+  locked?: boolean;
+}> = ({ state, student, onHome, onRename, onPrev, onAddChallenge, onAddTajweed, onEditChallenge, onEditTajweed, onStartChallenge, onStartTajweed, locked }) => {
   const { t } = useI18n();
   const idx = state.students.findIndex(s => s.id === student.id);
   const prev = state.students[idx - 1];
@@ -704,7 +708,7 @@ const StudentView: React.FC<{
 
   return (
     <>
-      <Crumbs items={[{ label: `← ${t('lettersTrainer.allStudents')}`, onClick: onHome }]} />
+      {!locked && <Crumbs items={[{ label: `← ${t('lettersTrainer.allStudents')}`, onClick: onHome }]} />}
 
       <Card>
         <div className="flex flex-wrap items-center gap-4">
@@ -724,11 +728,13 @@ const StudentView: React.FC<{
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('lettersTrainer.studentViewHint')}</p>
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Btn size="sm" disabled={!prev} onClick={() => prev && onPrev(prev.id)}>‹</Btn>
-            <span className="text-xs text-slate-500 dark:text-slate-400 px-2">{idx + 1} / {state.students.length}</span>
-            <Btn size="sm" disabled={!next} onClick={() => next && onPrev(next.id)}>›</Btn>
-          </div>
+          {!locked && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Btn size="sm" disabled={!prev} onClick={() => prev && onPrev(prev.id)}>‹</Btn>
+              <span className="text-xs text-slate-500 dark:text-slate-400 px-2">{idx + 1} / {state.students.length}</span>
+              <Btn size="sm" disabled={!next} onClick={() => next && onPrev(next.id)}>›</Btn>
+            </div>
+          )}
         </div>
       </Card>
 

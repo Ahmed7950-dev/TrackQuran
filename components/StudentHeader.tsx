@@ -12,6 +12,9 @@ interface StudentHeaderProps {
     hifdhPagesToNext: number | null;
     hifdhNextStudentName: string | null;
     onReviewMistakes: () => void;
+    /** Copy the student's shareable report link. Omitted when unavailable. */
+    onShareLink?: () => void;
+    shareState?: 'idle' | 'loading' | 'copied';
 }
 
 const getAge = (dob: string) => {
@@ -32,7 +35,7 @@ const ActionButton: React.FC<{ onClick: () => void; title: string; children: Rea
 );
 
 
-const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onStartSession, readingPagesToNext, readingNextStudentName, hifdhPagesToNext, hifdhNextStudentName, onReviewMistakes }) => {
+const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onStartSession, readingPagesToNext, readingNextStudentName, hifdhPagesToNext, hifdhNextStudentName, onReviewMistakes, onShareLink, shareState = 'idle' }) => {
     const { t } = useI18n();
     const birthdayStatus = getBirthdayStatus(student.dob);
 
@@ -61,6 +64,25 @@ const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onS
                             <div className="w-3 h-3 bg-green-500 rounded-full animate-glow"></div>
                         </div>
                     </ActionButton>
+                    {onShareLink && (
+                        <ActionButton
+                            onClick={shareState === 'idle' ? onShareLink : () => {}}
+                            title={shareState === 'copied' ? 'Link copied!' : 'Copy student link'}
+                            className={shareState === 'copied'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-gray-500'}
+                        >
+                            <div className="w-6 h-6 flex items-center justify-center">
+                                {shareState === 'loading' ? (
+                                    <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                                ) : shareState === 'copied' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                                )}
+                            </div>
+                        </ActionButton>
+                    )}
                     <ActionButton onClick={onReviewMistakes} title="Review Mistakes" className="bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-gray-500">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" /></svg>
                     </ActionButton>
