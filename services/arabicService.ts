@@ -318,6 +318,26 @@ export async function saveLessonNote(
   return true;
 }
 
+/** The teacher's note is now ONE per student (shared across all that student's
+ *  lessons), stored on arabic_students.teacher_note. */
+export async function getArabicStudentNote(studentId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('arabic_students')
+    .select('teacher_note')
+    .eq('id', studentId)
+    .maybeSingle();
+  if (error) { console.error('getArabicStudentNote:', error.message); return ''; }
+  return ((data as { teacher_note?: string } | null)?.teacher_note) ?? '';
+}
+
+export async function saveArabicStudentNote(studentId: string, note: string): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_students')
+    .update({ teacher_note: note || null })
+    .eq('id', studentId);
+  if (error) console.error('saveArabicStudentNote:', error.message);
+}
+
 export async function deleteArabicLesson(id: string): Promise<boolean> {
   const { error } = await supabase
     .from('arabic_lessons')

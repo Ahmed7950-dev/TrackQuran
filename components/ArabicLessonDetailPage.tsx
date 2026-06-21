@@ -31,6 +31,8 @@ import {
   markHomeworkComplete,
   getWhiteboardData, saveWhiteboardData, uploadNoteImage,
   saveLessonNote,
+  getArabicStudentNote,
+  saveArabicStudentNote,
   getLessonProgressForStudent, markLessonProgress, markLessonDone, logLessonRevision,
 } from '../services/arabicService';
 import { createNotification } from '../services/notificationService';
@@ -129,17 +131,26 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   const grammarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteWindowRef   = useRef<Window | null>(null);
 
+  // The teacher's note is ONE per student (shared across all that student's
+  // lessons). When viewing a specific student, load + save the student's note;
+  // otherwise (global lesson editing) fall back to the per-lesson note.
+  useEffect(() => {
+    if (!preSelectedStudentId) return;
+    getArabicStudentNote(preSelectedStudentId).then(setTeacherNote);
+  }, [preSelectedStudentId]);
+
   // Listen for postMessage from the teacher-note popup window and auto-save
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type !== 'teacher_note' || e.data?.lessonId !== lesson.id) return;
       const val = e.data.value as string;
       setTeacherNote(val);
-      saveLessonNote(lesson.id, 'teacherNote', val);
+      if (preSelectedStudentId) saveArabicStudentNote(preSelectedStudentId, val);
+      else saveLessonNote(lesson.id, 'teacherNote', val);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [lesson.id]);
+  }, [lesson.id, preSelectedStudentId]);
 
   // Open / focus the teacher-note popup window
   const openTeacherNoteWindow = () => {
