@@ -4,6 +4,7 @@ import QualityScoreInput from './QualityScoreInput';
 import { calculateVersesAndPages } from '../services/dataService';
 import { useI18n } from '../context/I18nProvider';
 import ConfirmationModal from './ConfirmationModal';
+import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
 
 interface EditStudentDataModalProps {
   isOpen: boolean;
@@ -19,7 +20,11 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   const [name, setName] = useState(student.name);
   const [dob, setDob] = useState(student.dob ?? '');
   const [ageCategory, setAgeCategory] = useState<AgeCategory>(student.ageCategory ?? 'young_gems');
-  
+  const [billing, setBilling] = useState<StudentBilling>({
+    timezone: student.timezone, hourlyRate: student.hourlyRate,
+    studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
+  });
+
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editingLogData, setEditingLogData] = useState<any | null>(null);
   const { t } = useI18n();
@@ -36,6 +41,10 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
         setName(student.name);
         setDob(student.dob ?? '');
         setAgeCategory(student.ageCategory ?? 'young_gems');
+        setBilling({
+          timezone: student.timezone, hourlyRate: student.hourlyRate,
+          studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
+        });
         setActiveTab('info');
         setEditingLogId(null);
         setEditingLogData(null);
@@ -44,7 +53,9 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
 
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory });
+    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory,
+      timezone: billing.timezone, hourlyRate: billing.hourlyRate,
+      studentType: billing.studentType, preplyPercentage: billing.preplyPercentage });
     onClose();
   };
   
@@ -372,6 +383,9 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                                         })}
                                     </div>
                                 </div>
+
+                                {/* Billing & scheduling (tutor-only) */}
+                                <StudentBillingFields value={billing} onChange={setBilling} />
                             </div>
                             <div className="mt-8 flex justify-end gap-4">
                                 <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 text-slate-800 dark:bg-gray-600 dark:text-slate-200 rounded-md hover:bg-slate-300 dark:hover:bg-gray-500">{t('modals.editStudent.cancel')}</button>

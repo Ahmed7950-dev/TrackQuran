@@ -46,6 +46,10 @@ const rowToStudent = (row: any): Student => ({
   mistakes:                    row.mistakes                     ?? {},
   teacherNote:                 row.teacher_note                 ?? undefined,
   quranHomework:               row.quran_homework               ?? [],
+  timezone:                    row.timezone                     ?? undefined,
+  hourlyRate:                  row.hourly_rate                  ?? undefined,
+  studentType:                 row.student_type                 ?? undefined,
+  preplyPercentage:            row.preply_percentage            ?? undefined,
 });
 
 const studentToRow = (teacherId: string, s: Student) => ({
@@ -63,6 +67,10 @@ const studentToRow = (teacherId: string, s: Student) => ({
   mistakes:                    s.mistakes,
   teacher_note:                s.teacherNote ?? null,
   quran_homework:              s.quranHomework ?? [],
+  timezone:                    s.timezone ?? null,
+  hourly_rate:                 s.hourlyRate ?? null,
+  student_type:                s.studentType ?? null,
+  preply_percentage:           s.preplyPercentage ?? null,
 });
 
 export const getStudents = async (teacherId: string): Promise<Student[]> => {

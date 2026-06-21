@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { AgeCategory } from '../types';
 import { useI18n } from '../context/I18nProvider';
+import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
 
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStudent: (name: string, dob: string, ageCategory: AgeCategory) => void;
+  onAddStudent: (name: string, dob: string, ageCategory: AgeCategory, billing: StudentBilling) => void;
 }
 
 const AGE_CATEGORIES: { value: AgeCategory; label: string; range: string; emoji: string }[] = [
@@ -30,6 +31,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
   const [manualCategory, setManualCategory] = useState<AgeCategory>('young_gems');
+  const [billing, setBilling] = useState<StudentBilling>({ studentType: 'preply', preplyPercentage: 18 });
   const [error, setError] = useState('');
   const { t } = useI18n();
 
@@ -45,23 +47,25 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
       return;
     }
     setError('');
-    onAddStudent(name.trim(), dob, effectiveCategory);
+    onAddStudent(name.trim(), dob, effectiveCategory, billing);
     setName('');
     setDob('');
     setManualCategory('young_gems');
+    setBilling({ studentType: 'preply', preplyPercentage: 18 });
   };
 
   const handleClose = () => {
     setName('');
     setDob('');
     setManualCategory('young_gems');
+    setBilling({ studentType: 'preply', preplyPercentage: 18 });
     setError('');
     onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center" onClick={handleClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-8 w-full max-w-md" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-8 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('modals.addStudent.title')}</h2>
@@ -150,6 +154,9 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
               })}
             </div>
           </div>
+
+          {/* Billing & scheduling (tutor-only) */}
+          <StudentBillingFields value={billing} onChange={setBilling} />
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
 

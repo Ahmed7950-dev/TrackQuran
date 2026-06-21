@@ -84,6 +84,11 @@ export interface Student {
   mistakes: { [key: string]: Mistake };
   teacherNote?: string;
   quranHomework?: QuranHomework[];
+  // ── Billing / scheduling (tutor-only; never shown to the student) ──
+  timezone?: string;                       // IANA tz id, e.g. "America/New_York"
+  hourlyRate?: number;                     // tutor's hourly rate for this student
+  studentType?: 'preply' | 'platform';     // preply = commission taken; platform = none
+  preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
 }
 
 export interface QuranHomework {

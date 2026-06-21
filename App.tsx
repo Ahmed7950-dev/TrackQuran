@@ -689,6 +689,10 @@ const App: React.FC = () => {
       tafsirReviews: student.tafsirReviews || [],
       tafsirMemorizationReviews: [],
       mistakes: {},
+      timezone: student.timezone,
+      hourlyRate: student.hourlyRate,
+      studentType: student.studentType,
+      preplyPercentage: student.preplyPercentage,
     };
     setStudents(prev => [...prev, newStudent]);
     if (currentUser?.role === 'teacher') {
@@ -1840,7 +1844,7 @@ const App: React.FC = () => {
       <AddStudentModal
         isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
-        onAddStudent={(name, dob, ageCategory) => handleAddStudent({ name, dob, ageCategory, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
+        onAddStudent={(name, dob, ageCategory, billing) => handleAddStudent({ name, dob, ageCategory, ...billing, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
       />
 
       <ContactSupportModal
