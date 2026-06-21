@@ -3,6 +3,7 @@ import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } f
 import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
+import { computeReportRanks } from '../services/rankingService';
 import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
 import HonorBoardModal from './HonorBoardModal';
@@ -90,7 +91,7 @@ const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; short: string; badge: stri
   3: { emoji: '🥉', short: '3rd', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-700' },
 };
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId }) => {
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string; allStudents: Student[] }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId, allStudents }) => {
     const { t, language } = useI18n();
 
     // ── Share link ────────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 // Include assigned homework so (re)creating the report doesn't wipe it
                 // from the student's portal link.
                 quranHomework: student.quranHomework || [],
+                ranks: computeReportRanks(student, allStudents),
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],
@@ -612,19 +614,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>

@@ -350,6 +350,13 @@ export interface SharedReportData {
   homeworkVerses?: string[];
   quranHomework?: QuranHomework[];
   quranicFont?: string;
+  // Precomputed ranks so the public portal shows real ranks (it only has this
+  // one student's data, not the tutor's roster).
+  ranks?: {
+    readingRank: number; readingTotal: number;
+    hifdhRank: number; hifdhTotal: number;
+    overallReadingRank: number; overallReadingTotal: number;
+  };
   studentProgress?: {
     recitationAchievements: Array<{
       id: string; date: string;

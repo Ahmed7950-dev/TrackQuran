@@ -66,3 +66,42 @@ export const getStudentRankAndProgress = (
 
     return { rank, totalInGroup: studentsInGroup.length, pagesToNext, nextStudentName };
 };
+
+/**
+ * Rank among ALL of the tutor's students (every age group), by reading or
+ * memorization pages. Returns rank (1-indexed) and the total student count.
+ */
+export const getOverallRankAndProgress = (
+    currentStudent: Student,
+    allStudents: Student[],
+    type: 'reading' | 'memorization'
+): { rank: number; total: number } => {
+    const getScore = (student: Student): number =>
+        type === 'reading' ? getRecitedPagesSet(student).size : getMemorizedPagesSet(student).size;
+
+    const ranked = allStudents
+        .map(s => ({ id: s.id, score: getScore(s) }))
+        .sort((a, b) => b.score - a.score);
+
+    const idx = ranked.findIndex(s => s.id === currentStudent.id);
+    return { rank: idx === -1 ? 0 : idx + 1, total: allStudents.length };
+};
+
+/** Ranks precomputed into a shared report so the public portal can show real
+ *  ranks (the portal only has the one student's data, not the roster). */
+export interface ReportRanks {
+    readingRank: number; readingTotal: number;
+    hifdhRank: number; hifdhTotal: number;
+    overallReadingRank: number; overallReadingTotal: number;
+}
+
+export const computeReportRanks = (student: Student, allStudents: Student[]): ReportRanks => {
+    const reading = getStudentRankAndProgress(student, allStudents, 'reading');
+    const hifdh = getStudentRankAndProgress(student, allStudents, 'memorization');
+    const overall = getOverallRankAndProgress(student, allStudents, 'reading');
+    return {
+        readingRank: reading.rank, readingTotal: reading.totalInGroup,
+        hifdhRank: hifdh.rank, hifdhTotal: hifdh.totalInGroup,
+        overallReadingRank: overall.rank, overallReadingTotal: overall.total,
+    };
+};

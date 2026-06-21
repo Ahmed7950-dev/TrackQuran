@@ -79,6 +79,8 @@
         "readingQuality": "Reading Quality",
         "averageOutOf10": "Average / 10",
         "rankInAgeGroup": "Rank in Age Group",
+        "rankAmongAll": "Rank Among All Students",
+        "allAgeGroups": "All age groups",
         "pagesToNextRank": "{{pages}} pages to next rank",
         "topOfClass": "Top of the class!",
         "pagesMemorized": "Pages Memorized",

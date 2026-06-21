@@ -5,7 +5,7 @@ import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
 import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport } from '../services/dataService';
 import { safeCopy } from '../utils';
-import { getStudentRankAndProgress } from '../services/rankingService';
+import { getStudentRankAndProgress, getOverallRankAndProgress, computeReportRanks, ReportRanks } from '../services/rankingService';
 import AddTafsirAchievementModal from './AddTafsirAchievementModal';
 import EditStudentDataModal from './EditStudentModal';
 import ExportReportModal from './ExportReportModal';
@@ -28,6 +28,9 @@ interface StudentDetailPageProps {
     onReviewMistakes?: () => void;
     /** Teacher id — needed to create/copy the student's shareable report link. */
     teacherId?: string;
+    /** Precomputed ranks (public portal) — the portal only has this one student,
+     *  so real ranks are computed by the tutor at share time and passed here. */
+    overrideRanks?: ReportRanks;
     /** When true: hides all action buttons, modals, and the Add Achievement bar */
     readOnly?: boolean;
 }
@@ -59,7 +62,7 @@ const StatCard: React.FC<{ title: string; value: string | number; subtext?: stri
     </div>
 );
 
-const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, readOnly = false }) => {
+const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, overrideRanks, readOnly = false }) => {
     // Fix: Replaced 'a.useState' with 'useState'.
     const [timePeriod, setTimePeriod] = useState<TimePeriod>(TimePeriod.AllTime);
 
@@ -78,6 +81,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 // Include assigned homework so (re)creating the report doesn't wipe it
                 // from the student's portal (the report is the student's link).
                 quranHomework: student.quranHomework || [],
+                ranks: computeReportRanks(student, students),
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],
@@ -162,16 +166,31 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     }, [student.attendance, student.recitationAchievements, student.memorizationAchievements, timePeriod]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
-    const { rank: readingRank, totalInGroup: readingTotal, pagesToNext: readingPagesToNext, nextStudentName: readingNextStudentName } = useMemo(() => 
-        getStudentRankAndProgress(student, students, 'reading'), 
+    const readingComputed = useMemo(() =>
+        getStudentRankAndProgress(student, students, 'reading'),
+        [student, students]
+    );
+    const hifdhComputed = useMemo(() =>
+        getStudentRankAndProgress(student, students, 'memorization'),
+        [student, students]
+    );
+    const overallComputed = useMemo(() =>
+        getOverallRankAndProgress(student, students, 'reading'),
         [student, students]
     );
 
-    // Fix: Replaced 'a.useMemo' with 'useMemo'.
-    const { rank: hifdhRank, totalInGroup: hifdhTotal, pagesToNext: hifdhPagesToNext, nextStudentName: hifdhNextStudentName } = useMemo(() => 
-        getStudentRankAndProgress(student, students, 'memorization'), 
-        [student, students]
-    );
+    // In the public portal `students` is just this one student, so rank would be
+    // 1/1 — use the ranks the tutor precomputed at share time when provided.
+    const readingRank   = overrideRanks ? overrideRanks.readingRank  : readingComputed.rank;
+    const readingTotal  = overrideRanks ? overrideRanks.readingTotal : readingComputed.totalInGroup;
+    const hifdhRank     = overrideRanks ? overrideRanks.hifdhRank    : hifdhComputed.rank;
+    const hifdhTotal    = overrideRanks ? overrideRanks.hifdhTotal   : hifdhComputed.totalInGroup;
+    const overallRank   = overrideRanks ? overrideRanks.overallReadingRank  : overallComputed.rank;
+    const overallTotal  = overrideRanks ? overrideRanks.overallReadingTotal : overallComputed.total;
+    const readingPagesToNext = overrideRanks ? null : readingComputed.pagesToNext;
+    const readingNextStudentName = overrideRanks ? null : readingComputed.nextStudentName;
+    const hifdhPagesToNext = overrideRanks ? null : hifdhComputed.pagesToNext;
+    const hifdhNextStudentName = overrideRanks ? null : hifdhComputed.nextStudentName;
     
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const readingData = useMemo(() => {
@@ -800,6 +819,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         <StatCard title={t('studentDetail.pagesRead')} value={readingData.totalPages} subtext={t('studentDetail.toKhatm', { pages: readingData.pagesRemaining })} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.5 2A1.5 1.5 0 0 0 2 3.5v13A1.5 1.5 0 0 0 3.5 18h13a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-13Zm1.25 1.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H4.75Z" /></svg>} />
                         <StatCard title={t('studentDetail.readingQuality')} value={readingData.avgQuality.toFixed(1)} subtext={t('studentDetail.averageOutOf10')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.868 2.884c.321-.772 1.415-.772 1.736 0l1.99 4.785a.75.75 0 0 0 .562.41l5.257.764c.818.119 1.145 1.121.556 1.704l-3.804 3.709a.75.75 0 0 0-.217.665l.9 5.236c.14.815-.713 1.44-1.442 1.054L10 18.232l-4.703 2.473c-.729.386-1.582-.239-1.442-1.054l.9-5.236a.75.75 0 0 0-.217-.665l-3.804-3.709c-.59-.583-.262-1.585.556-1.704l5.257-.764a.75.75 0 0 0 .562.41l1.99-4.785Z" clipRule="evenodd" /></svg>} />
                         <StatCard title={t('studentDetail.rankInAgeGroup')} value={`${readingRank} / ${readingTotal}`} subtext={readingPagesToNext !== null ? t('studentDetail.pagesToNextRank', { pages: readingPagesToNext }) : t('studentDetail.topOfClass')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M15.22 6.268a.75.75 0 0 1 .968-.432l3.5 1.5a.75.75 0 0 1 0 1.328l-3.5 1.5a.75.75 0 0 1-.968-.432V6.268ZM3.75 3A1.75 1.75 0 0 0 2 4.75v10.5A1.75 1.75 0 0 0 3.75 17h6.5A1.75 1.75 0 0 0 12 15.25v-2.016a.75.75 0 0 1 1.5 0v2.016a3.25 3.25 0 0 1-3.25 3.25h-6.5A3.25 3.25 0 0 1 .5 15.25V4.75A3.25 3.25 0 0 1 3.75 1.5h6.5A3.25 3.25 0 0 1 13.5 4.75v2.016a.75.75 0 0 1-1.5 0V4.75a1.75 1.75 0 0 0-1.75-1.75h-6.5Z" clipRule="evenodd" /></svg>} />
+                        <StatCard title={t('studentDetail.rankAmongAll')} value={`${overallRank} / ${overallTotal}`} subtext={t('studentDetail.allAgeGroups')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Z" /></svg>} />
                     </div>
                 </div>
 

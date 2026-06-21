@@ -1490,6 +1490,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                   student={fakeStudent}
                   students={[fakeStudent]}
                   quranMetadata={QURAN_METADATA}
+                  overrideRanks={report_data.ranks}
                   readOnly
                 />
               );

@@ -79,6 +79,8 @@
         "readingQuality": "جودة القراءة",
         "averageOutOf10": "المتوسط / ١٠",
         "rankInAgeGroup": "الترتيب في الفئة العمرية",
+        "rankAmongAll": "الترتيب بين جميع الطلاب",
+        "allAgeGroups": "كل الفئات العمرية",
         "pagesToNextRank": "{{pages}} صفحات للمرتبة التالية",
         "topOfClass": "الأول على الفصل!",
         "pagesMemorized": "الصفحات المحفوظة",

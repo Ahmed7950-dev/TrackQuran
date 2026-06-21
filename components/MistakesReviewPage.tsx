@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
 import { useI18n } from '../context/I18nProvider';
-import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getSharedReport, updateHomeworkVerses, saveStudent, resetVersePlayCount } from '../services/dataService';
+import { createOrUpdateSharedReport, getStudentReportId, getReportPlays, getSharedReport, updateHomeworkVerses, saveStudent, resetVersePlayCount, getStudents } from '../services/dataService';
+import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
@@ -108,11 +109,22 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     const removedVerseKeysRef = useRef<Set<string>>(new Set());
     // Tajweed lesson completions for this student — cached and embedded in shared report
     const tajweedCompletionsRef = useRef<Array<{ lessonId: string; lessonTitle: string; completedAt: string }>>([]);
+    // The tutor's roster — cached so the auto-sync can recompute the student's ranks
+    // (the public portal can't compute ranks itself).
+    const rosterRef = useRef<Student[]>([]);
 
     useEffect(() => {
         if (!student.id) return;
         getStudentCompletions(student.id).then(rows => { tajweedCompletionsRef.current = rows; });
     }, [student.id]);
+
+    // Cache the tutor's roster so the auto-sync below can keep the student's ranks
+    // fresh in the shared report.
+    useEffect(() => {
+        const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
+        if (!tid) return;
+        getStudents(tid).then(rows => { if (rows.length) rosterRef.current = rows; });
+    }, [teacherId, currentUser]);
 
     // Reset the "manually removed this session" set when switching students so a
     // verse removed for one student (or in a previous visit) doesn't stay hidden
@@ -165,6 +177,10 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             mistakes: student.mistakes || {},
             verses: verseList,
             homeworkVerses: [...homeworkVerses],
+            // Preserve homework + ranks: this sync OVERWRITES report_data, so any
+            // field omitted here is wiped from the student's portal.
+            quranHomework: student.quranHomework || [],
+            ...(rosterRef.current.length > 0 ? { ranks: computeReportRanks(student, rosterRef.current) } : {}),
             quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
             studentProgress: {
                 recitationAchievements: student.recitationAchievements || [],

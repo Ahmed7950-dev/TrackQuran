@@ -79,6 +79,8 @@
         "readingQuality": "Okuma Kalitesi",
         "averageOutOf10": "Ortalama / 10",
         "rankInAgeGroup": "Yaş Grubundaki Sıralama",
+        "rankAmongAll": "Tüm Öğrenciler Arasında Sıralama",
+        "allAgeGroups": "Tüm yaş grupları",
         "pagesToNextRank": "Bir sonraki sıraya {{pages}} sayfa",
         "topOfClass": "Sınıfın birincisi!",
         "pagesMemorized": "Ezberlenen Sayfalar",
