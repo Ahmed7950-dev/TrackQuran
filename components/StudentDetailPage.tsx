@@ -75,6 +75,9 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 mistakes: student.mistakes || {},
                 verses: [],
                 homeworkVerses: [],
+                // Include assigned homework so (re)creating the report doesn't wipe it
+                // from the student's portal (the report is the student's link).
+                quranHomework: student.quranHomework || [],
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],

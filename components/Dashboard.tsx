@@ -109,6 +109,9 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 mistakes: student.mistakes || {},
                 verses: verseList,
                 homeworkVerses: [],
+                // Include assigned homework so (re)creating the report doesn't wipe it
+                // from the student's portal link.
+                quranHomework: student.quranHomework || [],
                 quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
                 studentProgress: {
                     recitationAchievements: student.recitationAchievements || [],

@@ -22,6 +22,10 @@ type View =
   | { name: 'runner'; studentId: string; challengeId: string }
   | { name: 'tajweedRunner'; studentId: string; tajweedId: string };
 
+// Persist which student the teacher is viewing inside the trainer so a page
+// refresh restores it instead of dropping back to the all-students home screen.
+const TRAINER_VIEW_KEY = 'arabic_trainer_view_v1';
+
 // --- Avatar colours -----------------------------------------------------------
 
 const AVATAR_COLORS = [
@@ -284,9 +288,25 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
     }
     return loaded;
   });
-  const [view, setView] = useState<View>(() =>
-    preSelectedStudent ? { name: 'student', studentId: preSelectedStudent.id } : { name: 'home' }
-  );
+  const [view, setView] = useState<View>(() => {
+    // A pre-selected student (student's own view, or teacher opened the trainer
+    // for a specific student) always wins and locks to that student.
+    if (preSelectedStudent) return { name: 'student', studentId: preSelectedStudent.id };
+    // Otherwise restore the student the teacher was last viewing, so a refresh
+    // doesn't bounce back to the home screen. Mid-challenge / form screens are
+    // downgraded to that student's overview, and stale ids fall back to home.
+    try {
+      const raw = localStorage.getItem(TRAINER_VIEW_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as View;
+        const studentId = (saved as { studentId?: string }).studentId;
+        if (studentId && loadTrainerState().students.some(s => s.id === studentId)) {
+          return { name: 'student', studentId };
+        }
+      }
+    } catch { /* ignore malformed storage */ }
+    return { name: 'home' };
+  });
   const [confirm, setConfirm] = useState<{
     title: string;
     body: string;
@@ -299,6 +319,11 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
   useEffect(() => {
     saveTrainerState(state);
   }, [state]);
+
+  // Remember which student/screen the teacher is on so a refresh restores it.
+  useEffect(() => {
+    try { localStorage.setItem(TRAINER_VIEW_KEY, JSON.stringify(view)); } catch { /* ignore */ }
+  }, [view]);
 
   const update = (mut: (s: TrainerState) => void) =>
     setState(prev => {
