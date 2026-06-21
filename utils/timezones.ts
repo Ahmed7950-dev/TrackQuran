@@ -66,7 +66,7 @@ const TZ_ALIASES: Record<string, string> = {
   'Africa/Nairobi': 'kenya nairobi',
   'Africa/Johannesburg': 'south africa johannesburg cape town pretoria durban',
   'Africa/Khartoum': 'sudan khartoum',
-  'Europe/London': 'uk united kingdom england britain great britain london manchester birmingham',
+  'Europe/London': 'uk united kingdom england britain great britain london manchester birmingham leeds liverpool scotland edinburgh glasgow aberdeen dundee wales cardiff swansea northern ireland belfast bst gmt',
   'Europe/Dublin': 'ireland dublin',
   'Europe/Paris': 'france paris',
   'Europe/Berlin': 'germany berlin munich frankfurt hamburg cologne',
