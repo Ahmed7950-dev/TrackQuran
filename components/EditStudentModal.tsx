@@ -15,6 +15,18 @@ interface EditStudentDataModalProps {
   quranMetadata: SurahMetadata[];
 }
 
+/** Derive an age category from a date-of-birth string (matches AddStudentModal). */
+const categoryFromDob = (dob: string): AgeCategory => {
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  if (age <= 15) return 'young_gems';
+  if (age <= 35) return 'aspiring_scholars';
+  return 'devoted_learners';
+};
+
 const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onClose, onUpdateStudent, onDeleteStudent, student, quranMetadata }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'logbook'>('info');
   const [name, setName] = useState(student.name);
@@ -51,9 +63,15 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
     }
   }, [student, isOpen]);
 
+  // When a DOB is present the category is derived from it (the buttons are
+  // locked). Saving the stale state value here would otherwise move the student
+  // to the wrong age-group section on the dashboard ("disappearing" from where
+  // it was). Derive it the same way the dashboard does.
+  const effectiveCategory: AgeCategory = dob ? categoryFromDob(dob) : ageCategory;
+
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory,
+    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory: effectiveCategory,
       timezone: billing.timezone, hourlyRate: billing.hourlyRate,
       studentType: billing.studentType, preplyPercentage: billing.preplyPercentage });
     onClose();
@@ -362,7 +380,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                                           { value: 'aspiring_scholars' as AgeCategory, label: 'Aspiring Scholars', range: 'Ages 16–35', emoji: '📚' },
                                           { value: 'devoted_learners' as AgeCategory,  label: 'Devoted Learners',  range: 'Ages 36+',   emoji: '🌿' },
                                         ]).map(cat => {
-                                          const isSelected = ageCategory === cat.value;
+                                          const isSelected = effectiveCategory === cat.value;
                                           const isLocked = !!dob;
                                           return (
                                             <button
