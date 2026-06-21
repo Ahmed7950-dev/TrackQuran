@@ -173,50 +173,48 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       if (sessions.length < 2) return null;
 
       // Compare the cumulative err/pg NOW vs. how it stood BEFORE the most recent
-      // day of logging. We bucket by the most-recent calendar DAY (not by a single
-      // session) so that logging a second session on the same day STILL updates the
-      // trend — the old code returned null whenever the two latest sessions shared a
-      // day, which hid the indicator for same-day logs. (Sessions only store a date,
-      // not a time, so the day is the finest bucket their timestamps allow.)
-      const lastDateStr = new Date(sessions[0].date).toDateString();
-      const lastDayPages = sessions
-        .filter(s => new Date(s.date).toDateString() === lastDateStr)
-        .reduce((sum, s) => sum + (s.pagesCompleted ?? 0), 0);
-      if (lastDayPages === 0) return null;
+      // day of logging. The "before" state is computed by actually rebuilding the
+      // student WITHOUT the latest day's sessions and recomputing the unique recited
+      // page set — NOT by subtracting raw pagesCompleted from the unique-page count
+      // (those two are different units and the mismatch could flip the arrow).
+      const latestDayStart = new Date(new Date(sessions[0].date).toDateString()).getTime();
+      const prevSessions = sessions.filter(s => new Date(s.date).getTime() < latestDayStart);
+      if (prevSessions.length === 0) return null; // nothing before the latest day to compare against
 
-      // Re-derive the same valid-mistake set used for the displayed readingRate / tajweedRate
       const recitedPages = getRecitedPagesSet(student);
-      const allValidEntries = (Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][])
-        .filter(([key]) => {
-          const [surah, ayah] = key.split(':').map(Number);
-          return !isNaN(surah) && !isNaN(ayah) && recitedPages.has(getPageOfAyah(surah, ayah));
-        });
+      const nowPages = recitedPages.size; // total unique recited pages (matches the displayed rate)
+      const prevRecitedPages = getRecitedPagesSet({ ...student, recitationAchievements: prevSessions });
+      const prevPages = prevRecitedPages.size;
+      if (prevPages === 0) return null;
 
-      const nowReading = allValidEntries.filter(([, m]) => !m.errorType || m.errorType === 'reading').length;
-      const nowTajweed = allValidEntries.filter(([, m]) => m.errorType === 'tajweed').length;
-      const nowPages   = recitedPages.size; // total unique recited pages
+      const allEntries = Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][];
+      const isReading = (m: import('../types').Mistake) => !m.errorType || m.errorType === 'reading';
+      const isTajweed = (m: import('../types').Mistake) => m.errorType === 'tajweed';
 
-      // Mistakes attributed to the most recent day (all of that day's sessions)
-      const lastReading = allValidEntries.filter(([, m]) =>
-        m.date && new Date(m.date).toDateString() === lastDateStr &&
-        (!m.errorType || m.errorType === 'reading')
-      ).length;
-      const lastTajweed = allValidEntries.filter(([, m]) =>
-        m.date && new Date(m.date).toDateString() === lastDateStr &&
-        m.errorType === 'tajweed'
-      ).length;
+      // NOW: every mistake on a recited page (this is exactly what the displayed rate uses).
+      const nowValid = allEntries.filter(([key]) => {
+        const [s, a] = key.split(':').map(Number);
+        return !isNaN(s) && !isNaN(a) && recitedPages.has(getPageOfAyah(s, a));
+      });
+      const nowReading = nowValid.filter(([, m]) => isReading(m)).length;
+      const nowTajweed = nowValid.filter(([, m]) => isTajweed(m)).length;
 
-      // Pages recited before the most recent day
-      const prevPages = nowPages - lastDayPages;
-      if (prevPages <= 0) return null;
+      // BEFORE: mistakes logged before the latest day (by timestamp), on pages recited by then.
+      const prevValid = allEntries.filter(([key, m]) => {
+        if (!m.date || new Date(m.date).getTime() >= latestDayStart) return false;
+        const [s, a] = key.split(':').map(Number);
+        return !isNaN(s) && !isNaN(a) && prevRecitedPages.has(getPageOfAyah(s, a));
+      });
+      const prevReading = prevValid.filter(([, m]) => isReading(m)).length;
+      const prevTajweed = prevValid.filter(([, m]) => isTajweed(m)).length;
 
       // Current cumulative rates (= what is displayed)
       const nowReadingRate  = nowReading  / nowPages;
       const nowTajweedRate  = nowTajweed  / nowPages;
 
-      // Rates before the last session
-      const prevReadingRate = (nowReading  - lastReading)  / prevPages;
-      const prevTajweedRate = (nowTajweed  - lastTajweed)  / prevPages;
+      // Rates as of the end of the previous day
+      const prevReadingRate = prevReading / prevPages;
+      const prevTajweedRate = prevTajweed / prevPages;
 
       const readingDelta = nowReadingRate  - prevReadingRate;
       const tajweedDelta = nowTajweedRate  - prevTajweedRate;
