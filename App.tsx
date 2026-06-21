@@ -31,6 +31,7 @@ import ArabicDashboard from './components/ArabicDashboard';
 import ArabicStudentDetailPage from './components/ArabicStudentDetailPage';
 import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
+import UnifiedStudentPortal from './components/UnifiedStudentPortal';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
@@ -352,6 +353,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (arabicShareToken) return <ArabicStudentPortal token={arabicShareToken} />;
+
+  // ── Unified portal (paired Quran + Arabic profiles) — no auth required ────
+  const portalPairToken = (() => {
+    const m = window.location.pathname.match(/^\/portal\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (portalPairToken) return <UnifiedStudentPortal token={portalPairToken} />;
 
   // ── Family progress link — no auth required ───────────────────────────────
   const familyLinkId = (() => {

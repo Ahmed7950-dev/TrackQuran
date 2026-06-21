@@ -1,12 +1,27 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory, LessonSession } from '../types';
 import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
+import { getUpcomingSessions, updateSessionMeetUrl } from '../services/lessonSessionService';
+import { createGoogleMeetLink } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
 import HonorBoardModal from './HonorBoardModal';
+
+/** Format a lesson date as "Today · 6:00 PM", "Tomorrow · 6:00 PM", or "Mon 23 May · 6:00 PM" */
+const formatSessionDate = (iso: string): string => {
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lessonDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((lessonDay.getTime() - today.getTime()) / 86400000);
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diffDays === 0) return `Today · ${time}`;
+  if (diffDays === 1) return `Tomorrow · ${time}`;
+  return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${time}`;
+};
 
 /** Returns days since last activity, or null if the student has no records at all. */
 const getDaysSinceLastActivity = (s: Student): number | null => {
@@ -91,7 +106,7 @@ const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; short: string; badge: stri
   3: { emoji: '🥉', short: '3rd', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-700' },
 };
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string; allStudents: Student[] }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId, allStudents }) => {
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string; allStudents: Student[]; isNext?: boolean }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId, allStudents, isNext }) => {
     const { t, language } = useI18n();
 
     // ── Share link ────────────────────────────────────────────────────────────
@@ -250,16 +265,24 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
         : t('studentCard.notApplicable');
 
     return (
-        <div 
-            onClick={onSelect} 
+        <div
+            onClick={onSelect}
             className={`
-                rounded-xl shadow-sm transition-all cursor-pointer border overflow-hidden
-                ${isInactive
+                relative rounded-xl shadow-sm transition-all cursor-pointer border overflow-hidden
+                ${isNext
+                    ? 'bg-white dark:bg-gray-800 border-amber-400 dark:border-amber-500 ring-2 ring-amber-300/50 dark:ring-amber-600/30 shadow-md hover:shadow-lg hover:scale-[1.02]'
+                    : isInactive
                     ? 'bg-slate-100 dark:bg-gray-800/80 border-dashed border-slate-300 dark:border-gray-700 opacity-80 hover:opacity-100'
                     : 'bg-white dark:bg-gray-800 hover:shadow-lg hover:scale-[1.02] dark:border-gray-700'
                 }
             `}
         >
+            {isNext && (
+              <div className="absolute -top-2.5 left-4 z-10 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
+                <span className="text-xs">📅</span>
+                <span className="text-xs font-bold text-white">Next lesson</span>
+              </div>
+            )}
             {/* Top Section */}
             <div className={`p-4 ${isInactive 
                 ? 'bg-slate-50 dark:bg-gray-800/50' 
@@ -446,6 +469,65 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const { t } = useI18n();
 
+  // ── Upcoming linked-lesson banner + Google Meet (mirrors the Arabic dashboard) ──
+  const [sessions, setSessions] = useState<LessonSession[]>([]);
+  const [meetGenerating, setMeetGenerating] = useState(false);
+  const [meetCopied, setMeetCopied] = useState(false);
+
+  useEffect(() => {
+    if (!teacherId) return;
+    getUpcomingSessions(teacherId)
+      .then(setSessions)
+      .catch(err => console.error('[Sessions] load failed:', err));
+  }, [teacherId]);
+
+  // Next upcoming lesson among THIS teacher's Quran students (sessions whose
+  // student_id resolves to a Quran student — Arabic sessions are ignored here).
+  const nextLesson = useMemo(() => {
+    const now = new Date();
+    let best: { date: Date; student: Student; meetUrl?: string; sessionId?: string; title?: string } | null = null;
+    for (const session of sessions) {
+      const d = new Date(session.startAt);
+      if (d <= now) continue;
+      const student = students.find(s => s.id === session.studentId);
+      if (!student) continue; // not a Quran student
+      if (!best || d < best.date) {
+        best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: session.title };
+      }
+    }
+    return best;
+  }, [sessions, students]);
+
+  const highlightedStudentId = nextLesson?.student.id ?? null;
+
+  async function handleGenerateMeetLink() {
+    if (!nextLesson) return;
+    setMeetGenerating(true);
+    try {
+      const url = await createGoogleMeetLink(nextLesson.student.name, nextLesson.date.toISOString());
+      if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
+      if (nextLesson.sessionId) {
+        await updateSessionMeetUrl(nextLesson.sessionId, url);
+        setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: url } : s));
+      }
+    } finally {
+      setMeetGenerating(false);
+    }
+  }
+
+  async function handleCopyMeetLink() {
+    if (!nextLesson?.meetUrl) return;
+    await safeCopy(nextLesson.meetUrl);
+    setMeetCopied(true);
+    setTimeout(() => setMeetCopied(false), 2500);
+  }
+
+  async function handleClearMeetLink() {
+    if (!nextLesson?.sessionId) return;
+    await updateSessionMeetUrl(nextLesson.sessionId, null);
+    setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: undefined } : s));
+  }
+
   const sortedStudents = useMemo(() => {
     const filtered = students.filter(student =>
         student.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -506,6 +588,47 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
   return (
     <div>
+      {/* ── Upcoming Lesson banner (linked Google Calendar events) ──────────── */}
+      {nextLesson && (
+        <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                You have a lesson with{' '}
+                <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                {' '}on{' '}
+                <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+              </p>
+              {nextLesson.title && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.title}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            {nextLesson.meetUrl ? (
+              <>
+                <button onClick={handleCopyMeetLink} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                  {meetCopied ? '✓ Copied!' : (<><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>)}
+                </button>
+                <a href={nextLesson.meetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                  Join Lesson
+                </a>
+                <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </>
+            ) : (
+              <button onClick={handleGenerateMeetLink} disabled={meetGenerating} className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-3 mb-6">
         {/* ── Unified sort bar ── */}
         <div className="flex items-center gap-1.5 flex-wrap bg-white dark:bg-gray-800 px-4 py-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-gray-700">
@@ -609,19 +732,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   wasConnected,
 } from '../services/googleCalendarService';
 import { AvailabilitySlot } from '../services/availabilityService';
+import { safeCopy } from '../utils';
 import {
   LessonBooking,
   getTeacherBookings,
@@ -22,7 +23,8 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
-import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession } from '../services/lessonSessionService';
+import { ensurePortalPair } from '../services/portalPairService';
 import { netEarning } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
@@ -285,10 +287,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [linkSearch,        setLinkSearch]        = useState('');
   const [linkGroup,         setLinkGroup]         = useState<'quran' | 'arabic'>('quran');
   const [linking,           setLinking]           = useState(false);
-  const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession>>({});
+  // One event can be linked to MORE THAN ONE student (a student's Quran + Arabic
+  // profiles), so sessions are grouped per gcal_event_id.
+  const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession[]>>({});
   const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
-  /** Set when user clicks a linked event in link mode — shows unlink confirmation */
-  const [unlinkTarget, setUnlinkTarget] = useState<{ gcalId: string; studentId: string; studentName: string; title: string } | null>(null);
+  /** Set when user clicks a linked event — shows the manage-links modal (add / remove profiles) */
+  const [manageTarget, setManageTarget] = useState<{ gcalId: string; summary: string } | null>(null);
+  /** Pending link awaiting same-name confirmation (different name already on this event) */
+  const [nameMismatch, setNameMismatch] = useState<{ studentId: string; existingName: string; newName: string } | null>(null);
+  /** Generated unified portal link to show the tutor after pairing two profiles */
+  const [pairLink, setPairLink] = useState<string | null>(null);
+  const [pairLinkCopied, setPairLinkCopied] = useState(false);
   /** Set when silent refresh has failed — shows the reconnect banner */
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
@@ -478,18 +487,21 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // Load already-linked sessions so linked events render coloured.
   useEffect(() => {
     if (!canLink || !teacherId) return;
-    getSessionsByGcalId(teacherId).then(map => {
+    getSessionsListByGcalId(teacherId).then(map => {
       setLinkedSessions(map);
     }).catch(console.error);
   }, [canLink, teacherId]);
 
-  // Build a studentName lookup from linkedSessions
+  // Build a studentName lookup from linkedSessions (one display name per event;
+  // dual-linked profiles share the same name, so the first resolvable wins).
   useEffect(() => {
     if (!linkStudents.length) return;
     const names: Record<string, string> = {};
-    for (const [gcalId, session] of Object.entries(linkedSessions) as Array<[string, LessonSession]>) {
-      const student = linkStudentById.get(session.studentId);
-      if (student) names[gcalId] = student.name;
+    for (const [gcalId, sessionList] of Object.entries(linkedSessions) as Array<[string, LessonSession[]]>) {
+      for (const session of sessionList) {
+        const student = linkStudentById.get(session.studentId);
+        if (student) { names[gcalId] = student.name; break; }
+      }
     }
     setLinkedStudentNames(names);
   }, [linkedSessions, linkStudents, linkStudentById]);
@@ -598,11 +610,29 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     }
   };
 
+  /**
+   * Picker click. Allows linking a 2nd profile to an event, but if the event is
+   * already linked to a DIFFERENT name, ask for confirmation first (guards
+   * against accidentally pairing two different people).
+   */
+  function requestLink(studentId: string) {
+    if (!linkTarget) return;
+    const newName = linkStudentById.get(studentId)?.name ?? '';
+    const existing = (linkedSessions[linkTarget.id] ?? [])
+      .filter(s => s.studentId !== studentId)
+      .map(s => linkStudentById.get(s.studentId))
+      .find(b => b && newName && b.name.trim().toLowerCase() !== newName.trim().toLowerCase());
+    if (existing) {
+      setNameMismatch({ studentId, existingName: existing.name, newName });
+      return;
+    }
+    handleLinkToStudent(studentId);
+  }
+
   async function handleLinkToStudent(studentId: string) {
     if (!linkTarget || !gcalToken || !teacherId) return;
     setLinking(true);
     try {
-      const student = linkStudentById.get(studentId);
       // Always link the clicked event itself (it's in the current view), then link
       // the rest of the same-named series across the wider window.
       const clicked = events.find(e => e.id === linkTarget.id);
@@ -617,21 +647,21 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       if (!clicked && count === 0) {
         setError(`No calendar events titled "${linkTarget.summary}" were found to link.`);
       }
-      // Refresh linked sessions map
-      const map = await getSessionsByGcalId(teacherId);
+      // Refresh linked sessions map (name lookup rebuilds via effect)
+      const map = await getSessionsListByGcalId(teacherId);
       setLinkedSessions(map);
-      if (student) {
-        // Update name display for all events with this title
-        setLinkedStudentNames(prev => {
-          const next = { ...prev };
-          for (const [gcalId, session] of Object.entries(map)) {
-            if (session.studentId === studentId) {
-              next[gcalId] = student.name;
-            }
-          }
-          return next;
-        });
+
+      // If this event now has BOTH a Quran and an Arabic profile, ensure the
+      // permanent unified portal link and surface it to the tutor.
+      const eventSessions = map[linkTarget.id] ?? [];
+      const profiles = eventSessions.map(s => linkStudentById.get(s.studentId)).filter(Boolean) as LinkStudent[];
+      const q = profiles.find(p => p.kind === 'quran');
+      const a = profiles.find(p => p.kind === 'arabic');
+      if (q && a) {
+        const pair = await ensurePortalPair(teacherId, q.id, a.id, q.name);
+        if (pair) setPairLink(`${window.location.origin}/portal/${pair.token}`);
       }
+
       onSessionLinked?.();
       setLinkTarget(null);
       setLinkSearch('');
@@ -642,24 +672,21 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     }
   }
 
-  async function handleUnlink() {
-    if (!unlinkTarget || !teacherId) return;
+  /** Remove one student's link (all events with this title) from the manage modal. */
+  async function handleUnlinkStudent(studentId: string, title: string) {
+    if (!teacherId) return;
     setLinking(true);
     try {
-      await unlinkSessionsByStudentAndTitle(teacherId, unlinkTarget.studentId, unlinkTarget.title);
-      const map = await getSessionsByGcalId(teacherId);
+      await unlinkSessionsByStudentAndTitle(teacherId, studentId, title);
+      const map = await getSessionsListByGcalId(teacherId);
       setLinkedSessions(map);
-      setLinkedStudentNames(prev => {
-        const next = { ...prev };
-        delete next[unlinkTarget.gcalId];
-        return next;
-      });
       onSessionLinked?.();
+      // Close the manage modal if nothing is linked to this event anymore.
+      if (manageTarget && !(map[manageTarget.gcalId]?.length)) setManageTarget(null);
     } catch (err) {
       console.error('[Unlink] failed:', err);
     } finally {
       setLinking(false);
-      setUnlinkTarget(null);
     }
   }
 
@@ -693,13 +720,16 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     if (isStudentView) return null;
     let total = 0;
     const linkedNames = new Set<string>();
-    // Linked GCal events in this week (the `events` state holds this week's events)
+    // Linked GCal events in this week (the `events` state holds this week's events).
+    // A dual-linked event (same student's Quran + Arabic profile) is ONE lesson
+    // slot, so it is counted ONCE using the linked profile's rate.
     for (const ev of events) {
-      const session = linkedSessions[ev.id];
-      if (!session) continue;
-      const b = linkStudentById.get(session.studentId);
+      const sessionList = linkedSessions[ev.id];
+      if (!sessionList || !sessionList.length) continue;
+      const billings = sessionList.map(s => linkStudentById.get(s.studentId)).filter(Boolean) as LinkStudent[];
+      billings.forEach(b => linkedNames.add(b.name));
+      const b = billings.find(x => x.hourlyRate != null);
       if (!b?.hourlyRate) continue;
-      linkedNames.add(b.name);
       const startMs = new Date(ev.start.dateTime ?? ev.start.date ?? '').getTime();
       const endMs   = new Date(ev.end.dateTime   ?? ev.end.date   ?? '').getTime();
       const minutes = endMs > startMs ? (endMs - startMs) / 60_000 : 50;
@@ -1183,10 +1213,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                     );
                   }
 
-                  const isLinked    = !!linkedSessions[ev.id];
+                  const sessionList: LessonSession[] = linkedSessions[ev.id] ?? [];
+                  const isLinked    = sessionList.length > 0;
                   const linkedName  = linkedStudentNames[ev.id];
-                  const linkedSession = linkedSessions[ev.id];
-                  const linkedBilling = linkedSession ? linkStudentById.get(linkedSession.studentId) : undefined;
+                  const billings    = sessionList.map(s => linkStudentById.get(s.studentId)).filter(Boolean) as LinkStudent[];
+                  // Representative billing for colour/rate: prefer a profile with a rate.
+                  const linkedBilling = billings.find(b => b.hourlyRate != null) ?? billings[0];
+                  const isPaired    = billings.some(b => b.kind === 'quran') && billings.some(b => b.kind === 'arabic');
 
                   const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
                   const timeRange = `${fmtT(startDT)} - ${fmtT(endDT)}`;
@@ -1197,14 +1230,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
                   const handleEvClick = () => {
                     if (!canLink) return;
-                    if (isLinked && linkedSession && linkedName) {
-                      // Show unlink confirmation instead of link picker
-                      setUnlinkTarget({
-                        gcalId:      ev.id,
-                        studentId:   linkedSession.studentId,
-                        studentName: linkedName,
-                        title:       ev.summary,
-                      });
+                    if (isLinked) {
+                      // Manage the event's linked profile(s): add another or remove.
+                      setManageTarget({ gcalId: ev.id, summary: ev.summary });
                     } else {
                       setLinkTarget({ id: ev.id, summary: ev.summary });
                     }
@@ -1231,6 +1259,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                         <div className="flex items-center gap-1 leading-tight">
                           <ChainLinkIcon className="w-3 h-3 flex-shrink-0" />
                           <span className="text-[11px] font-bold truncate">{linkedName}</span>
+                          {isPaired && <span className="text-[8px] font-extrabold px-1 rounded bg-black/15 leading-none py-0.5 flex-shrink-0">Q+A</span>}
                         </div>
                       ) : (
                         <p className="text-[11px] font-bold leading-tight truncate">{ev.summary}</p>
@@ -1495,7 +1524,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             {/* Student list */}
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
               {(() => {
-                const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
+                const linkedStudentIds = new Set((Object.values(linkedSessions).flat() as LessonSession[]).map(s => s.studentId));
                 // Show ALL students of the selected group. A student may already be
                 // linked to a different event title — we still list them (with a
                 // "Linked" badge) so they can be linked to this event too.
@@ -1515,7 +1544,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                   <button
                     key={s.id}
-                    onClick={() => handleLinkToStudent(s.id)}
+                    onClick={() => requestLink(s.id)}
                     disabled={linking}
                     className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors disabled:opacity-50"
                   >
@@ -1545,32 +1574,118 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         </div>
       )}
 
-      {/* ── GCal Unlink confirmation modal ───────────────────────────────── */}
-      {unlinkTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      {/* ── GCal manage-links modal (linked event: add / remove profiles) ──── */}
+      {manageTarget && (() => {
+        const list = linkedSessions[manageTarget.gcalId] ?? [];
+        const profiles = list.map(s => ({ session: s, billing: linkStudentById.get(s.studentId) }));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+                <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">Linked profiles</p>
+                <p className="font-bold text-slate-800 dark:text-slate-100 truncate">"{manageTarget.summary}"</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Applies to all events with this title.</p>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-gray-700 max-h-60 overflow-y-auto">
+                {profiles.map(({ session, billing }) => (
+                  <div key={session.id} className="flex items-center gap-3 px-5 py-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold text-sm flex-shrink-0">
+                      {(billing?.name ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-800 dark:text-slate-100 text-sm truncate">{billing?.name ?? 'Unknown'}</p>
+                      <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{billing?.kind ?? ''}</p>
+                    </div>
+                    <button
+                      onClick={() => handleUnlinkStudent(session.studentId, manageTarget.summary)}
+                      disabled={linking}
+                      className="text-xs font-semibold text-red-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-4 flex flex-col gap-2 border-t border-slate-100 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    // Default the picker to the kind not yet linked (so the same person's
+                    // other profile is easy to find).
+                    const kinds = profiles.map(p => p.billing?.kind);
+                    setLinkGroup(kinds.includes('quran') && !kinds.includes('arabic') ? 'arabic' : 'quran');
+                    setLinkTarget({ id: manageTarget.gcalId, summary: manageTarget.summary });
+                    setManageTarget(null);
+                  }}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white transition-colors"
+                >
+                  + Link another profile
+                </button>
+                <button
+                  onClick={() => setManageTarget(null)}
+                  className="w-full py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Same-name confirmation before pairing two different names ──────── */}
+      {nameMismatch && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
-              <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Unlink student</p>
-              <p className="font-bold text-slate-800 dark:text-slate-100">"{unlinkTarget.title}"</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Remove <span className="font-semibold text-slate-700 dark:text-slate-200">{unlinkTarget.studentName}</span> from all events with this title?
+              <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-1">Different name</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                This event is already linked to <span className="font-bold">{nameMismatch.existingName}</span>, but you are linking <span className="font-bold">{nameMismatch.newName}</span>. Profiles do not have the same name. Continue?
               </p>
             </div>
             <div className="px-5 py-4 flex gap-3">
               <button
-                onClick={handleUnlink}
-                disabled={linking}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-60"
+                onClick={() => { const id = nameMismatch.studentId; setNameMismatch(null); handleLinkToStudent(id); }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors"
               >
-                {linking ? 'Unlinking…' : 'Yes, unlink'}
+                Continue
               </button>
               <button
-                onClick={() => setUnlinkTarget(null)}
-                disabled={linking}
+                onClick={() => setNameMismatch(null)}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unified portal link generated (after pairing Quran + Arabic) ───── */}
+      {pairLink && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">🔗 Unified portal link</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                This student's Quran and Arabic profiles are now paired. Share this permanent link — they can switch between both portals from it.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 text-xs font-mono text-slate-700 dark:text-slate-200 break-all">{pairLink}</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => { await safeCopy(pairLink); setPairLinkCopied(true); setTimeout(() => setPairLinkCopied(false), 2500); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                >
+                  {pairLinkCopied ? '✓ Copied!' : 'Copy link'}
+                </button>
+                <button
+                  onClick={() => { setPairLink(null); setPairLinkCopied(false); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

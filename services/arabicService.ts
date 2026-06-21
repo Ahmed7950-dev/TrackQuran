@@ -1034,6 +1034,26 @@ export async function ensureShareToken(student: ArabicStudent): Promise<string> 
   return token;
 }
 
+/**
+ * Like ensureShareToken but resolved by id only (no full student object needed).
+ * Returns the existing token if present, otherwise generates + persists one.
+ */
+export async function ensureShareTokenById(studentId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('arabic_students')
+    .select('share_token')
+    .eq('id', studentId)
+    .maybeSingle();
+  if (data?.share_token) return data.share_token as string;
+  const token = crypto.randomUUID();
+  const { error } = await supabase
+    .from('arabic_students')
+    .update({ share_token: token })
+    .eq('id', studentId);
+  if (error) { console.error('ensureShareTokenById:', error.message); return null; }
+  return token;
+}
+
 // ── Vocab rounds completed per lesson for a student ───────────────────────────
 // Returns: { lessonId → number of spaced-rep rounds (attempt numbers) completed }
 

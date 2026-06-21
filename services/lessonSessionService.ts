@@ -59,7 +59,9 @@ export async function getStudentUpcomingSessions(studentId: string): Promise<Les
 
 /**
  * Link (or re-link) a Google Calendar event to a student.
- * Uses upsert on (teacher_id, gcal_event_id).
+ * Uses upsert on (teacher_id, gcal_event_id, student_id) so ONE event can be
+ * linked to more than one student profile (e.g. a student's Quran AND Arabic
+ * profiles), while re-linking the same (event, student) stays idempotent.
  */
 export async function linkGCalSession(
   teacherId: string,
@@ -81,7 +83,7 @@ export async function linkGCalSession(
         end_at:        endAt ?? null,
         status:        'confirmed',
       },
-      { onConflict: 'teacher_id,gcal_event_id' },
+      { onConflict: 'teacher_id,gcal_event_id,student_id' },
     )
     .select()
     .single();
@@ -155,6 +157,28 @@ export async function getSessionsByGcalId(teacherId: string): Promise<Record<str
   for (const r of data as SessionRow[]) {
     const s = rowToSession(r);
     if (s.gcalEventId) map[s.gcalEventId] = s;
+  }
+  return map;
+}
+
+/**
+ * Load all sessions for a teacher grouped by gcal_event_id, allowing MULTIPLE
+ * linked students per event (dual-linked Quran + Arabic profiles of one student).
+ */
+export async function getSessionsListByGcalId(teacherId: string): Promise<Record<string, LessonSession[]>> {
+  const since = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .neq('status', 'cancelled')
+    .gte('start_at', since);
+  if (error) throw error;
+  const map: Record<string, LessonSession[]> = {};
+  for (const r of data as SessionRow[]) {
+    const s = rowToSession(r);
+    if (!s.gcalEventId) continue;
+    (map[s.gcalEventId] ??= []).push(s);
   }
   return map;
 }
