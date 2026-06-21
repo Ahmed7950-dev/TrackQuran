@@ -367,7 +367,15 @@ export function reconnectGoogleCalendar(
 /*  Calendar API fetch                                                  */
 /* ------------------------------------------------------------------ */
 
+// The calendar list rarely changes within a session; cache it per token so every
+// week navigation doesn't re-fetch it (saves one round-trip per fetchGCalEvents).
+let _calendarIdCache: { token: string; ids: string[]; at: number } | null = null;
+const CALENDAR_ID_TTL = 10 * 60 * 1000; // 10 min
+
 async function fetchCalendarIds(token: string): Promise<string[]> {
+  if (_calendarIdCache && _calendarIdCache.token === token && (performance.now?.() ?? 0) - _calendarIdCache.at < CALENDAR_ID_TTL) {
+    return _calendarIdCache.ids;
+  }
   const res = await fetch(
     'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50',
     { headers: { Authorization: `Bearer ${token}` } },
@@ -382,7 +390,9 @@ async function fetchCalendarIds(token: string): Promise<string[]> {
     throw new Error(`GCal API error ${res.status}`);
   }
   const data = await res.json() as { items?: { id: string }[] };
-  return (data.items ?? []).map(c => c.id);
+  const ids = (data.items ?? []).map(c => c.id);
+  _calendarIdCache = { token, ids, at: performance.now?.() ?? 0 };
+  return ids;
 }
 
 async function fetchEventsFromCalendar(

@@ -292,6 +292,10 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
+  // Per-week cache of fetched GCal events so revisiting a week is instant
+  // (stale-while-revalidate: show cached immediately, refresh in the background).
+  const eventsCacheRef  = useRef<Map<string, GCalEvent[]>>(new Map());
+  const latestWeekRef   = useRef<string>(''); // guards late fetches from overwriting a newer week
 
   // ── Booking state ────────────────────────────────────────────────────────
   /** All bookings for this teacher (loaded once + kept live via Realtime) */
@@ -323,11 +327,24 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   /* ---------------------------------------------------------------- */
 
   const loadEvents = useCallback(async (token: string, weekMonday: Date) => {
+    const cacheKey = weekMonday.toISOString().slice(0, 10);
+    latestWeekRef.current = cacheKey;
+    const cached = eventsCacheRef.current.get(cacheKey);
+    if (cached) {
+      // Show the cached week instantly, then refresh in the background (no spinner).
+      setEvents(cached);
+      setNeedsReconnect(false);
+      fetchGCalEvents(token, weekMonday, addDays(weekMonday, 7))
+        .then(data => { eventsCacheRef.current.set(cacheKey, data); if (latestWeekRef.current === cacheKey) setEvents(data); })
+        .catch(() => { /* keep showing cached data */ });
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const data = await fetchGCalEvents(token, weekMonday, addDays(weekMonday, 7));
-      setEvents(data);
+      eventsCacheRef.current.set(cacheKey, data);
+      if (latestWeekRef.current === cacheKey) { setEvents(data); }
       setNeedsReconnect(false); // success — hide banner if it was up
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load events.';
