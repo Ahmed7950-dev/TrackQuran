@@ -1,5 +1,6 @@
 import React from 'react';
-import { ALL_TIMEZONES, tzLabel, netEarning } from '../utils/timezones';
+import { netEarning } from '../utils/timezones';
+import SearchableTimezone from './SearchableTimezone';
 
 export interface StudentBilling {
   timezone?: string;
@@ -48,23 +49,16 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
         </div>
       </div>
 
-      {/* Timezone — type to search a city */}
+      {/* Timezone — type to search a city or country */}
       <div>
         <label className={labelCls}>Timezone / city</label>
-        <input
-          type="text"
-          list="tz-datalist"
-          value={value.timezone ?? ''}
-          onChange={e => onChange({ ...value, timezone: e.target.value || undefined })}
-          placeholder="Type a city, e.g. New York, Riyadh…"
-          autoComplete="off"
+        <SearchableTimezone
+          value={value.timezone}
+          onChange={tz => onChange({ ...value, timezone: tz })}
           className={inputCls}
         />
-        <datalist id="tz-datalist">
-          {ALL_TIMEZONES.map(tz => <option key={tz} value={tz}>{tzLabel(tz)}</option>)}
-        </datalist>
         {value.timezone && (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Now: {/* live local time preview */}{(() => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: value.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()); } catch { return '—'; } })()}</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Now: {(() => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: value.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()); } catch { return '—'; } })()}</p>
         )}
       </div>
 
