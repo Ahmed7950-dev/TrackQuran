@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   GCalEvent,
   connectGoogleCalendar,
@@ -21,8 +21,9 @@ import {
   istanbulDateString,
   isSlotInPast,
 } from '../services/lessonBookingService';
-import { ArabicStudent, LessonSession } from '../types';
+import { ArabicStudent, LessonSession, Student } from '../types';
 import { linkAllEventsByTitle, getSessionsByGcalId, unlinkSessionsByStudentAndTitle } from '../services/lessonSessionService';
+import { netEarning, currentTimeInZone } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
 
@@ -231,8 +232,20 @@ interface CalendarPageProps {
   onPendingCountChange?: (n: number) => void;
   /** Arabic students list — enables GCal event → student linking */
   arabicStudents?: ArabicStudent[];
+  /** Quran students — enables GCal linking with billing (rate/timezone/type) */
+  quranStudents?: Student[];
   /** Called when a GCal event is successfully linked to a student */
   onSessionLinked?: () => void;
+}
+
+/** Unified shape used for GCal event linking + earnings, from either list. */
+interface LinkStudent {
+  id: string;
+  name: string;
+  timezone?: string;
+  hourlyRate?: number;
+  studentType?: 'preply' | 'platform';
+  preplyPercentage?: number;
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
@@ -248,8 +261,21 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   portalType,
   onPendingCountChange,
   arabicStudents = [],
+  quranStudents = [],
   onSessionLinked,
 }) => {
+  // Unified linkable-student list. Quran students carry billing (rate/type/tz);
+  // Arabic students keep the existing name-only linking.
+  const linkStudents: LinkStudent[] = useMemo(() =>
+    quranStudents.length
+      ? quranStudents.map(s => ({ id: s.id, name: s.name, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage }))
+      : arabicStudents.map(s => ({ id: s.id, name: s.name, timezone: s.timezone })),
+    [quranStudents, arabicStudents]);
+  const linkStudentById = useMemo(() => {
+    const m = new Map<string, LinkStudent>();
+    linkStudents.forEach(s => m.set(s.id, s));
+    return m;
+  }, [linkStudents]);
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
   const [loading,     setLoading]     = useState(false);
@@ -443,14 +469,14 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
   // Build a studentName lookup from linkedSessions
   useEffect(() => {
-    if (!arabicStudents.length) return;
+    if (!linkStudents.length) return;
     const names: Record<string, string> = {};
     for (const [gcalId, session] of Object.entries(linkedSessions) as Array<[string, LessonSession]>) {
-      const student = arabicStudents.find(s => s.id === session.studentId);
+      const student = linkStudentById.get(session.studentId);
       if (student) names[gcalId] = student.name;
     }
     setLinkedStudentNames(names);
-  }, [linkedSessions, arabicStudents]);
+  }, [linkedSessions, linkStudents, linkStudentById]);
 
   /* ---------------------------------------------------------------- */
   /*  Current-time indicator                                            */
@@ -560,7 +586,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     if (!linkTarget || !gcalToken || !teacherId) return;
     setLinking(true);
     try {
-      const student = arabicStudents.find(s => s.id === studentId);
+      const student = linkStudentById.get(studentId);
       await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
       // Refresh linked sessions map
       const map = await getSessionsByGcalId(teacherId);
@@ -630,6 +656,36 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const weekDays: Date[] = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const today            = new Date();
 
+  // Tutor's net earnings for the selected week: linked GCal events (Preply) +
+  // Platform students' scheduled bookings. Platform bookings are matched to a
+  // student by name (booking.studentId is an opaque report id for Quran).
+  const weekEarnings = useMemo(() => {
+    if (isStudentView) return null;
+    let total = 0;
+    // Linked GCal events in this week (the `events` state holds this week's events)
+    for (const ev of events) {
+      const session = linkedSessions[ev.id];
+      if (!session) continue;
+      const b = linkStudentById.get(session.studentId);
+      if (!b?.hourlyRate) continue;
+      const startMs = new Date(ev.start.dateTime ?? ev.start.date ?? '').getTime();
+      const endMs   = new Date(ev.end.dateTime   ?? ev.end.date   ?? '').getTime();
+      const hours = endMs > startMs ? (endMs - startMs) / 3_600_000 : 1;
+      total += netEarning(b.hourlyRate, b.studentType, b.preplyPercentage) * hours;
+    }
+    // Platform students' confirmed bookings this week
+    for (let i = 0; i < 7; i++) {
+      const day = addDays(monday, i);
+      for (const bk of bookingsForDay(myBookings, day, i)) {
+        if (bk.status !== 'confirmed') continue;
+        const stu = linkStudents.find(s => s.studentType === 'platform' && s.name === bk.studentName && s.hourlyRate);
+        if (!stu?.hourlyRate) continue;
+        total += netEarning(stu.hourlyRate, 'platform', undefined) * (bk.durationMinutes / 60);
+      }
+    }
+    return total;
+  }, [isStudentView, events, linkedSessions, linkStudentById, linkStudents, myBookings, monday]);
+
   const eventsForDay = (day: Date): GCalEvent[] =>
     events.filter(ev => {
       const start = ev.start.dateTime ?? ev.start.date ?? '';
@@ -677,6 +733,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           >
             Today
           </button>
+          {/* Weekly earnings (tutor) — linked Preply events + Platform bookings */}
+          {weekEarnings !== null && weekEarnings > 0 && (
+            <span className="ml-1 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-sm font-extrabold whitespace-nowrap" title="Your net earnings this week (linked events + platform bookings)">
+              💰 {weekEarnings.toFixed(2)} / wk
+            </span>
+          )}
         </div>
 
         {/* Timezone legend (student view) */}
@@ -722,7 +784,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         </div>
 
         {/* Link GCal Events button — tutor only, when connected */}
-        {!isStudentView && gcalToken && arabicStudents.length > 0 && (
+        {!isStudentView && gcalToken && linkStudents.length > 0 && (
           <button
             onClick={() => { setLinkMode(v => !v); setLinkTarget(null); }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
@@ -1109,6 +1171,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   const isLinked    = !!linkedSessions[ev.id];
                   const linkedName  = linkedStudentNames[ev.id];
                   const linkedSession = linkedSessions[ev.id];
+                  const linkedBilling = linkedSession ? linkStudentById.get(linkedSession.studentId) : undefined;
 
                   const handleEvClick = () => {
                     if (!linkMode) return;
@@ -1145,7 +1208,18 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       {isLinked && linkedName ? (
                         <>
                           <p className="text-[10px] font-bold text-white leading-tight truncate">🔗 {linkedName}</p>
-                          <p className="text-[9px] text-white/80 leading-tight truncate">{ev.summary}</p>
+                          {linkedBilling && (linkedBilling.hourlyRate || linkedBilling.timezone) && (
+                            <p className="text-[9px] text-white/90 leading-tight truncate">
+                              {linkedBilling.hourlyRate ? `${linkedBilling.hourlyRate}/h` : ''}
+                              {linkedBilling.hourlyRate && linkedBilling.timezone ? ' · ' : ''}
+                              {linkedBilling.timezone ? `🕒 ${currentTimeInZone(linkedBilling.timezone)}` : ''}
+                            </p>
+                          )}
+                          {linkedBilling?.studentType && (
+                            <span className={`inline-block text-[8px] font-bold leading-none px-1 py-0.5 rounded ${linkedBilling.studentType === 'preply' ? 'bg-white/25 text-white' : 'bg-amber-300/90 text-amber-900'}`}>
+                              {linkedBilling.studentType === 'preply' ? 'Preply' : 'Platform'}
+                            </span>
+                          )}
                           <p className="text-[9px] text-white/70 leading-tight">
                             {new Date(startDT).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TUTOR_TIMEZONE })}
                           </p>
@@ -1395,11 +1469,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
               {(() => {
                 const linkedStudentIds = new Set(Object.values(linkedSessions).map(s => s.studentId));
-                const available = arabicStudents.filter(s => !linkedStudentIds.has(s.id));
+                // Exclude already-linked students AND Platform students — Platform
+                // lessons come from the booking/schedule system, not GCal links.
+                const available = linkStudents.filter(s => !linkedStudentIds.has(s.id) && s.studentType !== 'platform');
                 if (available.length === 0) {
                   return (
                     <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                      All students are already linked to events.
+                      No students available to link (Platform students are scheduled via bookings).
                     </div>
                   );
                 }
