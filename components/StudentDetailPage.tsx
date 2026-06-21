@@ -654,8 +654,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             <div className="flex justify-end items-center mb-3">
                 <span className="font-bold text-teal-600 dark:text-orange-400 text-sm">{t('studentDetail.completePercent', { percent: ((pagesCompleted / TOTAL_QURAN_PAGES) * 100).toFixed(1) })}</span>
             </div>
-            <div className="overflow-x-auto -mx-1">
-            <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(114, minmax(0, 1fr))', minWidth: '600px' }}>
+            <div className={readOnly ? '-mx-1' : 'overflow-x-auto -mx-1'}>
+            <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(114, minmax(0, 1fr))', minWidth: readOnly ? undefined : '600px' }}>
                 {quranMetadata.map(surah => {
                     const quality = qualityMap[surah.number];
                     const getQualityColor = (q: number) => {
@@ -682,8 +682,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     );
 
     const MilestoneSection = ({ completedPages }: { completedPages: Set<number> }) => (
-        <div className="overflow-x-auto -mx-1 px-1">
-        <div className="flex items-center min-w-max">
+        <div className={readOnly ? '-mx-1 px-1' : 'overflow-x-auto -mx-1 px-1'}>
+        <div className={readOnly ? 'flex flex-wrap items-center justify-center gap-y-3' : 'flex items-center min-w-max'}>
             {MILESTONES.map((milestone, index) => {
                 const achieved = milestone.isAchieved(completedPages);
                 const IconComponent = milestone.badgeIcon;
