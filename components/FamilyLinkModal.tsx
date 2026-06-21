@@ -232,7 +232,7 @@ const FamilyLinkModal: React.FC<Props> = ({
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{link.name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          {link.members.length} {link.members.length === 1 ? 'child' : 'children'}{subtitle ? ` · ${subtitle}` : ''}
+                          {link.members.length} {link.members.length === 1 ? 'student' : 'students'}{subtitle ? ` · ${subtitle}` : ''}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {link.members.map(m => (

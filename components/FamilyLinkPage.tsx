@@ -257,7 +257,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
               👨‍👩‍👧‍👦 {familyLink.name}
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {familyLink.members.length} {familyLink.members.length === 1 ? 'child' : 'children'}
+              {familyLink.members.length} {familyLink.members.length === 1 ? 'student' : 'students'}
               {quranCount > 0 && ` · ${quranCount} Quran`}
               {arabicCount > 0 && ` · ${arabicCount} Arabic`}
               {' '}· Progress shared by their teacher
@@ -271,7 +271,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
         {familyLink.members.length === 0 ? (
           <div className="text-center py-16 text-slate-400 dark:text-slate-500">
             <p className="text-4xl mb-3">👶</p>
-            <p className="text-lg font-semibold">No children added yet</p>
+            <p className="text-lg font-semibold">No students added yet</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
