@@ -64,6 +64,22 @@ export async function ensurePortalPair(
   return { token: row.token, studentName, quranReportId, arabicShareToken };
 }
 
+/**
+ * If this student (Quran or Arabic profile) has been paired, return the
+ * permanent unified portal token; otherwise null. Used so "copy student link"
+ * on either dashboard yields the SAME paired link once a pairing exists.
+ */
+export async function getPortalTokenForStudent(kind: 'quran' | 'arabic', studentId: string): Promise<string | null> {
+  const col = kind === 'quran' ? 'quran_student_id' : 'arabic_student_id';
+  const { data, error } = await supabase
+    .from('student_portal_pairs')
+    .select('token')
+    .eq(col, studentId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { token: string }).token;
+}
+
 /** Resolve a unified portal token to its two underlying portals (no auth). */
 export async function getPortalPairByToken(token: string): Promise<PortalPair | null> {
   const { data, error } = await supabase

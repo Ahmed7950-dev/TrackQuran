@@ -947,7 +947,7 @@ const ProgressTab: React.FC<{
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
-const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
+const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: string; onSwitch: () => void } }> = ({ reportId, switchPortal }) => {
   const { t, language, setLanguage } = useI18n();
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
@@ -1194,6 +1194,20 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
           <span className="hidden sm:block text-xs font-bold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-3 py-1 rounded-full flex-shrink-0 border border-teal-200 dark:border-teal-800">
             🎓 {t('studentPortal.badge')}
           </span>
+
+          {/* Switch to the paired Arabic portal */}
+          {switchPortal && (
+            <button
+              onClick={switchPortal.onSwitch}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors text-sm font-bold flex-shrink-0"
+              title={`Switch to ${switchPortal.label} portal`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+              <span style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</span>
+            </button>
+          )}
 
           {/* Desktop nav links */}
           <nav className="flex-1 hidden md:flex justify-center items-center gap-6">

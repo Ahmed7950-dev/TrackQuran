@@ -5,6 +5,7 @@ import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdate
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
 import { getUpcomingSessions, updateSessionMeetUrl } from '../services/lessonSessionService';
+import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
@@ -106,7 +107,7 @@ const RANK_CONFIG: Record<1 | 2 | 3, { emoji: string; short: string; badge: stri
   3: { emoji: '🥉', short: '3rd', badge: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 ring-1 ring-orange-300 dark:ring-orange-700' },
 };
 
-const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string; allStudents: Student[]; isNext?: boolean }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId, allStudents, isNext }) => {
+const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetadata: SurahMetadata[]; viewMode: 'points' | 'mistakesRate'; rank?: 1 | 2 | 3 | null; teacherId?: string; allStudents: Student[]; isNext?: boolean; isLinked?: boolean }> = ({ student, onSelect, quranMetadata, viewMode, rank, teacherId, allStudents, isNext, isLinked }) => {
     const { t, language } = useI18n();
 
     // ── Share link ────────────────────────────────────────────────────────────
@@ -138,7 +139,12 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 },
             });
             if (reportId) {
-                const link = `${window.location.origin}/report/${reportId}`;
+                // If this student's Quran + Arabic profiles are paired, share the
+                // permanent unified link instead of the Quran-only report link.
+                const pairToken = await getPortalTokenForStudent('quran', student.id);
+                const link = pairToken
+                  ? `${window.location.origin}/portal/${pairToken}`
+                  : `${window.location.origin}/report/${reportId}`;
                 setShareLink(link);
                 await safeCopy(link);
                 setShareState('copied');
@@ -292,6 +298,11 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                     <div className="flex-grow">
                         <div className="flex items-center gap-2 flex-wrap">
                             <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
+                            {isLinked && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full flex-shrink-0">
+                                🔗 Linked
+                              </span>
+                            )}
                             {rank && (
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${RANK_CONFIG[rank].badge}`}>
                                 <span>{RANK_CONFIG[rank].emoji}</span>
@@ -499,6 +510,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   }, [sessions, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
+  const linkedStudentIds = useMemo(() => new Set(sessions.map(s => s.studentId)), [sessions]);
 
   async function handleGenerateMeetLink() {
     if (!nextLesson) return;
@@ -732,19 +744,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-teal-500 dark:border-orange-500 pb-2">{t('dashboard.youngGems')}</h2>
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-orange-500 dark:border-yellow-500 pb-2">{t('dashboard.aspiringScholars')}</h2>
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200 border-b-2 border-sky-500 dark:border-cyan-500 pb-2">{t('dashboard.devotedLearners')}</h2>
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
-            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} />
+            <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>

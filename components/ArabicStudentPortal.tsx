@@ -37,9 +37,11 @@ function formatCountdown(targetIso: string, now: Date): string {
 
 interface Props {
   token: string;
+  /** When opened from a unified pair link, renders a header button to switch portals. */
+  switchPortal?: { label: string; onSwitch: () => void };
 }
 
-const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
+const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal }) => {
   const { t } = useI18n();
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
@@ -159,6 +161,20 @@ const ArabicStudentPortal: React.FC<Props> = ({ token }) => {
           >
             العربية
           </span>
+
+          {/* Switch to the paired Quran portal */}
+          {switchPortal && (
+            <button
+              onClick={switchPortal.onSwitch}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors text-sm font-bold flex-shrink-0"
+              title={`Switch to ${switchPortal.label} portal`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+              <span>📖 {switchPortal.label}</span>
+            </button>
+          )}
 
           {/* Desktop nav — centred, only shows md+ */}
           <nav className="flex-1 hidden md:flex justify-center items-center gap-4">

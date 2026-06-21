@@ -11,6 +11,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
+import { getPortalTokenForStudent } from '../services/portalPairService';
 import { safeCopy } from '../utils';
 import { getTeacherBookings, updateBookingMeetUrl } from '../services/lessonBookingService';
 import {
@@ -216,7 +217,10 @@ const ArabicDashboard: React.FC<Props> = ({
     try {
       const token = await ensureShareToken(student);
       if (!student.shareToken) onUpdateStudent({ ...student, shareToken: token });
-      await safeCopy(`${SITE_URL}/arabic/s/${token}`);
+      // If this student's Arabic + Quran profiles are paired, share the
+      // permanent unified link instead of the Arabic-only portal link.
+      const pairToken = await getPortalTokenForStudent('arabic', student.id);
+      await safeCopy(pairToken ? `${SITE_URL}/portal/${pairToken}` : `${SITE_URL}/arabic/s/${token}`);
       setCopiedId(student.id);
       setTimeout(() => setCopiedId(null), 2500);
     } catch (err) {
