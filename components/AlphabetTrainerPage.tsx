@@ -535,6 +535,14 @@ const AlphabetTrainerPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setPriorities(new Array(28).fill(1))}
+            className={`px-4 py-2 text-sm border transition-colors ${
+              childMode
+                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
+                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400'
+            }`}
+          >{t('alphabetTrainer.selectAll')}</button>
+          <button
             onClick={() => setPriorities(new Array(28).fill(0))}
             className={`px-4 py-2 text-sm border transition-colors ${
               childMode

@@ -505,6 +505,7 @@
         "letter": "letter",
         "letters": "letters",
         "rounds": "rounds",
+        "selectAll": "Select all",
         "clearAll": "Clear all",
         "startPractice": "Start Practice →",
         "backBtn": "← Letters",

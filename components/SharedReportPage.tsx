@@ -1311,7 +1311,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
         {/* Tab bar — hidden when About Us is open */}
         {portalTab === 'content' && (
           <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
-            <div className="container mx-auto px-3 sm:px-4 flex overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+            <div className="container mx-auto px-3 sm:px-4 flex sm:justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
               <button
                 onClick={() => setActiveTab('mistakes')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -1353,15 +1353,16 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
                 </svg>
                 {t('studentPortal.tabAvailability')}
               </button>
+              {/* Quran — the primary tab, given a distinct highlighted pill style */}
               <button
                 onClick={() => setActiveTab('quran')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap shadow-sm ${
                   activeTab === 'quran'
-                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
-                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-teal-500/30'
+                    : 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 ring-1 ring-teal-300 dark:ring-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/50'
                 }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                 </svg>
                 {t('studentPortal.tabQuran')}
@@ -1729,7 +1730,7 @@ const SharedReportPage: React.FC<{ reportId: string }> = ({ reportId }) => {
               <AlphabetTrainerPage />
             )}
             {activeTab === 'lettersTrainer' && (
-              <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} />
+              <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} readOnly />
             )}
 
             {activeTab === 'homework' && (() => {

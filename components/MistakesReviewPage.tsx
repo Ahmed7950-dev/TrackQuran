@@ -114,6 +114,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         getStudentCompletions(student.id).then(rows => { tajweedCompletionsRef.current = rows; });
     }, [student.id]);
 
+    // Reset the "manually removed this session" set when switching students so a
+    // verse removed for one student (or in a previous visit) doesn't stay hidden
+    // when new mistakes are later logged on that same verse.
+    useEffect(() => {
+        removedVerseKeysRef.current = new Set();
+    }, [student.id]);
+
     // Serialised mistakes — used to detect real content changes without object-reference churn
     const mistakesKey = useMemo(() => JSON.stringify(student.mistakes), [student.mistakes]);
     // Tracks the last mistakes snapshot we pushed to the DB so we don't over-call

@@ -275,9 +275,12 @@ interface LettersTrainerPageProps {
    *  goes straight to this student's history view. If the student doesn't
    *  exist yet in the local trainer data they are created automatically. */
   preSelectedStudent?: { id: string; name: string };
+  /** Read-only mode (student portal): can run challenges but cannot add/edit
+   *  challenges or rename the student. */
+  readOnly?: boolean;
 }
 
-const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent }) => {
+const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent, readOnly = false }) => {
   const { t } = useI18n();
   const [state, setState] = useState<TrainerState>(() => {
     const loaded = loadTrainerState();
@@ -454,6 +457,7 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
         onStartChallenge={c => setView({ name: 'runner', studentId: student.id, challengeId: c.id })}
         onStartTajweed={c => setView({ name: 'tajweedRunner', studentId: student.id, tajweedId: c.id })}
         locked={!!preSelectedStudent}
+        readOnly={readOnly}
       />
     );
   } else if (view.name === 'newChallenge') {
@@ -722,7 +726,9 @@ const StudentView: React.FC<{
   /** When true the trainer is scoped to this one student: hide the student
    *  switcher (prev/next) and the "all students" breadcrumb. */
   locked?: boolean;
-}> = ({ state, student, onHome, onRename, onPrev, onAddChallenge, onAddTajweed, onEditChallenge, onEditTajweed, onStartChallenge, onStartTajweed, locked }) => {
+  /** Read-only (student portal): hide add/edit/rename, keep run. */
+  readOnly?: boolean;
+}> = ({ state, student, onHome, onRename, onPrev, onAddChallenge, onAddTajweed, onEditChallenge, onEditTajweed, onStartChallenge, onStartTajweed, locked, readOnly }) => {
   const { t } = useI18n();
   const idx = state.students.findIndex(s => s.id === student.id);
   const prev = state.students[idx - 1];
@@ -743,13 +749,15 @@ const StudentView: React.FC<{
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{student.name}</h2>
-              <button
-                onClick={() => {
-                  const next = window.prompt('Rename student:', student.name);
-                  if (next && next.trim() && next.trim() !== student.name) onRename(next.trim());
-                }}
-                className="text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 transition-colors text-base"
-              >✎</button>
+              {!readOnly && (
+                <button
+                  onClick={() => {
+                    const next = window.prompt('Rename student:', student.name);
+                    if (next && next.trim() && next.trim() !== student.name) onRename(next.trim());
+                  }}
+                  className="text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 transition-colors text-base"
+                >✎</button>
+              )}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('lettersTrainer.studentViewHint')}</p>
           </div>
@@ -770,9 +778,11 @@ const StudentView: React.FC<{
             <SectionLabel>{t('lettersTrainer.letterChallengesSection')}</SectionLabel>
             <p className="text-xs text-slate-400 dark:text-slate-500 -mt-2">{t('lettersTrainer.letterChallengesDesc')}</p>
           </div>
-          <AddChallengeBtn variant="letter" onClick={onAddChallenge}>
-            {t('lettersTrainer.addLetterChallenge')}
-          </AddChallengeBtn>
+          {!readOnly && (
+            <AddChallengeBtn variant="letter" onClick={onAddChallenge}>
+              {t('lettersTrainer.addLetterChallenge')}
+            </AddChallengeBtn>
+          )}
         </div>
         {state.challenges.length === 0 ? (
           <p className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-4">{t('lettersTrainer.noLetterChallenges')}</p>
@@ -801,7 +811,7 @@ const StudentView: React.FC<{
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <IconEditBtn onClick={() => onEditChallenge(c)} title={t('lettersTrainer.edit')} />
+                    {!readOnly && <IconEditBtn onClick={() => onEditChallenge(c)} title={t('lettersTrainer.edit')} />}
                     <StartBtn variant="letter" onClick={() => onStartChallenge(c)}>
                       {t('lettersTrainer.start')}
                     </StartBtn>
@@ -820,9 +830,11 @@ const StudentView: React.FC<{
             <SectionLabel>{t('lettersTrainer.tajweedChallengesSection')}</SectionLabel>
             <p className="text-xs text-slate-400 dark:text-slate-500 -mt-2">{t('lettersTrainer.tajweedChallengesDesc')}</p>
           </div>
-          <AddChallengeBtn variant="tajweed" onClick={onAddTajweed}>
-            {t('lettersTrainer.addTajweedChallenge')}
-          </AddChallengeBtn>
+          {!readOnly && (
+            <AddChallengeBtn variant="tajweed" onClick={onAddTajweed}>
+              {t('lettersTrainer.addTajweedChallenge')}
+            </AddChallengeBtn>
+          )}
         </div>
         {state.tajweedChallenges.length === 0 ? (
           <p className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-4">{t('lettersTrainer.noTajweedChallenges')}</p>
@@ -844,7 +856,7 @@ const StudentView: React.FC<{
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <IconEditBtn onClick={() => onEditTajweed(c)} title={t('lettersTrainer.edit')} />
+                    {!readOnly && <IconEditBtn onClick={() => onEditTajweed(c)} title={t('lettersTrainer.edit')} />}
                     <StartBtn variant="tajweed" onClick={() => onStartTajweed(c)}>
                       {t('lettersTrainer.start')}
                     </StartBtn>
