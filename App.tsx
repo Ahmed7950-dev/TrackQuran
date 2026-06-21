@@ -1354,6 +1354,7 @@ const App: React.FC = () => {
               teacherId={currentUser.id}
               onPendingCountChange={setPendingBookingCount}
               arabicStudents={arabicStudents}
+              quranStudents={students}
             />
           ) : activeTab === 'vocabulary' ? (
             selectedArabicStudent ? (

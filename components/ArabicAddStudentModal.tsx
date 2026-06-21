@@ -7,6 +7,7 @@
 import React, { useRef, useState } from 'react';
 import { ArabicStudent, ArabicDialect, WeeklySlot } from '../types';
 import { useI18n } from '../context/I18nProvider';
+import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
 
 interface Props {
   isOpen: boolean;
@@ -221,6 +222,11 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
   const [nationality, setNationality] = useState(existing?.nationality ?? '');
   const [timezone,    setTimezone]    = useState(existing?.timezone    ?? 'Europe/Istanbul');
   const [deadline,    setDeadline]    = useState(existing?.goalDeadline ?? '');
+  const [billing,     setBilling]     = useState<StudentBilling>({
+    hourlyRate: existing?.hourlyRate,
+    studentType: existing?.studentType ?? 'preply',
+    preplyPercentage: existing?.preplyPercentage ?? 18,
+  });
   const [grid,        setGrid]        = useState<Set<string>>(
     () => slotsToGrid(existing?.availability ?? [])
   );
@@ -297,6 +303,9 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
       availability:       gridToSlots(grid),
       goalDeadline:       deadline || undefined,
       completedLessonIds: existing?.completedLessonIds ?? [],
+      hourlyRate:         billing.hourlyRate,
+      studentType:        billing.studentType,
+      preplyPercentage:   billing.preplyPercentage,
       createdAt:          existing?.createdAt ?? new Date().toISOString(),
     };
 
@@ -475,6 +484,10 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                   {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
               </div>
+            </div>
+            {/* Billing (timezone handled by the field above) */}
+            <div className="mt-4">
+              <StudentBillingFields value={billing} onChange={setBilling} showTimezone={false} />
             </div>
           </Section>
 

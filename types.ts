@@ -252,6 +252,10 @@ export interface ArabicStudent {
   completedLessonIds: string[];    // arabic lesson ids
   shareToken?: string;             // UUID; present once tutor has generated the link
   activeMeetUrl?: string;          // Google Meet link for the next lesson
+  // ── Billing (tutor-only; same as Quran students) ──
+  hourlyRate?: number;
+  studentType?: 'preply' | 'platform';
+  preplyPercentage?: number;
   createdAt: string;
 }
 

@@ -237,6 +237,7 @@ const ChainLinkIcon: React.FC<{ className?: string }> = ({ className }) => (
 interface LinkStudent {
   id: string;
   name: string;
+  kind: 'quran' | 'arabic';
   timezone?: string;
   hourlyRate?: number;
   studentType?: 'preply' | 'platform';
@@ -259,13 +260,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   quranStudents = [],
   onSessionLinked,
 }) => {
-  // Unified linkable-student list. Quran students carry billing (rate/type/tz);
-  // Arabic students keep the existing name-only linking.
-  const linkStudents: LinkStudent[] = useMemo(() =>
-    quranStudents.length
-      ? quranStudents.map(s => ({ id: s.id, name: s.name, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage }))
-      : arabicStudents.map(s => ({ id: s.id, name: s.name, timezone: s.timezone })),
-    [quranStudents, arabicStudents]);
+  // Unified linkable-student list — BOTH Quran and Arabic students, so the two
+  // calendars act as one unit (same linked events + combined weekly earnings).
+  const linkStudents: LinkStudent[] = useMemo(() => [
+    ...quranStudents.map(s => ({ id: s.id, name: s.name, kind: 'quran' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
+    ...arabicStudents.map(s => ({ id: s.id, name: s.name, kind: 'arabic' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
+  ], [quranStudents, arabicStudents]);
   const linkStudentById = useMemo(() => {
     const m = new Map<string, LinkStudent>();
     linkStudents.forEach(s => m.set(s.id, s));
@@ -283,6 +283,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // ── GCal event linking (tutor only) ──────────────────────────────────────
   const [linkTarget,        setLinkTarget]        = useState<{ id: string; summary: string } | null>(null);
   const [linkSearch,        setLinkSearch]        = useState('');
+  const [linkGroup,         setLinkGroup]         = useState<'quran' | 'arabic'>('quran');
   const [linking,           setLinking]           = useState(false);
   const [linkedSessions,    setLinkedSessions]    = useState<Record<string, LessonSession>>({});
   const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
@@ -1469,14 +1470,26 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
               <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">Link events to student</p>
               <p className="font-bold text-slate-800 dark:text-slate-100 truncate">"{linkTarget.summary}"</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All events with this title (next 60 days) will be linked.</p>
+              {/* Group selector: Quran / Arabic students */}
+              <div className="mt-3 flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-gray-700">
+                {(['quran', 'arabic'] as const).map(g => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setLinkGroup(g)}
+                    className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-colors ${linkGroup === g ? 'bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 shadow' : 'text-slate-500 dark:text-slate-400'}`}
+                  >
+                    {g === 'quran' ? 'Quran' : 'Arabic'}
+                  </button>
+                ))}
+              </div>
               {/* Search */}
               <input
                 type="text"
-                autoFocus
                 value={linkSearch}
                 onChange={e => setLinkSearch(e.target.value)}
                 placeholder="Search students…"
-                className="mt-3 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                className="mt-2 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
               />
             </div>
             {/* Student list */}
@@ -1487,12 +1500,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 // can be linked (Preply events show pink, Platform events green).
                 const q = linkSearch.trim().toLowerCase();
                 const available = linkStudents.filter(s =>
+                  s.kind === linkGroup &&
                   !linkedStudentIds.has(s.id) &&
                   (!q || s.name.toLowerCase().includes(q)));
                 if (available.length === 0) {
                   return (
                     <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                      {q ? 'No students match your search.' : 'All students are already linked.'}
+                      {q ? 'No students match your search.' : `No ${linkGroup === 'quran' ? 'Quran' : 'Arabic'} students available to link.`}
                     </div>
                   );
                 }

@@ -41,6 +41,9 @@ interface ArabicStudentRow {
   completed_lesson_ids: string[];
   share_token: string | null;
   active_meet_url: string | null;
+  hourly_rate: number | null;
+  student_type: string | null;
+  preply_percentage: number | null;
   created_at: string;
 }
 
@@ -115,6 +118,9 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     completedLessonIds:  r.completed_lesson_ids,
     shareToken:          r.share_token      ?? undefined,
     activeMeetUrl:       r.active_meet_url  ?? undefined,
+    hourlyRate:          r.hourly_rate       ?? undefined,
+    studentType:         (r.student_type as ArabicStudent['studentType']) ?? undefined,
+    preplyPercentage:    r.preply_percentage ?? undefined,
     createdAt:           r.created_at,
   };
 }
@@ -139,6 +145,9 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     completed_lesson_ids: s.completedLessonIds,
     share_token:         s.shareToken      ?? null,
     active_meet_url:     s.activeMeetUrl   ?? null,
+    hourly_rate:         s.hourlyRate       ?? null,
+    student_type:        s.studentType      ?? null,
+    preply_percentage:   s.preplyPercentage ?? null,
     created_at:          s.createdAt,
   };
 }

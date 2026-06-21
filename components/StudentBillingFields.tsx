@@ -15,7 +15,7 @@ export interface StudentBilling {
  * Preply students have the commission deducted; platform students pay the full
  * rate exactly as entered.
  */
-const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: StudentBilling) => void }> = ({ value, onChange }) => {
+const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: StudentBilling) => void; showTimezone?: boolean }> = ({ value, onChange, showTimezone = true }) => {
   const studentType = value.studentType ?? 'preply';
   const pct = value.preplyPercentage ?? 18;
   const rate = value.hourlyRate ?? 0;
@@ -50,6 +50,7 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
       </div>
 
       {/* Timezone — type to search a city or country */}
+      {showTimezone && (
       <div>
         <label className={labelCls}>Timezone / city</label>
         <SearchableTimezone
@@ -61,6 +62,7 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Now: {(() => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: value.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()); } catch { return '—'; } })()}</p>
         )}
       </div>
+      )}
 
       {/* Hourly rate + Preply % */}
       <div className="grid grid-cols-2 gap-2">
