@@ -715,26 +715,30 @@ const App: React.FC = () => {
         const reportId = await getStudentReportId(currentUser.id, updatedStudent.id);
         if (!reportId) return; // no shared report exists yet — nothing to sync
         await syncStudentDataInReport(reportId, updatedStudent);
-        // Broadcast live update to any open student portal.
-        // Prefer the already-subscribed session channel; fall back to a fresh one.
-        const broadcastCh = liveSessionChannelRef.current ?? supabase.channel(`report-plays-${reportId}`);
-        broadcastCh.send({
-          type: 'broadcast',
-          event: 'report_updated',
-          payload: {
-            mistakes: updatedStudent.mistakes ?? {},
-            quranHomework: updatedStudent.quranHomework ?? [],
-            studentProgress: {
-              recitationAchievements: updatedStudent.recitationAchievements ?? [],
-              memorizationAchievements: updatedStudent.memorizationAchievements ?? [],
-              attendance: updatedStudent.attendance ?? [],
-              masteredTajweedRules: updatedStudent.masteredTajweedRules ?? [],
-              dob: updatedStudent.dob,
-              tafsirReviews: updatedStudent.tafsirReviews ?? [],
-              tafsirMemorizationReviews: updatedStudent.tafsirMemorizationReviews ?? [],
+        // Live-broadcast to an open portal ONLY through the already-subscribed
+        // session channel for this same student. Spinning up a throwaway,
+        // unsubscribed channel just to send() triggers Supabase's REST-fallback
+        // deprecation warning — and it isn't needed: the report is already
+        // persisted above, so any open portal refreshes on its next load.
+        if (liveSessionChannelRef.current && sessionStudentId === updatedStudent.id) {
+          liveSessionChannelRef.current.send({
+            type: 'broadcast',
+            event: 'report_updated',
+            payload: {
+              mistakes: updatedStudent.mistakes ?? {},
+              quranHomework: updatedStudent.quranHomework ?? [],
+              studentProgress: {
+                recitationAchievements: updatedStudent.recitationAchievements ?? [],
+                memorizationAchievements: updatedStudent.memorizationAchievements ?? [],
+                attendance: updatedStudent.attendance ?? [],
+                masteredTajweedRules: updatedStudent.masteredTajweedRules ?? [],
+                dob: updatedStudent.dob,
+                tafsirReviews: updatedStudent.tafsirReviews ?? [],
+                tafsirMemorizationReviews: updatedStudent.tafsirMemorizationReviews ?? [],
+              },
             },
-          },
-        });
+          });
+        }
       }, 1500); // 1.5-second debounce window
     }
   };
