@@ -23,8 +23,9 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
-import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession, setSessionFamily } from '../services/lessonSessionService';
 import { ensurePortalPair } from '../services/portalPairService';
+import { ensureFamilyLink, FamilyStudentRef } from '../services/familyLinkService';
 import { netEarning } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import { supabase } from '../lib/supabase';
@@ -296,11 +297,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [linkedStudentNames, setLinkedStudentNames] = useState<Record<string, string>>({}); // gcalEventId → student name
   /** Set when user clicks a linked event — shows the manage-links modal (add / remove profiles) */
   const [manageTarget, setManageTarget] = useState<{ gcalId: string; summary: string } | null>(null);
-  /** Pending link awaiting same-name confirmation (different name already on this event) */
-  const [nameMismatch, setNameMismatch] = useState<{ studentId: string; existingName: string; newName: string } | null>(null);
-  /** Generated unified portal link to show the tutor after pairing two profiles */
-  const [pairLink, setPairLink] = useState<string | null>(null);
-  const [pairLinkCopied, setPairLinkCopied] = useState(false);
+  /** Pending link to a DIFFERENT-named student → prompts to group them as a family */
+  const [familyPrompt, setFamilyPrompt] = useState<{ studentId: string; existingNames: string[] } | null>(null);
+  const [familyName, setFamilyName] = useState('');
+  /** Generated unified link to show the tutor (portal pair or family link) */
+  const [generatedLink, setGeneratedLink] = useState<{ url: string; family: boolean } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   /** Set when silent refresh has failed — shows the reconnect banner */
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
@@ -614,55 +616,63 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   };
 
   /**
-   * Picker click. Allows linking a 2nd profile to an event, but if the event is
-   * already linked to a DIFFERENT name, ask for confirmation first (guards
-   * against accidentally pairing two different people).
+   * Picker click. Linking the SAME person (same name — e.g. their Quran +
+   * Arabic profile) links directly. Linking a DIFFERENT-named student to an
+   * event that already has someone prompts to group them as a FAMILY.
    */
   function requestLink(studentId: string) {
     if (!linkTarget) return;
     const newName = linkStudentById.get(studentId)?.name ?? '';
-    const existing = (linkedSessions[linkTarget.id] ?? [])
-      .filter(s => s.studentId !== studentId)
+    const others = (linkedSessions[linkTarget.id] ?? []).filter(s => s.studentId !== studentId);
+    const differentNamed = others
       .map(s => linkStudentById.get(s.studentId))
-      .find(b => b && newName && b.name.trim().toLowerCase() !== newName.trim().toLowerCase());
-    if (existing) {
-      setNameMismatch({ studentId, existingName: existing.name, newName });
+      .filter(b => b && newName && b.name.trim().toLowerCase() !== newName.trim().toLowerCase()) as LinkStudent[];
+    if (differentNamed.length > 0) {
+      // Prefill with an existing family name on the event if one is set.
+      const existingFamily = others.find(s => s.familyName)?.familyName ?? '';
+      setFamilyName(existingFamily);
+      setFamilyPrompt({ studentId, existingNames: differentNamed.map(b => b.name) });
       return;
     }
     handleLinkToStudent(studentId);
+  }
+
+  /** Link a single event-title to a student (and, for a same-person Q+A, pair). */
+  async function linkStudentToTarget(studentId: string): Promise<Record<string, LessonSession[]> | null> {
+    if (!linkTarget || !gcalToken || !teacherId) return null;
+    const clicked = events.find(e => e.id === linkTarget.id);
+    if (clicked) {
+      await linkGCalSession(
+        teacherId, studentId, clicked.id, clicked.summary,
+        clicked.start.dateTime ?? clicked.start.date ?? '',
+        clicked.end.dateTime ?? clicked.end.date ?? undefined,
+      );
+    }
+    const count = await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
+    if (!clicked && count === 0) {
+      setError(`No calendar events titled "${linkTarget.summary}" were found to link.`);
+    }
+    const map = await getSessionsListByGcalId(teacherId);
+    setLinkedSessions(map);
+    return map;
   }
 
   async function handleLinkToStudent(studentId: string) {
     if (!linkTarget || !gcalToken || !teacherId) return;
     setLinking(true);
     try {
-      // Always link the clicked event itself (it's in the current view), then link
-      // the rest of the same-named series across the wider window.
-      const clicked = events.find(e => e.id === linkTarget.id);
-      if (clicked) {
-        await linkGCalSession(
-          teacherId, studentId, clicked.id, clicked.summary,
-          clicked.start.dateTime ?? clicked.start.date ?? '',
-          clicked.end.dateTime ?? clicked.end.date ?? undefined,
-        );
-      }
-      const count = await linkAllEventsByTitle(teacherId, studentId, linkTarget.summary, gcalToken);
-      if (!clicked && count === 0) {
-        setError(`No calendar events titled "${linkTarget.summary}" were found to link.`);
-      }
-      // Refresh linked sessions map (name lookup rebuilds via effect)
-      const map = await getSessionsListByGcalId(teacherId);
-      setLinkedSessions(map);
+      const map = await linkStudentToTarget(studentId);
+      if (!map) return;
 
-      // If this event now has BOTH a Quran and an Arabic profile, ensure the
-      // permanent unified portal link and surface it to the tutor.
-      const eventSessions = map[linkTarget.id] ?? [];
-      const profiles = eventSessions.map(s => linkStudentById.get(s.studentId)).filter(Boolean) as LinkStudent[];
+      // If this event now has the SAME person's Quran AND Arabic profile,
+      // ensure the permanent unified portal link and surface it to the tutor.
+      const profiles = (map[linkTarget.id] ?? [])
+        .map(s => linkStudentById.get(s.studentId)).filter(Boolean) as LinkStudent[];
       const q = profiles.find(p => p.kind === 'quran');
       const a = profiles.find(p => p.kind === 'arabic');
-      if (q && a) {
+      if (q && a && q.name.trim().toLowerCase() === a.name.trim().toLowerCase()) {
         const pair = await ensurePortalPair(teacherId, q.id, a.id, q.name);
-        if (pair) setPairLink(`${window.location.origin}/portal/${pair.token}`);
+        if (pair) setGeneratedLink({ url: `${window.location.origin}/portal/${pair.token}`, family: false });
       }
 
       onSessionLinked?.();
@@ -670,6 +680,38 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       setLinkSearch('');
     } catch (err) {
       console.error('[Link] failed:', err);
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  /** Link the student AND group everyone on the event as a named family. */
+  async function handleLinkAsFamily(studentId: string, name: string) {
+    if (!linkTarget || !teacherId) return;
+    setLinking(true);
+    try {
+      const map = await linkStudentToTarget(studentId);
+      if (!map) return;
+
+      // Everyone now linked to this event → family members.
+      const sessionsForEvent = map[linkTarget.id] ?? [];
+      const refs: FamilyStudentRef[] = sessionsForEvent
+        .map(s => linkStudentById.get(s.studentId))
+        .filter(Boolean)
+        .map(b => ({ kind: (b as LinkStudent).kind, studentId: (b as LinkStudent).id, name: (b as LinkStudent).name }));
+      const existingFamilyId = sessionsForEvent.find(s => s.familyLinkId)?.familyLinkId;
+      const familyId = await ensureFamilyLink(teacherId, name.trim() || 'Family', refs, existingFamilyId);
+      if (familyId) {
+        await setSessionFamily(teacherId, linkTarget.summary, name.trim() || 'Family', familyId);
+        setLinkedSessions(await getSessionsListByGcalId(teacherId));
+        setGeneratedLink({ url: `${window.location.origin}/family/${familyId}`, family: true });
+      }
+
+      onSessionLinked?.();
+      setLinkTarget(null);
+      setLinkSearch('');
+    } catch (err) {
+      console.error('[Link family] failed:', err);
     } finally {
       setLinking(false);
     }
@@ -1226,6 +1268,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   // Representative billing for colour/rate: prefer a profile with a rate.
                   const linkedBilling = billings.find(b => b.hourlyRate != null) ?? billings[0];
                   const isPaired    = billings.some(b => b.kind === 'quran') && billings.some(b => b.kind === 'arabic');
+                  // A family groups several DIFFERENT students under one name.
+                  const familyName  = sessionList.find(s => s.familyName)?.familyName;
+                  const displayName = familyName ?? linkedName;
 
                   const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
                   const timeRange = `${fmtT(startDT)} - ${fmtT(endDT)}`;
@@ -1247,7 +1292,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                     <div
                       key={ev.id}
-                      title={`${isLinked && linkedName ? linkedName + ' — ' : ''}${ev.summary}\n${timeRange}${rateStr ? `\n${rateStr}` : ''}`}
+                      title={`${isLinked && displayName ? displayName + ' — ' : ''}${ev.summary}\n${timeRange}${rateStr ? `\n${rateStr}` : ''}`}
                       onClick={canLink ? handleEvClick : undefined}
                       className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 shadow-sm transition-all
                         ${isPlatform
@@ -1261,11 +1306,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                       `}
                       style={{ top: `${top}px`, height: `${height}px`, ...(isPreplyLinked ? { background: '#FE9FC3' } : {}) }}
                     >
-                      {isLinked && linkedName ? (
+                      {isLinked && displayName ? (
                         <div className="flex items-center gap-1 leading-tight">
                           <ChainLinkIcon className="w-3 h-3 flex-shrink-0" />
-                          <span className="text-[11px] font-bold truncate">{linkedName}</span>
-                          {isPaired && <span className="text-[8px] font-extrabold px-1 rounded bg-black/15 leading-none py-0.5 flex-shrink-0">Q+A</span>}
+                          <span className="text-[11px] font-bold truncate">{displayName}</span>
+                          {familyName && <span className="text-[8px] font-extrabold px-1 rounded bg-black/15 leading-none py-0.5 flex-shrink-0">👪</span>}
+                          {!familyName && isPaired && <span className="text-[8px] font-extrabold px-1 rounded bg-black/15 leading-none py-0.5 flex-shrink-0">Q+A</span>}
                         </div>
                       ) : (
                         <p className="text-[11px] font-bold leading-tight truncate">{ev.summary}</p>
@@ -1660,55 +1706,73 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         );
       })()}
 
-      {/* ── Same-name confirmation before pairing two different names ──────── */}
-      {nameMismatch && (
+      {/* ── Link a different-named student → group as a FAMILY ────────────── */}
+      {familyPrompt && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
-              <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-1">Different name</p>
+              <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1">👪 Link as family</p>
               <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                This event is already linked to <span className="font-bold">{nameMismatch.existingName}</span>, but you are linking <span className="font-bold">{nameMismatch.newName}</span>. Profiles do not have the same name. Continue?
+                This event is already linked to <span className="font-bold">{familyPrompt.existingNames.join(', ')}</span>. Group them with <span className="font-bold">{linkStudentById.get(familyPrompt.studentId)?.name}</span> as a family? The family name shows on the event and all members share one family link.
               </p>
             </div>
-            <div className="px-5 py-4 flex gap-3">
-              <button
-                onClick={() => { const id = nameMismatch.studentId; setNameMismatch(null); handleLinkToStudent(id); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-              >
-                Continue
-              </button>
-              <button
-                onClick={() => setNameMismatch(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Family name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={familyName}
+                  onChange={e => setFamilyName(e.target.value)}
+                  placeholder="e.g. Al-Hassan Family"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  disabled={linking || !familyName.trim()}
+                  onClick={() => { const id = familyPrompt.studentId; const n = familyName; setFamilyPrompt(null); handleLinkAsFamily(id, n); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50"
+                >
+                  {linking ? 'Linking…' : 'Link as family'}
+                </button>
+                <button
+                  onClick={() => setFamilyPrompt(null)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Unified portal link generated (after pairing Quran + Arabic) ───── */}
-      {pairLink && (
+      {/* ── Unified link generated (portal pair or family) ────────────────── */}
+      {generatedLink && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-md overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
-              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">🔗 Unified portal link</p>
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">
+                {generatedLink.family ? '👪 Family link' : '🔗 Unified portal link'}
+              </p>
               <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                This student's Quran and Arabic profiles are now paired. Share this permanent link — they can switch between both portals from it.
+                {generatedLink.family
+                  ? 'These students are now grouped as a family. Share this permanent link — copying any member’s link copies this same family link.'
+                  : 'This student’s Quran and Arabic profiles are now paired. Share this permanent link — they can switch between both portals from it.'}
               </p>
             </div>
             <div className="px-5 py-4 space-y-3">
-              <div className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 text-xs font-mono text-slate-700 dark:text-slate-200 break-all">{pairLink}</div>
+              <div className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 text-xs font-mono text-slate-700 dark:text-slate-200 break-all">{generatedLink.url}</div>
               <div className="flex gap-2">
                 <button
-                  onClick={async () => { await safeCopy(pairLink); setPairLinkCopied(true); setTimeout(() => setPairLinkCopied(false), 2500); }}
+                  onClick={async () => { await safeCopy(generatedLink.url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500); }}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
                 >
-                  {pairLinkCopied ? '✓ Copied!' : 'Copy link'}
+                  {linkCopied ? '✓ Copied!' : 'Copy link'}
                 </button>
                 <button
-                  onClick={() => { setPairLink(null); setPairLinkCopied(false); }}
+                  onClick={() => { setGeneratedLink(null); setLinkCopied(false); }}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Close

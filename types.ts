@@ -498,4 +498,6 @@ export interface LessonSession {
   meetUrl?: string;       // Google Meet link
   status: 'confirmed' | 'pending' | 'cancelled';
   createdAt: string;
+  familyName?: string;    // group name shown on the event when 2+ students are linked
+  familyLinkId?: string;  // family_links row joining the grouped students
 }

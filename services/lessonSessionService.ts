@@ -12,6 +12,8 @@ interface SessionRow {
   meet_url: string | null;
   status: string;
   created_at: string;
+  family_name?: string | null;
+  family_link_id?: string | null;
 }
 
 function rowToSession(r: SessionRow): LessonSession {
@@ -26,6 +28,8 @@ function rowToSession(r: SessionRow): LessonSession {
     meetUrl:      r.meet_url       ?? undefined,
     status:       r.status as LessonSession['status'],
     createdAt:    r.created_at,
+    familyName:   r.family_name    ?? undefined,
+    familyLinkId: r.family_link_id ?? undefined,
   };
 }
 
@@ -41,6 +45,21 @@ export async function getUpcomingSessions(teacherId: string): Promise<LessonSess
     .order('start_at', { ascending: true });
   if (error) throw error;
   return (data as SessionRow[]).map(rowToSession);
+}
+
+/**
+ * All distinct student_ids that have ANY (non-cancelled) linked session for a
+ * teacher — used to show the "Linked" badge on dashboard cards regardless of
+ * whether the linked lesson is upcoming or already past.
+ */
+export async function getLinkedStudentIds(teacherId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .select('student_id')
+    .eq('teacher_id', teacherId)
+    .neq('status', 'cancelled');
+  if (error) throw error;
+  return new Set((data as { student_id: string }[]).map(r => r.student_id));
 }
 
 /** Fetch upcoming sessions for a single student (used by student portal) */
@@ -181,6 +200,38 @@ export async function getSessionsListByGcalId(teacherId: string): Promise<Record
     (map[s.gcalEventId] ??= []).push(s);
   }
   return map;
+}
+
+/**
+ * Stamp a family name + family_links id onto every session for an event title
+ * (so the calendar shows the family name and any member resolves to the family
+ * link). Pass nulls to clear the grouping.
+ */
+export async function setSessionFamily(
+  teacherId: string,
+  title: string,
+  familyName: string | null,
+  familyLinkId: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_lesson_sessions')
+    .update({ family_name: familyName, family_link_id: familyLinkId })
+    .eq('teacher_id', teacherId)
+    .eq('title', title);
+  if (error) throw error;
+}
+
+/** If this student belongs to a calendar-created family, return its family_links id. */
+export async function getFamilyLinkIdForStudent(studentId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .select('family_link_id')
+    .eq('student_id', studentId)
+    .not('family_link_id', 'is', null)
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { family_link_id: string | null }).family_link_id ?? null;
 }
 
 /**

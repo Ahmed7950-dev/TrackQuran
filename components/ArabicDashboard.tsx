@@ -12,6 +12,7 @@ import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import { ensureShareToken } from '../services/arabicService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
+import { getFamilyLinkIdForStudent } from '../services/lessonSessionService';
 import { safeCopy } from '../utils';
 import { getTeacherBookings, updateBookingMeetUrl } from '../services/lessonBookingService';
 import {
@@ -20,6 +21,7 @@ import {
 import {
   getUpcomingSessions,
   updateSessionMeetUrl,
+  getLinkedStudentIds,
 } from '../services/lessonSessionService';
 import { useI18n } from '../context/I18nProvider';
 
@@ -167,7 +169,13 @@ const ArabicDashboard: React.FC<Props> = ({
   }, [sessions, bookings, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
-  const linkedStudentIds = new Set(sessions.map(s => s.studentId));
+
+  // Linked badge: ALL students with any linked session (past or upcoming).
+  const [linkedStudentIds, setLinkedStudentIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!teacherId) return;
+    getLinkedStudentIds(teacherId).then(setLinkedStudentIds).catch(() => {});
+  }, [teacherId]);
 
   // ── Meet link ─────────────────────────────────────────────────────────────
   async function handleGenerateMeetLink() {
@@ -217,10 +225,15 @@ const ArabicDashboard: React.FC<Props> = ({
     try {
       const token = await ensureShareToken(student);
       if (!student.shareToken) onUpdateStudent({ ...student, shareToken: token });
-      // If this student's Arabic + Quran profiles are paired, share the
-      // permanent unified link instead of the Arabic-only portal link.
+      // Prefer the unified links: a same-person Arabic+Quran pair, then a
+      // calendar-created family, else the Arabic-only portal link.
       const pairToken = await getPortalTokenForStudent('arabic', student.id);
-      await safeCopy(pairToken ? `${SITE_URL}/portal/${pairToken}` : `${SITE_URL}/arabic/s/${token}`);
+      const familyId  = pairToken ? null : await getFamilyLinkIdForStudent(student.id);
+      await safeCopy(
+        pairToken ? `${SITE_URL}/portal/${pairToken}`
+        : familyId ? `${SITE_URL}/family/${familyId}`
+        : `${SITE_URL}/arabic/s/${token}`,
+      );
       setCopiedId(student.id);
       setTimeout(() => setCopiedId(null), 2500);
     } catch (err) {

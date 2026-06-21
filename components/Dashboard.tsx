@@ -4,7 +4,7 @@ import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
-import { getUpcomingSessions, updateSessionMeetUrl } from '../services/lessonSessionService';
+import { getUpcomingSessions, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent } from '../services/lessonSessionService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
@@ -139,11 +139,14 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 },
             });
             if (reportId) {
-                // If this student's Quran + Arabic profiles are paired, share the
-                // permanent unified link instead of the Quran-only report link.
+                // Prefer the unified links: a same-person Quran+Arabic pair, then
+                // a calendar-created family, else the Quran-only report link.
                 const pairToken = await getPortalTokenForStudent('quran', student.id);
+                const familyId  = pairToken ? null : await getFamilyLinkIdForStudent(student.id);
                 const link = pairToken
                   ? `${window.location.origin}/portal/${pairToken}`
+                  : familyId
+                  ? `${window.location.origin}/family/${familyId}`
                   : `${window.location.origin}/report/${reportId}`;
                 setShareLink(link);
                 await safeCopy(link);
@@ -510,7 +513,14 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   }, [sessions, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
-  const linkedStudentIds = useMemo(() => new Set(sessions.map(s => s.studentId)), [sessions]);
+
+  // Linked badge: ALL students with any linked session (past or upcoming), not
+  // just the upcoming `sessions` used for the next-lesson banner.
+  const [linkedStudentIds, setLinkedStudentIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!teacherId) return;
+    getLinkedStudentIds(teacherId).then(setLinkedStudentIds).catch(() => {});
+  }, [teacherId]);
 
   async function handleGenerateMeetLink() {
     if (!nextLesson) return;

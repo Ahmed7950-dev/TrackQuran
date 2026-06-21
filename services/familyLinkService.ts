@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { createOrUpdateSharedReport } from './dataService';
+import { ensureShareTokenById } from './arabicService';
 
 export interface FamilyMember {
   /** Unique ID for this member slot within the family link */
@@ -46,6 +48,44 @@ export const saveFamilyLink = async (
 export const deleteFamilyLink = async (id: string): Promise<void> => {
   const { error } = await supabase.from('family_links').delete().eq('id', id);
   if (error) console.error('deleteFamilyLink:', error.message);
+};
+
+export interface FamilyStudentRef { kind: 'quran' | 'arabic'; studentId: string; name: string; }
+
+/**
+ * Create or update a family link from a set of students (used when a tutor
+ * groups students on a calendar event). Ensures each member's underlying portal
+ * (Quran shared report / Arabic share token) exists, then upserts the
+ * family_links row. Pass `existingId` to update an existing family in place so
+ * its /family/<id> URL never changes. Returns the family link id.
+ */
+export const ensureFamilyLink = async (
+  teacherId: string,
+  familyName: string,
+  students: FamilyStudentRef[],
+  existingId?: string,
+): Promise<string | null> => {
+  const members: FamilyMember[] = [];
+  for (const s of students) {
+    if (s.kind === 'quran') {
+      const reportId = await createOrUpdateSharedReport(teacherId, s.studentId, s.name, {
+        studentName: s.name,
+        generatedAt: new Date().toISOString(),
+      });
+      if (!reportId) continue;
+      members.push({ id: crypto.randomUUID(), name: s.name, type: 'quran', report_id: reportId });
+    } else {
+      const token = await ensureShareTokenById(s.studentId);
+      if (!token) continue;
+      members.push({ id: crypto.randomUUID(), name: s.name, type: 'arabic', share_token: token });
+    }
+  }
+  if (members.length < 2) return null;
+  const id = existingId ?? crypto.randomUUID();
+  try {
+    await saveFamilyLink({ id, teacher_id: teacherId, name: familyName || 'Family', members });
+  } catch { return null; }
+  return id;
 };
 
 export const getFamilyLinkById = async (id: string): Promise<FamilyLink | null> => {
