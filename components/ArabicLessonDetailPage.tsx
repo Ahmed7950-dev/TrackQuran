@@ -1524,10 +1524,40 @@ const HomeworkTab: React.FC<{
 
         {/* No submission state */}
         {!submission && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-slate-200 dark:border-gray-700 p-12 text-center space-y-3">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-slate-200 dark:border-gray-700 p-8 text-center space-y-3">
             <div className="text-5xl">📭</div>
             <p className="font-semibold text-slate-700 dark:text-slate-200">{studentName ?? 'The student'} hasn't submitted this homework yet.</p>
-            <p className="text-sm text-slate-400">You'll receive a notification when they submit.</p>
+            <p className="text-sm text-slate-400">You'll receive a notification when they submit. The assigned questions are shown below.</p>
+          </div>
+        )}
+
+        {/* Question preview — so the tutor can see the homework before the student submits */}
+        {!submission && practiceItems.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+              Assigned questions ({practiceItems.length})
+            </h3>
+            {practiceItems.map((item, i) => (
+              <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                  <span className="text-[11px] uppercase tracking-wide text-slate-400">{QUESTION_TYPE_LABELS[item.questionType ?? 'short_answer']}</span>
+                </div>
+                {item.content && <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap" dir="auto">{item.content}</p>}
+                {item.options && item.options.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {item.options.map((opt, oi) => (
+                      <li key={oi} className={`text-sm px-2 py-1 rounded ${opt === item.correctAnswer ? 'text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-900/20' : 'text-slate-500 dark:text-slate-400'}`} dir="auto">
+                        {String.fromCharCode(65 + oi)}. {opt}{opt === item.correctAnswer ? ' ✓' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {item.correctAnswer && (!item.options || item.options.length === 0) && (
+                  <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400" dir="auto">Answer: {item.correctAnswer}</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
