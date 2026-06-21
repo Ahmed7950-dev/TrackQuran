@@ -59,11 +59,7 @@ const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onS
                     )}
                 </div>
                 <div className="flex items-center gap-2 bg-white/60 dark:bg-gray-700/50 p-1 rounded-full">
-                    <ActionButton onClick={onStartSession} title="Live Logging" className="bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800/80 shadow-lg shadow-green-500/20 dark:shadow-green-400/20">
-                        <div className="w-6 h-6 flex items-center justify-center">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-glow"></div>
-                        </div>
-                    </ActionButton>
+                    {/* Live-logging moved to the highlighted "Quran" tab in the tools bar. */}
                     {onShareLink && (
                         <ActionButton
                             onClick={shareState === 'idle' ? onShareLink : () => {}}

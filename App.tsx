@@ -1592,6 +1592,7 @@ const App: React.FC = () => {
           { id: 'tajweed',         label: t('header.tajweed'),          icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
           { id: 'qaedah',          label: 'Qaedah',                     icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
           { id: 'alphabetTrainer', label: t('header.alphabetTrainer'),  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" /></svg> },
+          { id: 'quran',           label: 'Quran',                      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
           { id: 'lettersTrainer',  label: t('header.lettersTrainer'),   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg> },
           { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
         ] as const;
@@ -1602,7 +1603,35 @@ const App: React.FC = () => {
             style={{ top: headerHeight }}
           >
             <div className="flex items-center justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-              {tabs.map(tab => (
+              {tabs.map(tab => {
+                // The "Quran" tab opens the live logging session (what the old green
+                // button did) rather than switching activeTab. It's the primary action,
+                // so it gets a distinct highlighted pill — active while the session is open.
+                if (tab.id === 'quran') {
+                  const quranActive = !!sessionStudentId;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        if (sessionStudentId) { setSessionStudentId(null); return; }
+                        const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
+                        if (!sid) return;
+                        setCurrentStudentView('details');
+                        setActiveTab('main');
+                        setSessionStudentId(sid);
+                      }}
+                      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1.5 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap shadow-sm ${
+                        quranActive
+                          ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-teal-500/30'
+                          : 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 ring-1 ring-teal-300 dark:ring-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/50'
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  );
+                }
+                return (
                 <button
                   key={tab.id}
                   onClick={() => { setCurrentStudentView('details'); setActiveTab(activeTab === tab.id ? 'main' : tab.id); }}
@@ -1622,7 +1651,8 @@ const App: React.FC = () => {
                     </span>
                   )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
