@@ -1471,28 +1471,39 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <>
             {activeTab === 'calendar' && (
               <div className="space-y-4">
-                {/* Scheduled lessons list */}
+                {/* Scheduled lessons list — shown in the student's own timezone */}
                 {(() => {
                   const upcoming = studentLessons
                     .filter(l => l.startAt && new Date(l.startAt).getTime() > Date.now())
                     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
                   if (upcoming.length === 0) return null;
+                  const studentTZ = report?.report_data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
                   const ordinal = (n: number) => {
                     const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
                     return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
                   };
-                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Istanbul' });
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: studentTZ });
+                  const tzLabel = studentTZ.split('/').pop()?.replace(/_/g, ' ') ?? studentTZ;
                   return (
-                    <div className="rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20 p-4">
-                      <p className="text-sm font-bold text-teal-700 dark:text-teal-300 mb-2">{t('studentPortal.youHaveLessons')}</p>
+                    <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{t('studentPortal.youHaveLessons')}</p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> {tzLabel} time
+                        </span>
+                      </div>
                       <ul className="space-y-1.5">
                         {upcoming.map(l => {
-                          const d = new Date(l.startAt);
-                          const dayLabel = `${ordinal(d.getDate())} of ${d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'Europe/Istanbul' })}`;
+                          const dayLabel = (() => {
+                            const parts = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: studentTZ }).formatToParts(new Date(l.startAt));
+                            const day = Number(parts.find(p => p.type === 'day')?.value ?? '1');
+                            const mon = parts.find(p => p.type === 'month')?.value ?? '';
+                            return `${ordinal(day)} of ${mon}`;
+                          })();
                           const range = l.endAt ? `${fmtT(l.startAt)} to ${fmtT(l.endAt)}` : fmtT(l.startAt);
                           return (
                             <li key={l.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                              <span className="text-teal-500">📅</span>
+                              <span className="text-amber-500">📅</span>
                               <span className="font-semibold">{dayLabel}</span>
                               <span className="text-slate-500 dark:text-slate-400">{range}</span>
                             </li>
@@ -1510,6 +1521,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                   teacherId={report?.teacher_id}
                   studentId={report?.student_id}
                   studentName={report?.student_name}
+                  studentTimezone={report?.report_data.timezone}
                   portalType="quran"
                   studentLessons={studentLessons}
                 />

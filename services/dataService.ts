@@ -358,6 +358,8 @@ export interface SharedReportData {
   homeworkVerses?: string[];
   quranHomework?: QuranHomework[];
   quranicFont?: string;
+  /** Student's IANA timezone (from their profile) so the portal calendar shows their local times. */
+  timezone?: string;
   // Precomputed ranks so the public portal shows real ranks (it only has this
   // one student's data, not the tutor's roster).
   ranks?: {
@@ -438,6 +440,12 @@ export const createOrUpdateSharedReport = async (
       merged = { ...existing.report_data, ...reportData } as SharedReportData;
     }
   }
+  // Always stamp the student's timezone so the public portal calendar can show
+  // their local lesson times (the portal can't read the students table directly).
+  try {
+    const { data: stu } = await supabase.from('students').select('timezone').eq('id', studentId).maybeSingle();
+    if (stu?.timezone) merged.timezone = stu.timezone as string;
+  } catch { /* timezone column may not exist yet — ignore */ }
   const { data, error } = await supabase
     .from('shared_reports')
     .upsert(
