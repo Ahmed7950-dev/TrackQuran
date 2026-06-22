@@ -49,6 +49,7 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'exam_result_published':        return { emoji: '🏆', color: 'text-amber-500' };
     case 'exam_retake_allowed':          return { emoji: '🔄', color: 'text-indigo-500' };
     case 'homework_submitted':           return { emoji: '📋', color: 'text-teal-500' };
+    case 'subscription_renewal_reminder': return { emoji: '💳', color: 'text-violet-500' };
     default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }

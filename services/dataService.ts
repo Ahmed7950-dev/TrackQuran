@@ -50,6 +50,7 @@ const rowToStudent = (row: any): Student => ({
   hourlyRate:                  row.hourly_rate                  ?? undefined,
   studentType:                 row.student_type                 ?? undefined,
   preplyPercentage:            row.preply_percentage            ?? undefined,
+  subscriptionRenewalDate:     row.subscription_renewal_date    ?? undefined,
 });
 
 const studentToRow = (teacherId: string, s: Student) => ({
@@ -71,6 +72,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   hourly_rate:                 s.hourlyRate ?? null,
   student_type:                s.studentType ?? null,
   preply_percentage:           s.preplyPercentage ?? null,
+  subscription_renewal_date:   s.subscriptionRenewalDate ?? null,
 });
 
 export const getStudents = async (teacherId: string): Promise<Student[]> => {

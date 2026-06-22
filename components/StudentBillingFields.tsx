@@ -7,6 +7,8 @@ export interface StudentBilling {
   hourlyRate?: number;
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
+  /** Preply only — monthly subscription renewal date (recurs on this day each month). */
+  subscriptionRenewalDate?: string;
 }
 
 /**
@@ -88,6 +90,22 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
           </div>
         )}
       </div>
+
+      {/* Preply monthly subscription renewal date */}
+      {studentType === 'preply' && (
+        <div className="p-2.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+          <label className={labelCls}>Monthly subscription renewal date</label>
+          <input
+            type="date"
+            value={value.subscriptionRenewalDate ?? ''}
+            onChange={e => onChange({ ...value, subscriptionRenewalDate: e.target.value || undefined })}
+            className={inputCls}
+          />
+          <p className="text-[11px] text-violet-600/80 dark:text-violet-400/80 mt-1">
+            You'll get a reminder the day before each monthly renewal.
+          </p>
+        </div>
+      )}
 
       {/* Computed net */}
       {rate > 0 && (

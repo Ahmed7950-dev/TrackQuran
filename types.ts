@@ -89,6 +89,7 @@ export interface Student {
   hourlyRate?: number;                     // tutor's hourly rate for this student
   studentType?: 'preply' | 'platform';     // preply = commission taken; platform = none
   preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
+  subscriptionRenewalDate?: string;        // Preply only — monthly renewal date (YYYY-MM-DD); reminder fires 1 day before
 }
 
 export interface QuranHomework {

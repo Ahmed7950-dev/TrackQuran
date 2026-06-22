@@ -33,6 +33,7 @@ import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
 import UnifiedStudentPortal from './components/UnifiedStudentPortal';
 import LottieIcon from './components/LottieIcon';
+import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
@@ -344,6 +345,27 @@ const ToolsSidebar: React.FC<{
   );
 };
 
+/**
+ * If TOMORROW is a monthly renewal day for the given renewal date, return
+ * tomorrow's date as YYYY-MM-DD (the occurrence to remind for); else null.
+ * Recurs on the stored day-of-month, clamped for shorter months, and never
+ * fires before the very first renewal date.
+ */
+function renewalReminderOccurrence(renewalDateStr: string): string | null {
+  const stored = new Date(renewalDateStr + 'T00:00:00');
+  if (isNaN(stored.getTime())) return null;
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const daysInTomorrowMonth = new Date(tomorrow.getFullYear(), tomorrow.getMonth() + 1, 0).getDate();
+  const effectiveDay = Math.min(stored.getDate(), daysInTomorrowMonth);
+  if (tomorrow.getDate() !== effectiveDay) return null;
+  const storedMidnight = new Date(stored.getFullYear(), stored.getMonth(), stored.getDate());
+  if (tomorrow < storedMidnight) return null; // don't remind before the first renewal
+  const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const dd = String(tomorrow.getDate()).padStart(2, '0');
+  return `${tomorrow.getFullYear()}-${mm}-${dd}`;
+}
+
 const App: React.FC = () => {
   // ── Google Calendar OAuth2 callback — must be checked first ────────────────
   if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
@@ -622,7 +644,16 @@ const App: React.FC = () => {
       return;
     }
     const teacherId = currentUserId;
-    getStudents(teacherId).then(setStudents);
+    getStudents(teacherId).then(students => {
+      setStudents(students);
+      // Preply subscription reminders: notify the tutor the day before each
+      // monthly renewal (deduped per occurrence in the service).
+      for (const s of students) {
+        if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
+        const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
+        if (occ) ensureSubscriptionRenewalReminder({ teacherId, studentId: s.id, studentName: s.name, renewalDate: occ });
+      }
+    });
     getTajweedRules(teacherId).then(setTajweedRules);
     // Fetch arabic students then compute total vocab counts (lesson words + custom list words)
     Promise.all([

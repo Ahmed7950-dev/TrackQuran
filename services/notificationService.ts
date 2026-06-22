@@ -24,7 +24,8 @@ export type NotificationType =
   | 'exam_result_published'
   | 'exam_started'
   | 'exam_retake_allowed'
-  | 'homework_submitted';
+  | 'homework_submitted'
+  | 'subscription_renewal_reminder';
 
 export interface BookingNotification {
   id:         string;
@@ -115,6 +116,43 @@ export async function createNotification(input: {
     });
   } catch {
     // best-effort — never surface notification errors to the user
+  }
+}
+
+/**
+ * Create the "subscription renews tomorrow" reminder for a Preply student, but
+ * only once per renewal occurrence. Deduped on (student, type, the renewal date
+ * stored in metadata) so repeated app loads don't spam, while next month's
+ * renewal still fires a fresh reminder.
+ */
+export async function ensureSubscriptionRenewalReminder(input: {
+  teacherId:    string;
+  studentId:    string;
+  studentName:  string;
+  renewalDate:  string; // YYYY-MM-DD of the upcoming renewal (tomorrow)
+}): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('booking_notifications')
+      .select('id')
+      .eq('teacher_id', input.teacherId)
+      .eq('student_id', input.studentId)
+      .eq('type', 'subscription_renewal_reminder')
+      .filter('metadata->>renewalDate', 'eq', input.renewalDate)
+      .limit(1);
+    if (existing && existing.length > 0) return; // already reminded for this renewal
+    await createNotification({
+      teacherId:  input.teacherId,
+      studentId:  input.studentId,
+      recipient:  'tutor',
+      bookingId:  null,
+      type:       'subscription_renewal_reminder',
+      title:      'Subscription renews tomorrow',
+      body:       `${input.studentName} has his subscription renewed tomorrow, make sure they don't have any unscheduled lessons.`,
+      metadata:   { renewalDate: input.renewalDate },
+    });
+  } catch {
+    // best-effort
   }
 }
 

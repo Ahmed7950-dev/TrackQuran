@@ -35,6 +35,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   const [billing, setBilling] = useState<StudentBilling>({
     timezone: student.timezone, hourlyRate: student.hourlyRate,
     studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
+    subscriptionRenewalDate: student.subscriptionRenewalDate,
   });
 
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -56,6 +57,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
         setBilling({
           timezone: student.timezone, hourlyRate: student.hourlyRate,
           studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
+          subscriptionRenewalDate: student.subscriptionRenewalDate,
         });
         setActiveTab('info');
         setEditingLogId(null);
@@ -73,7 +75,8 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
     e.preventDefault();
     onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory: effectiveCategory,
       timezone: billing.timezone, hourlyRate: billing.hourlyRate,
-      studentType: billing.studentType, preplyPercentage: billing.preplyPercentage });
+      studentType: billing.studentType, preplyPercentage: billing.preplyPercentage,
+      subscriptionRenewalDate: billing.studentType === 'platform' ? undefined : billing.subscriptionRenewalDate });
     onClose();
   };
   
