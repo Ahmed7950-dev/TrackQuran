@@ -1075,7 +1075,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 
                                 const playCount = versePlays[verse.verse_key] ?? 0;
                                 const isHomework = homeworkVerses.has(verse.verse_key);
-                                const homeworkDone = isHomework && playCount >= 3;
 
                                 return (
                                      <div
@@ -1107,38 +1106,6 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                                     )}
                                                 </div>
                                             )}
-                                            {/* Homework toggle button */}
-                                            <button
-                                                onClick={() => handleToggleHomework(verse.verse_key)}
-                                                title={homeworkDone ? 'Homework done — click to re-assign' : isHomework ? 'Remove from homework' : 'Assign as homework'}
-                                                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border transition-all ${
-                                                    homeworkDone
-                                                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-300 dark:border-green-600'
-                                                        : isHomework
-                                                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600'
-                                                            : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-gray-600 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'
-                                                }`}
-                                            >
-                                                {homeworkDone ? (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                                                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                                                        </svg>
-                                                        Done
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                                                            <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
-                                                        </svg>
-                                                        {isHomework ? `Homework ${Math.min(playCount, 3)}/3` : 'Assign'}
-                                                    </>
-                                                )}
-                                            </button>
-
-                                            {/* Divider */}
-                                            <span className="w-px h-3.5 bg-slate-200 dark:bg-gray-600 mx-0.5 flex-shrink-0" />
-
                                             {/* Remove verse button */}
                                             <button
                                                 onClick={() => handleRemoveVerse(verse.verse_key)}

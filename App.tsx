@@ -1638,7 +1638,7 @@ const App: React.FC = () => {
                         setActiveTab('main');
                         setSessionStudentId(sid);
                       }}
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1.5 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1.5 mx-1 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
                         quranActive
                           ? 'bg-green-500 text-white shadow-[0_0_16px_2px_rgba(34,197,94,0.6)]'
                           : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 ring-1 ring-green-300 dark:ring-green-700 hover:bg-green-100 dark:hover:bg-green-900/50'

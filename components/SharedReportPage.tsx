@@ -88,247 +88,6 @@ const QURANIC_FONTS = [
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
 ] as const;
 
-// ── MistakesTab ───────────────────────────────────────────────────────────────
-
-const MistakesTab: React.FC<{
-  report: { student_name: string; report_data: SharedReportData };
-  reportId: string;
-  quranicFont: string;
-  handleVersePlay: (verseKey: string) => void;
-  versePlays: { [verseKey: string]: number };
-}> = ({ report, reportId, quranicFont, handleVersePlay, versePlays }) => {
-  const { t } = useI18n();
-  const { student_name, report_data } = report;
-  const { mistakes, verses, generatedAt, homeworkVerses = [] } = report_data;
-
-  // Sort all verses newest-first before grouping
-  const sortedVerses = [...verses].sort(
-    (a, b) => getVerseNewestTime(b.verse_key, mistakes) - getVerseNewestTime(a.verse_key, mistakes)
-  );
-
-  const versesBySurah: Record<number, Array<{ verse_key: string; text_uthmani: string }>> = {};
-  sortedVerses.forEach(v => {
-    const surahNum = Number(v.verse_key.split(':')[0]);
-    if (!versesBySurah[surahNum]) versesBySurah[surahNum] = [];
-    versesBySurah[surahNum].push(v);
-  });
-
-  const renderVerse = (verse: { verse_key: string; text_uthmani: string }) => {
-    const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-    // Replace standard sukun (U+0652) with Quranic small rounded zero (U+06E1)
-    // so it renders correctly in all Quranic fonts (same fix as MistakesReviewPage).
-    const words = splitVerseWords(verse.text_uthmani);
-
-    return words.map((word, wi) => {
-      const wordKey = `${surahNum}:${ayahNum}:${wi}`;
-      const wordMistake = mistakes[wordKey];
-      const letters = parseWordIntoLetters(word);
-
-      const hasLetterAnnotations = letters.some(({ index: li }) => {
-        const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
-        return mistakes[lk]?.errorText;
-      });
-
-      if (!hasLetterAnnotations) {
-        return (
-          <React.Fragment key={wordKey}>
-            <span className={`px-1 rounded-md ${wordMistake ? getMistakeBg(wordMistake.level) : ''}`}>
-              {renderWordWithMarks(word, wordKey)}
-            </span>{' '}
-          </React.Fragment>
-        );
-      }
-
-      const annotations: Array<{ label: string; type: string }> = [];
-      letters.forEach(({ index: li }) => {
-        const lm = mistakes[`${surahNum}:${ayahNum}:${wi}:${li}`];
-        if (lm?.errorText) annotations.push({ label: lm.errorText, type: lm.errorType ?? 'tajweed' });
-      });
-
-      const markPlan = wordMarkPlan(word);
-      return (
-        <React.Fragment key={wordKey}>
-          <span style={{ display: 'inline', fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit', position: 'relative', whiteSpace: 'nowrap' }}>
-            {letters.map(({ letter, index: li }) => {
-              const lk = `${surahNum}:${ayahNum}:${wi}:${li}`;
-              const lm = mistakes[lk];
-              const letterBg = lm?.errorText
-                ? lm.errorType === 'tajweed' ? 'bg-green-200' : 'bg-red-200'
-                : lm ? getMistakeBg(lm.level) : '';
-              return (
-                <span key={lk} className={`rounded ${letterBg}`} style={{ display: 'inline', fontFamily: 'inherit' }}>
-                  {letter}
-                </span>
-              );
-            })}
-          </span>
-          {annotations.length > 0 && (
-            <span style={{ display: 'inline-flex', gap: '4px', verticalAlign: 'super', fontSize: '0.6em', marginRight: '2px' }}>
-              {annotations.map((a, i) => (
-                <span
-                  key={i}
-                  className={`px-1 py-0.5 rounded font-sans font-medium whitespace-nowrap ${
-                    a.type === 'tajweed'
-                      ? 'bg-green-100 text-green-800 border border-green-300'
-                      : 'bg-red-100 text-red-800 border border-red-300'
-                  }`}
-                  style={{ fontFamily: 'sans-serif', lineHeight: 1.3 }}
-                >
-                  {a.label}
-                </span>
-              ))}
-            </span>
-          )}
-          {' '}
-        </React.Fragment>
-      );
-    });
-  };
-
-  if (verses.length === 0) {
-    return (
-      <div className="text-center py-16 text-slate-400">
-        <p className="text-4xl mb-3">📖</p>
-        <p>{t('studentPortal.noMistakes')}</p>
-      </div>
-    );
-  }
-
-  // Set of homework verse keys for O(1) lookup
-  const homeworkSet = new Set(homeworkVerses);
-  const homeworkCount = homeworkVerses.length;
-  const homeworkDoneCount = homeworkVerses.filter(vk => (versePlays[vk] ?? 0) >= 3).length;
-
-  return (
-    <div className="space-y-6">
-
-      {/* Homework summary banner — only when homework is assigned */}
-      {homeworkCount > 0 && (
-        <div className={`rounded-xl p-4 flex items-start gap-3 border ${
-          homeworkDoneCount === homeworkCount
-            ? 'bg-green-50 border-green-200'
-            : 'bg-amber-50 border-amber-200'
-        }`} dir="ltr">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 mt-0.5 flex-shrink-0 ${homeworkDoneCount === homeworkCount ? 'text-green-600' : 'text-amber-600'}`}>
-            <path fillRule="evenodd" d="M10 2c-1.716 0-3.408.106-5.07.31C3.806 2.45 3 3.346 3 4.445V19.5l7-3.111 7 3.111V4.445c0-1.1-.806-1.994-1.93-2.135A48.17 48.17 0 0 0 10 2Z" clipRule="evenodd" />
-          </svg>
-          <div className="flex-1 min-w-0">
-            <p className={`font-semibold text-sm ${homeworkDoneCount === homeworkCount ? 'text-green-800' : 'text-amber-800'}`}>
-              {homeworkDoneCount === homeworkCount
-                ? t('studentPortal.hwAllComplete')
-                : t('studentPortal.hwAssigned', { count: homeworkCount })}
-            </p>
-            <p className={`text-xs mt-0.5 ${homeworkDoneCount === homeworkCount ? 'text-green-700' : 'text-amber-700'}`}>
-              {homeworkDoneCount === homeworkCount
-                ? t('studentPortal.hwListenedAll', { count: homeworkCount })
-                : t('studentPortal.hwListenInstruction', { done: homeworkDoneCount, total: homeworkCount })}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Info banner */}
-      <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-sm text-teal-800" dir="ltr">
-        <p className="font-semibold mb-1">📖 {t('studentPortal.howToUseTitle')}</p>
-        <p>{t('studentPortal.howToUseBody')}</p>
-      </div>
-
-      {Object.entries(versesBySurah)
-        // Sort surah groups so the one with the most recent mistake appears first
-        .sort(([, vA], [, vB]) => {
-          const newest = (vv: Array<{ verse_key: string }>) =>
-            Math.max(0, ...vv.map(v => getVerseNewestTime(v.verse_key, mistakes)));
-          return newest(vB) - newest(vA);
-        })
-        .map(([surahNum, surahVerses]) => {
-        const surahInfo = QURAN_METADATA.find(s => s.number === Number(surahNum));
-        return (
-          <div key={surahNum} className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-4 sm:px-6 py-3" dir="ltr">
-              <h2 className="text-white font-bold text-base sm:text-lg">
-                {surahInfo?.number}. {surahInfo?.name}
-                <span className="font-normal text-teal-100 text-sm sm:text-base ml-2">({surahInfo?.transliteratedName})</span>
-              </h2>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {surahVerses.map(verse => {
-                const [s, a] = verse.verse_key.split(':').map(Number);
-                const isHomework = homeworkSet.has(verse.verse_key);
-                const playCount = versePlays[verse.verse_key] ?? 0;
-                const homeworkDone = isHomework && playCount >= 3;
-                return (
-                  <div
-                    key={verse.verse_key}
-                    className={`p-4 sm:p-6 transition-colors ${
-                      isHomework
-                        ? homeworkDone
-                          ? 'border-l-4 border-green-400 bg-green-50/30'
-                          : 'border-l-4 border-amber-400 bg-amber-50/40'
-                        : ''
-                    }`}
-                  >
-                    {/* Homework badge + progress dots */}
-                    {isHomework && (
-                      <div className="flex items-center gap-3 mb-3" dir="ltr">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${
-                          homeworkDone
-                            ? 'bg-green-100 text-green-700 border-green-300'
-                            : 'bg-amber-100 text-amber-700 border-amber-300'
-                        }`}>
-                          {homeworkDone
-                            ? (<>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
-                                Homework Complete
-                              </>)
-                            : '📌 Homework'
-                          }
-                        </span>
-                        {!homeworkDone && (
-                          <div className="flex items-center gap-1.5">
-                            {[0, 1, 2].map(i => (
-                              <span
-                                key={i}
-                                className={`w-2.5 h-2.5 rounded-full border-2 transition-colors ${
-                                  i < playCount
-                                    ? 'bg-amber-500 border-amber-500'
-                                    : 'border-slate-300 bg-white'
-                                }`}
-                              />
-                            ))}
-                            <span className="text-xs text-slate-500 font-medium">{Math.min(playCount, 3)}/3</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div
-                      className="text-slate-900 text-center select-none font-quranic"
-                      style={{ fontSize: '4rem', lineHeight: '7rem' }}
-                      dir="rtl"
-                    >
-                      {renderVerse(verse)}
-                      <span className="inline-flex items-center justify-center w-9 h-9 mx-1 font-mono text-sm font-bold text-slate-600 relative" style={{ verticalAlign: 'middle' }}>
-                        <svg className="absolute inset-0 w-full h-full text-slate-200" viewBox="0 0 100 100" fill="currentColor">
-                          <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
-                          <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
-                        </svg>
-                        <span className="relative z-10">{toEasternArabicNumerals(a)}</span>
-                      </span>
-                    </div>
-                    <div dir="ltr">
-                      <VerseAudioPlayer surah={s} ayah={a} onEnded={() => handleVersePlay(`${s}:${a}`)} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
 // ── ProgressTab ───────────────────────────────────────────────────────────────
 
 const ProgressTab: React.FC<{
@@ -960,7 +719,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [studentTZ, setStudentTZ] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mistakes' | 'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
+  const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1341,19 +1100,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
             <div className="container mx-auto px-3 sm:px-4 flex sm:justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
               <button
-                onClick={() => setActiveTab('mistakes')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === 'mistakes'
-                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
-                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                </svg>
-                {t('studentPortal.tabMistakes')}
-              </button>
-              <button
                 onClick={() => setActiveTab('progress')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'progress'
@@ -1384,7 +1130,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               {/* Quran — primary tab: a green glowing flat pill with an animated icon */}
               <button
                 onClick={() => setActiveTab('quran')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1 mx-1 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
                   activeTab === 'quran'
                     ? 'bg-green-500 text-white shadow-[0_0_16px_2px_rgba(34,197,94,0.6)]'
                     : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 ring-1 ring-green-300 dark:ring-green-700 hover:bg-green-100 dark:hover:bg-green-900/50'
@@ -1533,15 +1279,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                   studentLessons={studentLessons}
                 />
               </div>
-            )}
-            {activeTab === 'mistakes' && (
-              <MistakesTab
-                report={report}
-                reportId={reportId}
-                quranicFont={quranicFont}
-                handleVersePlay={handleVersePlay}
-                versePlays={versePlays}
-              />
             )}
             {activeTab === 'progress' && hasProgress && (() => {
               const sp = studentProgress!;
