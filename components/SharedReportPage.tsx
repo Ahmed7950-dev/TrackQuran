@@ -1534,10 +1534,10 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               <TajweedPage students={[]} preSelectedStudentId={report.student_id} readOnly />
             )}
             {activeTab === 'qaedah' && (
-              <QaedahPage />
+              <QaedahPage isStudentView={true} />
             )}
             {activeTab === 'alphabetTrainer' && (
-              <AlphabetTrainerPage />
+              <AlphabetTrainerPage isStudentView={true} />
             )}
             {activeTab === 'lettersTrainer' && (
               <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} readOnly />

@@ -36,7 +36,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 type View = 'list' | 'words' | 'challenge' | 'win';
 
-const QaedahPage: React.FC = () => {
+const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = false }) => {
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [topics,       setTopics]       = useState<QaedahTopic[]>([]);
@@ -63,9 +63,18 @@ const QaedahPage: React.FC = () => {
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);
 
-  // Hidden tutor shortcut: press R to spawn an enemy soldier (child mode only)
+  // Enemy soldiers: in the student portal they spawn automatically at random
+  // intervals; on the tutor side they're sent via the hidden "R" shortcut.
   useEffect(() => {
     if (!childMode || view !== 'challenge') return;
+    if (isStudentView) {
+      let timer: ReturnType<typeof setTimeout>;
+      const schedule = () => {
+        timer = setTimeout(() => { gameRef.current?.spawnEnemySoldier(); schedule(); }, 4000 + Math.random() * 5000);
+      };
+      schedule();
+      return () => clearTimeout(timer);
+    }
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -74,7 +83,7 @@ const QaedahPage: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [childMode, view]);
+  }, [childMode, view, isStudentView]);
 
   // ── CSS keyframes ────────────────────────────────────────────────────────
   useEffect(() => {

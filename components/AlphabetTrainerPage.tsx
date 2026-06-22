@@ -93,7 +93,7 @@ function buildQueue(priorities: number[]): string[] {
 type View = 'select' | 'practice' | 'win' | 'airplane';
 type GameChoice = 'tower' | 'airplane';
 
-const AlphabetTrainerPage: React.FC = () => {
+const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = false }) => {
   const { t } = useI18n();
 
   const [priorities, setPriorities] = useState<number[]>(() => {
@@ -123,9 +123,18 @@ const AlphabetTrainerPage: React.FC = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(priorities));
   }, [priorities]);
 
-  // Hidden tutor shortcut: press R to send an enemy soldier (child mode only)
+  // Enemy soldiers: in the student portal they spawn automatically at random
+  // intervals; on the tutor side they're sent via the hidden "R" shortcut.
   useEffect(() => {
     if (!childMode || view !== 'practice') return;
+    if (isStudentView) {
+      let timer: ReturnType<typeof setTimeout>;
+      const schedule = () => {
+        timer = setTimeout(() => { gameRef.current?.spawnEnemySoldier(); schedule(); }, 4000 + Math.random() * 5000);
+      };
+      schedule();
+      return () => clearTimeout(timer);
+    }
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -134,7 +143,7 @@ const AlphabetTrainerPage: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [childMode, view]);
+  }, [childMode, view, isStudentView]);
 
   useEffect(() => {
     const id = 'at-styles';
