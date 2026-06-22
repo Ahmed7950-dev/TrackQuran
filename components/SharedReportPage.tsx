@@ -12,6 +12,7 @@ import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { LessonSession } from '../types';
+import LottieIcon from './LottieIcon';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
@@ -1380,18 +1381,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 </svg>
                 {t('studentPortal.tabAvailability')}
               </button>
-              {/* Quran — the primary tab, given a distinct highlighted pill style */}
+              {/* Quran — primary tab: a green glowing flat pill with an animated icon */}
               <button
                 onClick={() => setActiveTab('quran')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap shadow-sm ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 my-1 mx-1 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
                   activeTab === 'quran'
-                    ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-teal-500/30'
-                    : 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 ring-1 ring-teal-300 dark:ring-teal-700 hover:bg-teal-100 dark:hover:bg-teal-900/50'
+                    ? 'bg-green-500 text-white shadow-[0_0_16px_2px_rgba(34,197,94,0.6)]'
+                    : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 ring-1 ring-green-300 dark:ring-green-700 hover:bg-green-100 dark:hover:bg-green-900/50'
                 }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                </svg>
+                <LottieIcon src="/al-quran.json" size={20} />
                 {t('studentPortal.tabQuran')}
               </button>
               <button
