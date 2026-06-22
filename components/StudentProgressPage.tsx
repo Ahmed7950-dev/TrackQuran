@@ -2163,14 +2163,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 const data = await response.json();
                 setVerses(data.verses);
 
-                // Set page range to cover the full surah.
-                // Short surahs (≤ 5 Mushaf pages) are shown completely in one go.
-                // Long surahs open at the surah's EXACT first page (no grid-snapping)
-                // so the student always sees real content from the very first window.
-                const firstPage = selectedMeta.startPage;
-                const lastPage  = selectedMeta.endPage;
+                // Set page range to cover the full surah. Derive the real page span
+                // from the verses themselves (via getPageOfAyah) — the SAME function
+                // the render filter uses — so it can't disagree with QURAN_METADATA
+                // and hide the tail of a short surah behind "Next 5 Pages".
+                const pages = (data.verses as { verse_key: string }[]).map(v => {
+                  const [s, a] = v.verse_key.split(':').map(Number);
+                  return getPageOfAyah(s, a);
+                });
+                const firstPage = pages.length ? Math.min(...pages) : selectedMeta.startPage;
+                const lastPage  = pages.length ? Math.max(...pages) : selectedMeta.endPage;
                 if (lastPage - firstPage <= 4) {
-                  // Surah fits in ≤ 5 pages — show the whole thing
+                  // Surah fits in ≤ 5 pages — show the whole thing, no paging needed.
                   setCurrentPageRange({ start: firstPage, end: lastPage });
                 } else {
                   // Start exactly at the surah's first page; never before it.
@@ -3776,37 +3780,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
                         {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>}
                         {renderSurahContent()}
-                        {/* Pagination Controls */}
-                        {!isLoading && !error && verses.length > 0 && (
-                            <div className="flex justify-center items-center gap-4 py-6 px-6 border-t border-slate-200 dark:border-gray-700">
+                        {/* Pagination Controls — only when the surah spans more than one window */}
+                        {!isLoading && !error && verses.length > 0 && (hasPreviousPages() || hasMorePages()) && (
+                            <div className="flex justify-center items-center gap-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
                                 <button
                                     onClick={handlePreviousPages}
                                     disabled={!hasPreviousPages()}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${
-                                        hasPreviousPages()
-                                            ? 'bg-teal-600 dark:bg-orange-600 text-white hover:bg-teal-700 dark:hover:bg-orange-700'
-                                            : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                                    }`}
+                                    className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-white enabled:dark:bg-gray-800 enabled:text-teal-700 enabled:dark:text-orange-300 enabled:border-teal-200 enabled:dark:border-orange-900/50 enabled:hover:bg-teal-50 enabled:dark:hover:bg-orange-900/20 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                                     </svg>
-                                    <span>Previous 5 Pages</span>
+                                    <span>Previous</span>
                                 </button>
-                                <span className="text-slate-600 dark:text-slate-400 font-medium">
-                                    Pages {toEasternArabicNumerals(currentPageRange.start)} - {toEasternArabicNumerals(currentPageRange.end)}
+                                <span className="px-3.5 py-1.5 rounded-full bg-teal-600 dark:bg-orange-600 text-white text-xs font-bold shadow-sm whitespace-nowrap">
+                                    {t('liveSession.page')} {toEasternArabicNumerals(currentPageRange.start)}–{toEasternArabicNumerals(currentPageRange.end)}
                                 </span>
                                 <button
                                     onClick={handleNextPages}
                                     disabled={!hasMorePages()}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${
-                                        hasMorePages()
-                                            ? 'bg-teal-600 dark:bg-orange-600 text-white hover:bg-teal-700 dark:hover:bg-orange-700'
-                                            : 'bg-slate-200 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                                    }`}
+                                    className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-teal-600 enabled:dark:bg-orange-600 enabled:text-white enabled:border-teal-600 enabled:dark:border-orange-600 enabled:hover:bg-teal-700 enabled:dark:hover:bg-orange-700 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
                                 >
-                                    <span>Next 5 Pages</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <span>Next</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                                     </svg>
                                 </button>
