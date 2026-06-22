@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
-import { audioUrl } from './VerseAudioPlayer';
+import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote } from '../services/tadabburService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
@@ -1396,6 +1396,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
     const surahNavScrollRef = useRef<HTMLDivElement | null>(null);
     const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
+    // true while a tap on an ayah number is playing the surah sequentially from
+    // that ayah to the end (vs a single-verse play from tapping the verse text).
+    const readOnlySeqRef = useRef(false);
+
+    /** Start/stop sequential recitation from an ayah number (student portal). */
+    const handleAyahNumberRecite = (surah: number, ayah: number) => {
+        const audio = readOnlyAudioRef.current;
+        if (!audio) return;
+        // A tap while anything is playing simply stops it.
+        if (readOnlyAudioVerse) {
+            audio.pause();
+            readOnlySeqRef.current = false;
+            setReadOnlyAudioVerse(null);
+            return;
+        }
+        // Otherwise start playing from this ayah and continue to the surah's end.
+        readOnlySeqRef.current = true;
+        audio.pause();
+        audio.src = audioUrl(surah, ayah);
+        audio.playbackRate = readOnlySpeed;
+        audio.play().catch(() => {});
+        setReadOnlyAudioVerse({ surah, ayah });
+    };
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
     const [tadabburMode, setTadabburMode] = useState(false);
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
@@ -2931,11 +2954,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : isTafseer ? '#fde68a' : 'currentColor';
 
         if (readOnly) {
-            // In readOnly mode: verse number is a pure colour indicator — no click interaction
+            // In readOnly mode (student portal): tapping the verse number plays the
+            // recitation from this ayah to the end of the surah. Tapping again (any
+            // number) stops it.
+            const isPlayingHere = readOnlyAudioVerse?.surah === surah && readOnlyAudioVerse?.ayah === number;
             return (
                 <span
-                    className="inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 relative"
-                    style={{ verticalAlign: 'middle' }} aria-label={`Verse ${number}`}
+                    onClick={() => handleAyahNumberRecite(surah, number)}
+                    className={`inline-flex items-center justify-center w-12 h-12 mx-2 font-mono text-base font-bold text-slate-700 dark:text-slate-200 relative cursor-pointer rounded-full transition-all ${isPlayingHere ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
+                    style={{ verticalAlign: 'middle' }} role="button" aria-label={`Play recitation from verse ${number}`}
                 >
                     <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill={svgFill}>
                         <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
@@ -3103,6 +3130,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             }
                             return;
                         }
+                        readOnlySeqRef.current = false; // verse-text tap = single ayah only
                         audio.pause();
                         audio.src = audioUrl(surahNum, ayahNum);
                         audio.playbackRate = readOnlySpeed;
@@ -3914,7 +3942,26 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             {readOnly && (
                 <audio
                     ref={readOnlyAudioRef}
-                    onEnded={() => setReadOnlyAudioVerse(null)}
+                    onEnded={() => {
+                        // Sequential mode (started from an ayah number): advance to the
+                        // next ayah until the surah ends, then stop.
+                        if (readOnlySeqRef.current && readOnlyAudioVerse) {
+                            const { surah, ayah } = readOnlyAudioVerse;
+                            if (ayah < versesInSurah(surah)) {
+                                const next = ayah + 1;
+                                const audio = readOnlyAudioRef.current;
+                                if (audio) {
+                                    audio.src = audioUrl(surah, next);
+                                    audio.playbackRate = readOnlySpeed;
+                                    audio.play().catch(() => {});
+                                }
+                                setReadOnlyAudioVerse({ surah, ayah: next });
+                                return;
+                            }
+                        }
+                        readOnlySeqRef.current = false;
+                        setReadOnlyAudioVerse(null);
+                    }}
                     preload="none"
                     style={{ display: 'none' }}
                 />

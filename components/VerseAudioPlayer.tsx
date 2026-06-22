@@ -23,6 +23,9 @@ const toGlobalAyah = (surah: number, ayah: number): number => {
 export const audioUrl = (surah: number, ayah: number): string =>
   `https://cdn.islamic.network/quran/audio/128/ar.minshawi/${toGlobalAyah(surah, ayah)}.mp3`;
 
+/** Number of ayahs in a surah (1-indexed surah number). */
+export const versesInSurah = (surah: number): number => SURAH_VERSE_COUNTS[surah - 1] ?? 0;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
