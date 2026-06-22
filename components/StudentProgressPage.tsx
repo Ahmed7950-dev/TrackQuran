@@ -242,6 +242,28 @@ const parseWordIntoLetters = (word: string): Array<{ letter: string; index: numb
     return letters;
 };
 
+// ── Cursive joining for per-letter spans ──────────────────────────────────────
+// Each letter is rendered in its own inline element so it can be tapped/marked.
+// iOS Safari shapes every inline element as an ISOLATED text run, so Arabic
+// letters fail to join and the word looks broken. Injecting a Zero-Width Joiner
+// (U+200D) at a letter's connecting edges forces each isolated span to render in
+// its correct contextual form (initial / medial / final), so they line up and
+// appear connected. Harmless on browsers that already join across spans.
+const ZWJ = '‍';
+// Base letters that do NOT connect to the FOLLOWING letter (right-joining only
+// or non-joining): alif forms, dal/thal, ra/zay, waw forms, hamza, teh marbuta,
+// alef maksura.
+const NON_FORWARD_JOINING = new Set<string>([
+  'ا', 'أ', 'إ', 'آ', 'ٱ', // ا أ إ آ ٱ
+  'د', 'ذ',                               // د ذ
+  'ر', 'ز',                               // ر ز
+  'و', 'ؤ',                               // و ؤ
+  'ء',                                         // ء
+  'ة',                                         // ة
+  'ى',                                         // ى
+]);
+const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !NON_FORWARD_JOINING.has(ch);
+
 // Check if a letter should be highlighted green based on Ghunnah rules
 const shouldHighlightGhunnah = (letter: string, letterIndex: number, word: string, nextWord: string): boolean => {
     if (!letter || letter.length === 0 || !word) return false;
@@ -845,6 +867,8 @@ const LetterWithError: React.FC<{
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
     isCursorActive?: boolean;
+    joinLead?: boolean;
+    joinTrail?: boolean;
 }> = ({
     letter,
     letterKey,
@@ -868,6 +892,8 @@ const LetterWithError: React.FC<{
     onLongPress,
     isFocused,
     isCursorActive,
+    joinLead,
+    joinTrail,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
@@ -1041,10 +1067,10 @@ const LetterWithError: React.FC<{
                     // The small translateX nudges it slightly "after" the tanween (leftward in
                     // RTL), and top raises it just above the tanween.
                     <span style={{ position: 'relative', display: 'inline' }}>
-                        {letter.replace(/ۢ/g, '')}
+                        {(joinLead ? ZWJ : '') + letter.replace(/ۢ/g, '') + (joinTrail ? ZWJ : '')}
                         <span style={{ position: 'absolute', top: '-0.34em', left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
-                ) : letter}
+                ) : (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '')}
             </span>
         </span>
     );
@@ -3075,10 +3101,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             const isEditing = editingLetterKey === letterKey;
                             const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
                             const isLastLetterOfWord = letterIndex === letters.length - 1;
+                            // Cursive-join hints so each isolated letter span shapes correctly on iOS.
+                            const joinLead  = letterIndex > 0 && connectsForward(letters[letterIndex - 1].letter[0]);
+                            const joinTrail = !isLastLetterOfWord && connectsForward(letter[0]);
                             return (
                                 <LetterWithError
                                     key={letterKey}
                                     letter={letter}
+                                    joinLead={joinLead}
+                                    joinTrail={joinTrail}
                                     letterKey={letterKey}
                                     mistake={mistake}
                                     isEditing={isEditing}
@@ -3730,6 +3761,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                         <LetterWithError
                                                                             key={lk}
                                                                             letter={letter}
+                                                                            joinLead={li > 0 && connectsForward(letters[li - 1].letter[0])}
+                                                                            joinTrail={li !== letters.length - 1 && connectsForward(letter[0])}
                                                                             letterKey={lk}
                                                                             mistake={mk}
                                                                             isEditing={editingLetterKey === lk}
