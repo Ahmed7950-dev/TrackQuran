@@ -53,6 +53,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
+      /* Prevent stray horizontal overflow on mobile (keeps every page within the
+         viewport). `clip` doesn't create a scroll container, so sticky headers
+         still work; intentional horizontal scrollers use their own overflow-x. */
+      html, body {
+        max-width: 100%;
+        overflow-x: clip;
+      }
       body {
         /* This will be overridden by tailwind classes */
         background-color: #f0f4f8;

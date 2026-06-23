@@ -3438,8 +3438,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
             <div className="space-y-6">
                 <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
-                    {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls */}
-                    <div className="flex items-center gap-2 min-w-0">
+                    {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls.
+                        Wraps on narrow screens so the right-side controls stay reachable. */}
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
                         <div className="relative flex-shrink-0" dir="ltr">
