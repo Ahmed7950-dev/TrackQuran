@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory, LessonSession } from '../types';
+import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
 import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
-import { getUpcomingSessions, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent } from '../services/lessonSessionService';
+import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent } from '../services/lessonSessionService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
-import { createGoogleMeetLink } from '../services/googleCalendarService';
+import { createGoogleMeetLink, fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
 import { useI18n } from '../context/I18nProvider';
 import HonorBoardModal from './HonorBoardModal';
@@ -483,34 +483,52 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const { t } = useI18n();
 
-  // ── Upcoming linked-lesson banner + Google Meet (mirrors the Arabic dashboard) ──
-  const [sessions, setSessions] = useState<LessonSession[]>([]);
+  // ── Upcoming linked-lesson banner + Google Meet ──
+  // Derived from the LIVE Google Calendar events (not the stored session rows),
+  // so a lesson the tutor cancels or reschedules on the calendar is reflected
+  // here too: cancelled events disappear from the fetch, and rescheduled events
+  // bring their new time. The linked-session map only resolves which student an
+  // event belongs to and supplies the Meet URL.
+  type NextLesson = { date: Date; student: Student; meetUrl?: string; sessionId?: string; title?: string };
+  const [nextLesson, setNextLesson] = useState<NextLesson | null>(null);
   const [meetGenerating, setMeetGenerating] = useState(false);
   const [meetCopied, setMeetCopied] = useState(false);
 
   useEffect(() => {
-    if (!teacherId) return;
-    getUpcomingSessions(teacherId)
-      .then(setSessions)
-      .catch(err => console.error('[Sessions] load failed:', err));
-  }, [teacherId]);
-
-  // Next upcoming lesson among THIS teacher's Quran students (sessions whose
-  // student_id resolves to a Quran student — Arabic sessions are ignored here).
-  const nextLesson = useMemo(() => {
-    const now = new Date();
-    let best: { date: Date; student: Student; meetUrl?: string; sessionId?: string; title?: string } | null = null;
-    for (const session of sessions) {
-      const d = new Date(session.startAt);
-      if (d <= now) continue;
-      const student = students.find(s => s.id === session.studentId);
-      if (!student) continue; // not a Quran student
-      if (!best || d < best.date) {
-        best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: session.title };
+    if (!teacherId) { setNextLesson(null); return; }
+    const token = getStoredToken();
+    if (!token) { setNextLesson(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const now = new Date();
+        const max = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // next 60 days
+        const [events, sessionMap] = await Promise.all([
+          fetchGCalEvents(token, now, max),
+          getSessionsListByGcalId(teacherId),
+        ]);
+        if (cancelled) return;
+        let best: NextLesson | null = null;
+        for (const ev of events) {
+          const startStr = ev.start.dateTime ?? ev.start.date;
+          if (!startStr) continue;
+          const d = new Date(startStr);
+          if (d <= now) continue;
+          for (const session of sessionMap[ev.id] ?? []) {
+            const student = students.find(s => s.id === session.studentId);
+            if (!student) continue; // not a Quran student (Arabic sessions ignored)
+            if (!best || d < best.date) {
+              best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: ev.summary };
+            }
+          }
+        }
+        setNextLesson(best);
+      } catch (err) {
+        if (!cancelled) { console.error('[Dashboard] next-lesson load failed:', err); setNextLesson(null); }
       }
-    }
-    return best;
-  }, [sessions, students]);
+    })();
+    return () => { cancelled = true; };
+  }, [teacherId, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
 
@@ -530,7 +548,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
       if (nextLesson.sessionId) {
         await updateSessionMeetUrl(nextLesson.sessionId, url);
-        setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: url } : s));
+        setNextLesson(prev => prev ? { ...prev, meetUrl: url } : prev);
       }
     } finally {
       setMeetGenerating(false);
@@ -547,7 +565,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   async function handleClearMeetLink() {
     if (!nextLesson?.sessionId) return;
     await updateSessionMeetUrl(nextLesson.sessionId, null);
-    setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: undefined } : s));
+    setNextLesson(prev => prev ? { ...prev, meetUrl: undefined } : prev);
   }
 
   const sortedStudents = useMemo(() => {
