@@ -33,6 +33,10 @@ import ArabicStudentPortal from './components/ArabicStudentPortal';
 import FamilyLinkPage from './components/FamilyLinkPage';
 import UnifiedStudentPortal from './components/UnifiedStudentPortal';
 import LottieIcon from './components/LottieIcon';
+import PricingPage from './components/PricingPage';
+import TermsOfServicePage from './components/TermsOfServicePage';
+import PrivacyPolicyPage from './components/PrivacyPolicyPage';
+import RefundPolicyPage from './components/RefundPolicyPage';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -369,6 +373,12 @@ function renewalReminderOccurrence(renewalDateStr: string): string | null {
 const App: React.FC = () => {
   // ── Google Calendar OAuth2 callback — must be checked first ────────────────
   if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
+
+  // ── Public policy / pricing pages — no auth required ─────────────────────────
+  if (window.location.pathname === '/pricing') return <PricingPage />;
+  if (window.location.pathname === '/terms')   return <TermsOfServicePage />;
+  if (window.location.pathname === '/privacy') return <PrivacyPolicyPage />;
+  if (window.location.pathname === '/refunds') return <RefundPolicyPage />;
 
   // ── Arabic student portal — no auth required ─────────────────────────────────
   const arabicShareToken = (() => {

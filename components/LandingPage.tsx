@@ -633,8 +633,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             {/* Support */}
             <div>
               <h4 style={{ fontWeight: 700, fontSize: 13, color: C.goldSoft, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>{t('landing.footerColSupport')}</h4>
-              {[t('landing.footerLinkFaq'), t('landing.footerLinkContact'), t('landing.footerLinkPrivacy')].map(link => (
+              {[t('landing.footerLinkFaq'), t('landing.footerLinkContact')].map(link => (
                 <a key={link} href="#" style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 10, textDecoration: 'none' }}>{link}</a>
+              ))}
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 style={{ fontWeight: 700, fontSize: 13, color: C.goldSoft, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 16 }}>Legal</h4>
+              {[{ label: 'Pricing', href: '/pricing' }, { label: 'Terms of Service', href: '/terms' }, { label: 'Privacy Policy', href: '/privacy' }, { label: 'Refund Policy', href: '/refunds' }].map(link => (
+                <a key={link.href} href={link.href} style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 10, textDecoration: 'none' }}>{link.label}</a>
               ))}
             </div>
           </div>
