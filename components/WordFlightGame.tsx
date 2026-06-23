@@ -477,6 +477,12 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const p2ScoreRef        = useRef(0);
   const p2SnapshotWordRef = useRef('');
   const latestSnapRef     = useRef<WP2Snapshot|null>(null);
+  // Client-side prediction (P2 view): P2 simulates its OWN plane locally at 60fps
+  // for instant control, gently reconciling to the host's snapshots; P1's plane is
+  // interpolated toward the latest snapshot for smooth motion. p2Pos/p2Vel/p2Tilt
+  // (host-only refs on P1) are reused here as P2's predicted own-plane state.
+  const p2RenderP1Ref     = useRef({ x: 86, y: 50, tilt: 0 });
+  const p2PredInitedRef   = useRef(false);
   const p2ViewP1PlaneRef  = useRef<HTMLDivElement>(null);
   const p2ViewP2PlaneRef  = useRef<HTMLDivElement>(null);
   const p2FuelBar1Ref     = useRef<HTMLDivElement>(null);
@@ -962,6 +968,80 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     return () => cancelAnimationFrame(rafRef.current);
   }, [status, isP2, triggerGlow]);
 
+  // ── P2 client-side prediction + interpolation loop ────────────────────────
+  // Runs only on the joining client (P2). P2's own plane is simulated locally
+  // from its own key presses (instant response, no network round-trip), and
+  // gently reconciled to the host's authoritative snapshots. P1's plane and the
+  // word bubbles are interpolated toward the latest snapshot for smooth 60fps
+  // motion. The host stays authoritative for collisions, fuel and scoring.
+  useEffect(() => {
+    if (!isP2 || status !== 'playing') return;
+    let raf = 0;
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    const tick = () => {
+      const snap = latestSnapRef.current;
+      if (snap) {
+        // First snapshot: align predicted state so there's no initial glide.
+        if (!p2PredInitedRef.current) {
+          p2Pos.current = { x: snap.p2.x, y: snap.p2.y };
+          p2Vel.current = { x: 0, y: 0 };
+          p2Tilt.current = snap.p2.tilt;
+          p2RenderP1Ref.current = { x: snap.p1.x, y: snap.p1.y, tilt: snap.p1.tilt };
+          p2PredInitedRef.current = true;
+        }
+
+        // ── P2's own plane: local prediction from its own keys ──
+        const p2 = p2Pos.current, v2 = p2Vel.current;
+        const frozen = snap.p2.crashed || snap.p2Shocked;
+        if (!frozen) {
+          const rk = p2RemoteKeysRef.current;
+          v2.y += PLANE_GRAVITY;
+          if (rk.up)    v2.y -= PLANE_ACCEL;
+          if (rk.down)  v2.y += PLANE_ACCEL;
+          if (rk.left)  v2.x -= PLANE_ACCEL_H;
+          if (rk.right) v2.x += PLANE_ACCEL_H;
+          v2.x *= PLANE_DRAG; v2.y *= PLANE_DRAG;
+          v2.x = clamp(v2.x, -PLANE_MAX_VEL_H, PLANE_MAX_VEL_H);
+          v2.y = clamp(v2.y, -PLANE_MAX_VEL,   PLANE_MAX_VEL);
+          p2.x = clamp(p2.x + v2.x, 4, 96);
+          p2.y = clamp(p2.y + v2.y, 7, 88);
+          const tilt2 = clamp(v2.y * 20, -28, 28);
+          p2Tilt.current += (tilt2 - p2Tilt.current) * 0.13;
+          // Reconcile drift toward the authoritative position: snap harder when
+          // the host disagrees a lot (e.g. a knockback), barely nudge otherwise.
+          const dx = snap.p2.x - p2.x, dy = snap.p2.y - p2.y;
+          const a = Math.hypot(dx, dy) > 6 ? 0.3 : 0.04;
+          p2.x += dx * a; p2.y += dy * a;
+        } else {
+          // Host-authoritative event (crash / shock knockback): follow the host.
+          p2.x += (snap.p2.x - p2.x) * 0.4;
+          p2.y += (snap.p2.y - p2.y) * 0.4;
+          p2Tilt.current += (snap.p2.tilt - p2Tilt.current) * 0.4;
+          v2.x = 0; v2.y = 0;
+        }
+        if (p2ViewP2PlaneRef.current) {
+          p2ViewP2PlaneRef.current.style.left      = `${p2.x}%`;
+          p2ViewP2PlaneRef.current.style.top       = `${p2.y}%`;
+          p2ViewP2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${p2Tilt.current}deg)`;
+        }
+
+        // ── P1's plane: smooth interpolation toward the latest snapshot ──
+        const r = p2RenderP1Ref.current;
+        r.x += (snap.p1.x - r.x) * 0.25;
+        r.y += (snap.p1.y - r.y) * 0.25;
+        r.tilt += (snap.p1.tilt - r.tilt) * 0.25;
+        if (p2ViewP1PlaneRef.current) {
+          p2ViewP1PlaneRef.current.style.left      = `${r.x}%`;
+          p2ViewP1PlaneRef.current.style.top       = `${r.y}%`;
+          p2ViewP1PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${r.tilt}deg)`;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); p2PredInitedRef.current = false; };
+  }, [isP2, status]);
+
   // ── Keyboard ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isP2 || status !== 'playing') return;
@@ -1076,16 +1156,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       }
       if (payload.p2Name && p2HudP2NameRef.current) p2HudP2NameRef.current.textContent = payload.p2Name;
 
-      if (p2ViewP1PlaneRef.current) {
-        p2ViewP1PlaneRef.current.style.left      = `${payload.p1.x}%`;
-        p2ViewP1PlaneRef.current.style.top       = `${payload.p1.y}%`;
-        p2ViewP1PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p1.tilt}deg)`;
-      }
-      if (p2ViewP2PlaneRef.current) {
-        p2ViewP2PlaneRef.current.style.left      = `${payload.p2.x}%`;
-        p2ViewP2PlaneRef.current.style.top       = `${payload.p2.y}%`;
-        p2ViewP2PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${payload.p2.tilt}deg)`;
-      }
+      // Plane positions are rendered by the P2 prediction/interpolation loop
+      // (from latestSnapRef), not set directly here — that's what removes the lag.
       if (p2FuelBar1Ref.current) { p2FuelBar1Ref.current.style.width = `${payload.fuels[0]}%`; p2FuelBar1Ref.current.style.background = fuelColor(payload.fuels[0]); }
       if (p2FuelBar2Ref.current) { p2FuelBar2Ref.current.style.width = `${payload.fuels[1]}%`; p2FuelBar2Ref.current.style.background = fuelColor(payload.fuels[1]); }
       if (p2Score1SpanRef.current) p2Score1SpanRef.current.textContent = String(payload.scores[0]);
