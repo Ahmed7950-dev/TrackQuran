@@ -3502,13 +3502,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         </div>
                         )}
                         {/* ── Middle: surah pills — first & last pinned, middle scrolls ── */}
-                        <div className="flex-1 flex items-center gap-2 min-w-0 overflow-hidden">
+                        <div className="flex-1 flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
                             {/* First surah (Al-Fatihah) — pinned */}
                             {surahStatuses[0] && (
                                 <button
                                     id={`surah-nav-${surahStatuses[0].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[0].id)}
-                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
+                                    className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[0].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[0].transliteratedName}</span>
@@ -3523,10 +3523,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             >‹</button>
                             {/* Surahs 2–113 — scrollable */}
                             <div ref={surahNavScrollRef} className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
-                                <div className="flex items-center gap-2 pb-0.5">
+                                <div className="flex items-center gap-1 sm:gap-2 pb-0.5">
                                     {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status, memStatus }) => (
                                         <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
-                                            className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
+                                            className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
                                             <span className="font-mono text-xs">{id}</span>
                                             <div className={`w-px h-4 ${getDividerClass(id, status, memStatus)}`} />
                                             <span className="tracking-wide">{transliteratedName}</span>
@@ -3546,7 +3546,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     id={`surah-nav-${surahStatuses[surahStatuses.length - 1].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[surahStatuses.length - 1].id)}
-                                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
+                                    className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[surahStatuses.length - 1].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[surahStatuses.length - 1].transliteratedName}</span>

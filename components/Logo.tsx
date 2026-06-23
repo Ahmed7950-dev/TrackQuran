@@ -27,11 +27,10 @@ const Logo: React.FC = () => {
     }, []);
 
     return (
-        <img 
-            src={isDarkMode ? "/TQ LOGO DM.png" : "/TQ LOGO.png"} 
-            alt="TQ Logo" 
-            style={{ height: '85px', width: 'auto' }}
-            className="object-contain"
+        <img
+            src={isDarkMode ? "/TQ LOGO DM.png" : "/TQ LOGO.png"}
+            alt="TQ Logo"
+            className="object-contain w-auto h-11 sm:h-[85px]"
         />
     );
 };
