@@ -3,38 +3,13 @@
 import React from 'react';
 import LegalPage, { SUPPORT_EMAIL } from './LegalPage';
 
-interface Plan {
-  name: string;
-  price: string;
-  per: string;
-  sessions: string;
-  features: string[];
-  featured?: boolean;
-}
-
-const PLANS: Plan[] = [
-  {
-    name: 'Seedling',
-    price: '$49',
-    per: '/month',
-    sessions: '4 sessions / month',
-    features: ['30-minute one-to-one sessions', 'One subject (Quran or Arabic)', 'Progress tracking & student portal'],
-  },
-  {
-    name: 'Scholar',
-    price: '$89',
-    per: '/month',
-    sessions: '8 sessions / month',
-    features: ['45-minute one-to-one sessions', 'Two subjects', 'Priority scheduling', 'Monthly progress report'],
-    featured: true,
-  },
-  {
-    name: 'Companion',
-    price: '$149',
-    per: '/month',
-    sessions: '16 sessions / month',
-    features: ['60-minute one-to-one sessions', 'All subjects', 'Dedicated teacher', 'Family plan eligible'],
-  },
+const FEATURES = [
+  'Live, one-to-one online lessons',
+  'Every lesson is 50 minutes long',
+  'Same flat price for every student and subject (Arabic or Qur’an)',
+  'Qualified male and female teachers',
+  'Flexible scheduling — book lessons as you go',
+  'Personal progress portal & lesson reminders',
 ];
 
 const PricingPage: React.FC = () => (
@@ -42,71 +17,52 @@ const PricingPage: React.FC = () => (
     title="Pricing"
     intro={
       <>
-        Simple, transparent monthly plans for one-to-one online Quran and Arabic lessons — including
-        live sessions, progress tracking, and your personal student portal. No hidden fees, cancel
-        anytime. New students can start with a free trial lesson.
+        One simple, transparent rate for everyone — no tiers, no hidden fees. New students can start
+        with a free trial lesson.
       </>
     }
   >
-    {/* Plan cards */}
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {PLANS.map(plan => (
-        <div
-          key={plan.name}
-          className={`rounded-2xl p-6 border flex flex-col ${
-            plan.featured
-              ? 'border-teal-500 dark:border-teal-400 ring-2 ring-teal-500/30 bg-white dark:bg-gray-800 shadow-lg'
-              : 'border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-          }`}
-        >
-          {plan.featured && (
-            <span className="self-start mb-3 px-2.5 py-0.5 rounded-full bg-teal-600 text-white text-[11px] font-bold uppercase tracking-wide">
-              Most popular
-            </span>
-          )}
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white">{plan.name}</h3>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-3xl font-extrabold text-teal-700 dark:text-teal-300">{plan.price}</span>
-            <span className="text-sm text-slate-400">{plan.per}</span>
-          </div>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{plan.sessions}</p>
-          <ul className="mt-4 space-y-2 flex-1">
-            {plan.features.map(f => (
-              <li key={f} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <span className="text-teal-500 mt-0.5">✓</span>{f}
-              </li>
-            ))}
-          </ul>
-          <a
-            href="/"
-            className={`mt-6 block text-center py-2.5 rounded-xl text-sm font-bold transition-colors ${
-              plan.featured
-                ? 'bg-teal-600 text-white hover:bg-teal-700'
-                : 'border border-teal-600 text-teal-700 dark:text-teal-300 dark:border-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
-            }`}
-          >
-            Get started
-          </a>
-        </div>
-      ))}
+    {/* Single flat-rate card */}
+    <div className="max-w-md mx-auto rounded-2xl border-2 border-teal-500 dark:border-teal-400 ring-2 ring-teal-500/20 bg-white dark:bg-gray-800 shadow-lg p-8 text-center">
+      <span className="inline-block px-3 py-0.5 rounded-full bg-teal-600 text-white text-[11px] font-bold uppercase tracking-wide">
+        One simple rate
+      </span>
+      <div className="mt-4 flex items-baseline justify-center gap-1">
+        <span className="text-5xl font-extrabold text-teal-700 dark:text-teal-300">$15</span>
+        <span className="text-lg text-slate-400">/ lesson</span>
+      </div>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Every lesson is 50 minutes long.</p>
+      <ul className="mt-6 space-y-2.5 text-start">
+        {FEATURES.map(f => (
+          <li key={f} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <span className="text-teal-500 mt-0.5">✓</span>{f}
+          </li>
+        ))}
+      </ul>
+      <a
+        href="/"
+        className="mt-7 block text-center py-3 rounded-xl text-sm font-bold bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+      >
+        Book a free trial
+      </a>
     </div>
 
     <div className="space-y-3 text-[15px] leading-relaxed text-slate-600 dark:text-slate-300">
       <p>
-        <span className="font-semibold text-slate-800 dark:text-slate-100">Billing.</span> Plans are billed
-        monthly and renew automatically until cancelled. You can cancel at any time from your account or by
-        contacting us; your plan stays active until the end of the current billing period.
+        <span className="font-semibold text-slate-800 dark:text-slate-100">How billing works.</span> Lessons
+        are <strong>$15 each</strong>, and every lesson runs for <strong>50 minutes</strong>. The rate is the
+        same for every student and every subject — there are no packages or membership tiers.
       </p>
       <p>
         <span className="font-semibold text-slate-800 dark:text-slate-100">Secure payments.</span> Payments
-        are securely processed by our authorized reseller and Merchant of Record, <strong>Paddle.com</strong>.
-        Paddle handles billing, receipts, and applicable taxes. We never see or store your full card details.
+        are securely processed by our authorized reseller and Merchant of Record,{' '}
+        <strong>Paddle.com</strong>, which handles billing, receipts, and applicable taxes. We never see or
+        store your full card details.
       </p>
       <p>
-        <span className="font-semibold text-slate-800 dark:text-slate-100">Custom & family plans.</span> Need a
-        different number of sessions, a sibling/family plan, or a tailored schedule? Email{' '}
+        <span className="font-semibold text-slate-800 dark:text-slate-100">Questions?</span> Email{' '}
         <a href={`mailto:${SUPPORT_EMAIL}`} className="text-teal-600 dark:text-teal-300 hover:underline">{SUPPORT_EMAIL}</a>{' '}
-        and we'll arrange a plan that fits.
+        and we'll be happy to help.
       </p>
       <p className="text-xs text-slate-400 dark:text-slate-500">
         Prices are in US dollars. Local taxes may be added at checkout depending on your country.

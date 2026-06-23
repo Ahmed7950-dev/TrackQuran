@@ -288,19 +288,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
               {t('landing.heroCta2')}
             </button>
           </div>
-          {/* Trust row */}
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-            {[
-              { num: '2400+', label: t('landing.trustStudents') },
-              { num: '38',    label: t('landing.trustCountries') },
-              { num: '4.9★',  label: t('landing.trustRating') },
-            ].map(item => (
-              <div key={item.label}>
-                <div style={{ fontFamily: F.display, fontSize: 28, fontWeight: 600, color: isDark ? C.goldSoft : C.green }}>{item.num}</div>
-                <div style={{ fontSize: 12, color: textMuted, fontWeight: 500 }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Right — medallion */}
@@ -327,22 +314,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </div>
           </div>
 
-          {/* Floating cards — hidden on small screens */}
-          <div className="hero-float-card" style={{ position: 'absolute', top: '8%', insetInlineEnd: '2%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 148 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, marginBottom: 2 }}>{t('landing.heroCard1Title')}</div>
-            <div style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard1Sub')}</div>
-          </div>
-          <div className="hero-float-card" style={{ position: 'absolute', insetInlineStart: '0%', top: '38%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 130 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: textPrimary, marginBottom: 2 }}>{t('landing.heroCard2Title')}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-              <span style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard2Sub')}</span>
-            </div>
-          </div>
-          <div className="hero-float-card" style={{ position: 'absolute', bottom: '10%', insetInlineEnd: '4%', background: cardBg, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', border: `1px solid ${borderColor}`, zIndex: 2, minWidth: 160 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 2 }}>🏆 {t('landing.heroCard3Title')}</div>
-            <div style={{ fontSize: 10, color: textMuted }}>{t('landing.heroCard3Sub')}</div>
-          </div>
         </div>
       </section>
 
@@ -439,94 +410,34 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </h2>
             <p style={{ color: textMuted, fontSize: 16 }}>{t('landing.pricingSub')}</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20, alignItems: 'start' }}>
-            {/* Seedling */}
-            <div style={{ background: cardBg, borderRadius: 20, padding: '32px 28px', border: `1px solid ${borderColor}` }}>
-              <h3 style={{ fontFamily: F.display, fontSize: 22, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>{t('landing.planSeedlingName')}</h3>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
-                <span style={{ fontFamily: F.display, fontSize: 40, fontWeight: 700, color: isDark ? C.goldSoft : C.green }}>{t('landing.planSeedlingPrice')}</span>
-                <span style={{ color: textMuted, fontSize: 14 }}>{t('landing.planSeedlingPer')}</span>
-              </div>
-              <p style={{ fontSize: 13, color: textMuted, marginBottom: 24 }}>{t('landing.planSeedlingSessions')}</p>
-              {[t('landing.planSeedlingFeature1'), t('landing.planSeedlingFeature2'), t('landing.planSeedlingFeature3')].map(f => (
-                <div key={f} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-start' }}>
-                  <CheckIcon /><span style={{ fontSize: 13, color: textMuted }}>{f}</span>
-                </div>
-              ))}
-              <button onClick={onOpenAuth} style={{ marginTop: 24, width: '100%', background: 'none', border: `1.5px solid ${isDark ? C.goldSoft : C.green}`, color: isDark ? C.goldSoft : C.green, borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>
-                {t('landing.planSeedlingCta')}
-              </button>
-            </div>
-
-            {/* Scholar (featured) */}
-            <div style={{ background: C.green, borderRadius: 20, padding: '32px 28px', border: 'none', position: 'relative', overflow: 'hidden' }}>
-              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice">
-                <StarPatternDefs id="scholar-pat" color={C.goldSoft} opacity={0.06} />
-                <rect width="300" height="500" fill="url(#scholar-pat)" />
+          {/* Single flat rate — same for every student */}
+          <div style={{ maxWidth: 420, margin: '0 auto' }}>
+            <div style={{ background: C.green, borderRadius: 20, padding: '40px 32px', border: 'none', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice">
+                <StarPatternDefs id="rate-pat" color={C.goldSoft} opacity={0.06} />
+                <rect width="300" height="400" fill="url(#rate-pat)" />
               </svg>
-              <span style={{ position: 'relative', background: C.gold, color: C.greenDeep, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 14 }}>
-                {t('landing.planScholarBadge')}
-              </span>
-              <h3 style={{ fontFamily: F.display, fontSize: 22, fontWeight: 600, color: '#fff', marginBottom: 6, position: 'relative' }}>{t('landing.planScholarName')}</h3>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6, position: 'relative' }}>
-                <span style={{ fontFamily: F.display, fontSize: 40, fontWeight: 700, color: C.goldSoft }}>{t('landing.planScholarPrice')}</span>
-                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>{t('landing.planScholarPer')}</span>
-              </div>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 24, position: 'relative' }}>{t('landing.planScholarSessions')}</p>
-              {[t('landing.planScholarFeature1'), t('landing.planScholarFeature2'), t('landing.planScholarFeature3'), t('landing.planScholarFeature4')].map(f => (
-                <div key={f} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-start', position: 'relative' }}>
-                  <CheckIcon dark /><span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{f}</span>
+              <div style={{ position: 'relative' }}>
+                <span style={{ background: C.gold, color: C.greenDeep, borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 18 }}>
+                  {t('landing.planFlatBadge')}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: F.display, fontSize: 56, fontWeight: 700, color: C.goldSoft, lineHeight: 1 }}>$15</span>
+                  <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 16 }}>{t('landing.planFlatPer')}</span>
                 </div>
-              ))}
-              <button onClick={onOpenAuth} style={{ position: 'relative', marginTop: 24, width: '100%', background: C.gold, border: 'none', color: C.greenDeep, borderRadius: 10, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: F.body }}>
-                {t('landing.planScholarCta')}
-              </button>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', marginBottom: 28 }}>{t('landing.planFlatSessionLen')}</p>
+                <div style={{ display: 'inline-block', textAlign: 'start' }}>
+                  {[t('landing.planFlatFeature1'), t('landing.planFlatFeature2'), t('landing.planFlatFeature3')].map(f => (
+                    <div key={f} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'flex-start' }}>
+                      <CheckIcon dark /><span style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)' }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onOpenAuth} style={{ marginTop: 20, width: '100%', background: C.gold, border: 'none', color: C.greenDeep, borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: F.body }}>
+                  {t('landing.planFlatCta')}
+                </button>
+              </div>
             </div>
-
-            {/* Companion */}
-            <div style={{ background: cardBg, borderRadius: 20, padding: '32px 28px', border: `1px solid ${borderColor}` }}>
-              <h3 style={{ fontFamily: F.display, fontSize: 22, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>{t('landing.planCompanionName')}</h3>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
-                <span style={{ fontFamily: F.display, fontSize: 40, fontWeight: 700, color: isDark ? C.goldSoft : C.green }}>{t('landing.planCompanionPrice')}</span>
-                <span style={{ color: textMuted, fontSize: 14 }}>{t('landing.planCompanionPer')}</span>
-              </div>
-              <p style={{ fontSize: 13, color: textMuted, marginBottom: 24 }}>{t('landing.planCompanionSessions')}</p>
-              {[t('landing.planCompanionFeature1'), t('landing.planCompanionFeature2'), t('landing.planCompanionFeature3'), t('landing.planCompanionFeature4')].map(f => (
-                <div key={f} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-start' }}>
-                  <CheckIcon /><span style={{ fontSize: 13, color: textMuted }}>{f}</span>
-                </div>
-              ))}
-              <button onClick={onOpenAuth} style={{ marginTop: 24, width: '100%', background: 'none', border: `1.5px solid ${isDark ? C.goldSoft : C.green}`, color: isDark ? C.goldSoft : C.green, borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>
-                {t('landing.planCompanionCta')}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 8. Testimonials ─────────────────────────────────────────────────── */}
-      <section style={{ background: isDark ? '#0a1a10' : C.paper, padding: '80px 24px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 52 }}>
-            <h2 style={{ fontFamily: F.display, fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, color: isDark ? C.goldSoft : C.green, marginBottom: 12 }}>
-              {t('landing.testimonialsTitle')}
-            </h2>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-            {[
-              { q: t('landing.testimonial1Quote'), author: t('landing.testimonial1Author'), loc: t('landing.testimonial1Location') },
-              { q: t('landing.testimonial2Quote'), author: t('landing.testimonial2Author'), loc: t('landing.testimonial2Location') },
-              { q: t('landing.testimonial3Quote'), author: t('landing.testimonial3Author'), loc: t('landing.testimonial3Location') },
-            ].map(item => (
-              <div key={item.author} style={{ background: cardBg, borderRadius: 16, padding: '28px 24px', border: `1px solid ${borderColor}` }}>
-                <div style={{ color: C.gold, fontSize: 18, marginBottom: 12 }}>{'★★★★★'}</div>
-                <p style={{ fontSize: 15, color: textPrimary, lineHeight: 1.7, marginBottom: 20, fontStyle: 'italic' }}>"{item.q}"</p>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: textPrimary }}>{item.author}</div>
-                  <div style={{ fontSize: 12, color: textMuted }}>{item.loc}</div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
