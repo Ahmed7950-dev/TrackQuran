@@ -162,7 +162,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signInWithGoogle = useCallback(async (): Promise<void> => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        // Always show Google's account chooser so the user can pick a different
+        // account instead of being silently signed in with the last one.
+        queryParams: { prompt: 'select_account' },
+      },
     });
     // Supabase redirects the browser; currentUser is set via onAuthStateChange after redirect.
   }, []);
