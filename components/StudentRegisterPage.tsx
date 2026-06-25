@@ -242,7 +242,7 @@ const StudentRegisterPage: React.FC = () => {
               {tutors.length === 0 ? <p className="text-sm text-slate-400">{t('register.noTutors')}</p> : tutors.map(tu => (
                 <button key={tu.id} onClick={() => setTutorId(tu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl border text-start transition-colors ${tutorId === tu.id ? 'border-teal-500 ring-2 ring-teal-500/30 bg-teal-50 dark:bg-teal-900/20' : 'border-slate-200 dark:border-gray-700 hover:border-teal-300'}`}>
                   {tu.photoUrl ? <img src={tu.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover" /> : <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center font-bold text-teal-700 dark:text-teal-300">{tu.name.charAt(0).toUpperCase()}</div>}
-                  <div className="min-w-0 flex-1"><p className="font-bold text-slate-800 dark:text-slate-100 truncate">{tu.name}</p>{tu.subjects?.length ? <p className="text-xs text-slate-400">{tu.subjects.join(' · ')}</p> : null}</div>
+                  <div className="min-w-0 flex-1"><p className="font-bold text-slate-800 dark:text-slate-100 truncate">{tu.name}</p><p className="text-xs text-slate-400">{t('register.arabic')} · {t('register.quran')}</p></div>
                   {tutorId === tu.id && <span className="text-teal-600">✓</span>}
                 </button>
               ))}
