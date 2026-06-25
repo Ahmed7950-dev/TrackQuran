@@ -90,6 +90,15 @@ export interface Student {
   studentType?: 'preply' | 'platform';     // preply = commission taken; platform = none
   preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
   subscriptionRenewalDate?: string;        // Preply only — monthly renewal date (YYYY-MM-DD); reminder fires 1 day before
+  // ── Self-registration (student created their own account via Google) ──
+  authUserId?: string;                     // Supabase auth uid of the self-registered student
+  selfRegistered?: boolean;
+  lessonsForSelf?: boolean;                // true = learning for themselves
+  lessonsForWhom?: string;                 // e.g. "my child", "a friend"
+  lessonsPerWeek?: number;
+  quranLevel?: number;                     // 1..10
+  studyFocus?: string[];                   // qaedah | recitation_fluency | basic_reading | advanced_tajweed | ijazah
+  studyAddons?: string[];                  // aqeedah | seerah | fiqh | tafseer
 }
 
 export interface QuranHomework {
@@ -257,7 +266,19 @@ export interface ArabicStudent {
   hourlyRate?: number;
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
+  // ── Self-registration (student created their own account via Google) ──
+  authUserId?: string;
+  selfRegistered?: boolean;
   createdAt: string;
+}
+
+/** A tutor as shown in the public registration directory (from list_tutors()). */
+export interface TutorDirectoryEntry {
+  id: string;
+  name: string;
+  photoUrl?: string;
+  bio?: string;
+  subjects?: string[];   // 'quran' | 'arabic'
 }
 
 export interface ArabicLesson {

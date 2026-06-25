@@ -51,6 +51,14 @@ const rowToStudent = (row: any): Student => ({
   studentType:                 row.student_type                 ?? undefined,
   preplyPercentage:            row.preply_percentage            ?? undefined,
   subscriptionRenewalDate:     row.subscription_renewal_date    ?? undefined,
+  authUserId:                  row.auth_user_id                 ?? undefined,
+  selfRegistered:              row.self_registered              ?? undefined,
+  lessonsForSelf:              row.lessons_for_self             ?? undefined,
+  lessonsForWhom:              row.lessons_for_whom             ?? undefined,
+  lessonsPerWeek:              row.lessons_per_week             ?? undefined,
+  quranLevel:                  row.quran_level                  ?? undefined,
+  studyFocus:                  row.study_focus                  ?? undefined,
+  studyAddons:                 row.study_addons                 ?? undefined,
 });
 
 const studentToRow = (teacherId: string, s: Student) => ({
@@ -73,6 +81,14 @@ const studentToRow = (teacherId: string, s: Student) => ({
   student_type:                s.studentType ?? null,
   preply_percentage:           s.preplyPercentage ?? null,
   subscription_renewal_date:   s.subscriptionRenewalDate ?? null,
+  auth_user_id:                s.authUserId ?? null,
+  self_registered:             s.selfRegistered ?? false,
+  lessons_for_self:            s.lessonsForSelf ?? null,
+  lessons_for_whom:            s.lessonsForWhom ?? null,
+  lessons_per_week:            s.lessonsPerWeek ?? null,
+  quran_level:                 s.quranLevel ?? null,
+  study_focus:                 s.studyFocus ?? null,
+  study_addons:                s.studyAddons ?? null,
 });
 
 export const getStudents = async (teacherId: string): Promise<Student[]> => {

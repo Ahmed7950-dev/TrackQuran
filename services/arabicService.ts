@@ -44,6 +44,8 @@ interface ArabicStudentRow {
   hourly_rate: number | null;
   student_type: string | null;
   preply_percentage: number | null;
+  auth_user_id?: string | null;
+  self_registered?: boolean | null;
   created_at: string;
 }
 
@@ -121,6 +123,8 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     hourlyRate:          r.hourly_rate       ?? undefined,
     studentType:         (r.student_type as ArabicStudent['studentType']) ?? undefined,
     preplyPercentage:    r.preply_percentage ?? undefined,
+    authUserId:          r.auth_user_id      ?? undefined,
+    selfRegistered:      r.self_registered   ?? undefined,
     createdAt:           r.created_at,
   };
 }
@@ -148,6 +152,8 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     hourly_rate:         s.hourlyRate       ?? null,
     student_type:        s.studentType      ?? null,
     preply_percentage:   s.preplyPercentage ?? null,
+    auth_user_id:        s.authUserId       ?? null,
+    self_registered:     s.selfRegistered   ?? false,
     created_at:          s.createdAt,
   };
 }
