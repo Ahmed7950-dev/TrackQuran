@@ -237,6 +237,18 @@ export async function saveArabicStudent(teacherId: string, student: ArabicStuden
   if (error) console.error('saveArabicStudent:', error.message);
 }
 
+/** Approve / reject a self-registered Arabic student's join request. */
+export async function setArabicStudentApprovalStatus(
+  teacherId: string, studentId: string, status: 'active' | 'rejected',
+): Promise<void> {
+  const { error } = await supabase
+    .from('arabic_students')
+    .update({ approval_status: status })
+    .eq('id', studentId)
+    .eq('teacher_id', teacherId);
+  if (error) console.error('setArabicStudentApprovalStatus:', error.message);
+}
+
 export async function deleteArabicStudent(teacherId: string, studentId: string): Promise<void> {
   const { error } = await supabase
     .from('arabic_students')

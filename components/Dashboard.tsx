@@ -474,9 +474,11 @@ interface DashboardProps {
   onFamilyLinks?: () => void;
   onAddStudent: () => void;
   teacherId?: string;
+  onApproveStudent?: (studentId: string) => void;
+  onRejectStudent?: (studentId: string) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId, onApproveStudent, onRejectStudent }) => {
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
@@ -568,9 +570,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     setNextLesson(prev => prev ? { ...prev, meetUrl: undefined } : prev);
   }
 
+  // Self-registered students awaiting this tutor's confirmation.
+  const pendingStudents = useMemo(
+    () => students.filter(s => s.selfRegistered && s.approvalStatus === 'pending'),
+    [students],
+  );
+
   const sortedStudents = useMemo(() => {
     const filtered = students.filter(student =>
         student.name.toLowerCase().includes(searchQuery.toLowerCase())
+        // Hide pending/rejected join requests from the normal roster.
+        && (!student.approvalStatus || student.approvalStatus === 'active')
     );
 
     return [...filtered].sort((a, b) => {
@@ -628,6 +638,36 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
   return (
     <div>
+      {/* ── Pending student join requests (self-registered) ─────────────────── */}
+      {pendingStudents.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/20 p-4">
+          <p className="text-sm font-bold text-teal-800 dark:text-teal-200 mb-3 flex items-center gap-2">
+            🙋 New student requests
+            <span className="bg-teal-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{pendingStudents.length}</span>
+          </p>
+          <div className="space-y-2">
+            {pendingStudents.map(s => {
+              const age = getAge(s.dob);
+              return (
+                <div key={s.id} className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 px-3 py-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-700 dark:text-teal-300 font-bold flex-shrink-0">{s.name.charAt(0).toUpperCase()}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}{age != null ? ` (${age})` : ''}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                      {s.timezone ? s.timezone.split('/').pop()?.replace(/_/g, ' ') : ''}
+                      {s.lessonsPerWeek != null ? ` · ${s.lessonsPerWeek}×/wk` : ''}
+                      {s.quranLevel != null ? ` · Level ${s.quranLevel}/10` : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => onRejectStudent?.(s.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Decline</button>
+                  <button onClick={() => onApproveStudent?.(s.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 transition-colors">Confirm</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Upcoming Lesson banner (linked Google Calendar events) ──────────── */}
       {nextLesson && (
         <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">

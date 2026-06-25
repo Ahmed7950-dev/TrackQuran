@@ -11,7 +11,7 @@ import Logo from './Logo';
 import { listTutors } from '../services/tutorDirectoryService';
 import {
   markProfileAsStudent, getMyStudentRecords,
-  registerQuranStudent, registerArabicStudent,
+  registerQuranStudent, registerArabicStudent, notifyTutorOfJoinRequest,
 } from '../services/studentRegistrationService';
 import { TutorDirectoryEntry } from '../types';
 
@@ -122,6 +122,8 @@ const StudentRegisterPage: React.FC = () => {
           arabic: { forSelf: qForSelf, arabicLevel: aLevel, arabicDialects: aDialects as any, learningPurposes: aPurposes, topicsToFocus: aTopics ? aTopics.split(',').map(s => s.trim()).filter(Boolean) : [], nationality: aNationality },
         });
       }
+      const subjects = [wantArabic && t('register.arabic'), wantQuran && t('register.quran')].filter(Boolean) as string[];
+      await notifyTutorOfJoinRequest(tutorId, firstName, subjects);
       setStep('done');
     } catch (e: any) {
       console.error('[register] failed:', e);

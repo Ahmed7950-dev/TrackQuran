@@ -4,9 +4,9 @@ import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus } from './services/dataService';
 import { supabase } from './lib/supabase';
-import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson } from './services/arabicService';
+import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
 import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
 import { useI18n } from './context/I18nProvider';
@@ -755,6 +755,28 @@ const App: React.FC = () => {
     setIsAddStudentModalOpen(false);
   };
 
+  // ── Self-registered student join requests (Quran) ──────────────────────────
+  const handleApproveStudent = async (studentId: string) => {
+    if (currentUser?.role !== 'teacher') return;
+    await setStudentApprovalStatus(currentUser.id, studentId, 'active');
+    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'active' } : s));
+  };
+  const handleRejectStudent = async (studentId: string) => {
+    if (currentUser?.role !== 'teacher') return;
+    await setStudentApprovalStatus(currentUser.id, studentId, 'rejected');
+    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'rejected' } : s));
+  };
+  const handleApproveArabicStudent = async (studentId: string) => {
+    if (currentUser?.role !== 'teacher') return;
+    await setArabicStudentApprovalStatus(currentUser.id, studentId, 'active');
+    setArabicStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'active' } : s));
+  };
+  const handleRejectArabicStudent = async (studentId: string) => {
+    if (currentUser?.role !== 'teacher') return;
+    await setArabicStudentApprovalStatus(currentUser.id, studentId, 'rejected');
+    setArabicStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'rejected' } : s));
+  };
+
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
@@ -1440,6 +1462,8 @@ const App: React.FC = () => {
               onSelectStudent={id => { setSelectedArabicStudentId(id); setActiveTab('main'); }}
               onUpdateStudent={handleUpdateArabicStudent}
               onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
+              onApproveStudent={handleApproveArabicStudent}
+              onRejectStudent={handleRejectArabicStudent}
             />
           )}
         </main>
@@ -1898,6 +1922,8 @@ const App: React.FC = () => {
             onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}
             onAddStudent={() => setIsAddStudentModalOpen(true)}
             teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined}
+            onApproveStudent={handleApproveStudent}
+            onRejectStudent={handleRejectStudent}
           />
         )}
       </main>

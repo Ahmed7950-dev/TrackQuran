@@ -6,7 +6,21 @@
 import { supabase } from '../lib/supabase';
 import { saveStudent } from './dataService';
 import { saveArabicStudent } from './arabicService';
+import { createNotification } from './notificationService';
 import { Student, ArabicStudent } from '../types';
+
+/** Tell the chosen tutor a new student wants to join (shows in their bell). */
+export async function notifyTutorOfJoinRequest(tutorId: string, studentName: string, subjects: string[]): Promise<void> {
+  await createNotification({
+    teacherId: tutorId,
+    studentId: 'self-registration',
+    recipient: 'tutor',
+    bookingId: null,
+    type: 'student_join_request',
+    title: 'New student request',
+    body: `${studentName} wants to join for ${subjects.join(' & ')}. Review and confirm in your dashboard.`,
+  });
+}
 
 /** Mark the signed-in user's profile as a student (so they're excluded from the
  *  tutor directory and recognised as a student on later logins). */

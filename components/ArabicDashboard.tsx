@@ -33,6 +33,8 @@ interface Props {
   onSelectStudent: (id: string) => void;
   onUpdateStudent: (s: ArabicStudent) => void;
   onFamilyLinks?:  () => void;
+  onApproveStudent?: (id: string) => void;
+  onRejectStudent?:  (id: string) => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -86,8 +88,10 @@ function getBookingNextDate(booking: import('../services/lessonBookingService').
 const ArabicDashboard: React.FC<Props> = ({
   teacherId, students, vocabCounts = {},
   onAddStudent, onSelectStudent, onUpdateStudent, onFamilyLinks,
+  onApproveStudent, onRejectStudent,
 }) => {
   const { t } = useI18n();
+  const pendingStudents = students.filter(s => s.selfRegistered && s.approvalStatus === 'pending');
 
   // ── state ─────────────────────────────────────────────────────────────────
   const [modalOpen,       setModalOpen]       = useState(false);
@@ -245,6 +249,7 @@ const ArabicDashboard: React.FC<Props> = ({
 
   const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
+    && (!s.approvalStatus || s.approvalStatus === 'active')  // hide pending/rejected join requests
   );
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -285,6 +290,31 @@ const ArabicDashboard: React.FC<Props> = ({
           </button>
         </div>
       </div>
+
+      {/* ── Pending student join requests (self-registered) ─────────────────── */}
+      {pendingStudents.length > 0 && (
+        <div className="rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4">
+          <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-3 flex items-center gap-2">
+            🙋 New student requests
+            <span className="bg-amber-500 text-white text-xs font-bold rounded-full px-2 py-0.5">{pendingStudents.length}</span>
+          </p>
+          <div className="space-y-2">
+            {pendingStudents.map(s => (
+              <div key={s.id} className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 px-3 py-2.5">
+                <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-700 dark:text-amber-300 font-bold flex-shrink-0">{s.name.charAt(0).toUpperCase()}</div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                    {s.arabicLevel ?? ''}{s.timezone ? ` · ${s.timezone.split('/').pop()?.replace(/_/g, ' ')}` : ''}
+                  </p>
+                </div>
+                <button onClick={() => onRejectStudent?.(s.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Decline</button>
+                <button onClick={() => onApproveStudent?.(s.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition-colors">Confirm</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Next Lesson Banner ──────────────────────────────────────────────── */}
       {nextLesson && (

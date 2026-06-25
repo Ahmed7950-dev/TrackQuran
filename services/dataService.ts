@@ -103,6 +103,18 @@ export const getStudents = async (teacherId: string): Promise<Student[]> => {
   return (data ?? []).map(rowToStudent);
 };
 
+/** Approve / reject a self-registered Quran student's join request. */
+export const setStudentApprovalStatus = async (
+  teacherId: string, studentId: string, status: 'active' | 'rejected',
+): Promise<void> => {
+  const { error } = await supabase
+    .from('students')
+    .update({ approval_status: status })
+    .eq('id', studentId)
+    .eq('teacher_id', teacherId);
+  if (error) console.error('setStudentApprovalStatus:', error.message);
+};
+
 export const saveStudent = async (teacherId: string, student: Student): Promise<void> => {
   const row = studentToRow(teacherId, student);
   const { error } = await supabase

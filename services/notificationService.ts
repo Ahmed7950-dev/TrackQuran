@@ -25,7 +25,8 @@ export type NotificationType =
   | 'exam_started'
   | 'exam_retake_allowed'
   | 'homework_submitted'
-  | 'subscription_renewal_reminder';
+  | 'subscription_renewal_reminder'
+  | 'student_join_request';
 
 export interface BookingNotification {
   id:         string;
