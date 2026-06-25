@@ -1164,6 +1164,27 @@
         "planFlatFeature1": "Live, one-to-one lessons",
         "planFlatFeature2": "Same price for every student & subject",
         "planFlatFeature3": "Flexible scheduling — book as you go",
-        "planFlatCta": "Book a free trial"
+        "planFlatCta": "Book a free trial",
+        "navForTutors": "For Tutors",
+        "forTutorsBadge": "For tutors",
+        "forTutorsTitle": "Run your teaching on LisanQuran",
+        "forTutorsSub": "Subscribe to the same platform our teachers use — manage your own students, track Quran & Arabic progress, schedule lessons, and share progress portals.",
+        "forTutorsFeat1Title": "Student management",
+        "forTutorsFeat1Desc": "Add unlimited students and keep everything for each one in one place.",
+        "forTutorsFeat2Title": "Progress tracking",
+        "forTutorsFeat2Desc": "Log recitation, memorization, mistakes and homework — with auto-generated reports.",
+        "forTutorsFeat3Title": "Scheduling & Google Meet",
+        "forTutorsFeat3Desc": "Connect Google Calendar, schedule lessons, and create Meet links in one click.",
+        "forTutorsFeat4Title": "Shareable student portals",
+        "forTutorsFeat4Desc": "Give each student or parent a private link to follow progress and lessons.",
+        "tutorPlanBadge": "Tutor subscription",
+        "tutorPlanPer": "/month",
+        "tutorPlanDesc": "Full access to all teaching features. Cancel anytime.",
+        "tutorPlanFeat1": "Unlimited students",
+        "tutorPlanFeat2": "Progress tracking & reports",
+        "tutorPlanFeat3": "Google Calendar, Meet & reminders",
+        "tutorPlanFeat4": "Student & family progress portals",
+        "tutorPlanFeat5": "Tajweed tools & learning games",
+        "tutorPlanCta": "Get started"
     }
 }

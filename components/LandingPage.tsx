@@ -116,6 +116,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
   const navLinks = [
     { label: t('landing.navPrograms'),    href: '#programs' },
     { label: t('landing.navHowItWorks'), href: '#how' },
+    { label: t('landing.navForTutors'),  href: '#for-tutors' },
     { label: t('landing.navPricing'),    href: '#pricing' },
     { label: t('landing.navFaq'),        href: '#faq' },
   ];
@@ -397,6 +398,53 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
                 <p style={{ fontSize: 13, color: textMuted, lineHeight: 1.6 }}>{step.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 6b. For Tutors (SaaS subscription) ──────────────────────────────── */}
+      <section id="for-tutors" style={{ background: isDark ? '#0a1a10' : C.mint, padding: '80px 24px' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+            <span style={{ background: isDark ? 'rgba(14,74,43,0.4)' : '#fff', color: isDark ? C.goldSoft : C.green, borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700, display: 'inline-block', marginBottom: 14, border: `1px solid ${borderColor}` }}>{t('landing.forTutorsBadge')}</span>
+            <h2 style={{ fontFamily: F.display, fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, color: isDark ? C.goldSoft : C.green, marginBottom: 12 }}>{t('landing.forTutorsTitle')}</h2>
+            <p style={{ color: textMuted, fontSize: 16, maxWidth: 640, margin: '0 auto' }}>{t('landing.forTutorsSub')}</p>
+          </div>
+
+          {/* Feature grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 20, marginBottom: 44 }}>
+            {[1, 2, 3, 4].map(n => (
+              <div key={n} style={{ background: cardBg, borderRadius: 16, padding: '24px 22px', border: `1px solid ${borderColor}` }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: textPrimary, marginBottom: 8 }}>{t(`landing.forTutorsFeat${n}Title`)}</h3>
+                <p style={{ fontSize: 13, color: textMuted, lineHeight: 1.6 }}>{t(`landing.forTutorsFeat${n}Desc`)}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Subscription card */}
+          <div style={{ maxWidth: 420, margin: '0 auto' }}>
+            <div style={{ background: C.green, borderRadius: 20, padding: '36px 32px', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice">
+                <StarPatternDefs id="tutor-pat" color={C.goldSoft} opacity={0.06} />
+                <rect width="300" height="400" fill="url(#tutor-pat)" />
+              </svg>
+              <div style={{ position: 'relative' }}>
+                <span style={{ background: C.gold, color: C.greenDeep, borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700, display: 'inline-block', marginBottom: 16 }}>{t('landing.tutorPlanBadge')}</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: F.display, fontSize: 52, fontWeight: 700, color: C.goldSoft, lineHeight: 1 }}>$20</span>
+                  <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 16 }}>{t('landing.tutorPlanPer')}</span>
+                </div>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', marginBottom: 26 }}>{t('landing.tutorPlanDesc')}</p>
+                <div style={{ display: 'inline-block', textAlign: 'start' }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <div key={n} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'flex-start' }}>
+                      <CheckIcon dark /><span style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)' }}>{t(`landing.tutorPlanFeat${n}`)}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={onOpenAuth} style={{ marginTop: 20, width: '100%', background: C.gold, border: 'none', color: C.greenDeep, borderRadius: 10, padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: F.body }}>{t('landing.tutorPlanCta')}</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>

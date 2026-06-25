@@ -1164,6 +1164,27 @@
         "planFlatFeature1": "Canlı, birebir dersler",
         "planFlatFeature2": "Her öğrenci ve ders için aynı ücret",
         "planFlatFeature3": "Esnek planlama — istedikçe rezervasyon",
-        "planFlatCta": "Ücretsiz deneme dersi al"
+        "planFlatCta": "Ücretsiz deneme dersi al",
+        "navForTutors": "Öğretmenler için",
+        "forTutorsBadge": "Öğretmenler için",
+        "forTutorsTitle": "Öğretiminizi LisanQuran üzerinde yönetin",
+        "forTutorsSub": "Öğretmenlerimizin kullandığı platforma abone olun — kendi öğrencilerinizi yönetin, Kur'an ve Arapça ilerlemesini takip edin, dersleri planlayın ve ilerleme portalları paylaşın.",
+        "forTutorsFeat1Title": "Öğrenci yönetimi",
+        "forTutorsFeat1Desc": "Sınırsız öğrenci ekleyin ve her biri için her şeyi tek yerde tutun.",
+        "forTutorsFeat2Title": "İlerleme takibi",
+        "forTutorsFeat2Desc": "Tilavet, ezber, hatalar ve ödevleri kaydedin — otomatik raporlarla.",
+        "forTutorsFeat3Title": "Planlama ve Google Meet",
+        "forTutorsFeat3Desc": "Google Takvim’i bağlayın, dersleri planlayın ve tek tıkla Meet bağlantıları oluşturun.",
+        "forTutorsFeat4Title": "Paylaşılabilir öğrenci portalları",
+        "forTutorsFeat4Desc": "Her öğrenciye veya veliye ilerlemeyi ve dersleri takip etmesi için özel bir bağlantı verin.",
+        "tutorPlanBadge": "Öğretmen aboneliği",
+        "tutorPlanPer": "/ay",
+        "tutorPlanDesc": "Tüm öğretim özelliklerine tam erişim. İstediğiniz zaman iptal edin.",
+        "tutorPlanFeat1": "Sınırsız öğrenci",
+        "tutorPlanFeat2": "İlerleme takibi ve raporlar",
+        "tutorPlanFeat3": "Google Takvim, Meet ve hatırlatmalar",
+        "tutorPlanFeat4": "Öğrenci ve aile ilerleme portalları",
+        "tutorPlanFeat5": "Tecvid araçları ve öğrenme oyunları",
+        "tutorPlanCta": "Başla"
     }
 }

@@ -1164,6 +1164,27 @@
         "planFlatFeature1": "دروس مباشرة فردية",
         "planFlatFeature2": "نفس السعر لكل طالب وكل مادة",
         "planFlatFeature3": "جدولة مرنة — احجز حسب حاجتك",
-        "planFlatCta": "احجز درسًا تجريبيًا مجانيًا"
+        "planFlatCta": "احجز درسًا تجريبيًا مجانيًا",
+        "navForTutors": "للمعلّمين",
+        "forTutorsBadge": "للمعلّمين",
+        "forTutorsTitle": "أدِر تعليمك عبر LisanQuran",
+        "forTutorsSub": "اشترك في المنصّة نفسها التي يستخدمها معلّمونا — أدِر طلابك، وتابع تقدّمهم في القرآن والعربية، وجدوِل الدروس، وشارك بوابات التقدّم.",
+        "forTutorsFeat1Title": "إدارة الطلاب",
+        "forTutorsFeat1Desc": "أضِف عددًا غير محدود من الطلاب واحتفظ بكل شيء لكل طالب في مكان واحد.",
+        "forTutorsFeat2Title": "تتبّع التقدّم",
+        "forTutorsFeat2Desc": "سجّل التلاوة والحفظ والأخطاء والواجبات — مع تقارير تُنشأ تلقائيًا.",
+        "forTutorsFeat3Title": "الجدولة وGoogle Meet",
+        "forTutorsFeat3Desc": "اربط Google Calendar، وجدوِل الدروس، وأنشئ روابط Meet بنقرة واحدة.",
+        "forTutorsFeat4Title": "بوابات طلاب قابلة للمشاركة",
+        "forTutorsFeat4Desc": "امنح كل طالب أو وليّ أمر رابطًا خاصًا لمتابعة التقدّم والدروس.",
+        "tutorPlanBadge": "اشتراك المعلّم",
+        "tutorPlanPer": "/شهريًا",
+        "tutorPlanDesc": "وصول كامل إلى جميع ميزات التعليم. يمكنك الإلغاء في أي وقت.",
+        "tutorPlanFeat1": "طلاب بلا حدود",
+        "tutorPlanFeat2": "تتبّع التقدّم والتقارير",
+        "tutorPlanFeat3": "Google Calendar وMeet والتذكيرات",
+        "tutorPlanFeat4": "بوابات تقدّم الطلاب والعائلة",
+        "tutorPlanFeat5": "أدوات التجويد وألعاب تعليمية",
+        "tutorPlanCta": "ابدأ الآن"
     }
 }
