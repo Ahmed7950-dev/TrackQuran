@@ -37,6 +37,7 @@ import PricingPage from './components/PricingPage';
 import TermsOfServicePage from './components/TermsOfServicePage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import RefundPolicyPage from './components/RefundPolicyPage';
+import StudentRegisterPage from './components/StudentRegisterPage';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -373,6 +374,9 @@ function renewalReminderOccurrence(renewalDateStr: string): string | null {
 const App: React.FC = () => {
   // ── Google Calendar OAuth2 callback — must be checked first ────────────────
   if (window.location.pathname === '/gcal-callback') return <GCalOAuthCallback />;
+
+  // ── Student self-registration wizard — handles its own Google sign-in ────────
+  if (window.location.pathname === '/join') return <StudentRegisterPage />;
 
   // ── Public policy / pricing pages — no auth required ─────────────────────────
   if (window.location.pathname === '/pricing') return <PricingPage />;

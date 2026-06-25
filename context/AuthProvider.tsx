@@ -58,6 +58,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let cancelled   = false;
 
     const resolveUser = async (session: Session, ensureProfileExists = false) => {
+      // Student registration happens on /join (the wizard's Google sign-in returns
+      // there). Never auto-create a TEACHER profile for that flow — the wizard
+      // marks their profile as 'student' instead. Pathname-gated so it can't
+      // poison a normal teacher login on the same browser.
+      if (window.location.pathname === '/join') return;
       if (ensureProfileExists) {
         // Guarantee a profiles row exists before we do anything else.
         // Critical for Google OAuth: the email signup flow calls createTeacherProfile

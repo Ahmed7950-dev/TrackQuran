@@ -210,8 +210,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
               {t('landing.navSignIn')}
             </button>
 
-            {/* Book trial CTA */}
-            <button onClick={onOpenAuth}
+            {/* Register as student CTA */}
+            <button onClick={() => { window.location.href = '/join'; }}
               className="hidden sm:block"
               style={{ background: C.green, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}
             >
@@ -282,7 +282,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             {t('landing.heroSub')}
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 48 }}>
-            <button onClick={onOpenAuth} style={{ background: C.green, color: '#fff', border: 'none', borderRadius: 10, padding: '14px 28px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>
+            <button onClick={() => { window.location.href = '/join'; }} style={{ background: C.green, color: '#fff', border: 'none', borderRadius: 10, padding: '14px 28px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>
               {t('landing.heroCta1')}
             </button>
             <button onClick={() => scrollTo('#programs')} style={{ background: 'none', border: `1.5px solid ${isDark ? C.goldSoft : C.green}`, color: isDark ? C.goldSoft : C.green, borderRadius: 10, padding: '14px 24px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>
