@@ -144,10 +144,22 @@ export interface TeacherUser extends User {
   role: 'teacher' | 'admin';
 }
 
+/** One subject a self-registered student is enrolled in. */
+export interface StudentSubject {
+  studentId: string;
+  teacherId: string;
+  approval: 'pending' | 'active' | 'rejected';
+  reportId?: string;    // Quran: shared_reports id that drives their portal
+  shareToken?: string;  // Arabic: arabic_students.share_token that drives their portal
+}
+
 export interface StudentUser {
   role: 'student';
-  student: Student;
-  teacherId: string;
+  authUserId: string;
+  name: string;
+  email?: string;
+  quran?: StudentSubject;
+  arabic?: StudentSubject;
 }
 
 export type AuthenticatedUser = TeacherUser | StudentUser;

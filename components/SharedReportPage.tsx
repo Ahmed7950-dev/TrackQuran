@@ -709,7 +709,7 @@ const ProgressTab: React.FC<{
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
-const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: string; onSwitch: () => void } }> = ({ reportId, switchPortal }) => {
+const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: string; onSwitch: () => void }; onLogout?: () => void }> = ({ reportId, switchPortal, onLogout }) => {
   const { t, language, setLanguage } = useI18n();
   const backUrl = new URLSearchParams(window.location.search).get('from') ?? null;
 
@@ -979,6 +979,19 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
               <span style={{ fontFamily: 'Amiri Regular, serif' }}>العربية</span>
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm font-bold flex-shrink-0"
+              title={t('register.signOut')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+              </svg>
+              <span className="hidden sm:inline">{t('register.signOut')}</span>
             </button>
           )}
 

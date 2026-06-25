@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { AuthenticatedUser, TeacherUser, StudentUser } from '../types';
 import { supabase } from '../lib/supabase';
 import * as dataService from '../services/dataService';
+import { loadStudentSession } from '../services/studentRegistrationService';
 
 interface AuthContextType {
   currentUser: AuthenticatedUser | null;
@@ -18,13 +19,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Fetch the role column from the profiles table.
 // Kept separate so the role is always read from the DB (not stale metadata).
-const fetchRole = async (userId: string): Promise<'teacher' | 'admin'> => {
+const fetchRole = async (userId: string): Promise<'teacher' | 'admin' | 'student'> => {
   const { data } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', userId)
     .single();
-  return data?.role === 'admin' ? 'admin' : 'teacher';
+  if (data?.role === 'admin') return 'admin';
+  if (data?.role === 'student') return 'student';
+  return 'teacher';
+};
+
+// Build a StudentUser from a Supabase session by resolving their enrolled subjects.
+const buildStudentUser = async (session: Session): Promise<StudentUser | null> => {
+  const s = await loadStudentSession(session.user.id);
+  if (!s) return null;
+  return {
+    role: 'student',
+    authUserId: session.user.id,
+    name: s.name,
+    email: session.user.email ?? undefined,
+    quran: s.quran,
+    arabic: s.arabic,
+  };
 };
 
 // Build a TeacherUser from a Supabase session + a resolved role.
@@ -63,6 +80,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // marks their profile as 'student' instead. Pathname-gated so it can't
       // poison a normal teacher login on the same browser.
       if (window.location.pathname === '/join') return;
+      // Resolve role first. A self-registered student's profile is role='student';
+      // render their portal instead of a teacher workspace (and never create a
+      // teacher profile for them).
+      const role = await fetchRole(session.user.id);
+      if (role === 'student') {
+        const studentUser = await buildStudentUser(session);
+        if (!cancelled) setCurrentUser(studentUser);
+        return;
+      }
       if (ensureProfileExists) {
         // Guarantee a profiles row exists before we do anything else.
         // Critical for Google OAuth: the email signup flow calls createTeacherProfile
@@ -76,7 +102,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           session.user.email?.split('@')[0] || 'Teacher';
         await dataService.createTeacherProfile(session.user.id, name);
       }
-      const role = await fetchRole(session.user.id);
       if (!cancelled) setCurrentUser(buildTeacherUser(session, role));
     };
 
@@ -87,12 +112,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
         if (session) {
-          // Page refresh / tab restore — optimistically set user from session
-          // immediately so the app never flickers to the login page while the
-          // DB role fetch is in-flight (critical on slow mobile connections).
-          if (!cancelled) setCurrentUser(buildTeacherUser(session, 'teacher'));
+          // Page refresh / tab restore — resolve the role before rendering so a
+          // student never flashes the teacher workspace (and vice-versa). The
+          // spinner (loading=true) shows meanwhile, so we never flicker to login.
           resolveUser(session, false).then(markDone).catch(() => {
-            // Role fetch failed but session is valid — keep the optimistic user.
+            // Role fetch failed but the session is valid — fall back to teacher
+            // so an existing tutor isn't locked out by a transient DB error.
+            if (!cancelled) setCurrentUser(buildTeacherUser(session, 'teacher'));
             markDone();
           });
         } else {
@@ -148,20 +174,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error: null };
   }, []);
 
-  // ── Student login (name + dob, no auth account) ──────────────
-  const studentLogin = useCallback(async (
-    firstName: string, lastName: string, dob: string,
-  ): Promise<StudentUser | null> => {
-    const result = await dataService.findStudentByNameAndDob(firstName, lastName, dob);
-    if (!result) return null;
-    const studentUser: StudentUser = {
-      role:      'student',
-      student:   result.student,
-      teacherId: result.teacherId,
-    };
-    setCurrentUser(studentUser);
-    return studentUser;
-  }, []);
+  // ── Student login (deprecated) ───────────────────────────────
+  // The old name+DOB student login was removed. Students now sign in with Google
+  // and are recognised by their profiles.role='student' in resolveUser above.
+  const studentLogin = useCallback(async (): Promise<StudentUser | null> => null, []);
 
   // ── Google OAuth ──────────────────────────────────────────────
   const signInWithGoogle = useCallback(async (): Promise<void> => {
@@ -179,14 +195,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // ── Logout ────────────────────────────────────────────────────
   const logout = useCallback(async (): Promise<void> => {
-    if (currentUser?.role === 'student') {
-      // Students have no Supabase session — just clear local state
-      setCurrentUser(null);
-      return;
-    }
+    // Both teachers and self-registered students have a real Supabase session.
     await supabase.auth.signOut();
     // setCurrentUser(null) is handled by onAuthStateChange SIGNED_OUT event
-  }, [currentUser]);
+  }, []);
 
   const value: AuthContextType = { currentUser, loading, login, signup, studentLogin, signInWithGoogle, logout };
 

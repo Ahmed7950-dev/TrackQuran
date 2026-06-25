@@ -66,6 +66,48 @@ const rowToArabic = (r: any): Partial<ArabicStudent> => ({
   shareToken: r.share_token ?? undefined,
 });
 
+export interface StudentSubjectInfo {
+  studentId: string;
+  teacherId: string;
+  approval: 'pending' | 'active' | 'rejected';
+  reportId?: string;
+  shareToken?: string;
+}
+
+/** Resolve everything the logged-in student portal needs from their auth id:
+ *  name, and per-subject (studentId, teacherId, approval, reportId/shareToken). */
+export async function loadStudentSession(authUserId: string): Promise<{
+  name: string; quran?: StudentSubjectInfo; arabic?: StudentSubjectInfo;
+} | null> {
+  const [q, a] = await Promise.all([
+    supabase.from('students').select('id, name, teacher_id, approval_status').eq('auth_user_id', authUserId).maybeSingle(),
+    supabase.from('arabic_students').select('id, name, teacher_id, approval_status, share_token').eq('auth_user_id', authUserId).maybeSingle(),
+  ]);
+  if (!q.data && !a.data) return null;
+  const name = (q.data?.name || a.data?.name || 'Student') as string;
+
+  let quran: StudentSubjectInfo | undefined;
+  if (q.data) {
+    // The student's portal is the same shared report the tutor maintains.
+    const rep = await supabase.from('shared_reports').select('id').eq('student_id', q.data.id).maybeSingle();
+    quran = {
+      studentId: q.data.id, teacherId: q.data.teacher_id,
+      approval: (q.data.approval_status ?? 'active') as StudentSubjectInfo['approval'],
+      reportId: rep.data?.id ?? undefined,
+    };
+  }
+
+  let arabic: StudentSubjectInfo | undefined;
+  if (a.data) {
+    arabic = {
+      studentId: a.data.id, teacherId: a.data.teacher_id,
+      approval: (a.data.approval_status ?? 'active') as StudentSubjectInfo['approval'],
+      shareToken: a.data.share_token ?? undefined,
+    };
+  }
+  return { name, quran, arabic };
+}
+
 export interface QuranOnboarding {
   lessonsForSelf: boolean;
   lessonsForWhom?: string;

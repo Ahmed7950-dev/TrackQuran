@@ -4,9 +4,10 @@ import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport } from './services/dataService';
+import { computeReportRanks } from './services/rankingService';
 import { supabase } from './lib/supabase';
-import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus } from './services/arabicService';
+import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus, ensureShareTokenById } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
 import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
 import { useI18n } from './context/I18nProvider';
@@ -38,6 +39,7 @@ import TermsOfServicePage from './components/TermsOfServicePage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import RefundPolicyPage from './components/RefundPolicyPage';
 import StudentRegisterPage from './components/StudentRegisterPage';
+import StudentApp from './components/StudentApp';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -759,6 +761,28 @@ const App: React.FC = () => {
   const handleApproveStudent = async (studentId: string) => {
     if (currentUser?.role !== 'teacher') return;
     await setStudentApprovalStatus(currentUser.id, studentId, 'active');
+    // Provision the student's portal source (the shared report) so it loads as
+    // soon as they sign in — they have no shareable link of their own.
+    const stu = students.find(s => s.id === studentId);
+    if (stu) {
+      await createOrUpdateSharedReport(currentUser.id, stu.id, stu.name, {
+        studentName: stu.name,
+        generatedAt: new Date().toISOString(),
+        mistakes: stu.mistakes || {},
+        quranHomework: stu.quranHomework || [],
+        ranks: computeReportRanks(stu, students),
+        quranicFont: localStorage.getItem('quranicFont') || 'Hafs',
+        studentProgress: {
+          recitationAchievements: stu.recitationAchievements || [],
+          memorizationAchievements: stu.memorizationAchievements || [],
+          attendance: stu.attendance || [],
+          masteredTajweedRules: stu.masteredTajweedRules || [],
+          dob: stu.dob,
+          tafsirReviews: stu.tafsirReviews || [],
+          tafsirMemorizationReviews: stu.tafsirMemorizationReviews || [],
+        },
+      });
+    }
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'active' } : s));
   };
   const handleRejectStudent = async (studentId: string) => {
@@ -769,6 +793,8 @@ const App: React.FC = () => {
   const handleApproveArabicStudent = async (studentId: string) => {
     if (currentUser?.role !== 'teacher') return;
     await setArabicStudentApprovalStatus(currentUser.id, studentId, 'active');
+    // Provision a share token so the signed-in student's Arabic portal loads.
+    await ensureShareTokenById(studentId);
     setArabicStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'active' } : s));
   };
   const handleRejectArabicStudent = async (studentId: string) => {
@@ -1127,147 +1153,9 @@ const App: React.FC = () => {
     return <LandingPageWithAuth />;
   }
   
-  // Student View-Only Page
+  // Student home — a self-registered, signed-in student (profiles.role=student).
   if (currentUser.role === 'student') {
-    const allStudentsForTeacher = getStudents(currentUser.teacherId);
-    const tajweedRulesForTeacher = getTajweedRules(currentUser.teacherId);
-
-    const currentHomework = studentHomeworkUpdates ?? (currentUser.student.quranHomework || []);
-
-    const handleMarkHomeworkDone = (homeworkId: string) => {
-      const updatedHomework = currentHomework.map((hw: QuranHomework) =>
-        hw.id === homeworkId ? { ...hw, isDone: true } : hw
-      );
-      setStudentHomeworkUpdates(updatedHomework);
-      // Save to Supabase under the teacher's ID
-      const updatedStudent: Student = { ...currentUser.student, quranHomework: updatedHomework };
-      saveStudent(currentUser.teacherId, updatedStudent);
-    };
-
-    return (
-       <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
-          <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
-                <button onClick={() => setActiveTab('main')} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to main">
-                    <Logo />
-                </button>
-                <nav className="flex-1 hidden md:flex justify-center items-center gap-6">
-                    <button
-                        onClick={() => setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs')}
-                        className={`text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-                    >{t('header.aboutUs')}</button>
-                    <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">{t('header.contactUs')}</a>
-                    <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">{t('header.supportUs')}</a>
-                </nav>
-                <div className="flex items-center gap-4">
-                    {/* Mobile hamburger — student view */}
-                    <button
-                        onClick={() => setIsMobileNavOpen(o => !o)}
-                        className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
-                        aria-label="Toggle navigation"
-                    >
-                        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                            {isMobileNavOpen
-                                ? <path d="M4 4L18 18M18 4L4 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                                : <path d="M3 6h16M3 11h16M3 16h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                            }
-                        </svg>
-                    </button>
-                    <span className="font-semibold text-slate-700 dark:text-slate-200 hidden sm:block">{currentUser.student.name}</span>
-                    <button onClick={toggleTheme} aria-label="Toggle theme" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
-                        {currentTheme === 'dark' ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
-                        ) : currentTheme === 'reading' ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25c0 5.385 4.365 9.75 9.75 9.75 2.572 0 4.921-.994 6.697-2.648Z" /></svg>
-                        )}
-                    </button>
-                    <div className="relative">
-                        <button onClick={() => setIsFontMenuOpen(!isFontMenuOpen)} aria-label="Select Quranic font" className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
-                            <span className="font-quranic text-xl" style={{ fontFamily: 'Amiri Regular' }}>ع</span>
-                        </button>
-                        {isFontMenuOpen && (
-                            <div className="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50 font-menu-dropdown">
-                                <div className="py-1">
-                                    <div className="px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('common.quranicFont')}</div>
-                                    {fonts.map((fontOption) => (
-                                        <button
-                                            key={fontOption.name}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setFont(fontOption.name);
-                                                setIsFontMenuOpen(false);
-                                            }}
-                                            className={`font-option-button w-full text-left px-4 py-2 text-sm flex items-center justify-between ${
-                                                currentFont === fontOption.name
-                                                    ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-700 dark:text-orange-400 font-medium'
-                                                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'
-                                            }`}
-                                        >
-                                            <span className="font-quranic" style={{ fontFamily: fontOption.name }}>{fontOption.displayName}</span>
-                                            {currentFont === fontOption.name && (
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                                </svg>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <button onClick={logout} className="px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700 flex items-center gap-2 rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
-                        <span className="hidden sm:inline">{t('userMenu.logout')}</span>
-                    </button>
-                </div>
-            </div>
-          {/* Mobile nav drawer — student view */}
-          {isMobileNavOpen && (
-            <div className="md:hidden border-t border-slate-100 dark:border-gray-700">
-              <nav className="flex flex-col py-2">
-                <button onClick={() => { setActiveTab(t => t === 'aboutUs' ? 'main' : 'aboutUs'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'aboutUs' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.aboutUs')}</button>
-                <button onClick={() => { setActiveTab(t => t === 'lettersTrainer' ? 'main' : 'lettersTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔡 {t('header.lettersTrainer')}</button>
-                <button onClick={() => { setActiveTab(t => t === 'alphabetTrainer' ? 'main' : 'alphabetTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔤 {t('header.alphabetTrainer')}</button>
-              </nav>
-            </div>
-          )}
-          </header>
-          {/* Left tools sidebar — only on student progress page (desktop) */}
-          {activeTab === 'main' && (
-            <ToolsSidebar
-              items={[
-                { tab: 'lettersTrainer', icon: '🔡', label: t('header.lettersTrainer') },
-                { tab: 'alphabetTrainer', icon: '🔤', label: t('header.alphabetTrainer') },
-              ]}
-              activeTab={activeTab}
-              onSelect={(tab) => setActiveTab(tab)}
-              headerHeight={headerHeight}
-            />
-          )}
-          <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
-              {activeTab === 'lettersTrainer' ? (
-                <LettersTrainerPage preSelectedStudent={{ id: currentUser.student.id, name: currentUser.student.name }} />
-              ) : activeTab === 'alphabetTrainer' ? (
-                <AlphabetTrainerPage />
-              ) : activeTab === 'aboutUs' ? (
-                <AboutUsPage />
-              ) : (
-                <StudentViewOnlyPage
-                  student={{ ...currentUser.student, quranHomework: currentHomework }}
-                  students={allStudentsForTeacher}
-                  quranMetadata={QURAN_METADATA}
-                  tajweedRules={tajweedRulesForTeacher}
-                  onMarkHomeworkDone={handleMarkHomeworkDone}
-                />
-              )}
-          </main>
-          <div className="no-print">
-            <Footer />
-          </div>
-      </div>
-    );
+    return <StudentApp user={currentUser} onLogout={logout} />;
   }
 
   // Admin View — isolated panel, no student management
