@@ -1261,6 +1261,7 @@
     "rejectedSub": "Öğretmeniniz şu anda sizi kabul edemedi. Çıkış yapıp başka bir öğretmenle yeniden kayıt olabilirsiniz.",
     "settingUpTitle": "Neredeyse hazır",
     "settingUpSub": "Öğretmeniniz sizi onayladı — portalınız hazırlanıyor ve birazdan görünecek. Birazdan tekrar deneyin.",
-    "registerAgain": "Tekrar kayıt ol"
+    "registerAgain": "Tekrar kayıt ol",
+    "notRegisteredYet": "Henüz öğrenci olarak kayıt olmadınız."
   }
 }

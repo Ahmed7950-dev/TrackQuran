@@ -1261,6 +1261,7 @@
     "rejectedSub": "Your tutor wasn’t able to take you on right now. You can sign out and register again with a different tutor.",
     "settingUpTitle": "Almost ready",
     "settingUpSub": "Your tutor has confirmed you — your portal is being set up and will appear shortly. Try again in a moment.",
-    "registerAgain": "Register again"
+    "registerAgain": "Register again",
+    "notRegisteredYet": "You haven’t registered as a student yet."
   }
 }

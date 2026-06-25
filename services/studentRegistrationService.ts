@@ -22,10 +22,15 @@ export async function notifyTutorOfJoinRequest(tutorId: string, studentName: str
   });
 }
 
-/** Mark the signed-in user's profile as a student (so they're excluded from the
- *  tutor directory and recognised as a student on later logins). */
+/** Mark the signed-in user's profile as a student so they're recognised as one
+ *  on later logins. NON-DESTRUCTIVE: an account that is already a teacher/admin
+ *  keeps that role — the same Google account can be both a tutor and a student
+ *  (their tutor workspace stays at "/", their student portal lives at "/student").
+ *  Only a brand-new account (or an existing student) gets role='student'. */
 export async function markProfileAsStudent(userId: string, name: string): Promise<void> {
   try {
+    const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (data?.role === 'teacher' || data?.role === 'admin') return; // dual role — don't demote them
     await supabase.from('profiles').upsert({ id: userId, name, role: 'student' }, { onConflict: 'id' });
   } catch (e) { console.error('markProfileAsStudent:', e); }
 }

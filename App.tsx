@@ -40,6 +40,7 @@ import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import RefundPolicyPage from './components/RefundPolicyPage';
 import StudentRegisterPage from './components/StudentRegisterPage';
 import StudentApp from './components/StudentApp';
+import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -379,6 +380,10 @@ const App: React.FC = () => {
 
   // ── Student self-registration wizard — handles its own Google sign-in ────────
   if (window.location.pathname === '/join') return <StudentRegisterPage />;
+
+  // ── Logged-in student portal — works for pure students AND tutors who also
+  //    registered as a student with the same Google account ───────────────────
+  if (window.location.pathname === '/student') return <StudentRoute />;
 
   // ── Public policy / pricing pages — no auth required ─────────────────────────
   if (window.location.pathname === '/pricing') return <PricingPage />;
