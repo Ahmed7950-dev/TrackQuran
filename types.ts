@@ -93,6 +93,7 @@ export interface Student {
   // ── Self-registration (student created their own account via Google) ──
   authUserId?: string;                     // Supabase auth uid of the self-registered student
   selfRegistered?: boolean;
+  approvalStatus?: 'pending' | 'active' | 'rejected'; // self-reg students wait for tutor confirmation
   lessonsForSelf?: boolean;                // true = learning for themselves
   lessonsForWhom?: string;                 // e.g. "my child", "a friend"
   lessonsPerWeek?: number;
@@ -269,6 +270,7 @@ export interface ArabicStudent {
   // ── Self-registration (student created their own account via Google) ──
   authUserId?: string;
   selfRegistered?: boolean;
+  approvalStatus?: 'pending' | 'active' | 'rejected';
   createdAt: string;
 }
 

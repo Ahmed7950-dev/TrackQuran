@@ -46,6 +46,7 @@ interface ArabicStudentRow {
   preply_percentage: number | null;
   auth_user_id?: string | null;
   self_registered?: boolean | null;
+  approval_status?: string | null;
   created_at: string;
 }
 
@@ -125,6 +126,7 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     preplyPercentage:    r.preply_percentage ?? undefined,
     authUserId:          r.auth_user_id      ?? undefined,
     selfRegistered:      r.self_registered   ?? undefined,
+    approvalStatus:      (r.approval_status as ArabicStudent['approvalStatus']) ?? undefined,
     createdAt:           r.created_at,
   };
 }
@@ -154,6 +156,7 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     preply_percentage:   s.preplyPercentage ?? null,
     auth_user_id:        s.authUserId       ?? null,
     self_registered:     s.selfRegistered   ?? false,
+    approval_status:     s.approvalStatus   ?? 'active',
     created_at:          s.createdAt,
   };
 }
