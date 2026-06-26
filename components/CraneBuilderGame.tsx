@@ -116,6 +116,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     placed: 0,
     wrongUntil: 0,
     wrongAt: null as { x: number; y: number } | null,
+    placedFx: null as { x: number; y: number; until: number } | null,
   });
   const keys = useRef<Set<string>>(new Set());
   const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -230,6 +231,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       if (overNext && cube.matchKey === next.matchKey && cube.kind === next.kind) {
         // Correct!
         cube.state = 'placed'; cube.x = next.x; cube.y = next.y; g.held = null; g.placed += 1;
+        g.placedFx = { x: next.x, y: next.y + CUBE / 2, until: performance.now() + 500 };
         sfxPlace();
         if (g.placed >= g.slots.length) {
           setPhase('wordDone'); sfxWin();
@@ -306,29 +308,31 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const cubePctW = `${(CUBE / STAGE_W) * 100}%`;
   const cubePctH = `${(CUBE / STAGE_H) * 100}%`;
 
-  const renderCube = (glyph: string, kind: 'letter' | 'mark', opts: { ghost?: boolean; held?: boolean; placed?: boolean; wrong?: boolean } = {}) => (
-    <div
-      style={{
-        width: '100%', height: '100%', borderRadius: 10,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        ...HAFS, fontSize: 'clamp(18px, 3.4vw, 34px)', direction: 'rtl', userSelect: 'none',
-        color: opts.ghost ? 'rgba(255,255,255,0.25)' : kind === 'mark' ? '#7c2d12' : '#1f2937',
-        background: opts.ghost ? 'transparent'
-          : opts.wrong ? 'linear-gradient(160deg,#fecaca,#ef4444)'
-          : opts.placed ? 'linear-gradient(160deg,#bbf7d0,#34d399)'
-          : kind === 'mark' ? 'linear-gradient(160deg,#fde68a,#f59e0b)'
-          : 'linear-gradient(160deg,#fef3c7,#fbbf24)',
-        border: opts.ghost ? '2px dashed rgba(255,255,255,0.4)' : '2px solid rgba(0,0,0,0.18)',
-        boxShadow: opts.ghost ? 'none'
-          : opts.held ? '0 8px 18px rgba(0,0,0,0.45)'
-          : 'inset 0 -6px 0 rgba(0,0,0,0.16), inset 0 4px 0 rgba(255,255,255,0.5), 0 4px 8px rgba(0,0,0,0.3)',
-        transition: opts.placed ? 'background 0.2s' : undefined,
-        boxSizing: 'border-box',
-      }}
-    >
-      {glyph}
-    </div>
-  );
+  const renderCube = (glyph: string, kind: 'letter' | 'mark', opts: { held?: boolean; placed?: boolean } = {}) => {
+    // Two material palettes: warm carved wood for letters, jade stone for vowels.
+    const pal = opts.placed
+      ? { face: 'linear-gradient(155deg,#86efac,#22c55e 60%,#15803d)', edge: '#166534', ink: '#052e16', top: 'rgba(255,255,255,0.55)' }
+      : kind === 'mark'
+      ? { face: 'linear-gradient(155deg,#5eead4,#14b8a6 55%,#0f766e)', edge: '#115e59', ink: '#042f2e', top: 'rgba(255,255,255,0.5)' }
+      : { face: 'linear-gradient(155deg,#fde9b8,#f0b45e 55%,#c47e2a)', edge: '#7c4a16', ink: '#3b240b', top: 'rgba(255,255,255,0.6)' };
+    return (
+      <div style={{ position: 'relative', width: '100%', height: '100%', transition: 'transform 0.12s', transform: opts.held ? 'scale(1.06)' : undefined }}>
+        {/* Carved face */}
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: 12, background: pal.face,
+          border: `2px solid ${pal.edge}`, boxSizing: 'border-box',
+          boxShadow: opts.held
+            ? `0 14px 22px rgba(0,0,0,0.5), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`
+            : `0 6px 0 ${pal.edge}, 0 9px 14px rgba(0,0,0,0.35), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {/* subtle grain / chisel texture */}
+          <div style={{ position: 'absolute', inset: 0, borderRadius: 12, opacity: kind === 'mark' ? 0.12 : 0.18, background: 'repeating-linear-gradient(115deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 7px)', pointerEvents: 'none' }} />
+          <span style={{ ...HAFS, fontSize: 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: pal.ink, textShadow: `0 1px 0 ${pal.top}`, position: 'relative' }}>{glyph}</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,20,40,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
@@ -343,37 +347,128 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       </div>
 
       {/* Stage */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: STAGE_W, aspectRatio: `${STAGE_W} / ${STAGE_H}`, background: 'linear-gradient(180deg,#7dd3fc 0%,#bae6fd 55%,#e7c89b 55%,#d9b384 100%)', borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: STAGE_W, aspectRatio: `${STAGE_W} / ${STAGE_H}`, background: '#bae6fd', borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
 
-        {/* Sun + clouds */}
-        <div style={{ position: 'absolute', left: '6%', top: '7%', width: '8%', aspectRatio: '1', borderRadius: '50%', background: 'radial-gradient(circle,#fff7cc,#fde047)', boxShadow: '0 0 40px #fde047' }} />
-        <div style={{ position: 'absolute', right: '14%', top: '12%', width: '16%', height: '8%', background: 'rgba(255,255,255,0.85)', borderRadius: 999 }} />
-        <div style={{ position: 'absolute', right: '30%', top: '20%', width: '11%', height: '6%', background: 'rgba(255,255,255,0.7)', borderRadius: 999 }} />
+        {/* ── Scenery + static crane (one vector layer, stage coordinate space) ── */}
+        <svg viewBox={`0 0 ${STAGE_W} ${STAGE_H}`} preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          <defs>
+            <linearGradient id="cbSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#5cb8f2" /><stop offset="60%" stopColor="#a5dcfb" /><stop offset="100%" stopColor="#d8f0ff" />
+            </linearGradient>
+            <linearGradient id="cbGround" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e9cf9f" /><stop offset="55%" stopColor="#d3aa6c" /><stop offset="100%" stopColor="#b98a4e" />
+            </linearGradient>
+            <radialGradient id="cbSun" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#fffbe6" /><stop offset="55%" stopColor="#fde047" /><stop offset="100%" stopColor="#fbbf24" />
+            </radialGradient>
+            <linearGradient id="cbSteel" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fcd34d" /><stop offset="100%" stopColor="#d97706" />
+            </linearGradient>
+            <pattern id="cbHazard" width="28" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(0)">
+              <rect width="28" height="14" fill="#fbbf24" />
+              <path d="M0 14 L14 0 H28 L14 14 Z M-14 14 L0 0 H0 Z" fill="#1f2937" />
+            </pattern>
+          </defs>
 
-        {/* Ground line */}
-        <div style={{ position: 'absolute', left: 0, right: 0, top: '55%', height: 3, background: 'rgba(0,0,0,0.12)' }} />
+          {/* Sky + sun + clouds */}
+          <rect x="0" y="0" width={STAGE_W} height="330" fill="url(#cbSky)" />
+          <circle cx="92" cy="84" r="72" fill="#fde047" opacity="0.22" />
+          <circle cx="92" cy="84" r="36" fill="url(#cbSun)" />
+          <g fill="#ffffff">
+            <g opacity="0.9"><ellipse cx="690" cy="80" rx="70" ry="26" /><ellipse cx="640" cy="92" rx="46" ry="22" /><ellipse cx="744" cy="94" rx="42" ry="20" /></g>
+            <g opacity="0.7"><ellipse cx="430" cy="140" rx="54" ry="20" /><ellipse cx="392" cy="150" rx="34" ry="16" /></g>
+          </g>
 
-        {/* ── Crane structure ── */}
-        {/* Mast */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX > STAGE_W / 2 ? 90 : STAGE_W - 120), top: pcy(RAIL_Y), bottom: '0%', width: 14, transform: 'translateX(-50%)', background: 'repeating-linear-gradient(0deg,#f59e0b,#f59e0b 10px,#b45309 10px,#b45309 20px)', borderRadius: 3, boxShadow: '0 0 0 2px rgba(0,0,0,0.2)' }} />
-        {/* Rail / jib */}
-        <div style={{ position: 'absolute', left: '4%', right: '4%', top: pcy(RAIL_Y), height: 12, transform: 'translateY(-50%)', background: 'repeating-linear-gradient(90deg,#f59e0b,#f59e0b 14px,#b45309 14px,#b45309 22px)', borderRadius: 4, boxShadow: '0 2px 6px rgba(0,0,0,0.35)' }} />
+          {/* Distant skyline */}
+          <g fill="#9fc6dd" opacity="0.55">
+            <rect x="150" y="250" width="40" height="80" /><rect x="196" y="226" width="30" height="104" /><rect x="232" y="266" width="46" height="64" />
+            <rect x="560" y="244" width="34" height="86" /><rect x="600" y="262" width="40" height="68" /><rect x="648" y="232" width="28" height="98" /><rect x="684" y="258" width="44" height="72" />
+            <rect x="800" y="252" width="36" height="78" /><rect x="842" y="236" width="26" height="94" />
+          </g>
+
+          {/* Ground */}
+          <rect x="0" y="330" width={STAGE_W} height={STAGE_H - 330} fill="url(#cbGround)" />
+          <g fill="#a87f48" opacity="0.5">
+            <ellipse cx="120" cy="520" rx="26" ry="7" /><ellipse cx="430" cy="560" rx="34" ry="8" /><ellipse cx="760" cy="535" rx="30" ry="7" /><ellipse cx="640" cy="575" rx="22" ry="6" />
+          </g>
+          <g fill="#8a6636"><circle cx="300" cy="500" r="4" /><circle cx="520" cy="528" r="3" /><circle cx="700" cy="498" r="4" /><circle cx="200" cy="556" r="3" /></g>
+
+          {/* Hazard barrier along the horizon */}
+          <rect x="0" y="322" width={STAGE_W} height="12" fill="url(#cbHazard)" opacity="0.92" />
+
+          {/* ── Tower crane (static) ── */}
+          {/* counter-jib + counterweight */}
+          <g stroke="#b45309" strokeWidth="2.5">
+            <line x1="40" y1="48" x2="120" y2="48" stroke="url(#cbSteel)" strokeWidth="6" />
+            <line x1="40" y1="60" x2="120" y2="60" stroke="url(#cbSteel)" strokeWidth="6" />
+            <line x1="52" y1="48" x2="68" y2="60" /><line x1="76" y1="48" x2="92" y2="60" /><line x1="100" y1="48" x2="116" y2="60" />
+          </g>
+          <rect x="40" y="50" width="34" height="34" rx="3" fill="#475569" stroke="#1e293b" strokeWidth="2" />
+          {/* cat-head apex + pendant tie-bars */}
+          <line x1="120" y1="52" x2="120" y2="8" stroke="url(#cbSteel)" strokeWidth="5" />
+          <line x1="120" y1="10" x2="600" y2="44" stroke="#92400e" strokeWidth="2.5" />
+          <line x1="120" y1="10" x2="56" y2="48" stroke="#92400e" strokeWidth="2.5" />
+          {/* jib (working arm) truss */}
+          <g stroke="#b45309" strokeWidth="2.5">
+            <line x1="120" y1="44" x2="912" y2="44" stroke="url(#cbSteel)" strokeWidth="6" />
+            <line x1="120" y1="62" x2="912" y2="62" stroke="url(#cbSteel)" strokeWidth="7" />
+            {Array.from({ length: 16 }).map((_, i) => (
+              <line key={i} x1={140 + i * 48} y1="44" x2={164 + i * 48} y2="62" />
+            ))}
+          </g>
+          {/* operator cab */}
+          <rect x="98" y="66" width="44" height="34" rx="4" fill="url(#cbSteel)" stroke="#b45309" strokeWidth="2" />
+          <rect x="104" y="72" width="32" height="16" rx="2" fill="#bae6fd" stroke="#0c4a6e" strokeWidth="1.5" opacity="0.9" />
+          {/* tower mast lattice */}
+          <g stroke="#d97706" strokeWidth="6">
+            <line x1="106" y1="100" x2="106" y2={STAGE_H} /><line x1="138" y1="100" x2="138" y2={STAGE_H} />
+          </g>
+          <g stroke="#b45309" strokeWidth="3">
+            {Array.from({ length: 11 }).map((_, i) => {
+              const y = 110 + i * 46;
+              return (
+                <g key={i}>
+                  <line x1="106" y1={y} x2="138" y2={y} />
+                  <line x1="106" y1={y} x2="138" y2={y + 46} />
+                  <line x1="138" y1={y} x2="106" y2={y + 46} />
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+
+        {/* ── Dynamic crane parts (HTML, track trolley/hook) ── */}
         {/* Trolley */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y + 6), width: 46, height: 18, transform: 'translate(-50%,-50%)', background: 'linear-gradient(#fbbf24,#d97706)', borderRadius: 5, border: '2px solid rgba(0,0,0,0.3)', zIndex: 6 }} />
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y - 2), width: 50, height: 22, transform: 'translate(-50%,-50%)', background: 'linear-gradient(#fde68a,#d97706)', borderRadius: 6, border: '2px solid #7c4a16', zIndex: 6, boxShadow: '0 3px 6px rgba(0,0,0,0.4)' }} />
         {/* Cable */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y + 6), height: pcy(g.hookY - RAIL_Y - 6), width: 3, transform: 'translateX(-50%)', background: 'rgba(30,30,30,0.85)', zIndex: 5 }} />
-        {/* Magnet / grabber */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 40, height: 20, transform: 'translate(-50%,-50%)', background: g.held !== null ? 'linear-gradient(#ef4444,#b91c1c)' : 'linear-gradient(#6b7280,#374151)', borderRadius: '6px 6px 10px 10px', border: '2px solid rgba(0,0,0,0.4)', zIndex: 7, boxShadow: g.held !== null ? '0 0 14px rgba(239,68,68,0.7)' : 'none' }} />
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y + 6), height: pcy(g.hookY - RAIL_Y - 6), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
+        {/* Hook block / electromagnet */}
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
+          background: g.held !== null ? 'linear-gradient(#f87171,#b91c1c)' : 'linear-gradient(#9ca3af,#374151)',
+          border: '2px solid #1f2937',
+          boxShadow: g.held !== null ? '0 0 20px rgba(239,68,68,0.85), inset 0 3px 0 rgba(255,255,255,0.35)' : 'inset 0 3px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.4)' }}>
+          {/* magnet poles */}
+          <div style={{ position: 'absolute', bottom: -4, left: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
+          <div style={{ position: 'absolute', bottom: -4, right: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
+        </div>
 
         {/* ── Building ghost slots (remaining) ── */}
         {g.slots.map((s, i) => i >= g.placed && (
           <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2 }}>
-            <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', borderRadius: 10,
-              border: i === g.placed ? '3px dashed #fff' : '2px dashed rgba(255,255,255,0.45)',
-              background: i === g.placed ? 'rgba(255,255,255,0.12)' : 'transparent',
+            <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', borderRadius: 12,
+              border: i === g.placed ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.5)',
+              background: i === g.placed ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
+              boxShadow: i === g.placed ? '0 0 18px rgba(253,224,71,0.6)' : 'none',
               animation: i === g.placed ? 'craneSlotPulse 1s ease-in-out infinite' : undefined }} />
           </div>
         ))}
+
+        {/* Placement dust burst */}
+        {g.placedFx && g.placedFx.until > performance.now() && (
+          <div style={{ position: 'absolute', left: pct(g.placedFx.x), top: pcy(g.placedFx.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 8, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', inset: '-30%', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.85)', animation: 'craneDust 0.5s ease-out forwards' }} />
+          </div>
+        )}
 
         {/* Wrong-placement flash */}
         {wrongActive && g.wrongAt && (
@@ -446,6 +541,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       <style>{`
         @keyframes craneSlotPulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
         @keyframes craneShake { 0%,100% { transform: translate(0,0); } 25% { transform: translate(-3px,0); } 75% { transform: translate(3px,0); } }
+        @keyframes craneDust { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(1.8); opacity: 0; } }
       `}</style>
     </div>
   );
