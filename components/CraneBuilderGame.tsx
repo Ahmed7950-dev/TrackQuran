@@ -184,27 +184,17 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const sfxWrong   = useCallback(() => tone([180, 120], 0.22, 'sawtooth', 0.2), [tone]);
   const sfxWin     = useCallback(() => tone([523, 659, 784, 1047], 0.13, 'sine', 0.2), [tone]);
 
-  // ── Continuous "crane motor" hum while the hook/trolley is moving ──────────
-  const motorRef = useRef<{ gain: GainNode } | null>(null);
-  const motorOnRef = useRef(false);
+  // ── Crane motor sound (real recording, first 5s looped) while moving ───────
+  const motorAudioRef = useRef<HTMLAudioElement | null>(null);
   const setMotor = useCallback((on: boolean) => {
-    try {
-      const ac = acRef.current ?? (acRef.current = new (window.AudioContext || (window as any).webkitAudioContext)());
-      if (on && ac.state === 'suspended') ac.resume().catch(() => {});
-      if (!motorRef.current) {
-        const gain = ac.createGain(); gain.gain.value = 0; gain.connect(ac.destination);
-        const osc = ac.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 62;
-        const harm = ac.createOscillator(); harm.type = 'square'; harm.frequency.value = 124;
-        const harmG = ac.createGain(); harmG.gain.value = 0.35; harm.connect(harmG); harmG.connect(gain);
-        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 11;
-        const lfoG = ac.createGain(); lfoG.gain.value = 7; lfo.connect(lfoG); lfoG.connect(osc.frequency);
-        osc.connect(gain); osc.start(); harm.start(); lfo.start();
-        motorRef.current = { gain };
-      }
-      if (motorOnRef.current === on) return;
-      motorOnRef.current = on;
-      motorRef.current.gain.gain.setTargetAtTime(on ? 0.05 : 0, ac.currentTime, 0.04);
-    } catch { /* audio not available */ }
+    let a = motorAudioRef.current;
+    if (!a) {
+      a = new Audio('/sounds/crane-motor.m4a');
+      a.loop = true; a.volume = 0.55;
+      motorAudioRef.current = a;
+    }
+    if (on) { if (a.paused) a.play().catch(() => {}); }
+    else if (!a.paused) { a.pause(); }
   }, []);
 
   // ── Word audio ─────────────────────────────────────────────────────────────
@@ -372,7 +362,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   }, [phase]);
 
   // Cleanup audio on unmount.
-  useEffect(() => () => { audioElRef.current?.pause(); window.speechSynthesis?.cancel(); acRef.current?.close().catch(() => {}); }, []);
+  useEffect(() => () => { audioElRef.current?.pause(); motorAudioRef.current?.pause(); window.speechSynthesis?.cancel(); acRef.current?.close().catch(() => {}); }, []);
 
   const nextWord = () => {
     if (wordIndex + 1 >= cleanWords.length) setPhase('allDone');
