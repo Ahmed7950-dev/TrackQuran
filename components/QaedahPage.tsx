@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
+import CraneBuilderGame from './CraneBuilderGame';
 import {
   QaedahTopic,
   QaedahWord,
@@ -49,6 +50,7 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   const [view,        setView]        = useState<View>('list');
   const [childMode,   setChildMode]   = useState(false);
   const [levelFilter, setLevelFilter] = useState<'all' | 1 | 2 | 3>('all');
+  const [showCrane,   setShowCrane]   = useState(false);
 
   // ── Challenge state ───────────────────────────────────────────────────────
   const [queue,       setQueue]      = useState<string[]>([]);
@@ -384,17 +386,24 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
           {(() => {
             const count = levelFilter === 'all' ? words.length : words.filter(w => w.level === levelFilter).length;
             return (
-              <div className="flex justify-center">
+              <div className="flex justify-center gap-3 flex-wrap">
                 <button
                   onClick={handleStart}
                   disabled={count === 0}
-                  className={`px-10 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 ${
+                  className={`px-8 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 ${
                     childMode
                       ? 'bg-orange-400 hover:bg-orange-500 text-white shadow-orange-200'
                       : 'bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
                   }`}
                 >
                   ⚔️ Start Challenge — {count} word{count !== 1 ? 's' : ''}
+                </button>
+                <button
+                  onClick={() => setShowCrane(true)}
+                  disabled={count === 0}
+                  className="px-8 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 bg-sky-600 hover:bg-sky-700 text-white shadow-sky-200 dark:shadow-none"
+                >
+                  🏗️ Build the Word
                 </button>
               </div>
             );
@@ -606,6 +615,14 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
       {view === 'words'     && renderWords()}
       {view === 'challenge' && renderChallenge()}
       {view === 'win'       && renderWin()}
+
+      {showCrane && (
+        <CraneBuilderGame
+          words={(levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter)).map(w => w.word)}
+          topicTitle={selectedTopic?.titleEn}
+          onExit={() => setShowCrane(false)}
+        />
+      )}
     </div>
   );
 };
