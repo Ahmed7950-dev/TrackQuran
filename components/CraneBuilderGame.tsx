@@ -184,6 +184,29 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const sfxWrong   = useCallback(() => tone([180, 120], 0.22, 'sawtooth', 0.2), [tone]);
   const sfxWin     = useCallback(() => tone([523, 659, 784, 1047], 0.13, 'sine', 0.2), [tone]);
 
+  // ── Continuous "crane motor" hum while the hook/trolley is moving ──────────
+  const motorRef = useRef<{ gain: GainNode } | null>(null);
+  const motorOnRef = useRef(false);
+  const setMotor = useCallback((on: boolean) => {
+    try {
+      const ac = acRef.current ?? (acRef.current = new (window.AudioContext || (window as any).webkitAudioContext)());
+      if (on && ac.state === 'suspended') ac.resume().catch(() => {});
+      if (!motorRef.current) {
+        const gain = ac.createGain(); gain.gain.value = 0; gain.connect(ac.destination);
+        const osc = ac.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 62;
+        const harm = ac.createOscillator(); harm.type = 'square'; harm.frequency.value = 124;
+        const harmG = ac.createGain(); harmG.gain.value = 0.35; harm.connect(harmG); harmG.connect(gain);
+        const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 11;
+        const lfoG = ac.createGain(); lfoG.gain.value = 7; lfo.connect(lfoG); lfoG.connect(osc.frequency);
+        osc.connect(gain); osc.start(); harm.start(); lfo.start();
+        motorRef.current = { gain };
+      }
+      if (motorOnRef.current === on) return;
+      motorOnRef.current = on;
+      motorRef.current.gain.gain.setTargetAtTime(on ? 0.05 : 0, ac.currentTime, 0.04);
+    } catch { /* audio not available */ }
+  }, []);
+
   // ── Word audio ─────────────────────────────────────────────────────────────
   const playWord = useCallback((w: string) => {
     if (!w) return;
@@ -319,6 +342,8 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     let raf = 0;
     const loop = () => {
       const g = game.current;
+      const moving = phase === 'playing' && (keys.current.has('ArrowLeft') || keys.current.has('ArrowRight') || keys.current.has('ArrowUp') || keys.current.has('ArrowDown'));
+      setMotor(moving);
       if (phase === 'playing') {
         if (keys.current.has('ArrowLeft'))  g.trolleyX = Math.max(TROLLEY_MIN, g.trolleyX - TROLLEY_SPEED);
         if (keys.current.has('ArrowRight')) g.trolleyX = Math.min(TROLLEY_MAX, g.trolleyX + TROLLEY_SPEED);
@@ -417,9 +442,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             <div style={{ position: 'absolute', inset: 0, borderRadius: 12, opacity: kind === 'mark' ? 0.12 : 0.18, background: 'repeating-linear-gradient(115deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 7px)' }} />
           </div>
         )}
-        {/* success tint once placed */}
+        {/* success tint once placed — matches the block's visible footprint */}
         {opts.placed && (
-          <div style={{ position: 'absolute', inset: '7%', borderRadius: 10, background: 'rgba(34,197,94,0.30)', boxShadow: '0 0 16px rgba(34,197,94,0.75), inset 0 0 0 3px rgba(22,163,74,0.85)' }} />
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: `${TILE_FOOT[kind].w * 100}%`, height: `${TILE_FOOT[kind].h * 100}%`, borderRadius: 10, background: 'rgba(34,197,94,0.30)', boxShadow: '0 0 16px rgba(34,197,94,0.75), inset 0 0 0 3px rgba(22,163,74,0.85)' }} />
         )}
         {/* glyph — vowel marks render larger so the harakah is clearly readable */}
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, ...HAFS, fontSize: kind === 'mark' ? 'clamp(34px, 6vw, 60px)' : 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: opts.placed ? '#052e16' : pal.ink, textShadow: `0 1px 1px ${pal.top}` }}>
