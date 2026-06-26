@@ -30,6 +30,7 @@ const GRAB_RADIUS = 46;
 const DROP_RADIUS = 58;
 const BASE_Y = 458;         // y-centre of each column's bottom slot
 const GROUND_Y = 548;       // y-centre of cubes resting on the ground
+const GRAVITY = 0.9;        // px/frame² pull on loose ground cubes
 const TROLLEY_MIN = 60;
 const TROLLEY_MAX = STAGE_W - 60;
 const CRANE_TOP = 2;        // stage-y offset for the raster crane so its jib meets RAIL_Y
@@ -58,7 +59,7 @@ interface Slot { matchKey: string; glyph: string; kind: 'letter' | 'mark'; x: nu
 // A cube the player can pick up.
 interface Cube {
   id: number; matchKey: string; glyph: string; kind: 'letter' | 'mark';
-  x: number; y: number; state: 'ground' | 'held' | 'placed';
+  x: number; y: number; vy: number; homeX: number; state: 'ground' | 'held' | 'placed';
 }
 
 const dottedMark = (mark: string) => `◌${mark}`; // ◌ + combining mark renders the mark alone
@@ -177,19 +178,17 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       ...distractors,
     ].sort(() => Math.random() - 0.5);
 
-    // Lay cubes across the ground in two rows, evenly spread.
+    // One evenly-spaced row of lanes — cubes never overlap. They drop in from
+    // above and settle on the ground under gravity (see the game loop).
     const n = pool.length;
+    const left = 72, right = STAGE_W - 72;
     const cubes: Cube[] = pool.map((c, i) => {
-      const perRow = Math.ceil(n / 2);
-      const rowIdx = Math.floor(i / perRow);
-      const colIdx = i % perRow;
-      const gap = (STAGE_W - 140) / Math.max(1, perRow - 1 || 1);
-      const x = 70 + (perRow === 1 ? (STAGE_W - 140) / 2 : colIdx * gap) + (Math.random() * 16 - 8);
-      const y = (rowIdx === 0 ? GROUND_Y : GROUND_Y - 4) + (rowIdx === 1 ? 0 : 0);
-      return { id: cubeIdSeq++, matchKey: c.matchKey, glyph: c.glyph, kind: c.kind, x, y: rowIdx === 0 ? GROUND_Y : GROUND_Y, state: 'ground' };
+      const homeX = n === 1 ? STAGE_W / 2 : left + ((right - left) * i) / (n - 1);
+      return {
+        id: cubeIdSeq++, matchKey: c.matchKey, glyph: c.glyph, kind: c.kind,
+        x: homeX, y: -CUBE - Math.random() * 240, vy: 0, homeX, state: 'ground' as const,
+      };
     });
-    // Stagger the two rows vertically a touch so overlaps are visible.
-    cubes.forEach((c, i) => { if (i % 2 === 1) c.y = GROUND_Y - 6; });
 
     game.current.cubes = cubes;
     game.current.slots = slots;
@@ -246,11 +245,11 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         const at = overNext ? next : g.slots.find((s, i) => i >= g.placed && dist(s.x, s.y, g.trolleyX, g.hookY) < DROP_RADIUS)!;
         g.wrongUntil = performance.now() + 650;
         g.wrongAt = { x: at.x, y: at.y };
-        cube.state = 'ground'; cube.y = GROUND_Y; g.held = null;
+        cube.state = 'ground'; cube.vy = 0; g.held = null;
         sfxWrong();
       } else {
-        // Released over empty ground — just set it down, no penalty.
-        cube.state = 'ground'; cube.y = GROUND_Y; g.held = null;
+        // Released over empty ground — drop it; gravity returns it to its lane.
+        cube.state = 'ground'; cube.vy = 0; g.held = null;
       }
     }
     setTick(t => t + 1);
@@ -286,6 +285,14 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         if (g.held !== null) {
           const c = g.cubes.find(x => x.id === g.held);
           if (c) { c.x = g.trolleyX; c.y = g.hookY + CUBE / 2 + 6; }
+        }
+        // Gravity: loose ground cubes fall and settle in their lane (no overlap).
+        for (const c of g.cubes) {
+          if (c.state !== 'ground') continue;
+          c.vy += GRAVITY;
+          c.y += c.vy;
+          if (c.y >= GROUND_Y) { c.y = GROUND_Y; c.vy = c.vy > 2.5 ? -c.vy * 0.32 : 0; }
+          c.x += (c.homeX - c.x) * 0.18;
         }
       }
       setTick(t => (t + 1) % 1000000);
@@ -350,19 +357,19 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,20,40,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
-      {/* Top bar */}
-      <div style={{ width: '100%', maxWidth: STAGE_W, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, color: '#fff' }}>
-        <button onClick={onExit} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
-        <div style={{ flex: 1, fontWeight: 800, fontSize: 16 }}>
-          🏗️ Crane Builder {topicTitle ? <span style={{ opacity: 0.7, fontWeight: 600 }}>· {topicTitle}</span> : null}
-        </div>
-        <div style={{ fontSize: 13, opacity: 0.85, fontWeight: 700 }}>Word {Math.min(wordIndex + 1, cleanWords.length)} / {cleanWords.length}</div>
-        <button onClick={() => playWord(word)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
-      </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#0b1220', overflow: 'hidden' }}>
+      {/* Stage — fills the whole screen */}
+      <div style={{ position: 'absolute', inset: 0, background: '#bae6fd', overflow: 'hidden' }}>
 
-      {/* Stage */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: STAGE_W, aspectRatio: `${STAGE_W} / ${STAGE_H}`, background: '#bae6fd', borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+        {/* Top bar overlay */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 16, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', color: '#fff', background: 'linear-gradient(rgba(8,20,40,0.55), rgba(8,20,40,0))' }}>
+          <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
+          <div style={{ flex: 1, fontWeight: 800, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
+            🏗️ Crane Builder {topicTitle ? <span style={{ opacity: 0.8, fontWeight: 600 }}>· {topicTitle}</span> : null}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>Word {Math.min(wordIndex + 1, cleanWords.length)} / {cleanWords.length}</div>
+          <button onClick={() => playWord(word)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
+        </div>
 
         {/* ── Scenery + static crane (one vector layer, stage coordinate space) ── */}
         <svg viewBox={`0 0 ${STAGE_W} ${STAGE_H}`} preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
@@ -466,11 +473,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             style={{ position: 'absolute', left: '0%', top: pcy(CRANE_TOP), width: '100%', zIndex: 1, pointerEvents: 'none' }} />
         )}
 
-        {/* ── Dynamic crane parts (HTML, track trolley/hook) ── */}
-        {/* Trolley */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y - 2), width: 50, height: 22, transform: 'translate(-50%,-50%)', background: 'linear-gradient(#fde68a,#d97706)', borderRadius: 6, border: '2px solid #7c4a16', zIndex: 6, boxShadow: '0 3px 6px rgba(0,0,0,0.4)' }} />
-        {/* Cable */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y + 6), height: pcy(g.hookY - RAIL_Y - 6), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
+        {/* ── Dynamic crane parts (HTML, track the hook) ── */}
+        {/* Cable — drops straight out of the crane jib (no trolley box) */}
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y), height: pcy(g.hookY - RAIL_Y), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
         {/* Hook block / electromagnet */}
         {imgOk.hook ? (
           <img src="/sprites/crane-hook.png" alt="" onError={() => dropImg('hook')}
@@ -567,8 +572,8 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         )}
       </div>
 
-      {/* Bottom hint */}
-      <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 600 }}>
+      {/* Bottom hint overlay */}
+      <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', zIndex: 16, color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>
         ← → move · ↑ ↓ raise/lower · <b>Space</b> grab / drop
       </div>
 
