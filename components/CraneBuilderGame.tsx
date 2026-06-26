@@ -36,6 +36,9 @@ const TROLLEY_MAX = STAGE_W - 60;
 const CRANE_TOP = 2;        // stage-y offset for the raster crane so its jib meets RAIL_Y
 const HOOK_IMG = 62;        // rendered size (px) of the raster hook sprite
 const ROPE_TOP = 92;        // y where the rope leaves the crane (lower edge of the jib)
+// Visible footprint of each block sprite inside its square cube box (tile ÷ sprite).
+// The dotted placeholder boxes use this so they match the actual block size.
+const TILE_FOOT = { letter: { w: 0.90, h: 0.64 }, mark: { w: 0.90, h: 0.74 } } as const;
 
 // Combining marks we support, with their vertical placement relative to the letter.
 const MARK_POS: Record<string, 'above' | 'below'> = {
@@ -108,7 +111,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const [tick, setTick] = useState(0);          // forces re-render each animation frame
   const [showHelp, setShowHelp] = useState(true);
   // Raster sprite assets; each falls back to the SVG version if its file fails.
-  const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, wood: true, stone: true });
+  const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, wood: true, stone: true, stage: true });
   const dropImg = (k: keyof typeof imgOk) => setImgOk(s => (s[k] ? { ...s, [k]: false } : s));
 
   const word = cleanWords[wordIndex] ?? '';
@@ -497,11 +500,23 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
           </div>
         )}
 
-        {/* ── Building ghost slots (remaining) ── */}
+        {/* ── Stage / platform behind the building slots ── */}
+        {imgOk.stage && g.slots.length > 0 && (() => {
+          const xs = g.slots.map(s => s.x);
+          const minX = Math.min(...xs), maxX = Math.max(...xs);
+          const baseY = Math.max(...g.slots.map(s => s.y));
+          const padX = CUBE * 0.8;
+          return (
+            <img src="/sprites/crane-stage.png" alt="" onError={() => dropImg('stage')}
+              style={{ position: 'absolute', left: pct(minX - padX), top: pcy(baseY + CUBE * 0.32), width: pct((maxX - minX) + padX * 2), zIndex: 1, pointerEvents: 'none' }} />
+          );
+        })()}
+
+        {/* ── Building ghost slots (remaining) — sized to match the block footprint ── */}
         {g.slots.map((s, i) => i >= g.placed && (
-          <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2 }}>
-            <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', borderRadius: 12,
-              border: i === g.placed ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.5)',
+          <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: `${TILE_FOOT[s.kind].w * 100}%`, height: `${TILE_FOOT[s.kind].h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
+              border: i === g.placed ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.55)',
               background: i === g.placed ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
               boxShadow: i === g.placed ? '0 0 18px rgba(253,224,71,0.6)' : 'none',
               animation: i === g.placed ? 'craneSlotPulse 1s ease-in-out infinite' : undefined }} />
