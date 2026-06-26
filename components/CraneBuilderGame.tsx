@@ -38,7 +38,14 @@ const HOOK_IMG = 62;        // rendered size (px) of the raster hook sprite
 const ROPE_TOP = 92;        // y where the rope leaves the crane (lower edge of the jib)
 // Visible footprint of each block sprite inside its square cube box (tile ÷ sprite).
 // The dotted placeholder boxes use this so they match the actual block size.
-const TILE_FOOT = { letter: { w: 0.90, h: 0.64 }, mark: { w: 0.90, h: 0.74 } } as const;
+// The letter/vowel blocks are a single SVG (a green book) — landscape aspect.
+// Its visible footprint inside the (possibly non-matching) cube box is computed
+// so the dotted placeholder and green success box match it exactly.
+const BOOK_ASPECT = 450 / 258;
+const bookFootprint = (cube: { w: number; h: number }): { w: number; h: number } => {
+  const cubeA = cube.w / cube.h;
+  return cubeA <= BOOK_ASPECT ? { w: 1, h: cubeA / BOOK_ASPECT } : { w: BOOK_ASPECT / cubeA, h: 1 };
+};
 
 // ── Editable layout (all in the 960×600 stage coordinate space) ──────────────
 // The in-game layout editor (✎) lets the user drag/resize these; "Save" copies
@@ -134,7 +141,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const [tick, setTick] = useState(0);          // forces re-render each animation frame
   const [showHelp, setShowHelp] = useState(true);
   // Raster sprite assets; each falls back to the SVG version if its file fails.
-  const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, wood: true, stone: true, stage: true });
+  const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, book: true, stage: true });
   const dropImg = (k: keyof typeof imgOk) => setImgOk(s => (s[k] ? { ...s, [k]: false } : s));
 
   // ── Editable layout + in-game editor ───────────────────────────────────────
@@ -409,35 +416,22 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const setL = (patch: Partial<Layout>) => setLayout(l => ({ ...l, ...patch }));
 
   const renderCube = (glyph: string, kind: 'letter' | 'mark', opts: { held?: boolean; placed?: boolean } = {}) => {
-    // Two material palettes (used for the SVG/CSS fallback face): wood / jade.
-    const pal = kind === 'mark'
-      ? { face: 'linear-gradient(155deg,#5eead4,#14b8a6 55%,#0f766e)', edge: '#115e59', ink: '#042f2e', top: 'rgba(255,255,255,0.5)' }
-      : { face: 'linear-gradient(155deg,#fde9b8,#f0b45e 55%,#c47e2a)', edge: '#7c4a16', ink: '#3b240b', top: 'rgba(255,255,255,0.6)' };
-    const useImg = kind === 'mark' ? imgOk.stone : imgOk.wood;
-    const imgSrc = kind === 'mark' ? '/sprites/block-stone.png' : '/sprites/block-wood.png';
+    const foot = bookFootprint(layout.cube);   // visible book footprint inside the cube box
     return (
       <div style={{ position: 'relative', width: '100%', height: '100%', transition: 'transform 0.12s', transform: opts.held ? 'scale(1.07)' : undefined }}>
-        {useImg ? (
-          <img src={imgSrc} alt="" onError={() => dropImg(kind === 'mark' ? 'stone' : 'wood')}
+        {imgOk.book ? (
+          <img src="/sprites/letter-block.svg" alt="" onError={() => dropImg('book')}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain',
               filter: opts.held ? 'drop-shadow(0 12px 16px rgba(0,0,0,0.5))' : 'drop-shadow(0 5px 6px rgba(0,0,0,0.4))' }} />
         ) : (
-          <div style={{
-            position: 'absolute', inset: 0, borderRadius: 12, background: pal.face,
-            border: `2px solid ${pal.edge}`, boxSizing: 'border-box',
-            boxShadow: opts.held
-              ? `0 14px 22px rgba(0,0,0,0.5), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`
-              : `0 6px 0 ${pal.edge}, 0 9px 14px rgba(0,0,0,0.35), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`,
-          }}>
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 12, opacity: kind === 'mark' ? 0.12 : 0.18, background: 'repeating-linear-gradient(115deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 7px)' }} />
-          </div>
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: `${foot.w * 100}%`, height: `${foot.h * 100}%`, borderRadius: 8, background: 'linear-gradient(155deg,#52944d,#1d451b)', border: '2px solid #133a12', boxSizing: 'border-box' }} />
         )}
-        {/* success tint once placed — matches the block's visible footprint */}
+        {/* success tint once placed — same footprint as the book block */}
         {opts.placed && (
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: `${TILE_FOOT[kind].w * 100}%`, height: `${TILE_FOOT[kind].h * 100}%`, borderRadius: 10, background: 'rgba(34,197,94,0.30)', boxShadow: '0 0 16px rgba(34,197,94,0.75), inset 0 0 0 3px rgba(22,163,74,0.85)' }} />
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: `${foot.w * 100}%`, height: `${foot.h * 100}%`, borderRadius: 8, background: 'rgba(34,197,94,0.35)', boxShadow: '0 0 16px rgba(34,197,94,0.8), inset 0 0 0 3px rgba(22,163,74,0.9)' }} />
         )}
-        {/* glyph — vowel marks render larger so the harakah is clearly readable */}
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, ...HAFS, fontSize: kind === 'mark' ? 'clamp(34px, 6vw, 60px)' : 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: opts.placed ? '#052e16' : pal.ink, textShadow: `0 1px 1px ${pal.top}` }}>
+        {/* glyph — white, vowel marks render larger so the harakah is clearly readable */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, ...HAFS, fontSize: kind === 'mark' ? 'clamp(26px, 4.6vw, 46px)' : 'clamp(18px, 3.2vw, 32px)', direction: 'rtl', userSelect: 'none', color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.7), 0 0 6px rgba(0,0,0,0.5)' }}>
           {glyph}
         </div>
       </div>
@@ -595,7 +589,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         {/* ── Building ghost slots (remaining) — sized to match the block footprint ── */}
         {g.slots.map((s, i) => i >= g.placed && (
           <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: `${TILE_FOOT[s.kind].w * 100}%`, height: `${TILE_FOOT[s.kind].h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
+            <div style={{ width: `${bookFootprint(layout.cube).w * 100}%`, height: `${bookFootprint(layout.cube).h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
               border: i === g.placed ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.55)',
               background: i === g.placed ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
               boxShadow: i === g.placed ? '0 0 18px rgba(253,224,71,0.6)' : 'none',
