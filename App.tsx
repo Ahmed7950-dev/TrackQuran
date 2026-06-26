@@ -274,6 +274,15 @@ const AuthModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             {t('login.googleSignIn')}
           </button>
 
+          {/* Student sign-up — this modal signs in tutors; students register at /join */}
+          <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${border}`, textAlign: 'center' }}>
+            <p style={{ fontSize: 13, color: inkMuted, fontFamily: "'DM Sans', sans-serif", margin: '0 0 10px' }}>{t('login.studentPrompt')}</p>
+            <a href="/join"
+              style={{ display: 'inline-flex', width: '100%', boxSizing: 'border-box', justifyContent: 'center', alignItems: 'center', padding: '11px', borderRadius: 12, border: `1.5px solid ${isDark ? goldSoft : green}`, background: 'transparent', color: isDark ? goldSoft : green, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", textDecoration: 'none' }}>
+              {t('login.studentCta')}
+            </a>
+          </div>
+
           {/* Quranic verse */}
           <p style={{ textAlign: 'center', marginTop: 22, fontFamily: "'Amiri', serif", fontSize: 16, color: gold, direction: 'rtl' }}>
             وَقُل رَّبِّ زِدْنِي عِلْمًا

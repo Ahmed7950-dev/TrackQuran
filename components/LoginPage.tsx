@@ -89,6 +89,15 @@ const LoginPage: React.FC = () => {
                         </button>
                     </div>
                 </div>
+
+                {/* Student sign-up — this page is for tutors; students register at /join */}
+                <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 text-center">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">{t('login.studentPrompt')}</p>
+                    <a href="/join"
+                        className="mt-3 inline-flex justify-center items-center w-full py-2.5 px-4 rounded-md border border-teal-600 dark:border-orange-500 text-sm font-semibold text-teal-700 dark:text-orange-400 hover:bg-teal-50 dark:hover:bg-gray-700 transition-colors">
+                        {t('login.studentCta')}
+                    </a>
+                </div>
             </div>
         </div>
     );

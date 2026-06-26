@@ -138,7 +138,9 @@
     "invalidCredentials": "Geçersiz e-posta veya şifre.",
     "studentNotFound": "Öğrenci bulunamadı. Lütfen bilgileri kontrol edip tekrar deneyin.",
     "emailInUse": "Bu e-posta adresi zaten kullanımda.",
-    "userNotFound": "Bu e-posta ile kayıtlı hesap bulunamadı."
+    "userNotFound": "Bu e-posta ile kayıtlı hesap bulunamadı.",
+    "studentPrompt": "Ders arayan bir öğrenci misiniz?",
+    "studentCta": "Öğrenci olarak kayıt ol"
   },
   "studentView": {
     "pageTitle": "{{name}} için İlerleme Raporu",

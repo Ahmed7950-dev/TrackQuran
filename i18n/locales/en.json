@@ -138,7 +138,9 @@
     "invalidCredentials": "Invalid email or password.",
     "studentNotFound": "Student not found. Please check the details and try again.",
     "emailInUse": "This email is already in use.",
-    "userNotFound": "No account found with this email."
+    "userNotFound": "No account found with this email.",
+    "studentPrompt": "Are you a student looking for lessons?",
+    "studentCta": "Sign up as a student"
   },
   "studentView": {
     "pageTitle": "Progress Report for {{name}}",
