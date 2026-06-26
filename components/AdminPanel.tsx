@@ -22,6 +22,7 @@ import TajweedPage from './TajweedPage';
 import ArabicLessonPage from './ArabicLessonPage';
 import AdminQaedahTab from './AdminQaedahTab';
 import AdminLetterAudioTab from './AdminLetterAudioTab';
+import AdminWordAudioTab from './AdminWordAudioTab';
 import AdminExamsTab from './AdminExamsTab';
 import { useI18n } from '../context/I18nProvider';
 
@@ -86,7 +87,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
   const themeIcon = theme === 'light' ? '☀️' : theme === 'dark' ? '🌙' : '📖';
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'teachers' | 'tajweed' | 'arabic' | 'qaedah' | 'letterAudio' | 'exams'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'tajweed' | 'arabic' | 'qaedah' | 'letterAudio' | 'wordAudio' | 'exams'>('teachers');
   const [showSupport, setShowSupport] = useState(false);
 
   // Teachers state
@@ -409,7 +410,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
 
             {/* ── Tabs ───────────────────────────────────────────────────────── */}
             <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm w-fit flex-wrap">
-              {(['teachers', 'tajweed', 'arabic', 'qaedah', 'letterAudio', 'exams'] as const).map(tab => (
+              {(['teachers', 'tajweed', 'arabic', 'qaedah', 'letterAudio', 'wordAudio', 'exams'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -419,7 +420,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {tab === 'teachers' ? 'Teachers' : tab === 'tajweed' ? 'Tajweed Lessons' : tab === 'arabic' ? 'Arabic Lessons' : tab === 'qaedah' ? 'Qaedah' : tab === 'letterAudio' ? 'Letter Audio' : 'Exams'}
+                  {tab === 'teachers' ? 'Teachers' : tab === 'tajweed' ? 'Tajweed Lessons' : tab === 'arabic' ? 'Arabic Lessons' : tab === 'qaedah' ? 'Qaedah' : tab === 'letterAudio' ? 'Letter Audio' : tab === 'wordAudio' ? 'Word Audio' : 'Exams'}
                 </button>
               ))}
             </div>
@@ -602,6 +603,13 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
             {activeTab === 'letterAudio' && (
               <div className="flex-1">
                 <AdminLetterAudioTab />
+              </div>
+            )}
+
+            {/* ── Word Audio Tab ───────────────────────────────────────────── */}
+            {activeTab === 'wordAudio' && (
+              <div className="flex-1">
+                <AdminWordAudioTab />
               </div>
             )}
 
