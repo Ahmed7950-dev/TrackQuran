@@ -35,6 +35,7 @@ const TROLLEY_MIN = 60;
 const TROLLEY_MAX = STAGE_W - 60;
 const CRANE_TOP = 2;        // stage-y offset for the raster crane so its jib meets RAIL_Y
 const HOOK_IMG = 62;        // rendered size (px) of the raster hook sprite
+const ROPE_TOP = 92;        // y where the rope leaves the crane (lower edge of the jib)
 
 // Combining marks we support, with their vertical placement relative to the letter.
 const MARK_POS: Record<string, 'above' | 'below'> = {
@@ -348,8 +349,8 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         {opts.placed && (
           <div style={{ position: 'absolute', inset: '7%', borderRadius: 10, background: 'rgba(34,197,94,0.30)', boxShadow: '0 0 16px rgba(34,197,94,0.75), inset 0 0 0 3px rgba(22,163,74,0.85)' }} />
         )}
-        {/* glyph */}
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', ...HAFS, fontSize: 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: opts.placed ? '#052e16' : pal.ink, textShadow: `0 1px 1px ${pal.top}` }}>
+        {/* glyph — vowel marks render larger so the harakah is clearly readable */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, ...HAFS, fontSize: kind === 'mark' ? 'clamp(34px, 6vw, 60px)' : 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: opts.placed ? '#052e16' : pal.ink, textShadow: `0 1px 1px ${pal.top}` }}>
           {glyph}
         </div>
       </div>
@@ -468,14 +469,19 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
           <img src="/sprites/crane-bg.png" alt="" onError={() => dropImg('bg')}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, pointerEvents: 'none' }} />
         )}
+
+        {/* ── Aspect-locked play field: only the background stretches to fill the
+             screen; the crane and cubes keep their natural proportions, centred
+             and sized to the screen height ── */}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', height: '100%', aspectRatio: `${STAGE_W} / ${STAGE_H}`, zIndex: 1 }}>
         {imgOk.crane && (
           <img src="/sprites/crane-tower.png" alt="" onError={() => dropImg('crane')}
             style={{ position: 'absolute', left: '0%', top: pcy(CRANE_TOP), width: '100%', zIndex: 1, pointerEvents: 'none' }} />
         )}
 
         {/* ── Dynamic crane parts (HTML, track the hook) ── */}
-        {/* Cable — drops straight out of the crane jib (no trolley box) */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y), height: pcy(g.hookY - RAIL_Y), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
+        {/* Cable — drops from the lower edge of the jib (no trolley box) */}
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(ROPE_TOP), height: pcy(g.hookY - ROPE_TOP), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
         {/* Hook block / electromagnet */}
         {imgOk.hook ? (
           <img src="/sprites/crane-hook.png" alt="" onError={() => dropImg('hook')}
@@ -522,6 +528,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             {renderCube(c.glyph, c.kind, { held: c.state === 'held', placed: c.state === 'placed' })}
           </div>
         ))}
+        </div>{/* end play field */}
 
         {/* Help overlay */}
         {showHelp && phase === 'playing' && (
