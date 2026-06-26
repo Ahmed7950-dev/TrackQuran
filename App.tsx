@@ -15,7 +15,6 @@ import Footer from './components/Footer';
 import Logo from './components/Logo';
 import AddStudentModal from './components/AddStudentModal';
 import { useAuth } from './context/AuthProvider';
-import LoginPage from './components/LoginPage';
 import StudentViewOnlyPage from './components/StudentViewOnlyPage';
 import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
@@ -123,8 +122,8 @@ const useQuranicFont = () => {
 
 /**
  * Wrapper that renders the public marketing landing page.
- * When the user clicks "Sign in" or any CTA, a modal overlay with the
- * existing LoginPage slides in on top. After successful auth the
+ * When the user clicks "Sign in" or any CTA, the AuthModal overlay slides in
+ * on top. After successful auth the
  * AuthProvider updates currentUser, the parent App re-renders and
  * immediately shows the dashboard — the landing page unmounts automatically.
  */
