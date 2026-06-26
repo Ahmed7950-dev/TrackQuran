@@ -55,14 +55,14 @@ interface Layout {
   hook: { w: number; dy: number };  // hook sprite size + vertical offset
 }
 const DEFAULT_LAYOUT: Layout = {
-  stage: { x: 300, y: 372, w: 360, h: 210 },
-  crane: { x: 0, y: CRANE_TOP, w: STAGE_W, h: 0 },
-  cube: { w: CUBE, h: CUBE },
-  build: { x: STAGE_W / 2 + CUBE * 1.18, y: BASE_Y },
-  colGap: CUBE * 1.18, rowGap: CUBE,
-  groundY: GROUND_Y,
-  ropeTop: ROPE_TOP,
-  hook: { w: HOOK_IMG, dy: 10 },
+  stage: { x: 242, y: 320, w: 345, h: 235 },
+  crane: { x: -28, y: -26, w: 957, h: 522 },
+  cube: { w: 59, h: 60 },
+  build: { x: 480, y: 448 },
+  colGap: 68.44, rowGap: 58,
+  groundY: 548,
+  ropeTop: 92,
+  hook: { w: 62, dy: 10 },
 };
 
 // Combining marks we support, with their vertical placement relative to the letter.
