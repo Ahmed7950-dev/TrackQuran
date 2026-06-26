@@ -32,6 +32,8 @@ const BASE_Y = 458;         // y-centre of each column's bottom slot
 const GROUND_Y = 548;       // y-centre of cubes resting on the ground
 const TROLLEY_MIN = 60;
 const TROLLEY_MAX = STAGE_W - 60;
+const CRANE_TOP = 2;        // stage-y offset for the raster crane so its jib meets RAIL_Y
+const HOOK_IMG = 62;        // rendered size (px) of the raster hook sprite
 
 // Combining marks we support, with their vertical placement relative to the letter.
 const MARK_POS: Record<string, 'above' | 'below'> = {
@@ -103,6 +105,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const [phase, setPhase] = useState<'playing' | 'wordDone' | 'allDone'>('playing');
   const [tick, setTick] = useState(0);          // forces re-render each animation frame
   const [showHelp, setShowHelp] = useState(true);
+  // Raster sprite assets; each falls back to the SVG version if its file fails.
+  const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, wood: true, stone: true });
+  const dropImg = (k: keyof typeof imgOk) => setImgOk(s => (s[k] ? { ...s, [k]: false } : s));
 
   const word = cleanWords[wordIndex] ?? '';
 
@@ -309,26 +314,36 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const cubePctH = `${(CUBE / STAGE_H) * 100}%`;
 
   const renderCube = (glyph: string, kind: 'letter' | 'mark', opts: { held?: boolean; placed?: boolean } = {}) => {
-    // Two material palettes: warm carved wood for letters, jade stone for vowels.
-    const pal = opts.placed
-      ? { face: 'linear-gradient(155deg,#86efac,#22c55e 60%,#15803d)', edge: '#166534', ink: '#052e16', top: 'rgba(255,255,255,0.55)' }
-      : kind === 'mark'
+    // Two material palettes (used for the SVG/CSS fallback face): wood / jade.
+    const pal = kind === 'mark'
       ? { face: 'linear-gradient(155deg,#5eead4,#14b8a6 55%,#0f766e)', edge: '#115e59', ink: '#042f2e', top: 'rgba(255,255,255,0.5)' }
       : { face: 'linear-gradient(155deg,#fde9b8,#f0b45e 55%,#c47e2a)', edge: '#7c4a16', ink: '#3b240b', top: 'rgba(255,255,255,0.6)' };
+    const useImg = kind === 'mark' ? imgOk.stone : imgOk.wood;
+    const imgSrc = kind === 'mark' ? '/sprites/block-stone.png' : '/sprites/block-wood.png';
     return (
-      <div style={{ position: 'relative', width: '100%', height: '100%', transition: 'transform 0.12s', transform: opts.held ? 'scale(1.06)' : undefined }}>
-        {/* Carved face */}
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: 12, background: pal.face,
-          border: `2px solid ${pal.edge}`, boxSizing: 'border-box',
-          boxShadow: opts.held
-            ? `0 14px 22px rgba(0,0,0,0.5), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`
-            : `0 6px 0 ${pal.edge}, 0 9px 14px rgba(0,0,0,0.35), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {/* subtle grain / chisel texture */}
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 12, opacity: kind === 'mark' ? 0.12 : 0.18, background: 'repeating-linear-gradient(115deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 7px)', pointerEvents: 'none' }} />
-          <span style={{ ...HAFS, fontSize: 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: pal.ink, textShadow: `0 1px 0 ${pal.top}`, position: 'relative' }}>{glyph}</span>
+      <div style={{ position: 'relative', width: '100%', height: '100%', transition: 'transform 0.12s', transform: opts.held ? 'scale(1.07)' : undefined }}>
+        {useImg ? (
+          <img src={imgSrc} alt="" onError={() => dropImg(kind === 'mark' ? 'stone' : 'wood')}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain',
+              filter: opts.held ? 'drop-shadow(0 12px 16px rgba(0,0,0,0.5))' : 'drop-shadow(0 5px 6px rgba(0,0,0,0.4))' }} />
+        ) : (
+          <div style={{
+            position: 'absolute', inset: 0, borderRadius: 12, background: pal.face,
+            border: `2px solid ${pal.edge}`, boxSizing: 'border-box',
+            boxShadow: opts.held
+              ? `0 14px 22px rgba(0,0,0,0.5), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`
+              : `0 6px 0 ${pal.edge}, 0 9px 14px rgba(0,0,0,0.35), inset 0 -7px 0 rgba(0,0,0,0.22), inset 0 5px 0 ${pal.top}`,
+          }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 12, opacity: kind === 'mark' ? 0.12 : 0.18, background: 'repeating-linear-gradient(115deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 7px)' }} />
+          </div>
+        )}
+        {/* success tint once placed */}
+        {opts.placed && (
+          <div style={{ position: 'absolute', inset: '7%', borderRadius: 10, background: 'rgba(34,197,94,0.30)', boxShadow: '0 0 16px rgba(34,197,94,0.75), inset 0 0 0 3px rgba(22,163,74,0.85)' }} />
+        )}
+        {/* glyph */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', ...HAFS, fontSize: 'clamp(20px, 3.6vw, 36px)', direction: 'rtl', userSelect: 'none', color: opts.placed ? '#052e16' : pal.ink, textShadow: `0 1px 1px ${pal.top}` }}>
+          {glyph}
         </div>
       </div>
     );
@@ -370,6 +385,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             </pattern>
           </defs>
 
+          {!imgOk.bg && (<g>
           {/* Sky + sun + clouds */}
           <rect x="0" y="0" width={STAGE_W} height="330" fill="url(#cbSky)" />
           <circle cx="92" cy="84" r="72" fill="#fde047" opacity="0.22" />
@@ -395,7 +411,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
           {/* Hazard barrier along the horizon */}
           <rect x="0" y="322" width={STAGE_W} height="12" fill="url(#cbHazard)" opacity="0.92" />
+          </g>)}
 
+          {!imgOk.crane && (<g>
           {/* ── Tower crane (static) ── */}
           {/* counter-jib + counterweight */}
           <g stroke="#b45309" strokeWidth="2.5">
@@ -435,7 +453,18 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
               );
             })}
           </g>
+          </g>)}
         </svg>
+
+        {/* ── Raster sprites (over the SVG fallback) ── */}
+        {imgOk.bg && (
+          <img src="/sprites/crane-bg.png" alt="" onError={() => dropImg('bg')}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, pointerEvents: 'none' }} />
+        )}
+        {imgOk.crane && (
+          <img src="/sprites/crane-tower.png" alt="" onError={() => dropImg('crane')}
+            style={{ position: 'absolute', left: '0%', top: pcy(CRANE_TOP), width: '100%', zIndex: 1, pointerEvents: 'none' }} />
+        )}
 
         {/* ── Dynamic crane parts (HTML, track trolley/hook) ── */}
         {/* Trolley */}
@@ -443,14 +472,19 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         {/* Cable */}
         <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(RAIL_Y + 6), height: pcy(g.hookY - RAIL_Y - 6), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
         {/* Hook block / electromagnet */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
-          background: g.held !== null ? 'linear-gradient(#f87171,#b91c1c)' : 'linear-gradient(#9ca3af,#374151)',
-          border: '2px solid #1f2937',
-          boxShadow: g.held !== null ? '0 0 20px rgba(239,68,68,0.85), inset 0 3px 0 rgba(255,255,255,0.35)' : 'inset 0 3px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.4)' }}>
-          {/* magnet poles */}
-          <div style={{ position: 'absolute', bottom: -4, left: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
-          <div style={{ position: 'absolute', bottom: -4, right: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
-        </div>
+        {imgOk.hook ? (
+          <img src="/sprites/crane-hook.png" alt="" onError={() => dropImg('hook')}
+            style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY + 10), width: HOOK_IMG, height: HOOK_IMG, transform: 'translate(-50%,-50%)', zIndex: 7, pointerEvents: 'none',
+              filter: g.held !== null ? 'drop-shadow(0 0 10px rgba(239,68,68,0.9)) saturate(1.4)' : 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
+        ) : (
+          <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
+            background: g.held !== null ? 'linear-gradient(#f87171,#b91c1c)' : 'linear-gradient(#9ca3af,#374151)',
+            border: '2px solid #1f2937',
+            boxShadow: g.held !== null ? '0 0 20px rgba(239,68,68,0.85), inset 0 3px 0 rgba(255,255,255,0.35)' : 'inset 0 3px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.4)' }}>
+            <div style={{ position: 'absolute', bottom: -4, left: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
+            <div style={{ position: 'absolute', bottom: -4, right: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
+          </div>
+        )}
 
         {/* ── Building ghost slots (remaining) ── */}
         {g.slots.map((s, i) => i >= g.placed && (
