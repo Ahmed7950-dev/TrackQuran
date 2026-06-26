@@ -40,6 +40,31 @@ const ROPE_TOP = 92;        // y where the rope leaves the crane (lower edge of 
 // The dotted placeholder boxes use this so they match the actual block size.
 const TILE_FOOT = { letter: { w: 0.90, h: 0.64 }, mark: { w: 0.90, h: 0.74 } } as const;
 
+// ── Editable layout (all in the 960×600 stage coordinate space) ──────────────
+// The in-game layout editor (✎) lets the user drag/resize these; "Save" copies
+// the resulting JSON so the defaults below can be updated in code.
+interface Rect { x: number; y: number; w: number; h: number }
+interface Layout {
+  stage: Rect;            // the platform png (where the letters are built)
+  crane: Rect;           // the crane png (h:0 ⇒ natural/auto height)
+  cube: { w: number; h: number };   // letter/vowel block size
+  build: { x: number; y: number };  // centre of the first (right-most) column's bottom slot
+  colGap: number; rowGap: number;   // spacing between columns / stacked rows
+  groundY: number;       // resting line of the loose cubes
+  ropeTop: number;       // y where the rope leaves the crane
+  hook: { w: number; dy: number };  // hook sprite size + vertical offset
+}
+const DEFAULT_LAYOUT: Layout = {
+  stage: { x: 300, y: 372, w: 360, h: 210 },
+  crane: { x: 0, y: CRANE_TOP, w: STAGE_W, h: 0 },
+  cube: { w: CUBE, h: CUBE },
+  build: { x: STAGE_W / 2 + CUBE * 1.18, y: BASE_Y },
+  colGap: CUBE * 1.18, rowGap: CUBE,
+  groundY: GROUND_Y,
+  ropeTop: ROPE_TOP,
+  hook: { w: HOOK_IMG, dy: 10 },
+};
+
 // Combining marks we support, with their vertical placement relative to the letter.
 const MARK_POS: Record<string, 'above' | 'below'> = {
   'ً': 'above', // fathatan
@@ -68,8 +93,9 @@ interface Cube {
 
 const dottedMark = (mark: string) => `◌${mark}`; // ◌ + combining mark renders the mark alone
 
-/** Decompose a word into per-letter columns and the ordered slot sequence. */
-function buildPlan(word: string): { slots: Slot[]; cols: number } {
+/** Decompose a word into per-letter columns and the ordered slot sequence,
+ *  positioned according to the (editable) layout. */
+function buildPlan(word: string, L: Layout): { slots: Slot[]; cols: number } {
   const chars = Array.from(word).filter(ch => ch.trim() !== '');
   type Col = { letter: string; below: string[]; above: string[] };
   const cols: Col[] = [];
@@ -83,12 +109,9 @@ function buildPlan(word: string): { slots: Slot[]; cols: number } {
   }
 
   const numCols = cols.length;
-  const totalW = numCols * CUBE * 1.18;
-  const startRight = STAGE_W / 2 + totalW / 2 - CUBE * 0.59; // column 0 sits on the right (RTL)
-
   const slots: Slot[] = [];
   cols.forEach((col, i) => {
-    const colX = startRight - i * CUBE * 1.18;
+    const colX = L.build.x - i * L.colGap; // column 0 (first letter) sits on the right (RTL)
     // bottom → top: below marks (foundation), then the letter, then above marks
     const stack: Array<{ glyph: string; matchKey: string; kind: 'letter' | 'mark' }> = [
       ...col.below.map(m => ({ glyph: dottedMark(m), matchKey: m, kind: 'mark' as const })),
@@ -96,7 +119,7 @@ function buildPlan(word: string): { slots: Slot[]; cols: number } {
       ...col.above.map(m => ({ glyph: dottedMark(m), matchKey: m, kind: 'mark' as const })),
     ];
     stack.forEach((s, level) => {
-      slots.push({ ...s, x: colX, y: BASE_Y - level * CUBE });
+      slots.push({ ...s, x: colX, y: L.build.y - level * L.rowGap });
     });
   });
   return { slots, cols: numCols };
@@ -113,6 +136,14 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   // Raster sprite assets; each falls back to the SVG version if its file fails.
   const [imgOk, setImgOk] = useState({ bg: true, crane: true, hook: true, wood: true, stone: true, stage: true });
   const dropImg = (k: keyof typeof imgOk) => setImgOk(s => (s[k] ? { ...s, [k]: false } : s));
+
+  // ── Editable layout + in-game editor ───────────────────────────────────────
+  const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
+  const layoutRef = useRef(layout);
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+  const [design, setDesign] = useState(false);
+  const [savedJson, setSavedJson] = useState('');
+  const fieldRef = useRef<HTMLDivElement>(null);
 
   const word = cleanWords[wordIndex] ?? '';
 
@@ -167,7 +198,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
   // ── Set up a word: build plan + scatter cubes ───────────────────────────────
   const setupWord = useCallback((w: string) => {
-    const { slots } = buildPlan(w);
+    const { slots } = buildPlan(w, layoutRef.current);
     // Required cubes (one per slot) + distractors.
     const usedLetters = new Set(slots.filter(s => s.kind === 'letter').map(s => s.matchKey));
     const usedMarks = new Set(slots.filter(s => s.kind === 'mark').map(s => s.matchKey));
@@ -190,7 +221,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       const homeX = n === 1 ? STAGE_W / 2 : left + ((right - left) * i) / (n - 1);
       return {
         id: cubeIdSeq++, matchKey: c.matchKey, glyph: c.glyph, kind: c.kind,
-        x: homeX, y: -CUBE - Math.random() * 240, vy: 0, homeX, state: 'ground' as const,
+        x: homeX, y: -layoutRef.current.cube.h - Math.random() * 240, vy: 0, homeX, state: 'ground' as const,
       };
     });
 
@@ -212,6 +243,14 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     const t = setTimeout(() => playWord(word), 450); // let the scene mount first
     return () => clearTimeout(t);
   }, [word, setupWord, playWord]);
+
+  // Re-position the building slots live when the layout is edited (design mode).
+  useEffect(() => {
+    if (word && game.current.cubes.length) {
+      game.current.slots = buildPlan(word, layout).slots;
+      setTick(t => t + 1);
+    }
+  }, [layout, word]);
 
   // ── Grab / drop ──────────────────────────────────────────────────────────────
   const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
@@ -291,11 +330,12 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
           if (c) { c.x = g.trolleyX; c.y = g.hookY + CUBE / 2 + 6; }
         }
         // Gravity: loose ground cubes fall and settle in their lane (no overlap).
+        const groundY = layoutRef.current.groundY;
         for (const c of g.cubes) {
           if (c.state !== 'ground') continue;
           c.vy += GRAVITY;
           c.y += c.vy;
-          if (c.y >= GROUND_Y) { c.y = GROUND_Y; c.vy = c.vy > 2.5 ? -c.vy * 0.32 : 0; }
+          if (c.y >= groundY) { c.y = groundY; c.vy = c.vy > 2.5 ? -c.vy * 0.32 : 0; }
           c.x += (c.homeX - c.x) * 0.18;
         }
       }
@@ -320,9 +360,38 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const pct = (x: number) => `${(x / STAGE_W) * 100}%`;
   const pcy = (y: number) => `${(y / STAGE_H) * 100}%`;
 
-  // px size of a cube relative to the stage, used by CSS.
-  const cubePctW = `${(CUBE / STAGE_W) * 100}%`;
-  const cubePctH = `${(CUBE / STAGE_H) * 100}%`;
+  // px size of a cube relative to the stage, used by CSS (from the editable layout).
+  const cubePctW = `${(layout.cube.w / STAGE_W) * 100}%`;
+  const cubePctH = `${(layout.cube.h / STAGE_H) * 100}%`;
+
+  // Drag/resize handle used in the layout editor — works in stage coordinates.
+  const EditBox: React.FC<{ rect: Rect; color: string; label: string; onChange: (r: Rect) => void; resizable?: boolean }>
+    = ({ rect, color, label, onChange, resizable = true }) => {
+    const startDrag = (e: React.PointerEvent, mode: 'move' | 'resize') => {
+      e.preventDefault(); e.stopPropagation();
+      const sx = e.clientX, sy = e.clientY; const r0 = { ...rect };
+      const fr = fieldRef.current?.getBoundingClientRect();
+      const scaleX = (fr?.width ?? STAGE_W) / STAGE_W, scaleY = (fr?.height ?? STAGE_H) / STAGE_H;
+      const onMove = (ev: PointerEvent) => {
+        const dx = (ev.clientX - sx) / scaleX, dy = (ev.clientY - sy) / scaleY;
+        if (mode === 'move') onChange({ ...r0, x: Math.round(r0.x + dx), y: Math.round(r0.y + dy) });
+        else onChange({ ...r0, w: Math.max(8, Math.round(r0.w + dx)), h: Math.max(8, Math.round(r0.h + dy)) });
+      };
+      const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+    };
+    return (
+      <div onPointerDown={e => startDrag(e, 'move')}
+        style={{ position: 'absolute', left: pct(rect.x), top: pcy(rect.y), width: pct(rect.w), height: pcy(rect.h), zIndex: 30, boxSizing: 'border-box', border: `2px solid ${color}`, background: `${color}22`, cursor: 'move' }}>
+        <span style={{ position: 'absolute', top: -17, left: -2, fontSize: 10, fontWeight: 700, color: '#fff', background: color, padding: '1px 5px', borderRadius: 4, whiteSpace: 'nowrap' }}>{label}</span>
+        {resizable && (
+          <div onPointerDown={e => startDrag(e, 'resize')}
+            style={{ position: 'absolute', right: -7, bottom: -7, width: 14, height: 14, background: color, border: '2px solid #fff', borderRadius: 3, cursor: 'nwse-resize' }} />
+        )}
+      </div>
+    );
+  };
+  const setL = (patch: Partial<Layout>) => setLayout(l => ({ ...l, ...patch }));
 
   const renderCube = (glyph: string, kind: 'letter' | 'mark', opts: { held?: boolean; placed?: boolean } = {}) => {
     // Two material palettes (used for the SVG/CSS fallback face): wood / jade.
@@ -372,6 +441,8 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             🏗️ Crane Builder {topicTitle ? <span style={{ opacity: 0.8, fontWeight: 600 }}>· {topicTitle}</span> : null}
           </div>
           <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>Word {Math.min(wordIndex + 1, cleanWords.length)} / {cleanWords.length}</div>
+          <button onClick={() => setDesign(d => !d)} title="Edit layout"
+            style={{ background: design ? '#f59e0b' : 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✎</button>
           <button onClick={() => playWord(word)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
         </div>
 
@@ -476,19 +547,19 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         {/* ── Aspect-locked play field: only the background stretches to fill the
              screen; the crane and cubes keep their natural proportions, centred
              and sized to the screen height ── */}
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', height: '100%', aspectRatio: `${STAGE_W} / ${STAGE_H}`, zIndex: 1 }}>
+        <div ref={fieldRef} style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', height: '100%', aspectRatio: `${STAGE_W} / ${STAGE_H}`, zIndex: 1 }}>
         {imgOk.crane && (
           <img src="/sprites/crane-tower.png" alt="" onError={() => dropImg('crane')}
-            style={{ position: 'absolute', left: '0%', top: pcy(CRANE_TOP), width: '100%', zIndex: 1, pointerEvents: 'none' }} />
+            style={{ position: 'absolute', left: pct(layout.crane.x), top: pcy(layout.crane.y), width: pct(layout.crane.w), height: layout.crane.h ? pcy(layout.crane.h) : 'auto', zIndex: 1, pointerEvents: 'none' }} />
         )}
 
         {/* ── Dynamic crane parts (HTML, track the hook) ── */}
         {/* Cable — drops from the lower edge of the jib (no trolley box) */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(ROPE_TOP), height: pcy(g.hookY - ROPE_TOP), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
+        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(layout.ropeTop), height: pcy(g.hookY - layout.ropeTop), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
         {/* Hook block / electromagnet */}
         {imgOk.hook ? (
           <img src="/sprites/crane-hook.png" alt="" onError={() => dropImg('hook')}
-            style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY + 10), width: HOOK_IMG, height: HOOK_IMG, transform: 'translate(-50%,-50%)', zIndex: 7, pointerEvents: 'none',
+            style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY + layout.hook.dy), width: layout.hook.w, height: layout.hook.w, transform: 'translate(-50%,-50%)', zIndex: 7, pointerEvents: 'none',
               filter: g.held !== null ? 'drop-shadow(0 0 10px rgba(239,68,68,0.9)) saturate(1.4)' : 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
         ) : (
           <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
@@ -500,17 +571,11 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
           </div>
         )}
 
-        {/* ── Stage / platform behind the building slots ── */}
-        {imgOk.stage && g.slots.length > 0 && (() => {
-          const xs = g.slots.map(s => s.x);
-          const minX = Math.min(...xs), maxX = Math.max(...xs);
-          const baseY = Math.max(...g.slots.map(s => s.y));
-          const padX = CUBE * 0.8;
-          return (
-            <img src="/sprites/crane-stage.png" alt="" onError={() => dropImg('stage')}
-              style={{ position: 'absolute', left: pct(minX - padX), top: pcy(baseY + CUBE * 0.32), width: pct((maxX - minX) + padX * 2), zIndex: 1, pointerEvents: 'none' }} />
-          );
-        })()}
+        {/* ── Stage / platform where the letters are built ── */}
+        {imgOk.stage && (
+          <img src="/sprites/crane-stage.png" alt="" onError={() => dropImg('stage')}
+            style={{ position: 'absolute', left: pct(layout.stage.x), top: pcy(layout.stage.y), width: pct(layout.stage.w), height: pcy(layout.stage.h), zIndex: 1, pointerEvents: 'none' }} />
+        )}
 
         {/* ── Building ghost slots (remaining) — sized to match the block footprint ── */}
         {g.slots.map((s, i) => i >= g.placed && (
@@ -543,7 +608,56 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
             {renderCube(c.glyph, c.kind, { held: c.state === 'held', placed: c.state === 'placed' })}
           </div>
         ))}
+
+        {/* ── Layout editor handles (drag to move, corner to resize) ── */}
+        {design && (
+          <>
+            <EditBox rect={layout.stage} color="#f43f5e" label="stage" onChange={r => setL({ stage: r })} />
+            <EditBox rect={{ ...layout.crane, h: layout.crane.h || Math.round(layout.crane.w * 548 / 990) }} color="#f59e0b" label="crane" onChange={r => setL({ crane: r })} />
+            <EditBox rect={{ x: Math.round(layout.build.x - layout.cube.w / 2), y: Math.round(layout.build.y - layout.cube.h / 2), w: layout.cube.w, h: layout.cube.h }} color="#22d3ee" label="letter box + position"
+              onChange={r => setL({ cube: { w: r.w, h: r.h }, build: { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) } })} />
+          </>
+        )}
         </div>{/* end play field */}
+
+        {/* ── Layout editor panel ── */}
+        {design && (
+          <div style={{ position: 'absolute', top: 56, right: 10, width: 230, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', zIndex: 40, background: 'rgba(15,23,42,0.94)', border: '1px solid #334155', borderRadius: 12, padding: 12, color: '#fff', fontSize: 12, fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>Layout editor</div>
+            {([
+              ['colGap', layout.colGap, (v: number) => setL({ colGap: v })],
+              ['rowGap', layout.rowGap, (v: number) => setL({ rowGap: v })],
+              ['build.x', layout.build.x, (v: number) => setL({ build: { ...layout.build, x: v } })],
+              ['build.y', layout.build.y, (v: number) => setL({ build: { ...layout.build, y: v } })],
+              ['cube.w', layout.cube.w, (v: number) => setL({ cube: { ...layout.cube, w: v } })],
+              ['cube.h', layout.cube.h, (v: number) => setL({ cube: { ...layout.cube, h: v } })],
+              ['groundY', layout.groundY, (v: number) => setL({ groundY: v })],
+              ['ropeTop', layout.ropeTop, (v: number) => setL({ ropeTop: v })],
+              ['crane.x', layout.crane.x, (v: number) => setL({ crane: { ...layout.crane, x: v } })],
+              ['crane.y', layout.crane.y, (v: number) => setL({ crane: { ...layout.crane, y: v } })],
+              ['crane.w', layout.crane.w, (v: number) => setL({ crane: { ...layout.crane, w: v } })],
+              ['hook.w', layout.hook.w, (v: number) => setL({ hook: { ...layout.hook, w: v } })],
+              ['hook.dy', layout.hook.dy, (v: number) => setL({ hook: { ...layout.hook, dy: v } })],
+            ] as Array<[string, number, (v: number) => void]>).map(([label, val, on]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                <span style={{ flex: 1, opacity: 0.8 }}>{label}</span>
+                <button onClick={() => on(Math.round(val - 5))} style={{ width: 22, height: 22, borderRadius: 5, border: 'none', background: '#334155', color: '#fff', cursor: 'pointer' }}>−</button>
+                <span style={{ width: 38, textAlign: 'center', fontWeight: 700 }}>{Math.round(val)}</span>
+                <button onClick={() => on(Math.round(val + 5))} style={{ width: 22, height: 22, borderRadius: 5, border: 'none', background: '#334155', color: '#fff', cursor: 'pointer' }}>＋</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <button onClick={() => { const j = JSON.stringify(layout); navigator.clipboard?.writeText(j).catch(() => {}); setSavedJson(j); }}
+                style={{ flex: 1, background: '#16a34a', border: 'none', color: '#fff', borderRadius: 8, padding: '8px', fontWeight: 800, cursor: 'pointer' }}>💾 Save</button>
+              <button onClick={() => setLayout(DEFAULT_LAYOUT)} style={{ background: '#475569', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>Reset</button>
+            </div>
+            {savedJson && (
+              <textarea readOnly value={savedJson} onFocus={e => e.target.select()}
+                style={{ width: '100%', height: 70, marginTop: 8, fontSize: 10, fontFamily: 'monospace', background: '#0b1220', color: '#86efac', border: '1px solid #334155', borderRadius: 6, padding: 6, boxSizing: 'border-box' }} />
+            )}
+            <p style={{ margin: '8px 0 0', opacity: 0.6, fontSize: 10 }}>Drag the coloured boxes to move; drag a corner to resize. Save copies the JSON.</p>
+          </div>
+        )}
 
         {/* Help overlay */}
         {showHelp && phase === 'playing' && (
