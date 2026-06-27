@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import lottie from 'lottie-web';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { safeCopy } from '../utils';
@@ -538,6 +539,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // instant control and reconciles to the host's snapshots; P1 is interpolated.
   const p2RenderP1Ref      = useRef({ x: 86, y: 50, tilt: 0 });
   const p2PredInitedRef    = useRef(false);
+  const p2BubbleRenderRef  = useRef<Map<string, number>>(new Map()); // smoothed bubble x for P2
   const p2FuelBar1Ref      = useRef<HTMLDivElement>(null);
   const p2FuelBar2Ref      = useRef<HTMLDivElement>(null);
   const p2Score1SpanRef    = useRef<HTMLSpanElement>(null);
@@ -1192,6 +1194,21 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p2ViewP1PlaneRef.current.style.top       = `${r.y}%`;
           p2ViewP1PlaneRef.current.style.transform = `translate(-50%,-50%) rotate(${r.tilt}deg)`;
         }
+        // ── Bubbles — drift by vx every frame and gently reconcile toward the
+        //    snapshot, so they glide at 60fps instead of snapping every ~33ms ──
+        const bmap = p2BubbleRenderRef.current;
+        const liveIds = new Set<string>();
+        for (const b of snap.bubbles) {
+          if (b.popped) continue;
+          liveIds.add(b.id);
+          let rx = bmap.get(b.id);
+          if (rx === undefined || Math.abs(b.x - rx) > 40) rx = b.x; // new bubble or edge wrap → snap
+          else { rx += b.vx; rx += (b.x - rx) * 0.12; }              // extrapolate + correction
+          bmap.set(b.id, rx);
+          const el = bubbleDomRefs.current.get(b.id);
+          if (el) el.style.left = `${rx}%`;
+        }
+        for (const id of bmap.keys()) if (!liveIds.has(id)) bmap.delete(id);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -1373,12 +1390,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       if (p2Score1SpanRef.current) p2Score1SpanRef.current.textContent = String(payload.scores[0]);
       if (p2Score2SpanRef.current) p2Score2SpanRef.current.textContent = String(payload.scores[1]);
 
-      // Update bubble positions directly
-      for (const b of payload.bubbles) {
-        if (b.popped) continue;
-        const el = bubbleDomRefs.current.get(b.id);
-        if (el) el.style.left = `${b.x}%`;
-      }
+      // Bubble positions are smoothed in the P2 prediction loop (drift + reconcile),
+      // not snapped here — that's what removes the bubble stutter.
     });
 
     // P2 receives event notifications from P1 (sound + glow on P2's own screen)
@@ -1935,6 +1948,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               <div className="flex gap-1.5 items-center">
                 <div className="flex-1 bg-slate-100 rounded-lg px-2 py-1.5 text-[10px] text-slate-500 font-mono truncate border border-slate-200">{shareLink}</div>
                 <button onClick={copyLink} className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all active:scale-95 flex-shrink-0" style={{ background: linkCopied ? '#22c55e' : '#3b82f6', color: 'white' }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
+              </div>
+              <div className="mt-2 flex flex-col items-center gap-1">
+                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                  <QRCodeSVG value={shareLink} size={116} level="M" />
+                </div>
+                <p className="text-[10px] text-slate-400 font-semibold">Or scan to join on a phone 📱</p>
               </div>
               {p2Joined
                 ? <p className="text-[11px] font-extrabold text-green-600 mt-1.5">✅ Player 2 joined! Ready to take off.</p>
