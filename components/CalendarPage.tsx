@@ -1022,7 +1022,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         {/* Day header row */}
         <div
           className="grid sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700"
-          style={{ gridTemplateColumns: showDualTZ ? '80px repeat(7, 1fr)' : '56px repeat(7, 1fr)' }}
+          style={{ gridTemplateColumns: showDualTZ ? '64px repeat(7, minmax(76px, 1fr))' : '56px repeat(7, minmax(76px, 1fr))' }}
         >
           {/* Corner: timezone label */}
           <div className="border-e border-slate-200 dark:border-gray-700 flex flex-col items-end justify-end pb-1 pe-1.5">
@@ -1051,7 +1051,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         {/* Time grid body */}
         <div
           className="grid"
-          style={{ gridTemplateColumns: showDualTZ ? '80px repeat(7, 1fr)' : '56px repeat(7, 1fr)' }}
+          style={{ gridTemplateColumns: showDualTZ ? '64px repeat(7, minmax(76px, 1fr))' : '56px repeat(7, minmax(76px, 1fr))' }}
         >
           {/* Time labels column */}
           <div className="border-e border-slate-200 dark:border-gray-700 relative">
