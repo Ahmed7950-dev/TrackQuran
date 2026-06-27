@@ -250,6 +250,11 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
   );
 };
 
+// Tiny silent clip used to "unlock" HTML audio on the first touch (iOS/iPad
+// block audio that isn't started inside a user gesture — Player 2's audio is
+// triggered by network snapshots, so we prime a reusable element on first tap).
+const SILENT_WAV = 'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+
 const Joystick: React.FC<{
   onKeys: (k: { up: boolean; down: boolean; left: boolean; right: boolean }) => void;
   accentColor?: string;
@@ -258,7 +263,7 @@ const Joystick: React.FC<{
   const knobRef = React.useRef<HTMLDivElement>(null);
   const ptrId = React.useRef<number | null>(null);
   const centerRef = React.useRef({ x: 0, y: 0 });
-  const BASE_R = 55, KNOB_R = 24, MAX = BASE_R - KNOB_R, DEAD = 0.22;
+  const BASE_R = 60, KNOB_R = 26, MAX = BASE_R - KNOB_R, DEAD = 0.12;
 
   const move = (cx: number, cy: number) => {
     const kn = knobRef.current;
@@ -465,6 +470,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   const [p2Joined, setP2Joined]               = useState(false);
   const [p2RemotePlane, setP2RemotePlane]     = useState(1);
   const [linkCopied, setLinkCopied]           = useState(false);
+  const [qrOpen, setQrOpen]                   = useState(false);
   const [p2Waiting, setP2Waiting]             = useState(false);
   // P2-only crashed state (updated rarely)
   const [p1CrashedRemote, setP1CrashedRemote] = useState(false);
@@ -494,7 +500,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // ── Shared game refs ──────────────────────────────────────────────────────
   const keysDown      = useRef<Record<string, boolean>>({});
   const rafRef        = useRef<number>(0);
-  const audioRef      = useRef<HTMLAudioElement | null>(null);
+  const audioRef      = useRef<HTMLAudioElement | null>(null); // single reusable, iOS-unlocked element
+  const audioUnlockedRef = useRef(false);
   const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const bubblesRef    = useRef<Bubble[]>([]);
   const bubbleDomRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -670,17 +677,35 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     }
   }, [letters]);
 
+  // One reusable <audio> element (unlocked on first touch) plays every letter —
+  // this is what makes audio reliable on iPad/phone for Player 2, whose audio is
+  // triggered by network snapshots rather than a tap.
   const playLetterAudio = useCallback((letter: string) => {
     if (!letter) return;
-    audioRef.current?.pause(); window.speechSynthesis?.cancel();
-    const cached = audioCacheRef.current.get(letter);
-    const audio = cached ?? new Audio(letterAudioUrl(letter));
-    if (cached) { cached.currentTime = 0; }
-    audioRef.current = audio;
+    window.speechSynthesis?.cancel();
+    const el = audioRef.current ?? (audioRef.current = new Audio());
     let fallbackUsed = false;
     const fallback = () => { if (!fallbackUsed) { fallbackUsed = true; speakLetter(letter); } };
-    audio.onerror = fallback;
-    audio.play().then(() => { audio.onerror = null; }).catch(fallback);
+    el.muted = false;
+    el.onerror = fallback;
+    el.src = letterAudioUrl(letter);
+    el.currentTime = 0;
+    el.play().then(() => { el.onerror = null; }).catch(fallback);
+  }, []);
+
+  // Unlock audio (and speech) on the first user gesture anywhere on the page.
+  useEffect(() => {
+    const unlock = () => {
+      if (audioUnlockedRef.current) return;
+      const el = audioRef.current ?? (audioRef.current = new Audio());
+      el.muted = true; el.src = SILENT_WAV;
+      el.play().then(() => { el.pause(); el.currentTime = 0; el.muted = false; audioUnlockedRef.current = true; })
+               .catch(() => { el.muted = false; });
+      try { window.speechSynthesis?.resume(); const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis?.speak(u); } catch { /* no speech */ }
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('touchstart', unlock);
+    return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('touchstart', unlock); };
   }, []);
 
   // ── Trigger glow helper ───────────────────────────────────────────────────
@@ -1950,14 +1975,26 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
                 <button onClick={copyLink} className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all active:scale-95 flex-shrink-0" style={{ background: linkCopied ? '#22c55e' : '#3b82f6', color: 'white' }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
               </div>
               <div className="mt-2 flex flex-col items-center gap-1">
-                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <button type="button" onClick={() => setQrOpen(true)} title="Tap to enlarge"
+                  className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer">
                   <QRCodeSVG value={shareLink} size={116} level="M" />
-                </div>
-                <p className="text-[10px] text-slate-400 font-semibold">Or scan to join on a phone 📱</p>
+                </button>
+                <p className="text-[10px] text-slate-400 font-semibold">Tap the QR to enlarge · scan to join 📱</p>
               </div>
               {p2Joined
                 ? <p className="text-[11px] font-extrabold text-green-600 mt-1.5">✅ Player 2 joined! Ready to take off.</p>
                 : <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full border-2 border-sky-400 border-t-transparent animate-spin"/>Waiting for Player 2…</p>}
+            </div>
+          )}
+
+          {/* Enlarged QR overlay */}
+          {qrOpen && (
+            <div onClick={() => setQrOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(8,15,30,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <div onClick={e => e.stopPropagation()} className="bg-white rounded-3xl p-5 shadow-2xl flex flex-col items-center gap-3">
+                <QRCodeSVG value={shareLink} size={Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 90, 380)} level="M" />
+                <p className="text-sm text-slate-600 font-bold">Scan to join as Player 2 ✈️</p>
+              </div>
+              <button onClick={() => setQrOpen(false)} className="mt-5 px-6 py-2.5 rounded-full bg-white text-slate-800 font-extrabold shadow-lg active:scale-95">Close ✕</button>
             </div>
           )}
 

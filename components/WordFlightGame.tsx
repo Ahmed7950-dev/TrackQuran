@@ -224,7 +224,7 @@ const Joystick: React.FC<{
   const knobRef = React.useRef<HTMLDivElement>(null);
   const ptrId = React.useRef<number | null>(null);
   const centerRef = React.useRef({ x: 0, y: 0 });
-  const BASE_R = 55, KNOB_R = 24, MAX = BASE_R - KNOB_R, DEAD = 0.22;
+  const BASE_R = 60, KNOB_R = 26, MAX = BASE_R - KNOB_R, DEAD = 0.12;
 
   const move = (cx: number, cy: number) => {
     const kn = knobRef.current;
@@ -419,6 +419,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const [p2Joined, setP2Joined]             = useState(false);
   const [p2RemotePlane, setP2RemotePlane]   = useState(1);
   const [linkCopied, setLinkCopied]         = useState(false);
+  const [qrOpen, setQrOpen]                 = useState(false);
   const [p2Waiting, setP2Waiting]           = useState(false);
   const [p1CrashedRemote, setP1CrashedRemote] = useState(false);
   const [p2CrashedRemote, setP2CrashedRemote] = useState(false);
@@ -1652,14 +1653,26 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
                 <button onClick={copyLink} className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all active:scale-95 flex-shrink-0" style={{ background:linkCopied?'#22c55e':'#3b82f6', color:'white' }}>{linkCopied?'✓ Copied':'Copy'}</button>
               </div>
               <div className="mt-2 flex flex-col items-center gap-1">
-                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <button type="button" onClick={() => setQrOpen(true)} title="Tap to enlarge"
+                  className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer">
                   <QRCodeSVG value={shareLink} size={116} level="M" />
-                </div>
-                <p className="text-[10px] text-slate-400 font-semibold">Or scan to join on a phone 📱</p>
+                </button>
+                <p className="text-[10px] text-slate-400 font-semibold">Tap the QR to enlarge · scan to join 📱</p>
               </div>
               {p2Joined
                 ? <p className="text-[11px] font-extrabold text-green-600 mt-1.5">✅ Player 2 joined! Ready to take off.</p>
                 : <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full border-2 border-sky-400 border-t-transparent animate-spin"/>Waiting for Player 2…</p>}
+            </div>
+          )}
+
+          {/* Enlarged QR overlay */}
+          {qrOpen && (
+            <div onClick={() => setQrOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(8,15,30,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <div onClick={e => e.stopPropagation()} className="bg-white rounded-3xl p-5 shadow-2xl flex flex-col items-center gap-3">
+                <QRCodeSVG value={shareLink} size={Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 90, 380)} level="M" />
+                <p className="text-sm text-slate-600 font-bold">Scan to join as Player 2 ✈️</p>
+              </div>
+              <button onClick={() => setQrOpen(false)} className="mt-5 px-6 py-2.5 rounded-full bg-white text-slate-800 font-extrabold shadow-lg active:scale-95">Close ✕</button>
             </div>
           )}
 
