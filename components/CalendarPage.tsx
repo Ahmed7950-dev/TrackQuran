@@ -1018,7 +1018,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       )}
 
       {/* Calendar grid */}
-      <div ref={calendarGridRef} className="flex-1 overflow-auto rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div ref={calendarGridRef} className={`${isStudentView ? 'h-[68vh]' : 'flex-1'} overflow-auto rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm`}>
         {/* Day header row */}
         <div
           className="grid sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700"
