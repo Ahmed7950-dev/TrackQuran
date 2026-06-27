@@ -10,6 +10,7 @@ import {
   wasConnected,
 } from '../services/googleCalendarService';
 import { AvailabilitySlot } from '../services/availabilityService';
+import { getTutorBusy, syncTutorBusy, BusySlot } from '../services/tutorBusyService';
 import { safeCopy } from '../utils';
 import {
   LessonBooking,
@@ -282,6 +283,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const canLink = !isStudentView && !!gcalToken && linkStudents.length > 0;
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
+  const [tutorBusy,   setTutorBusy]   = useState<BusySlot[]>([]); // student view: tutor's Google busy times (from DB)
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState<string | null>(null);
   const [connecting,  setConnecting]  = useState(false);
@@ -415,6 +417,33 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     if (gcalToken) loadEvents(gcalToken, monday);
     else           setEvents([]);
   }, [gcalToken, monday, loadEvents]);
+
+  // Tutor side: mirror a 4-week window of Google busy times into the DB so
+  // students can see them as "Booked" on any device (the Google token never
+  // leaves this browser). Covers the typical booking horizon, refreshing as the
+  // tutor opens / navigates the calendar.
+  useEffect(() => {
+    if (isStudentView || !teacherId || !gcalToken) return;
+    let cancelled = false;
+    const start = monday, end = addDays(monday, 28);
+    (async () => {
+      try {
+        const evs = await fetchGCalEvents(gcalToken, start, end);
+        if (cancelled) return;
+        const slots: BusySlot[] = evs
+          .filter(e => e.start.dateTime && e.end.dateTime)
+          .map(e => ({ startAt: e.start.dateTime!, endAt: e.end.dateTime! }));
+        await syncTutorBusy(teacherId, start.toISOString(), end.toISOString(), slots);
+      } catch { /* offline / token expired — ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [teacherId, isStudentView, gcalToken, monday]);
+
+  // Student side: read the tutor's mirrored busy times for the shown week.
+  useEffect(() => {
+    if (!isStudentView || !teacherId) { setTutorBusy([]); return; }
+    getTutorBusy(teacherId, monday.toISOString(), addDays(monday, 7).toISOString()).then(setTutorBusy);
+  }, [isStudentView, teacherId, monday]);
 
   /* ---------------------------------------------------------------- */
   /*  Fetch lesson bookings + Realtime subscription                     */
@@ -803,6 +832,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
   const lessonsForDay = (day: Date): LessonSession[] =>
     studentLessons.filter(l => l.startAt && isSameDay(new Date(l.startAt), day));
+
+  const busyForDay = (day: Date): BusySlot[] =>
+    tutorBusy.filter(b => b.startAt && isSameDay(new Date(b.startAt), day));
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                            */
@@ -1352,6 +1384,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                           <p className="text-[10px] font-semibold leading-tight mt-0.5 opacity-90">{range}</p>
                         </>
                       )}
+                    </div>
+                  );
+                })}
+
+                {/* Tutor's Google Calendar busy times → shown to students as "Booked" */}
+                {isStudentView && busyForDay(day).map((b, i) => {
+                  const top    = timeToOffsetInTZ(b.startAt, TUTOR_TIMEZONE);
+                  const height = eventHeightInTZ(b.startAt, b.endAt);
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: studentTZ });
+                  return (
+                    <div
+                      key={`busy-${day.toDateString()}-${i}`}
+                      title={`Booked — ${fmtT(b.startAt)} to ${fmtT(b.endAt)}`}
+                      className="absolute left-0.5 right-0.5 rounded-lg overflow-hidden z-10 bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-100 px-2 py-1 shadow-sm"
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      <p className="text-[11px] font-bold leading-tight truncate">Booked</p>
                     </div>
                   );
                 })}
