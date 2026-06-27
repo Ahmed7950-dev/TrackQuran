@@ -1007,8 +1007,8 @@ const LetterWithError: React.FC<{
                 </div>
             )}
             {mistake && mistake.errorText && !isEditing && (
-                <div 
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-40 pointer-events-auto group"
+                <div
+                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-0.5 sm:mb-3 z-40 pointer-events-auto group"
                     style={{ zIndex: 40 }}
                     onMouseEnter={(e) => {
                         (e.currentTarget as HTMLElement).style.zIndex = '9999';
@@ -1017,7 +1017,7 @@ const LetterWithError: React.FC<{
                         (e.currentTarget as HTMLElement).style.zIndex = '40';
                     }}
                 >
-                    <div className={`px-3 py-1 text-sm rounded-lg shadow-lg whitespace-nowrap max-w-[300px] font-medium transition-all ${
+                    <div className={`px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg shadow-lg whitespace-nowrap max-w-[180px] sm:max-w-[300px] font-medium transition-all ${
                         mistake.errorType === 'tajweed' 
                             ? 'bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-200 border-2 border-green-300 dark:border-green-700'
                             : 'bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border-2 border-red-300 dark:border-red-700'
@@ -1466,8 +1466,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [searchInput, setSearchInput] = useState('');
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
+    // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
+    // so the verses + mistake annotations fit without overlapping.
     const [fontSize, setFontSize] = useState(() =>
-        typeof window !== 'undefined' && window.innerWidth >= 768 ? 7 : 4
+        typeof window !== 'undefined' && window.innerWidth >= 768 ? 7 : 1
     );
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
@@ -2677,7 +2679,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
 
     const handleIncreaseFontSize = () => setFontSize(prev => Math.min(prev + 1, 8));
-    const handleDecreaseFontSize = () => setFontSize(prev => Math.max(prev - 1, 2));
+    const handleDecreaseFontSize = () => setFontSize(prev => Math.max(prev - 1, 1));
 
     const selectedSurahInfo = QURAN_METADATA.find(s => s.number === selectedSurahId);
     
@@ -3307,7 +3309,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 );
              }
         });
-        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center text-${fontSize}xl select-none py-6 px-2 sm:py-10 sm:px-4` + (showTranslation ? '' : ' leading-[2.6]');
+        const sizeClass = fontSize <= 1 ? 'text-base' : `text-${fontSize}xl`;
+        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center ${sizeClass} select-none py-6 px-2 sm:py-10 sm:px-4` + (showTranslation ? '' : ' leading-[2.6]');
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
