@@ -932,8 +932,9 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           )
         )}
 
-        {/* Student view */}
-        {isStudentView && !gcalToken && (
+        {/* Student view — only say "not set up" when there's genuinely nothing
+            to show (no availability AND no synced calendar) */}
+        {isStudentView && !gcalToken && availabilitySlots.length === 0 && (
           <span className="text-sm text-slate-400 dark:text-slate-500 italic">
             Your tutor hasn't set up calendar sharing yet.
           </span>

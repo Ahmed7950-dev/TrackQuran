@@ -393,6 +393,7 @@ const App: React.FC = () => {
   //    registered as a student with the same Google account ───────────────────
   if (window.location.pathname === '/student') return <StudentRoute />;
 
+
   // ── Public policy / pricing pages — no auth required ─────────────────────────
   if (window.location.pathname === '/pricing') return <PricingPage />;
   if (window.location.pathname === '/terms')   return <TermsOfServicePage />;
