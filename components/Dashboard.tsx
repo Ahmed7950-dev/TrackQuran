@@ -306,7 +306,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                  <div className="flex justify-between items-start">
                     <div className="flex-grow">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <StudentProfileIcon src={student.profileIcon} size={84} mode="hover" play={cardHover} />
+                            <StudentProfileIcon src={student.profileIcon} size={64} mode="hover" play={cardHover} />
                             <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
                             {isLinked && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full flex-shrink-0">
