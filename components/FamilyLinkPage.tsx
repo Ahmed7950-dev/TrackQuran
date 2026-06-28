@@ -78,7 +78,7 @@ interface Metrics {
   achievedMilestoneIds: string[];
   tajweedLessonNames: string[];
   tafsirVerses: number;
-  lastHomework: { range: string; note: string } | null;
+  homeworks: { range: string; note: string; isDone: boolean; date: string }[];
 }
 
 function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
@@ -110,9 +110,14 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
   });
   const attended = explicitPresent + implicitDays.size;
 
-  // Last homework — independent of timeframe.
+  // All assigned homework, newest first — independent of timeframe.
   const allHw = [...(rd?.quranHomework ?? [])].sort((a, b) => new Date(b.assignedAt || 0).getTime() - new Date(a.assignedAt || 0).getTime());
-  const lastHw = allHw[0] ? { range: fmtHomework(allHw[0]), note: allHw[0].note ?? '' } : null;
+  const homeworks = allHw.map((hw: any) => ({
+    range: fmtHomework(hw),
+    note: hw.note ?? '',
+    isDone: !!hw.isDone,
+    date: hw.assignedAt ?? '',
+  }));
 
   return {
     points: [...recTF, ...memTF].reduce((s: number, a: any) => s + (a.pointsEarned ?? ((a.versesCompleted ?? 0) * 15 * POINTS_PER_WORD)), 0),
@@ -137,7 +142,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
       }
       return sum + 1;
     }, 0),
-    lastHomework: lastHw,
+    homeworks,
   };
 }
 
@@ -357,25 +362,31 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
             {/* 2 ── Attendance calendar */}
             {quranMembers.length > 0 && <AttendanceCalendar members={quranMembers} />}
 
-            {/* 3 ── Latest homework (not time-framed) */}
+            {/* 3 ── Assigned homework (all, not time-framed) */}
             {quranMembers.length > 0 && (
               <section className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
-                <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2">📝 Latest homework</h2>
+                <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2">📝 Homework assigned</h2>
                 <div className="divide-y divide-slate-100 dark:divide-gray-700">
                   {quranMembers.map(m => {
-                    const hw = metricsByMember[m.id].lastHomework;
+                    const list = metricsByMember[m.id].homeworks;
                     return (
                       <div key={m.id} className="flex items-start gap-3 py-3">
                         <span className="flex items-center gap-2 w-32 flex-shrink-0 pt-0.5">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
                           <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{m.name}</span>
                         </span>
-                        <div className="flex-1 min-w-0">
-                          {hw ? (
-                            <>
-                              <p className="text-base font-semibold text-violet-700 dark:text-violet-300">{hw.range}</p>
-                              {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{hw.note}</p>}
-                            </>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          {list.length > 0 ? (
+                            list.map((hw, i) => (
+                              <div key={i}>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className={`text-base font-semibold ${hw.isDone ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-violet-700 dark:text-violet-300'}`}>{hw.range}</p>
+                                  {hw.isDone && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✓ Done</span>}
+                                  {hw.date && <span className="text-[10px] text-slate-400">{new Date(hw.date).toLocaleDateString()}</span>}
+                                </div>
+                                {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{hw.note}</p>}
+                              </div>
+                            ))
                           ) : (
                             <p className="text-xs text-slate-400 italic">No homework assigned.</p>
                           )}
