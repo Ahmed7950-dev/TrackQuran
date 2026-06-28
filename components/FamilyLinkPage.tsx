@@ -126,7 +126,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
     rankAge: rd?.ranks ? { rank: rd.ranks.readingRank, total: rd.ranks.readingTotal } : null,
     rankAll: rd?.ranks ? { rank: rd.ranks.overallReadingRank, total: rd.ranks.overallReadingTotal } : null,
     // Per-page mistakes rate — same as the tutor's student card (all-time).
-    mistakesRate: computeMistakesRate(rec, rd?.mistakes ?? {}),
+    mistakesRate: computeMistakesRate(rec, rd?.mistakes ?? {}, mem),
     achievedMilestoneIds: MILESTONES.filter(m => m.isAchieved(readPagesAll)).map(m => m.id), // all-time
     tajweedLessonNames: tjw.map((t: any) => t.lessonTitle || t.lessonId).filter(Boolean),
     // Actual tafsir verses from each review's ayah range (not whole surahs).

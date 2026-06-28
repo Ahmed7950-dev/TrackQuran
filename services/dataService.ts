@@ -329,8 +329,14 @@ function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
 export const computeMistakesRate = (
   recitationAchievements: AchRange[],
   mistakes: Record<string, unknown>,
+  memorizationAchievements: AchRange[] = [],
 ): number => {
-  const pages = fullyRecitedPageSet(recitationAchievements);
+  // Read pages = recited ∪ memorized (a recited short surah is logged as
+  // memorization but still counts as read), so mistakes in those pages count.
+  const pages = new Set<number>([
+    ...fullyRecitedPageSet(recitationAchievements),
+    ...fullyRecitedPageSet(memorizationAchievements),
+  ]);
   if (pages.size === 0) return 0;
   const mistakeVerses = new Set<string>();
   for (const key of Object.keys(mistakes)) {

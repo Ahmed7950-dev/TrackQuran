@@ -39,12 +39,14 @@ export const getStudentRankAndProgress = (
     const currentStudentGroup = effectiveCategory(currentStudent);
     const studentsInGroup = allStudents.filter(s => effectiveCategory(s) === currentStudentGroup);
     
+    // "Reading" counts memorized pages as read too (a hifz student has also
+    // read those pages), matching the page counts shown everywhere else.
     const getScore = (student: Student): number => {
-        return type === 'reading' 
-            ? getRecitedPagesSet(student).size
+        return type === 'reading'
+            ? new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size
             : getMemorizedPagesSet(student).size;
     };
-    
+
     const rankedStudents = studentsInGroup
         .map(s => ({ id: s.id, name: s.name, score: getScore(s) }))
         .sort((a, b) => b.score - a.score);
@@ -83,7 +85,9 @@ export const getOverallRankAndProgress = (
     type: 'reading' | 'memorization'
 ): { rank: number; total: number } => {
     const getScore = (student: Student): number =>
-        type === 'reading' ? getRecitedPagesSet(student).size : getMemorizedPagesSet(student).size;
+        type === 'reading'
+            ? new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size
+            : getMemorizedPagesSet(student).size;
 
     const ranked = allStudents
         .map(s => ({ id: s.id, score: getScore(s) }))
