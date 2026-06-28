@@ -298,173 +298,147 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                 <span className="text-xs font-bold text-white">Next lesson</span>
               </div>
             )}
-            {/* Top Section */}
-            <div className={`p-4 ${isInactive 
-                ? 'bg-slate-50 dark:bg-gray-800/50' 
-                : 'bg-gradient-to-br from-teal-50 to-orange-50 dark:from-gray-800 dark:to-slate-800/60'
-            }`}>
-                 <div className="flex justify-between items-start">
-                    <div className="flex-grow">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <StudentProfileIcon src={student.profileIcon} size={64} mode="hover" play={cardHover} />
-                            <h3 className={`font-extrabold text-xl truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
-                            {isLinked && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full flex-shrink-0">
-                                🔗 Linked
-                              </span>
-                            )}
-                            {rank && (
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${RANK_CONFIG[rank].badge}`}>
-                                <span>{RANK_CONFIG[rank].emoji}</span>
-                                <span>{RANK_CONFIG[rank].short}</span>
-                              </span>
-                            )}
-                            {viewMode === 'points' ? (
-                              <span className="text-xs font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
-                            ) : (
-                              <span className="flex items-center gap-1 flex-wrap">
-                                <span className="text-xs font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  {(readingRate + tajweedRate).toFixed(2)} err/pg
-                                </span>
-                                {mistakeRateTrend && mistakeRateTrend.dir !== 'same' && (
-                                  <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
-                                    mistakeRateTrend.dir === 'better'
-                                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
-                                      : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
-                                  }`}>
-                                    {mistakeRateTrend.dir === 'better'
-                                      ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>
-                                      : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>
-                                    }
-                                    {mistakeRateTrend.dir === 'better' ? 'Improving' : 'Higher'}
-                                  </span>
-                                )}
-                                {mistakeRateTrend && mistakeRateTrend.dir === 'same' && (
-                                  <span className="inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M2.75 8a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5h-9A.75.75 0 0 1 2.75 8Z" clipRule="evenodd" /></svg>
-                                    Steady
-                                  </span>
-                                )}
-                              </span>
-                            )}
+
+            {/* Copy student link — small corner icon */}
+            {teacherId && (
+                <button
+                    onClick={handleShare}
+                    disabled={shareState === 'loading'}
+                    title={shareState === 'copied' ? 'Link copied!' : 'Copy student link'}
+                    className={`absolute top-2 right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors ${
+                        shareState === 'copied'
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-white/80 dark:bg-gray-700/80 text-slate-500 dark:text-slate-300 hover:bg-teal-500 hover:text-white'
+                    }`}
+                >
+                    {shareState === 'loading' ? (
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                    ) : shareState === 'copied' ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd"/>
+                        </svg>
+                    ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"/>
+                        </svg>
+                    )}
+                </button>
+            )}
+
+            {/* Body: avatar (left third) + info (right two-thirds) */}
+            <div className="flex items-stretch">
+                {/* Left third — big avatar */}
+                <div className={`w-1/3 flex items-center justify-center p-3 ${isInactive
+                    ? 'bg-slate-50 dark:bg-gray-800/50'
+                    : 'bg-gradient-to-br from-teal-50 to-orange-50 dark:from-gray-800 dark:to-slate-800/60'
+                }`}>
+                    {student.profileIcon ? (
+                        <StudentProfileIcon src={student.profileIcon} size={112} mode="hover" play={cardHover} className="w-full max-w-[112px] aspect-square h-auto" />
+                    ) : (
+                        <div className="w-full max-w-[96px] aspect-square rounded-full bg-teal-500/90 dark:bg-teal-600 flex items-center justify-center text-white text-3xl font-extrabold">
+                            {student.name.charAt(0).toUpperCase()}
                         </div>
-                        {getAge(student.dob) !== null
-                          ? <p className="text-sm text-slate-600 dark:text-slate-400">{t('studentCard.yearsOld', { age: getAge(student.dob) })}</p>
-                          : student.ageCategory && (
-                              <p className="text-sm text-slate-500 dark:text-slate-400">
-                                {student.ageCategory === 'young_gems' ? '⭐ Young Gems' : student.ageCategory === 'aspiring_scholars' ? '📚 Aspiring Scholars' : '🌿 Devoted Learners'}
-                              </p>
-                            )
-                        }
-                    </div>
-                     <div className="flex items-center flex-shrink-0 gap-1.5 ml-2">
-                        {achievedReadingMilestones.slice(0, 2).map(m => <MilestoneBadge key={`read-${m.id}`} milestone={m} type="reading" />)}
-                        {achievedHifdhMilestones.slice(0, 2).map(m => <MilestoneBadge key={`hifdh-${m.id}`} milestone={m} type="memorization" />)}
-                    </div>
-                 </div>
-            </div>
-            
-            {student.dob && <BirthdayBanner dob={student.dob} name={student.name} />}
-            
-            {/* Content Section */}
-            <div className="px-4 py-2">
-                {/* Main Stats */}
-                {viewMode === 'points' ? (
-                  <div className="flex justify-around items-center text-center">
-                    <div className="flex items-baseline gap-1.5">
-                        <p className={`text-xl font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-teal-600 dark:text-orange-400'}`}>{totalPagesRead}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.pagesRead')}</p>
-                    </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
-                    <div className="flex items-baseline gap-1.5">
-                        <p className={`text-xl font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-sky-600 dark:text-sky-400'}`}>{totalPagesMemorized}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.hifdhPages')}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-around items-center text-center">
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <p className={`text-xl font-bold ${readingRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : readingRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                          {readingRate.toFixed(2)}
-                        </p>
-                        {mistakeRateTrend && (() => {
-                          const d = mistakeRateTrend.readingDelta;
-                          if (Math.abs(d) < 0.04) return null;
-                          return d < 0
-                            ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>
-                            : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-red-500 flex-shrink-0"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>;
-                        })()}
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">reading<br/>mistakes/pg</p>
-                    </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <p className={`text-xl font-bold ${tajweedRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : tajweedRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                          {tajweedRate.toFixed(2)}
-                        </p>
-                        {mistakeRateTrend && (() => {
-                          const d = mistakeRateTrend.tajweedDelta;
-                          if (Math.abs(d) < 0.04) return null;
-                          return d < 0
-                            ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>
-                            : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-red-500 flex-shrink-0"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>;
-                        })()}
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-tight">tajweed<br/>mistakes/pg</p>
-                    </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-gray-700"></div>
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-slate-600 dark:text-slate-300">{totalPagesRead}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.pagesRead')}</p>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Last Achievement */}
-                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
-                    <p className="text-xs text-slate-400 dark:text-slate-500">{t('studentCard.lastRecitation')}</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 font-semibold truncate">
-                        {lastAchievementText} {lastAchievement ? t('studentCard.onDate', {date: lastAchievementDate}) : ''}
-                    </p>
+                    )}
                 </div>
 
-                {/* Share student link */}
-                {teacherId && (
-                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
-                        <button
-                            onClick={handleShare}
-                            disabled={shareState === 'loading'}
-                            className={`w-full flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                shareState === 'copied'
-                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                                    : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-300'
-                            }`}
-                            title="Copy student portal link"
-                        >
-                            {shareState === 'loading' ? (
-                                <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                                </svg>
-                            ) : shareState === 'copied' ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd"/>
-                                </svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"/>
-                                </svg>
+                {/* Right two-thirds — all info */}
+                <div className="w-2/3 min-w-0 p-3 pr-10">
+                    {/* Name (big, prominent) */}
+                    <h3 className={`font-extrabold text-xl leading-tight truncate ${isInactive ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{student.name}</h3>
+
+                    {/* Badges + age (all small) */}
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {getAge(student.dob) !== null
+                          ? <span className="text-xs text-slate-500 dark:text-slate-400">{t('studentCard.yearsOld', { age: getAge(student.dob) })}</span>
+                          : student.ageCategory && (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {student.ageCategory === 'young_gems' ? '⭐ Young Gems' : student.ageCategory === 'aspiring_scholars' ? '📚 Aspiring Scholars' : '🌿 Devoted Learners'}
+                              </span>
+                            )
+                        }
+                        {isLinked && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full flex-shrink-0">🔗 Linked</span>
+                        )}
+                        {rank && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${RANK_CONFIG[rank].badge}`}>
+                            <span>{RANK_CONFIG[rank].emoji}</span><span>{RANK_CONFIG[rank].short}</span>
+                          </span>
+                        )}
+                        {viewMode === 'points' ? (
+                          <span className="text-[10px] font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 flex-wrap">
+                            <span className="text-[10px] font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">{(readingRate + tajweedRate).toFixed(2)} err/pg</span>
+                            {mistakeRateTrend && mistakeRateTrend.dir !== 'same' && (
+                              <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                mistakeRateTrend.dir === 'better' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+                              }`}>
+                                {mistakeRateTrend.dir === 'better'
+                                  ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 2a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.22 3.22V2.75A.75.75 0 0 1 8 2Z" clipRule="evenodd" /></svg>
+                                  : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M8 14a.75.75 0 0 1-.75-.75V4.56L4.03 7.78a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06L8.75 4.56v8.69A.75.75 0 0 1 8 14Z" clipRule="evenodd" /></svg>}
+                                {mistakeRateTrend.dir === 'better' ? 'Improving' : 'Higher'}
+                              </span>
                             )}
-                            {shareState === 'loading' ? 'Generating…' : shareState === 'copied' ? 'Link Copied!' : 'Copy Student Link'}
-                        </button>
-                        {shareLink && shareState !== 'idle' && (
-                            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500 truncate text-center">{shareLink}</p>
+                          </span>
                         )}
                     </div>
-                )}
+
+                    {/* Milestone badges */}
+                    {(achievedReadingMilestones.length > 0 || achievedHifdhMilestones.length > 0) && (
+                      <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                        {achievedReadingMilestones.slice(0, 2).map(m => <MilestoneBadge key={`read-${m.id}`} milestone={m} type="reading" />)}
+                        {achievedHifdhMilestones.slice(0, 2).map(m => <MilestoneBadge key={`hifdh-${m.id}`} milestone={m} type="memorization" />)}
+                      </div>
+                    )}
+
+                    {/* Main stats (small) */}
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
+                      {viewMode === 'points' ? (
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-baseline gap-1">
+                            <span className={`text-base font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-teal-600 dark:text-orange-400'}`}>{totalPagesRead}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.pagesRead')}</span>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className={`text-base font-bold ${isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-sky-600 dark:text-sky-400'}`}>{totalPagesMemorized}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{t('studentCard.hifdhPages')}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 text-center">
+                          <div>
+                            <p className={`text-base font-bold ${readingRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : readingRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>{readingRate.toFixed(2)}</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">reading/pg</p>
+                          </div>
+                          <div className="h-7 w-px bg-slate-200 dark:bg-gray-700"></div>
+                          <div>
+                            <p className={`text-base font-bold ${tajweedRate === 0 ? 'text-emerald-500 dark:text-emerald-400' : tajweedRate < 0.5 ? 'text-amber-500 dark:text-amber-400' : 'text-rose-500 dark:text-rose-400'}`}>{tajweedRate.toFixed(2)}</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">tajweed/pg</p>
+                          </div>
+                          <div className="h-7 w-px bg-slate-200 dark:bg-gray-700"></div>
+                          <div>
+                            <p className="text-base font-bold text-slate-600 dark:text-slate-300">{totalPagesRead}</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">pages</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Last achievement (small) */}
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-gray-700">
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('studentCard.lastRecitation')}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold truncate">
+                            {lastAchievementText} {lastAchievement ? t('studentCard.onDate', {date: lastAchievementDate}) : ''}
+                        </p>
+                    </div>
+                </div>
             </div>
+
+            {student.dob && <BirthdayBanner dob={student.dob} name={student.name} />}
+
              {isInactive && (
                 <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-semibold p-2 flex items-center justify-center">
                     <span>{t('studentCard.inactiveWarning', { days: daysSinceLastActivity })}</span>
