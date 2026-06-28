@@ -622,14 +622,6 @@ const HomeView: React.FC<{
                   className="relative cursor-pointer p-4 rounded-2xl border-2 border-slate-100 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/40 hover:border-teal-400 dark:hover:border-orange-400 hover:shadow-md transition-all group"
                 >
                   <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      const next = window.prompt('Rename student:', s.name);
-                      if (next && next.trim() && next.trim() !== s.name) onRenameStudent(s.id, next.trim());
-                    }}
-                    className="absolute top-2 right-8 text-slate-300 dark:text-gray-600 group-hover:text-slate-400 hover:!text-teal-500 dark:hover:!text-orange-400 transition-colors text-sm"
-                  >✎</button>
-                  <button
                     onClick={e => { e.stopPropagation(); onRemoveStudent(s.id, s.name); }}
                     className="absolute top-2 right-2 text-slate-300 dark:text-gray-600 group-hover:text-slate-400 hover:!text-red-500 transition-colors font-bold"
                   >×</button>
@@ -749,15 +741,6 @@ const StudentView: React.FC<{
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{student.name}</h2>
-              {!readOnly && (
-                <button
-                  onClick={() => {
-                    const next = window.prompt('Rename student:', student.name);
-                    if (next && next.trim() && next.trim() !== student.name) onRename(next.trim());
-                  }}
-                  className="text-slate-400 hover:text-teal-600 dark:hover:text-orange-400 transition-colors text-base"
-                >✎</button>
-              )}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('lettersTrainer.studentViewHint')}</p>
           </div>

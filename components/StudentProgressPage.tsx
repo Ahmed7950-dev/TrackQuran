@@ -1465,6 +1465,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
+    const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
     // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
     // so the verses + mistake annotations fit without overlapping.
@@ -2329,9 +2330,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, [verses, scrollToVerseKey]);
     
     useEffect(() => {
+        const nav = surahNavScrollRef.current;
+        // Pinned Al-Fatiha (1) and An-Nas (114) sit OUTSIDE the scroll list, so
+        // scrollIntoView can't move the inner strip — nudge it to the matching end
+        // so the nav bar also slides to that side of the Quran.
+        if (nav) {
+            if (selectedSurahId === 1)        nav.scrollTo({ left: 0, behavior: 'smooth' });
+            else if (selectedSurahId === 114) nav.scrollTo({ left: nav.scrollWidth, behavior: 'smooth' });
+        }
         const surahElement = document.getElementById(`surah-nav-${selectedSurahId}`);
         if (surahElement) surahElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }, [selectedSurahId]);
+
+    // Show a floating "back to the start of the surah" button once scrolled past
+    // the beginning of the Quran body.
+    useEffect(() => {
+        const onScroll = () => {
+            const top = quranBodyRef.current?.offsetTop ?? 0;
+            setShowScrollTop(window.scrollY > top + 240);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     const showToast = useCallback((message: string) => {
         setToastMessage(message);
@@ -2483,7 +2504,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     
     const handleSurahSelection = (id: number) => {
         setSelectedSurahId(id);
-        // Page range will be reset in the useEffect when verses are loaded
+        // Open at the START of the surah (page range + scroll both target ayah 1).
+        setScrollToVerseKey(`${id}:1`);
     };
     
     const handleNextPages = () => {
@@ -3819,7 +3841,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {renderSurahContent()}
                         {/* Pagination Controls — only when the surah spans more than one window */}
                         {!isLoading && !error && verses.length > 0 && (hasPreviousPages() || hasMorePages()) && (
-                            <div className="flex justify-center items-center gap-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
+                            <div dir="ltr" className="flex justify-center items-center gap-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
                                 <button
                                     onClick={handlePreviousPages}
                                     disabled={!hasPreviousPages()}
@@ -3852,6 +3874,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
             {student && <ExportReportModal student={student} students={students} quranMetadata={QURAN_METADATA} isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />}
             {toastMessage && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg transition-all animate-bounce z-50">{toastMessage}</div>}
+            {/* Back to the start of the current surah */}
+            {showScrollTop && (
+                <button
+                    onClick={() => setScrollToVerseKey(`${selectedSurahId}:1`)}
+                    aria-label="Back to start of surah"
+                    title="Back to start of surah"
+                    className="fixed bottom-6 end-6 z-50 w-12 h-12 flex items-center justify-center rounded-full bg-teal-600 dark:bg-orange-600 text-white shadow-lg hover:bg-teal-700 dark:hover:bg-orange-700 hover:-translate-y-0.5 active:translate-y-0 transition-all"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                    </svg>
+                </button>
+            )}
             <SearchResultsModal isOpen={isSearchResultsModalOpen} onClose={() => setIsSearchResultsModalOpen(false)} results={searchResults} query={searchInput} onSelect={handleSelectSearchResult} />
             <ConfirmationModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} })} onConfirm={confirmModalState.onConfirm} title={confirmModalState.title} message={confirmModalState.message} />
 
