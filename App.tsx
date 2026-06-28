@@ -603,6 +603,25 @@ const App: React.FC = () => {
 
   // Debounce timer for shared-report sync (avoids hammering DB on rapid updates)
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ranksRefreshedRef = useRef(false);
+
+  // Ranks are relative (depend on the whole roster) but stored per-report and
+  // only refreshed on each student's own sync — so they go stale (e.g. "1/1").
+  // Once per session, recompute every student's ranks against the full roster and
+  // write them back, so shared links / family links show current ranks.
+  useEffect(() => {
+    if (currentUser?.role !== 'teacher' || students.length === 0 || ranksRefreshedRef.current) return;
+    ranksRefreshedRef.current = true;
+    const roster = students;
+    (async () => {
+      for (const stu of roster) {
+        try {
+          const reportId = await getStudentReportId(currentUser.id, stu.id);
+          if (reportId) await syncStudentDataInReport(reportId, stu, computeReportRanks(stu, roster));
+        } catch { /* keep going */ }
+      }
+    })();
+  }, [students, currentUser]);
   // Subscribed Realtime channel for the current live session. Kept alive so
   // broadcasts (buzz, letter_focus) go through WebSocket, not the REST fallback.
   const liveSessionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -832,7 +851,7 @@ const App: React.FC = () => {
       syncDebounceRef.current = setTimeout(async () => {
         const reportId = await getStudentReportId(currentUser.id, updatedStudent.id);
         if (!reportId) return; // no shared report exists yet — nothing to sync
-        await syncStudentDataInReport(reportId, updatedStudent);
+        await syncStudentDataInReport(reportId, updatedStudent, computeReportRanks(updatedStudent, students));
         // Live-broadcast to an open portal ONLY through the already-subscribed
         // session channel for this same student. Spinning up a throwaway,
         // unsubscribed channel just to send() triggers Supabase's REST-fallback

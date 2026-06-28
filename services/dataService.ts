@@ -570,6 +570,7 @@ export const syncStudentDataInReport = async (
     | 'tafsirReviews'
     | 'tafsirMemorizationReviews'
   >,
+  ranks?: SharedReportData['ranks'],
 ): Promise<void> => {
   // Fetch existing data to preserve verses / homeworkVerses / quranicFont
   const { data, error: fetchErr } = await supabase
@@ -587,6 +588,7 @@ export const syncStudentDataInReport = async (
     generatedAt: new Date().toISOString(),
     mistakes: student.mistakes as SharedReportData['mistakes'],
     quranHomework: student.quranHomework ?? [],
+    ranks: ranks ?? existing.ranks, // refresh precomputed ranks when provided
     studentProgress: {
       ...(existing.studentProgress ?? {}),
       recitationAchievements: student.recitationAchievements ?? [],
