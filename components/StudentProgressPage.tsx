@@ -3876,7 +3876,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             })()
                         ) : (
                         <>
-                        <div className="text-center pt-12 pb-8 px-2"><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></div>
+                        <div className="text-center pt-12 pb-8 px-2">
+                            {readOnly ? (
+                                <><p className="text-4xl font-quranic text-slate-700 dark:text-slate-100">{selectedSurahInfo?.name}</p><p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p></>
+                            ) : (
+                                <button
+                                    onClick={() => selectedSurahInfo && openLogModal({ start: { surah: selectedSurahId, ayah: 1 }, end: { surah: selectedSurahId, ayah: selectedSurahInfo.numberOfAyahs } })}
+                                    title="Log the entire surah"
+                                    className="group inline-flex flex-col items-center rounded-2xl px-6 py-2 transition-colors hover:bg-teal-50 dark:hover:bg-orange-900/20"
+                                >
+                                    <p className="text-4xl font-quranic text-slate-700 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-orange-300 transition-colors">{selectedSurahInfo?.name}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">{selectedSurahInfo?.englishName}</p>
+                                    <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-teal-600 dark:text-orange-400 opacity-60 group-hover:opacity-100 transition-opacity">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M10 3a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H4a1 1 0 1 1 0-2h5V4a1 1 0 0 1 1-1Z" /></svg>
+                                        Tap to log the whole surah
+                                    </span>
+                                </button>
+                            )}
+                        </div>
                         {showTranslation && isTranslationLoading && <div className="text-center my-4 p-3 bg-slate-100 dark:bg-gray-700 rounded-lg mx-6 sm:mx-12"><p className="text-slate-600 dark:text-slate-300 animate-pulse font-semibold">{t('liveSession.loadingTranslation')}</p></div>}
                         {showTranslation && translationError && <div className="text-center my-4 p-3 bg-red-100 text-red-700 rounded-lg mx-6 sm:mx-12"><p className="font-semibold">{translationError}</p></div>}
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
