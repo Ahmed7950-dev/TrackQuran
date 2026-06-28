@@ -1,4 +1,4 @@
-import { Student } from '../types';
+import { Student, AgeCategory } from '../types';
 import { getRecitedPagesSet, getMemorizedPagesSet } from './dataService';
 
 const getAge = (dob: string): number => {
@@ -19,19 +19,25 @@ const getAgeGroup = (age: number): 'young' | 'aspiring' | 'devoted' | null => {
     return null;
 }
 
+// The effective age category — the same rule the dashboard groups by: a manual
+// ageCategory always wins, otherwise derive from dob (fallback young_gems). The
+// ranking MUST use this so a student's rank group matches the group the tutor sees.
+const effectiveCategory = (s: Student): AgeCategory => {
+    if (s.ageCategory) return s.ageCategory;
+    const age = s.dob ? getAge(s.dob) : NaN;
+    if (isNaN(age)) return 'young_gems';
+    if (age <= 15) return 'young_gems';
+    if (age <= 35) return 'aspiring_scholars';
+    return 'devoted_learners';
+};
+
 export const getStudentRankAndProgress = (
     currentStudent: Student,
     allStudents: Student[],
     type: 'reading' | 'memorization'
 ): { rank: number; totalInGroup: number; pagesToNext: number | null, nextStudentName: string | null } => {
-    const currentStudentAge = getAge(currentStudent.dob);
-    const currentStudentGroup = getAgeGroup(currentStudentAge);
-
-    if (!currentStudentGroup) {
-        return { rank: 0, totalInGroup: 0, pagesToNext: null, nextStudentName: null };
-    }
-
-    const studentsInGroup = allStudents.filter(s => getAgeGroup(getAge(s.dob)) === currentStudentGroup);
+    const currentStudentGroup = effectiveCategory(currentStudent);
+    const studentsInGroup = allStudents.filter(s => effectiveCategory(s) === currentStudentGroup);
     
     const getScore = (student: Student): number => {
         return type === 'reading' 
