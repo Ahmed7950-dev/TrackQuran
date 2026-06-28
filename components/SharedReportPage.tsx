@@ -13,6 +13,7 @@ import { getTeacherAvailability, AvailabilitySlot } from '../services/availabili
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { LessonSession } from '../types';
 import LottieIcon from './LottieIcon';
+import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
@@ -153,10 +154,11 @@ const ProgressTab: React.FC<{
   const memorizedSurahsQuality = useMemo(() => getSurahQualityMap(memorizationAchievements, 'memorizationQuality'), [memorizationAchievements]);
 
   // ── Attendance ───────────────────────────────────────────────────────────────
+  // Attendance status is stored uppercase ('PRESENT'…) — compare case-insensitively.
   const attendanceData = useMemo(() => ({
-    present: attendance.filter(a => a.status === 'present').length,
-    absent: attendance.filter(a => a.status === 'absent').length,
-    rescheduled: attendance.filter(a => a.status === 'rescheduled').length,
+    present: attendance.filter(a => String(a.status).toLowerCase() === 'present').length,
+    absent: attendance.filter(a => String(a.status).toLowerCase() === 'absent').length,
+    rescheduled: attendance.filter(a => String(a.status).toLowerCase() === 'rescheduled').length,
   }), [attendance]);
 
   // ── Reading data ─────────────────────────────────────────────────────────────
@@ -333,7 +335,9 @@ const ProgressTab: React.FC<{
                   ? 'bg-teal-500 border-teal-200 text-white'
                   : 'bg-slate-200 border-slate-300 text-slate-500'
               }`}>
-                {achieved && typeof milestone.badgeIcon !== 'string' && milestone.id !== 'ya-seen' && milestone.id !== 'khatm'
+                {MILESTONE_LOTTIE[milestone.id]
+                  ? <LottieIcon src={MILESTONE_LOTTIE[milestone.id]} size={42} loop autoplay playOnHover={false} />
+                  : achieved && typeof milestone.badgeIcon !== 'string' && milestone.id !== 'ya-seen' && milestone.id !== 'khatm'
                   ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -409,7 +413,7 @@ const ProgressTab: React.FC<{
   ));
   for (let d = 1; d <= calDaysInMonth; d++) {
     const dateStr = new Date(calYear, calMonth, d).toDateString();
-    const status = attendanceMap.get(dateStr);
+    const status = String(attendanceMap.get(dateStr) ?? '').toLowerCase();
     const isToday = dateStr === new Date().toDateString();
     const bg = status === 'present'
       ? 'bg-green-400 text-white'

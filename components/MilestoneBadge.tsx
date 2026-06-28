@@ -8,7 +8,7 @@ interface MilestoneBadgeProps {
 }
 
 // Custom animated milestone badges (uploaded Lottie files).
-const MILESTONE_LOTTIE: Record<string, string> = {
+export const MILESTONE_LOTTIE: Record<string, string> = {
     'al-baqarah': '/animations/cow.json',     // Al-Baqarah (The Cow)
     '5-juz':      '/animations/five.json',     // 5 Ajza
     '10-juz':     '/animations/ten.json',      // 10 Ajza

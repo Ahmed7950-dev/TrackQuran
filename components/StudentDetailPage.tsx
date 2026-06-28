@@ -2,6 +2,8 @@ import React, { useState, useMemo, Fragment, useEffect } from 'react';
 import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion } from '../types';
 import { getStudentCompletions } from '../services/tajweedService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
+import LottieIcon from './LottieIcon';
+import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
 import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport } from '../services/dataService';
 import { safeCopy } from '../utils';
@@ -715,7 +717,9 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     <Fragment key={milestone.id}>
                         <div className="relative flex flex-col items-center group w-20">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center border-4 transition-all duration-300 ${achieved ? 'bg-teal-500 dark:bg-orange-500 border-teal-200 dark:border-orange-800 text-white' : 'bg-slate-200 dark:bg-gray-700 border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400'}`}>
-                                {achieved && typeof milestone.badgeIcon !== 'string' && milestone.id !== 'ya-seen' && milestone.id !== 'khatm' ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : (typeof IconComponent === 'string' ? <span className="font-bold text-lg">{IconComponent}</span> : IconComponent)}
+                                {MILESTONE_LOTTIE[milestone.id]
+                                    ? <LottieIcon src={MILESTONE_LOTTIE[milestone.id]} size={42} loop autoplay playOnHover={false} />
+                                    : achieved && typeof milestone.badgeIcon !== 'string' && milestone.id !== 'ya-seen' && milestone.id !== 'khatm' ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg> : (typeof IconComponent === 'string' ? <span className="font-bold text-lg">{IconComponent}</span> : IconComponent)}
                             </div>
                             <p className={`text-center text-xs mt-2 font-semibold transition-colors ${achieved ? 'text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'}`}>{milestone.title}</p>
                             <div className="absolute bottom-full mb-3 w-48 bg-slate-800 dark:bg-gray-900 text-white text-xs rounded py-1.5 px-3 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">{milestone.description}<svg className="absolute text-slate-800 dark:text-gray-900 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg></div>
