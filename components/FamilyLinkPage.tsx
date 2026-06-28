@@ -21,6 +21,7 @@ interface Props { linkId: string }
 type Timeframe = 'month' | 'week' | 'all';
 
 const PALETTE = ['#0d9488', '#0284c7', '#7c3aed', '#db2777', '#ea580c', '#16a34a', '#ca8a04', '#dc2626'];
+const TOTAL_QURAN_VERSES = 6236;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -129,7 +130,8 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
     mistakesTajweed: mistakesTF.filter(m => m.errorType === 'tajweed').length,
     achievedMilestoneIds: MILESTONES.filter(m => m.isAchieved(readPagesAll)).map(m => m.id),
     tajweedLessonNames: tjw.map((t: any) => t.lessonTitle || t.lessonId).filter(Boolean),
-    tafsirVerses: taf.length,
+    tafsirVerses: [...new Set(taf.map((r: any) => r.surah))]
+      .reduce((sum: number, s: number) => sum + (QURAN_METADATA.find(m => m.number === s)?.numberOfAyahs ?? 0), 0),
     lastHomework: lastHw,
   };
 }
@@ -262,25 +264,30 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
   const metricsByMember: Record<string, Metrics> = {};
   quranMembers.forEach(m => { metricsByMember[m.id] = computeMetrics(m.report, timeframe, now); });
 
-  const pct = (v: number) => `${v} · ${Math.round((v / TOTAL_QURAN_PAGES) * 100)}%`;
   const leaderboard = [...quranMembers].sort((a, b) => metricsByMember[b.id].points - metricsByMember[a.id].points);
   const medal = ['🥇', '🥈', '🥉'];
+
+  // number with a percentage on a second line (smaller, coloured).
+  const numPct = (value: number, total: number, color: string) => (
+    <div className="flex flex-col items-center leading-tight">
+      <span>{value}</span>
+      <span className={`text-xs font-bold ${color}`}>{total ? Math.round((value / total) * 100) : 0}%</span>
+    </div>
+  );
 
   // Comparison table rows.
   const cell = (m: typeof quranMembers[number], render: (mx: Metrics) => React.ReactNode) => render(metricsByMember[m.id]);
   const rows: { label: string; render: (m: typeof quranMembers[number]) => React.ReactNode }[] = [
-    { label: 'Pages read', render: m => cell(m, x => pct(x.pagesRead)) },
-    { label: 'Pages memorized', render: m => cell(m, x => pct(x.pagesMemorized)) },
+    { label: 'Pages read', render: m => cell(m, x => numPct(x.pagesRead, TOTAL_QURAN_PAGES, 'text-teal-500 dark:text-teal-400')) },
+    { label: 'Pages memorized', render: m => cell(m, x => numPct(x.pagesMemorized, TOTAL_QURAN_PAGES, 'text-sky-500 dark:text-sky-400')) },
     { label: 'Days attended', render: m => cell(m, x => x.attended) },
     { label: 'Days absent', render: m => cell(m, x => x.absent) },
     { label: 'Days rescheduled', render: m => cell(m, x => x.rescheduled) },
-    { label: 'Reading quality', render: m => cell(m, x => `${x.readingQuality.toFixed(1)}/10`) },
-    { label: 'Memorization quality', render: m => cell(m, x => `${x.memQuality.toFixed(1)}/10`) },
+    { label: 'Reading quality', render: m => cell(m, x => x.readingQuality.toFixed(1)) },
+    { label: 'Memorization quality', render: m => cell(m, x => x.memQuality.toFixed(1)) },
     { label: 'Rank in age group', render: m => cell(m, x => x.rankAge?.rank ? `#${x.rankAge.rank} of ${x.rankAge.total}` : '—') },
     { label: 'Rank among all students', render: m => cell(m, x => x.rankAll?.rank ? `#${x.rankAll.rank} of ${x.rankAll.total}` : '—') },
-    { label: 'Mistakes', render: m => cell(m, x => (
-      <span className="whitespace-nowrap"><span className="text-rose-500 font-bold">{x.mistakesReading}</span> <span className="text-[10px] text-slate-400">read</span> · <span className="text-amber-500 font-bold">{x.mistakesTajweed}</span> <span className="text-[10px] text-slate-400">tajwīd</span></span>
-    )) },
+    { label: 'Mistakes rate', render: m => cell(m, x => x.mistakesReading + x.mistakesTajweed) },
     { label: 'Milestones', render: m => cell(m, x => (
       x.achievedMilestoneIds.length === 0 ? <span className="text-slate-300">—</span> : (
         <div className="flex items-center justify-center gap-1 flex-wrap">
@@ -299,7 +306,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
         </div>
       )
     )) },
-    { label: 'Tafsir verses', render: m => cell(m, x => x.tafsirVerses) },
+    { label: 'Tafsir verses', render: m => cell(m, x => numPct(x.tafsirVerses, TOTAL_QURAN_VERSES, 'text-blue-500 dark:text-blue-400')) },
   ];
 
   return (
@@ -344,24 +351,26 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
             {/* 3 ── Latest homework (not time-framed) */}
             {quranMembers.length > 0 && (
               <section className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
-                <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-3">📝 Latest homework</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2">📝 Latest homework</h2>
+                <div className="divide-y divide-slate-100 dark:divide-gray-700">
                   {quranMembers.map(m => {
                     const hw = metricsByMember[m.id].lastHomework;
                     return (
-                      <div key={m.id} className="rounded-xl border border-slate-100 dark:border-gray-700 p-3">
-                        <div className="flex items-center gap-2 mb-1">
+                      <div key={m.id} className="flex items-start gap-3 py-3">
+                        <span className="flex items-center gap-2 w-32 flex-shrink-0 pt-0.5">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
                           <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{m.name}</span>
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          {hw ? (
+                            <>
+                              <p className="text-base font-semibold text-violet-700 dark:text-violet-300">{hw.range}</p>
+                              {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{hw.note}</p>}
+                            </>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">No homework assigned.</p>
+                          )}
                         </div>
-                        {hw ? (
-                          <>
-                            <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">{hw.range}</p>
-                            {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-pre-wrap">{hw.note}</p>}
-                          </>
-                        ) : (
-                          <p className="text-xs text-slate-400 italic">No homework assigned.</p>
-                        )}
                       </div>
                     );
                   })}
@@ -396,7 +405,10 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
                         <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.name}</span>
                       </div>
-                      <span className="font-extrabold text-teal-600 dark:text-teal-400 flex-shrink-0">{metricsByMember[m.id].points}<span className="text-xs font-semibold text-slate-400 ml-1">pts</span></span>
+                      <span className="flex items-baseline gap-1 flex-shrink-0">
+                        <span className="text-3xl font-extrabold text-teal-600 dark:text-teal-400">{metricsByMember[m.id].points.toFixed(1)}</span>
+                        <span className="text-xs font-semibold text-slate-400">pts</span>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -406,7 +418,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
             {/* 5 ── Comparison table */}
             {quranMembers.length > 0 && (
               <section className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
+                <table className="w-full text-base border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-gray-700">
                       <th className="text-left font-bold text-slate-500 dark:text-slate-400 px-4 py-3 sticky left-0 bg-white dark:bg-gray-800 z-10">Metric</th>
@@ -424,7 +436,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                       <tr key={row.label} className={ri % 2 ? 'bg-slate-50/60 dark:bg-gray-700/20' : ''}>
                         <td className={`text-left font-semibold text-slate-600 dark:text-slate-300 px-4 py-3 sticky left-0 z-10 whitespace-nowrap ${ri % 2 ? 'bg-[#f7f9fa] dark:bg-[#1f2733]' : 'bg-white dark:bg-gray-800'}`}>{row.label}</td>
                         {quranMembers.map(m => (
-                          <td key={m.id} className="px-4 py-3 text-center font-semibold text-slate-800 dark:text-slate-100">{row.render(m)}</td>
+                          <td key={m.id} className="px-5 py-4 text-center font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">{row.render(m)}</td>
                         ))}
                       </tr>
                     ))}
