@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import lottie from 'lottie-web';
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
@@ -1427,6 +1428,50 @@ const VERSE_BG: Record<string, string> = {
 const VERSE_UNDERLINE = 'border-b-4 border-blue-400 dark:border-blue-500';
 const VERSE_MARKER_FILL: Record<string, string> = {
     green: '#86efac', orange: '#fdba74', purple: '#d8b4fe', blue: '#93c5fd', none: 'currentColor',
+};
+
+// A Lottie animation that rests on its first frame and plays while `play` is true.
+const LottieIcon: React.FC<{ src: string; play: boolean; className?: string }> = ({ src, play, className }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    const animRef = useRef<ReturnType<typeof lottie.loadAnimation> | null>(null);
+    useEffect(() => {
+        if (!ref.current) return;
+        const anim = lottie.loadAnimation({ container: ref.current, renderer: 'svg', loop: true, autoplay: false, path: src });
+        anim.goToAndStop(0, true);
+        animRef.current = anim;
+        return () => anim.destroy();
+    }, [src]);
+    useEffect(() => {
+        const a = animRef.current;
+        if (!a) return;
+        if (play) a.play(); else a.goToAndStop(0, true);
+    }, [play]);
+    return <div ref={ref} className={className} aria-hidden="true" />;
+};
+
+const LOG_OPTION_COLORS: Record<string, string> = {
+    orange: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-orange-900/60',
+    green:  'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900/60',
+    blue:   'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/60',
+    purple: 'bg-purple-50 dark:bg-purple-900/30 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/60',
+};
+
+// A log-type card: animated Lottie icon (plays on hover/focus) + label.
+const LogOption: React.FC<{ src: string; label: string; sub?: string; color: 'orange' | 'green' | 'blue' | 'purple'; onClick: () => void }> = ({ src, label, sub, color, onClick }) => {
+    const [hover, setHover] = useState(false);
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+            onFocus={() => setHover(true)} onBlur={() => setHover(false)}
+            className={`flex flex-col items-center justify-center gap-1 p-3 rounded-2xl border font-semibold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 ${LOG_OPTION_COLORS[color]}`}
+        >
+            <LottieIcon src={src} play={hover} className="w-14 h-14" />
+            <span className="text-sm font-bold leading-tight">{label}</span>
+            {sub && <span className="text-[10px] font-semibold opacity-70 leading-none">{sub}</span>}
+        </button>
+    );
 };
 
 const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
@@ -4003,53 +4048,41 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         ? ` → ${QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} ${pendingLogRange.end.ayah}`
                                         : ''}
                                 </p>
-                                <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-2.5">
 
-                                    {/* ── Reading: show Revision if surah already has reading, else first-time Reading ── */}
+                                    {/* ── Reading: Revision if surah already has reading, else first-time ── */}
                                     {hasReadingForRange(pendingLogRange.start, pendingLogRange.end) ? (
-                                        <button onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
-                                            <span className="text-xl">🔄</span> Log Reading Revision
-                                        </button>
+                                        <LogOption src="/animations/reading.json" label="Reading" sub="Revision" color="orange"
+                                            onClick={() => { setSelectedLogType('reading-revision'); setLogTypeStep('quality'); }} />
                                     ) : (
-                                        <button onClick={() => { setSelectedLogType('reading'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 font-semibold transition-colors">
-                                            <span className="text-xl">📖</span> Log Reading
-                                        </button>
+                                        <LogOption src="/animations/reading.json" label="Reading" color="orange"
+                                            onClick={() => { setSelectedLogType('reading'); setLogTypeStep('quality'); }} />
                                     )}
 
-                                    {/* ── Hifz: show Revision if surah already has hifz, else first-time Hifz ── */}
+                                    {/* ── Hifz: Revision if surah already has hifz, else first-time ── */}
                                     {hasHifzForRange(pendingLogRange.start, pendingLogRange.end) ? (
-                                        <button onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
-                                            <span className="text-xl">🔁</span> Log Hifz Revision
-                                        </button>
+                                        <LogOption src="/animations/hifz.json" label="Hifz" sub="Revision" color="green"
+                                            onClick={() => { setSelectedLogType('hifz-revision'); setLogTypeStep('quality'); }} />
                                     ) : (
-                                        <button onClick={() => { setSelectedLogType('hifz'); setLogTypeStep('quality'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-800 dark:text-sky-200 font-semibold transition-colors">
-                                            <span className="text-xl">🧠</span> Log Hifz
-                                        </button>
+                                        <LogOption src="/animations/hifz.json" label="Hifz" color="green"
+                                            onClick={() => { setSelectedLogType('hifz'); setLogTypeStep('quality'); }} />
                                     )}
 
                                     {/* ── Tafseer — hidden once surah already has tafseer ── */}
                                     {!hasTafseerForRange(pendingLogRange.start, pendingLogRange.end) && (
-                                        <button onClick={() => {
-                                            if (!pendingLogRange) return;
-                                            onLogTafseerRange(student.id, pendingLogRange);
-                                            showToast('Tafseer logged');
-                                            setPendingLogRange(null); setLogTypeStep(null); setSelectedLogType(null);
-                                        }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-semibold transition-colors">
-                                            <span className="text-xl">📚</span> Log Tafseer
-                                        </button>
+                                        <LogOption src="/animations/tafsir.json" label="Tafsir" color="blue"
+                                            onClick={() => {
+                                                if (!pendingLogRange) return;
+                                                onLogTafseerRange(student.id, pendingLogRange);
+                                                showToast('Tafseer logged');
+                                                setPendingLogRange(null); setLogTypeStep(null); setSelectedLogType(null);
+                                            }} />
                                     )}
 
                                     {/* ── Homework ── */}
                                     {onLogHomework && (
-                                        <button onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setLogTypeStep('homework-note'); }}
-                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-800 dark:text-violet-200 font-semibold transition-colors">
-                                            <span className="text-xl">📝</span> Assign Homework
-                                        </button>
+                                        <LogOption src="/animations/homework.json" label="Homework" color="purple"
+                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setLogTypeStep('homework-note'); }} />
                                     )}
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
