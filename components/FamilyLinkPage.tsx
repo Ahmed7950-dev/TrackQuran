@@ -98,6 +98,17 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
   const avgReadQ = readQ.length ? readQ.reduce((s: number, q: number) => s + q, 0) / readQ.length : 0;
   const avgMemQ = memTF.length ? memTF.reduce((s: number, a: any) => s + a.memorizationQuality, 0) / memTF.length : 0;
 
+  // "Attended" = explicit PRESENT records + implicit present (any day with an
+  // achievement and no explicit record), matching the tutor's student-detail page.
+  const allExplicitDays = new Set((sp.attendance ?? []).map((a: any) => new Date(a.date).toDateString()));
+  const explicitPresent = att.filter((a: any) => isStatus(a.status, 'present')).length;
+  const implicitDays = new Set<string>();
+  [...recTF, ...memTF].forEach((a: any) => {
+    const ds = new Date(a.date).toDateString();
+    if (!allExplicitDays.has(ds)) implicitDays.add(ds);
+  });
+  const attended = explicitPresent + implicitDays.size;
+
   // Last homework — independent of timeframe.
   const allHw = [...(rd?.quranHomework ?? [])].sort((a, b) => new Date(b.assignedAt || 0).getTime() - new Date(a.assignedAt || 0).getTime());
   const lastHw = allHw[0] ? { range: fmtHomework(allHw[0]), note: allHw[0].note ?? '' } : null;
@@ -106,7 +117,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
     points: recTF.reduce((s: number, a: any) => s + (a.pointsEarned || 0), 0),
     pagesRead: readPagesTF.size,
     pagesMemorized: memPagesTF.size,
-    attended: att.filter((a: any) => isStatus(a.status, 'present')).length,
+    attended,
     absent: att.filter((a: any) => isStatus(a.status, 'absent')).length,
     rescheduled: att.filter((a: any) => isStatus(a.status, 'rescheduled')).length,
     readingQuality: avgReadQ,
@@ -128,11 +139,25 @@ const AttendanceCalendar: React.FC<{ members: { id: string; name: string; color:
 
   const attendeesByDay = useMemo(() => {
     const map: Record<string, { name: string; color: string }[]> = {};
+    const add = (key: string, name: string, color: string) => {
+      const arr = (map[key] ??= []);
+      if (!arr.some(p => p.name === name)) arr.push({ name, color });
+    };
     members.forEach(m => {
-      (m.report?.studentProgress?.attendance ?? []).forEach((a: any) => {
-        if (!isStatus(a.status, 'present') || !a.date) return;
-        const key = String(a.date).slice(0, 10);
-        (map[key] ??= []).push({ name: m.name, color: m.color });
+      const sp = m.report?.studentProgress ?? {};
+      // explicit records: remember every day with a record + which are PRESENT
+      const explicit = new Map<string, string>();
+      (sp.attendance ?? []).forEach((a: any) => {
+        if (!a.date) return;
+        const key = dayKey(new Date(a.date));
+        explicit.set(key, String(a.status).toLowerCase());
+        if (isStatus(a.status, 'present')) add(key, m.name, m.color);
+      });
+      // implicit present: any achievement day without an explicit record
+      [...(sp.recitationAchievements ?? []), ...(sp.memorizationAchievements ?? [])].forEach((a: any) => {
+        if (!a.date) return;
+        const key = dayKey(new Date(a.date));
+        if (!explicit.has(key)) add(key, m.name, m.color);
       });
     });
     return map;
