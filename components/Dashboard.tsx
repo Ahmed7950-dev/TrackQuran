@@ -176,8 +176,10 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     // Calculate score
     const score = calculateScore(student);
 
-    // Mistake rate calculations (for mistakesRate view mode)
-    const recitedPagesForMistakes = getRecitedPagesSet(student);
+    // Mistake rate calculations (for mistakesRate view mode).
+    // Read pages = recited ∪ memorized — a recited short surah is logged as
+    // memorization but still counts as read, so mistakes in it must count too.
+    const recitedPagesForMistakes = new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]);
     const validMistakeEntries = Object.entries(student.mistakes || {}).filter(([key]) => {
       const [surah, ayah] = key.split(':').map(Number);
       if (isNaN(surah) || isNaN(ayah)) return false;
@@ -194,7 +196,9 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     // We identify mistakes dated to the most recent session and subtract them to get
     // the "before" state, then compare overall rates.
     const mistakeRateTrend = useMemo((): { dir: 'better' | 'worse' | 'same'; readingDelta: number; tajweedDelta: number } | null => {
-      const sessions = [...student.recitationAchievements]
+      // Count both recitation and memorization logs — a recited short surah is
+      // logged as memorization but still counts as a "read" page.
+      const sessions = [...student.recitationAchievements, ...student.memorizationAchievements]
         .filter(a => (a.pagesCompleted ?? 0) > 0)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -206,12 +210,19 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       // page set — NOT by subtracting raw pagesCompleted from the unique-page count
       // (those two are different units and the mismatch could flip the arrow).
       const latestDayStart = new Date(new Date(sessions[0].date).toDateString()).getTime();
-      const prevSessions = sessions.filter(s => new Date(s.date).getTime() < latestDayStart);
+      const beforeLatest = (a: { date: string }) => new Date(a.date).getTime() < latestDayStart;
+      const prevSessions = sessions.filter(beforeLatest);
       if (prevSessions.length === 0) return null; // nothing before the latest day to compare against
 
-      const recitedPages = getRecitedPagesSet(student);
-      const nowPages = recitedPages.size; // total unique recited pages (matches the displayed rate)
-      const prevRecitedPages = getRecitedPagesSet({ ...student, recitationAchievements: prevSessions });
+      // Read pages = recited ∪ memorized, both NOW and as of before the latest day.
+      const recitedPages = new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]);
+      const nowPages = recitedPages.size; // total unique read pages (matches the displayed rate)
+      const prevStudent = {
+        ...student,
+        recitationAchievements: student.recitationAchievements.filter(beforeLatest),
+        memorizationAchievements: student.memorizationAchievements.filter(beforeLatest),
+      };
+      const prevRecitedPages = new Set<number>([...getRecitedPagesSet(prevStudent), ...getMemorizedPagesSet(prevStudent)]);
       const prevPages = prevRecitedPages.size;
       if (prevPages === 0) return null;
 
