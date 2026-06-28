@@ -1414,6 +1414,21 @@ const isVerseInHomeworkRange = (
     return false;
 };
 
+// ── 4-colour log model ──────────────────────────────────────────────────────
+// green = hifz (reading implied) · orange = read only · purple = homework ·
+// blue = tafsir. Tafsir layered on top of another state shows as a blue underline.
+const VERSE_BG: Record<string, string> = {
+    green:  'bg-green-100 dark:bg-green-900/40',
+    orange: 'bg-orange-100 dark:bg-orange-900/30',
+    purple: 'bg-purple-100 dark:bg-purple-900/30',
+    blue:   'bg-blue-100 dark:bg-blue-900/30',
+    none:   '',
+};
+const VERSE_UNDERLINE = 'border-b-4 border-blue-400 dark:border-blue-500';
+const VERSE_MARKER_FILL: Record<string, string> = {
+    green: '#86efac', orange: '#fdba74', purple: '#d8b4fe', blue: '#93c5fd', none: 'currentColor',
+};
+
 const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
@@ -2148,18 +2163,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     //   memorized only  → sky/blue
     //   read only       → teal (completed) / amber (in-progress)
     //   neither         → grey
+    // Aggregate homework/tafsir flags for a whole surah (for the nav-bar tint).
+    const surahHasHomework = (surahId: number) =>
+        homeworkRanges.some(r => surahId >= r.startSurah && surahId <= r.endSurah);
+    const surahHasTafsir = (surahId: number) =>
+        (student.tafsirReviews || []).some(r => {
+            const ss = r.startSurah ?? r.surah; const es = r.endSurah ?? r.surah;
+            return surahId >= ss && surahId <= es;
+        });
+
+    // Surah-name tint mirrors the verse model: green=hifz, orange=read,
+    // purple=homework, blue=tafsir, with a blue underline when tafsir overlaps.
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
         if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
         const hasRead = status !== 'not-started';
         const hasMem  = memStatus !== 'not-started';
-        if (hasRead && hasMem)
-            return 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900';
-        if (hasMem)
-            return 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900';
-        if (status === 'completed')
-            return 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-900';
-        if (status === 'in-progress')
-            return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900';
+        const hasTaf  = surahHasTafsir(surahId);
+        const underline = hasTaf && (hasMem || hasRead) ? ' border-b-2 border-blue-400 dark:border-blue-500' : '';
+        if (hasMem)  return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900' + underline;
+        if (hasRead) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900' + underline;
+        if (surahHasHomework(surahId)) return 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900';
+        if (hasTaf)  return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900';
         return 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
     };
 
@@ -2167,10 +2191,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (surahId === selectedSurahId) return 'bg-white/40 dark:bg-white/40';
         const hasRead = status !== 'not-started';
         const hasMem  = memStatus !== 'not-started';
-        if (hasRead && hasMem) return 'bg-violet-300 dark:bg-violet-700';
-        if (hasMem)            return 'bg-sky-300 dark:bg-sky-700';
-        if (status === 'completed')   return 'bg-teal-300 dark:bg-teal-700';
-        if (status === 'in-progress') return 'bg-amber-300 dark:bg-amber-700';
+        if (hasMem)  return 'bg-green-300 dark:bg-green-700';
+        if (hasRead) return 'bg-orange-300 dark:bg-orange-700';
+        if (surahHasHomework(surahId)) return 'bg-purple-300 dark:bg-purple-700';
+        if (surahHasTafsir(surahId))   return 'bg-blue-300 dark:bg-blue-700';
         return 'bg-slate-300 dark:bg-gray-600';
     };
 
@@ -2743,6 +2767,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return { isLogged: false, reviewId: null };
     }, [student.tafsirReviews]);
 
+    const isVerseHomework = useCallback((surahNum: number, ayahNum: number) => {
+        const v = { surah: surahNum, ayah: ayahNum };
+        return homeworkRanges.some(r =>
+            isVerseAfterOrEqual(v, { surah: r.startSurah, ayah: r.startAyah }) &&
+            isVerseAfterOrEqual({ surah: r.endSurah, ayah: r.endAyah }, v));
+    }, [homeworkRanges]);
+
+    // Resolve a verse to its log colour. Memorized implies read (→ green), so
+    // existing hifz logs automatically count as read with no data migration.
+    const verseLogColor = useCallback((surahNum: number, ayahNum: number) => {
+        const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements).isLogged;
+        const isRead      = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements).isLogged;
+        const isTafseer   = getTafseerRangeInfo(surahNum, ayahNum).isLogged;
+        const isHomework  = isVerseHomework(surahNum, ayahNum);
+        const base = isMemorized ? 'green' : isRead ? 'orange' : isHomework ? 'purple' : isTafseer ? 'blue' : 'none';
+        const underline = isTafseer && base !== 'blue' && base !== 'none';
+        return { base, underline };
+    }, [getVerseRangeInfo, getTafseerRangeInfo, isVerseHomework, memorizationAchievements, recitationAchievements]);
+
     
     // ── Range-log helpers ─────────────────────────────────────────────────────
     // Check if a surah has any non-revision reading/hifz logs
@@ -2810,9 +2853,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             showToast('Reading revision saved');
         } else if (selectedLogType === 'hifz') {
             onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, false); // hifz implies reading
             showToast(t('liveSession.memorizationRangeSaved'));
         } else if (selectedLogType === 'hifz-revision') {
             onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
+            onLogRecitationRange(student.id, pendingLogRange, logQuality, true); // hifz revision implies reading
             showToast('Hifz revision saved');
         } else if (selectedLogType === 'tafseer') {
             onLogTafseerRange(student.id, pendingLogRange);
@@ -2998,14 +3043,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     const VerseMarker: React.FC<{ number: number; surah: number; isSelectedStart: boolean }> = ({ number, surah, isSelectedStart }) => {
         // Include ALL logs (first-time + revisions) so the table and live page stay in sync
-        const isRead      = getVerseRangeInfo(surah, number, recitationAchievements).isLogged;
-        const isMemorized = getVerseRangeInfo(surah, number, memorizationAchievements).isLogged;
-        const isTafseer   = getTafseerRangeInfo(surah, number).isLogged;
         const isLongPressStart = longPressStart?.surah === surah && longPressStart?.ayah === number;
         const glowClass = (!readOnly && isSelectedStart) ? 'ring-2 ring-offset-4 ring-teal-500 dark:ring-orange-500 animate-pulse' : '';
         const longPressGlowClass = (!readOnly && isLongPressStart) ? 'animate-glow' : '';
-        // sky = memorized (highest priority), teal = read, amber = tafseer only
-        const svgFill = isMemorized ? '#38bdf8' : isRead ? '#a7f3d0' : isTafseer ? '#fde68a' : 'currentColor';
+        // green = hifz(+reading), orange = read, purple = homework, blue = tafsir
+        const svgFill = VERSE_MARKER_FILL[verseLogColor(surah, number).base];
 
         if (readOnly) {
             // In readOnly mode (student portal): tapping the verse number plays the
@@ -3103,6 +3145,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const isRead      = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements).isLogged;
             const isMemorized = getVerseRangeInfo(surahNum, ayahNum, memorizationAchievements).isLogged;
             const isTafseer   = getTafseerRangeInfo(surahNum, ayahNum).isLogged;
+            const vColor = verseLogColor(surahNum, ayahNum);
             const isVerseHidden = hiddenRanges.some(range => isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, range.start) && isVerseAfterOrEqual(range.end, { surah: surahNum, ayah: ayahNum }));
 
             const verseWords = splitVerseWords(verse.text_uthmani).map((word, wordIndex, wordsArray) => {
@@ -3169,7 +3212,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <span
                     key={`text-${verse.verse_key}`}
                     className={`px-1 py-1 rounded-md transition-all duration-300
-                        ${isMemorized ? 'bg-sky-50 dark:bg-sky-900/30' : isRead ? 'bg-teal-50 dark:bg-teal-900/30' : isTafseer ? 'bg-amber-50 dark:bg-amber-900/20' : ''}
+                        ${VERSE_BG[vColor.base]} ${vColor.underline ? VERSE_UNDERLINE : ''}
                         ${isVerseHidden ? 'opacity-0' : 'opacity-100'}
                         ${readOnly ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
@@ -3839,32 +3882,44 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
                         {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>}
                         {renderSurahContent()}
-                        {/* Pagination Controls — only when the surah spans more than one window */}
-                        {!isLoading && !error && verses.length > 0 && (hasPreviousPages() || hasMorePages()) && (
-                            <div dir="ltr" className="flex justify-center items-center gap-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
-                                <button
-                                    onClick={handlePreviousPages}
-                                    disabled={!hasPreviousPages()}
-                                    className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-white enabled:dark:bg-gray-800 enabled:text-teal-700 enabled:dark:text-orange-300 enabled:border-teal-200 enabled:dark:border-orange-900/50 enabled:hover:bg-teal-50 enabled:dark:hover:bg-orange-900/20 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                                    </svg>
-                                    <span>Previous</span>
-                                </button>
-                                <span className="px-3.5 py-1.5 rounded-full bg-teal-600 dark:bg-orange-600 text-white text-xs font-bold shadow-sm whitespace-nowrap">
-                                    {t('liveSession.page')} {toEasternArabicNumerals(currentPageRange.start)}–{toEasternArabicNumerals(currentPageRange.end)}
-                                </span>
-                                <button
-                                    onClick={handleNextPages}
-                                    disabled={!hasMorePages()}
-                                    className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-teal-600 enabled:dark:bg-orange-600 enabled:text-white enabled:border-teal-600 enabled:dark:border-orange-600 enabled:hover:bg-teal-700 enabled:dark:hover:bg-orange-700 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
-                                >
-                                    <span>Next</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                    </svg>
-                                </button>
+                        {/* Colour legend (left) + pagination controls (right) */}
+                        {!isLoading && !error && verses.length > 0 && (
+                            <div dir="ltr" className="flex flex-wrap justify-between items-center gap-x-4 gap-y-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
+                                {/* Legend */}
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
+                                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" />Read &amp; memorized</span>
+                                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-300 dark:bg-orange-700" />Read</span>
+                                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-purple-300 dark:bg-purple-700" />Homework</span>
+                                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 dark:bg-blue-700" />Tafsir</span>
+                                </div>
+                                {/* Pager — only when the surah spans more than one window */}
+                                {(hasPreviousPages() || hasMorePages()) && (
+                                    <div className="flex items-center gap-3 ms-auto">
+                                        <button
+                                            onClick={handlePreviousPages}
+                                            disabled={!hasPreviousPages()}
+                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-white enabled:dark:bg-gray-800 enabled:text-teal-700 enabled:dark:text-orange-300 enabled:border-teal-200 enabled:dark:border-orange-900/50 enabled:hover:bg-teal-50 enabled:dark:hover:bg-orange-900/20 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                                            </svg>
+                                            <span>Previous</span>
+                                        </button>
+                                        <span className="px-3.5 py-1.5 rounded-full bg-teal-600 dark:bg-orange-600 text-white text-xs font-bold shadow-sm whitespace-nowrap">
+                                            {t('liveSession.page')} {toEasternArabicNumerals(currentPageRange.start)}–{toEasternArabicNumerals(currentPageRange.end)}
+                                        </span>
+                                        <button
+                                            onClick={handleNextPages}
+                                            disabled={!hasMorePages()}
+                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-teal-600 enabled:dark:bg-orange-600 enabled:text-white enabled:border-teal-600 enabled:dark:border-orange-600 enabled:hover:bg-teal-700 enabled:dark:hover:bg-orange-700 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
+                                        >
+                                            <span>Next</span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                         </>
