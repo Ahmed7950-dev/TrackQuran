@@ -444,6 +444,8 @@ const App: React.FC = () => {
   // Tracks homework updates made by the student so they persist within the session
   // without needing to expose setCurrentUser from AuthProvider.
   const [studentHomeworkUpdates, setStudentHomeworkUpdates] = useState<QuranHomework[] | null>(null);
+  // Verse key the tutor's Quran view should jump to (homework "go to" button)
+  const [quranHomeworkJump, setQuranHomeworkJump] = useState<string | null>(null);
   const [sessionStudentId, setSessionStudentId] = useState<string | null>(null);
   const [tajweedRules, setTajweedRules] = useState<string[]>([]);
   const { currentTheme, toggleTheme } = useTheme();
@@ -1111,6 +1113,22 @@ const App: React.FC = () => {
     }
   };
 
+  // Mark a homework item done (tutor side) and push it to the student's portal.
+  const handleMarkHomeworkDone = async (studentId: string, homeworkId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student || currentUser?.role !== 'teacher') return;
+    const updatedHomework = (student.quranHomework || []).map(hw =>
+      hw.id === homeworkId ? { ...hw, isDone: true } : hw);
+    handleUpdateStudent({ ...student, quranHomework: updatedHomework });
+    const reportId = await getStudentReportId(currentUser.id, studentId);
+    if (reportId) {
+      await updateQuranHomeworkInReport(reportId, updatedHomework);
+      supabase.channel(`report-plays-${reportId}`).send({
+        type: 'broadcast', event: 'homework_assigned', payload: { quranHomework: updatedHomework },
+      });
+    }
+  };
+
   // Broadcast a real-time "buzz" to the student's open portal when the tutor
   // presses Ctrl during a live session. Fire-and-forget — no UI feedback needed.
   const handleMistakeBuzz = () => {
@@ -1773,10 +1791,36 @@ const App: React.FC = () => {
               </section>
             </div>
           );
-        })() : sessionStudent ? (
+        })() : sessionStudent ? (() => {
+          const activeHw = (sessionStudent.quranHomework ?? []).filter(hw => !hw.isDone);
+          const firstHw = activeHw[0];
+          const jumpToHomework = () => {
+            if (!firstHw) return;
+            const key = `${firstHw.startSurah}:${firstHw.startAyah}`;
+            setQuranHomeworkJump(key);
+            setTimeout(() => setQuranHomeworkJump(null), 400); // reset so repeat taps re-fire
+          };
+          const homeworkExtra = firstHw ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={jumpToHomework}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-900/30 border-2 border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300 text-sm font-bold shadow-sm hover:bg-violet-100 dark:hover:bg-violet-800/50 transition-colors">
+                📝 Go to homework
+                {activeHw.length > 1 && (
+                  <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeHw.length}</span>
+                )}
+              </button>
+              <button onClick={() => handleMarkHomeworkDone(sessionStudent.id, firstHw.id)}
+                className="flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 text-sm font-bold shadow-sm hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors">
+                ✓ Done
+              </button>
+            </div>
+          ) : null;
+          return (
           <StudentProgressPage
             student={sessionStudent}
             students={students}
+            nameCardExtra={homeworkExtra}
+            jumpToVerseKey={quranHomeworkJump}
             notesStudentId={sessionStudent.id}
             studentProgress={progress[sessionStudent.id]}
             studentMistakes={sessionStudent.mistakes || {}}
@@ -1799,7 +1843,8 @@ const App: React.FC = () => {
             onLetterFocus={handleLetterFocus}
             onCursorMove={handleCursorMove}
           />
-        ) : selectedStudent ? (
+          );
+        })() : selectedStudent ? (
           currentStudentView === 'mistakes' ? (
             <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined} onStudentUpdate={handleUpdateStudent} />
           ) : (
