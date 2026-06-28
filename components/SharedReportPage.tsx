@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { getSharedReport, SharedReportData, recordVersePlay, getPageOfAyah, getReportPlays, getStudentTimezonePublic } from '../services/dataService';
 import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
@@ -720,6 +720,17 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
+  // Remember each tab's scroll position so returning to a tab (esp. Quran) lands
+  // exactly where you left it instead of jumping/looking blank.
+  const tabScrollRef = useRef<Record<string, number>>({});
+  const changeTab = (next: typeof activeTab) => {
+    if (next === activeTab) return;
+    tabScrollRef.current[activeTab] = window.scrollY;
+    setActiveTab(next);
+  };
+  useLayoutEffect(() => {
+    window.scrollTo(0, tabScrollRef.current[activeTab] ?? 0);
+  }, [activeTab]);
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
@@ -1113,7 +1124,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <div className="border-t border-slate-100 dark:border-gray-700" dir="ltr">
             <div className="container mx-auto px-3 sm:px-4 flex sm:justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
               <button
-                onClick={() => setActiveTab('progress')}
+                onClick={() => changeTab('progress')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'progress'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1128,7 +1139,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 {!hasProgress && <span className="text-xs ml-1 opacity-70">{t('studentPortal.shareToUnlock')}</span>}
               </button>
               <button
-                onClick={() => setActiveTab('calendar')}
+                onClick={() => changeTab('calendar')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'calendar'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1142,7 +1153,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               {/* Quran — primary tab: a green glowing flat pill with an animated icon */}
               <button
-                onClick={() => setActiveTab('quran')}
+                onClick={() => changeTab('quran')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1 mx-1 rounded-none text-sm font-bold transition-all whitespace-nowrap ${
                   activeTab === 'quran'
                     ? 'bg-green-500 text-white'
@@ -1153,7 +1164,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 {t('studentPortal.tabQuran')}
               </button>
               <button
-                onClick={() => setActiveTab('homework')}
+                onClick={() => changeTab('homework')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'homework'
                     ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
@@ -1174,7 +1185,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 })()}
               </button>
               <button
-                onClick={() => setActiveTab('tajweed')}
+                onClick={() => changeTab('tajweed')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'tajweed'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1187,7 +1198,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 {t('studentPortal.tabTajweed')}
               </button>
               <button
-                onClick={() => setActiveTab('qaedah')}
+                onClick={() => changeTab('qaedah')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'qaedah'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1200,7 +1211,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 {t('studentPortal.tabQaedah')}
               </button>
               <button
-                onClick={() => setActiveTab('alphabetTrainer')}
+                onClick={() => changeTab('alphabetTrainer')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'alphabetTrainer'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1213,7 +1224,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 {t('studentPortal.tabAlphabet')}
               </button>
               <button
-                onClick={() => setActiveTab('lettersTrainer')}
+                onClick={() => changeTab('lettersTrainer')}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'lettersTrainer'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
@@ -1317,7 +1328,10 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 />
               );
             })()}
-            {activeTab === 'quran' && (() => {
+            {/* Quran stays MOUNTED (hidden when inactive) so the open surah +
+                scroll position survive switching tabs. */}
+            <div className={activeTab === 'quran' ? '' : 'hidden'}>
+            {(() => {
               const sp = studentProgress;
               const quranFakeStudent: Student = {
                 id: 'shared-report-quran',
@@ -1543,6 +1557,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 </div>
               );
             })()}
+            </div>
             {activeTab === 'tajweed' && (
               <TajweedPage students={[]} preSelectedStudentId={report.student_id} readOnly />
             )}
@@ -1624,7 +1639,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                     setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
                                     setShowHistory(false);
                                     setNoteVisible(true);
-                                    setActiveTab('quran');
+                                    changeTab('quran');
                                   }}
                                   className="flex-1 py-2 px-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-semibold border border-violet-200 dark:border-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
                                 >
