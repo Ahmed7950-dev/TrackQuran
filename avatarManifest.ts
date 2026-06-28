@@ -23,7 +23,13 @@ export const AVATAR_FILES: Record<AvatarGender, string[]> = {
     'student-3.json', 'student-4.json', 'superhero.json', 'superhero-copy.json', 'teacher.json',
     'world-creativity-and-innovation-day.json',
   ],
-  female: [],
+  female: [
+    'baby-girl.json', 'brunei.json', 'girl.json', 'girl-1.json', 'girl-2.json', 'girl-3.json', 'girl-4.json',
+    'grandma.json', 'happy.json', 'heart-1.json', 'hijab.json', 'laughing.json', 'madness.json', 'moroccan.json',
+    'pensive.json', 'reading-1.json', 'reading-1-copy.json', 'sad.json', 'selfie.json', 'sleepy.json',
+    'spanish.json', 'stress.json', 'student.json', 'student-1.json', 'student-2.json', 'teenager.json',
+    'watermelon.json', 'woman-wearing-hijab.json', 'woman.json', 'worker.json', 'yawn.json',
+  ],
 };
 
 export const avatarSrc = (gender: AvatarGender, file: string): string => `/avatars/${FOLDER[gender]}/${file}`;
