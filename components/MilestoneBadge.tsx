@@ -9,11 +9,11 @@ interface MilestoneBadgeProps {
 
 // Custom animated milestone badges (uploaded Lottie files).
 export const MILESTONE_LOTTIE: Record<string, string> = {
-    'al-baqarah': '/animations/cow.json',     // Al-Baqarah (The Cow)
-    '5-juz':      '/animations/five.json',     // 5 Ajza
-    '10-juz':     '/animations/ten.json',      // 10 Ajza
-    '15-juz':     '/animations/fifteen.json',  // Nisf Al-Quran
-    'ya-seen':    '/animations/heart.json',    // Qalb Al-Quran (Heart of the Quran)
+    'al-baqarah': '/animations/cow.json',          // Al-Baqarah (The Cow)
+    '5-juz':      '/animations/five.json',         // 5 Ajza (100 pages)
+    '10-juz':     '/animations/ten.json',          // 10 Ajza (200 pages)
+    '15-juz':     '/animations/fifteen.json',      // Nisf Al-Quran (300 pages)
+    'khatm':      '/animations/finish-flag.json',  // Khatm Al-Quran (whole Quran)
 };
 
 const MilestoneBadge: React.FC<MilestoneBadgeProps> = ({ milestone, type }) => {

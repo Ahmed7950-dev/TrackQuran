@@ -8,7 +8,7 @@ import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote } from '../services/tadabburService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
-import { getPageOfAyah, saveStudentTeacherNote } from '../services/dataService';
+import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords } from '../utils/quranicMarks';
 import ConfirmationModal from './ConfirmationModal';
@@ -3559,7 +3559,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                      )}
                 </div>
                 <SurahProgressBar surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading" />
-                <MilestoneTracker studentProgress={studentProgress} />
+                <MilestoneTracker completedPages={new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)])} />
             </div>
 
             <div className="space-y-6">
