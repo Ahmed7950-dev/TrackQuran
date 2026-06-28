@@ -13,6 +13,7 @@ import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyL
 import { getSharedReport, getPageOfAyah, computeMistakesRate, calculateVersesAndPages } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import LottieIcon from './LottieIcon';
+import StudentProfileIcon from './StudentProfileIcon';
 import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import Logo from './Logo';
 
@@ -262,7 +263,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
 
   const quranMembers = familyLink.members
     .filter(m => m.type === 'quran')
-    .map((m, i) => ({ id: m.id, name: m.name, color: PALETTE[i % PALETTE.length], report: reports[m.id] }));
+    .map((m, i) => ({ id: m.id, name: m.name, color: PALETTE[i % PALETTE.length], report: reports[m.id], profileIcon: reports[m.id]?.profileIcon as string | undefined }));
 
   const now = new Date();
   const metricsByMember: Record<string, Metrics> = {};
@@ -341,9 +342,13 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
               {familyLink.members.map((member, i) => (
                 <a key={member.id} href={memberUrl(member)}
                   className="group flex flex-col items-center gap-2 w-24 p-3 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-extrabold text-white" style={{ backgroundColor: PALETTE[i % PALETTE.length] }}>
-                    {member.name.charAt(0).toUpperCase()}
-                  </div>
+                  {reports[member.id]?.profileIcon ? (
+                    <div className="w-12 h-12 flex items-center justify-center"><StudentProfileIcon src={reports[member.id].profileIcon} size={48} mode="always" /></div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-extrabold text-white" style={{ backgroundColor: PALETTE[i % PALETTE.length] }}>
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-200 text-center leading-tight truncate w-full group-hover:text-teal-600 dark:group-hover:text-teal-400">{member.name}</span>
                 </a>
               ))}
@@ -407,6 +412,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="text-xl w-7 text-center flex-shrink-0">{medal[i] ?? <span className="text-sm font-bold text-slate-400">{i + 1}</span>}</span>
                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                        <StudentProfileIcon src={m.profileIcon} size={24} mode="always" />
                         <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.name}</span>
                       </div>
                       <span className="flex items-baseline gap-1 flex-shrink-0">

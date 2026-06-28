@@ -11,9 +11,12 @@ const LottieIcon: React.FC<{
   loop?: boolean;
   autoplay?: boolean;
   playOnHover?: boolean;
+  /** Controlled playback — when provided, plays while true and rests at frame 0
+   *  while false (overrides autoplay/hover). */
+  play?: boolean;
   className?: string;
   style?: React.CSSProperties;
-}> = ({ src, size = 20, loop = false, autoplay = true, playOnHover = true, className, style }) => {
+}> = ({ src, size = 20, loop = false, autoplay = true, playOnHover = true, play, className, style }) => {
   const ref = useRef<HTMLDivElement>(null);
   const animRef = useRef<ReturnType<typeof lottie.loadAnimation> | null>(null);
 
@@ -24,17 +27,26 @@ const LottieIcon: React.FC<{
       .then(r => r.json())
       .then(data => {
         if (cancelled || !ref.current) return;
-        animRef.current = lottie.loadAnimation({
+        const anim = lottie.loadAnimation({
           container: ref.current,
           animationData: data,
           renderer: 'svg',
           loop,
-          autoplay,
+          autoplay: play === undefined ? autoplay : false,
         });
+        animRef.current = anim;
+        if (play === false) anim.goToAndStop(0, true);
+        else if (play === true) anim.play();
       })
       .catch(() => {});
     return () => { cancelled = true; animRef.current?.destroy(); animRef.current = null; };
   }, [src, loop, autoplay]);
+
+  useEffect(() => {
+    const a = animRef.current;
+    if (play === undefined || !a) return;
+    if (play) a.goToAndPlay(0, true); else a.goToAndStop(0, true);
+  }, [play]);
 
   const replay = () => {
     if (!playOnHover || !animRef.current) return;

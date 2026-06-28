@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ProfileIconPicker from './ProfileIconPicker';
 import { AgeCategory } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
@@ -6,7 +7,7 @@ import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStudent: (name: string, dob: string, ageCategory: AgeCategory, billing: StudentBilling) => void;
+  onAddStudent: (name: string, dob: string, ageCategory: AgeCategory, billing: StudentBilling, profileIcon?: string) => void;
 }
 
 const AGE_CATEGORIES: { value: AgeCategory; label: string; range: string; emoji: string }[] = [
@@ -32,6 +33,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
   const [dob, setDob] = useState('');
   const [manualCategory, setManualCategory] = useState<AgeCategory>('young_gems');
   const [billing, setBilling] = useState<StudentBilling>({ studentType: 'preply', preplyPercentage: 18 });
+  const [profileIcon, setProfileIcon] = useState<string | undefined>(undefined);
   const [error, setError] = useState('');
   const { t } = useI18n();
 
@@ -47,11 +49,12 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
       return;
     }
     setError('');
-    onAddStudent(name.trim(), dob, effectiveCategory, billing);
+    onAddStudent(name.trim(), dob, effectiveCategory, billing, profileIcon);
     setName('');
     setDob('');
     setManualCategory('young_gems');
     setBilling({ studentType: 'preply', preplyPercentage: 18 });
+    setProfileIcon(undefined);
   };
 
   const handleClose = () => {
@@ -91,6 +94,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
               placeholder={t('modals.addStudent.namePlaceholder')}
             />
           </div>
+
+          <ProfileIconPicker value={profileIcon} onChange={setProfileIcon} />
 
           {/* Date of Birth — optional */}
           <div>

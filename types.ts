@@ -75,6 +75,7 @@ export interface Student {
   name: string;
   dob?: string; // ISO date — optional; use ageCategory when absent
   ageCategory?: AgeCategory; // Manual override; auto-derived from dob when dob is present
+  profileIcon?: string; // public URL of the chosen animated Lottie profile icon
   recitationAchievements: RecitationAchievement[];
   memorizationAchievements: MemorizationAchievement[];
   attendance: AttendanceRecord[];

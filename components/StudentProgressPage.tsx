@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
+import StudentProfileIcon from './StudentProfileIcon';
 import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
@@ -3536,6 +3537,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="flex justify-between items-start">
                     <div className="flex-grow min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
+                            <StudentProfileIcon src={(student as { profileIcon?: string }).profileIcon} size={30} mode="always" />
                             <h1 className="text-2xl font-bold text-teal-800 dark:text-slate-100">{student.name}{student.dob ? ` (${t('liveSession.age', { age: getAge(student.dob) })})` : ''}</h1>
                             {nameCardExtra}
                         </div>

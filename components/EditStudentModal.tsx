@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ProfileIconPicker from './ProfileIconPicker';
 import { Student, SurahMetadata, MemorizationAchievement, TafsirMemorizationReview, AttendanceRecord, AttendanceStatus, RecitationAchievement, TafsirReview, AgeCategory } from '../types';
 import QualityScoreInput from './QualityScoreInput';
 import { calculateVersesAndPages } from '../services/dataService';
@@ -32,6 +33,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   const [name, setName] = useState(student.name);
   const [dob, setDob] = useState(student.dob ?? '');
   const [ageCategory, setAgeCategory] = useState<AgeCategory>(student.ageCategory ?? 'young_gems');
+  const [profileIcon, setProfileIcon] = useState<string | undefined>(student.profileIcon);
   const [billing, setBilling] = useState<StudentBilling>({
     timezone: student.timezone, hourlyRate: student.hourlyRate,
     studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
@@ -54,6 +56,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
         setName(student.name);
         setDob(student.dob ?? '');
         setAgeCategory(student.ageCategory ?? 'young_gems');
+        setProfileIcon(student.profileIcon);
         setBilling({
           timezone: student.timezone, hourlyRate: student.hourlyRate,
           studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
@@ -73,7 +76,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
 
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory: effectiveCategory,
+    onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory: effectiveCategory, profileIcon,
       timezone: billing.timezone, hourlyRate: billing.hourlyRate,
       studentType: billing.studentType, preplyPercentage: billing.preplyPercentage,
       subscriptionRenewalDate: billing.studentType === 'platform' ? undefined : billing.subscriptionRenewalDate });
@@ -356,6 +359,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                                     <label htmlFor="student-name-edit" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('modals.editStudent.nameLabel')}</label>
                                     <input type="text" id="student-name-edit" value={name} onChange={(e) => setName(e.target.value)} className="block w-full px-3 py-2 bg-white dark:bg-gray-700 dark:text-white border border-slate-300 dark:border-gray-600 rounded-md shadow-sm" />
                                 </div>
+                                <ProfileIconPicker value={profileIcon} onChange={setProfileIcon} />
                                 <div>
                                     <label htmlFor="student-dob-edit" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                       {t('modals.editStudent.dobLabel')}

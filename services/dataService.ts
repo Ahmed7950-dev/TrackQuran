@@ -37,6 +37,7 @@ const rowToStudent = (row: any): Student => ({
   name:                        row.name,
   dob:                         row.dob,
   ageCategory:                 row.age_category ?? undefined,
+  profileIcon:                 row.profile_icon ?? undefined,
   recitationAchievements:      row.recitation_achievements      ?? [],
   memorizationAchievements:    row.memorization_achievements    ?? [],
   attendance:                  row.attendance                   ?? [],
@@ -68,6 +69,7 @@ const studentToRow = (teacherId: string, s: Student) => ({
   name:                        s.name,
   dob:                         s.dob ?? null,  // explicit null overrides any column DEFAULT
   age_category:                s.ageCategory ?? null,
+  profile_icon:                s.profileIcon ?? null,
   recitation_achievements:     s.recitationAchievements,
   memorization_achievements:   s.memorizationAchievements,
   attendance:                  s.attendance,
@@ -384,6 +386,7 @@ const getDefaultTajweedRules = (): string[] => [
 
 export interface SharedReportData {
   studentName: string;
+  profileIcon?: string; // animated Lottie profile icon URL
   generatedAt: string;
   mistakes: { [key: string]: { level: number; errorType?: string; errorText?: string; date: string } };
   verses: Array<{ verse_key: string; text_uthmani: string }>;
@@ -589,6 +592,7 @@ export const syncStudentDataInReport = async (
     generatedAt: new Date().toISOString(),
     mistakes: student.mistakes as SharedReportData['mistakes'],
     quranHomework: student.quranHomework ?? [],
+    profileIcon: (student as { profileIcon?: string }).profileIcon ?? existing.profileIcon,
     ranks: ranks ?? existing.ranks, // refresh precomputed ranks when provided
     studentProgress: {
       ...(existing.studentProgress ?? {}),

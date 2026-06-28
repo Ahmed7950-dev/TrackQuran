@@ -806,6 +806,7 @@ const App: React.FC = () => {
     if (stu) {
       await createOrUpdateSharedReport(currentUser.id, stu.id, stu.name, {
         studentName: stu.name,
+        profileIcon: stu.profileIcon,
         generatedAt: new Date().toISOString(),
         mistakes: stu.mistakes || {},
         quranHomework: stu.quranHomework || [],
@@ -1922,7 +1923,7 @@ const App: React.FC = () => {
       <AddStudentModal
         isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
-        onAddStudent={(name, dob, ageCategory, billing) => handleAddStudent({ name, dob, ageCategory, ...billing, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
+        onAddStudent={(name, dob, ageCategory, billing, profileIcon) => handleAddStudent({ name, dob, ageCategory, profileIcon, ...billing, recitationAchievements: [], memorizationAchievements: [], attendance: [], masteredTajweedRules: [], tafsirReviews: [], tafsirMemorizationReviews: [] })}
       />
 
       <ContactSupportModal

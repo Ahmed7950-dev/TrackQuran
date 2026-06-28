@@ -3,6 +3,7 @@ import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchieve
 import { getStudentCompletions } from '../services/tajweedService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import LottieIcon from './LottieIcon';
+import StudentProfileIcon from './StudentProfileIcon';
 import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import AddRecitationAchievementModal from './AddRecitationAchievementModal';
 import { calculateVersesAndPages, getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport } from '../services/dataService';
@@ -76,6 +77,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         try {
             const reportId = await createOrUpdateSharedReport(teacherId, student.id, student.name, {
                 studentName: student.name,
+                profileIcon: student.profileIcon,
                 generatedAt: new Date().toISOString(),
                 mistakes: student.mistakes || {},
                 // NOTE: omit `verses`/`homeworkVerses` — we don't have the verse text

@@ -13,6 +13,7 @@ import { getTeacherAvailability, AvailabilitySlot } from '../services/availabili
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { LessonSession } from '../types';
 import LottieIcon from './LottieIcon';
+import StudentProfileIcon from './StudentProfileIcon';
 import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
 import NotificationCenter from './NotificationCenter';
@@ -1055,7 +1056,9 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
           {/* Student name badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
-            <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
+            {report_data.profileIcon
+              ? <StudentProfileIcon src={report_data.profileIcon} size={22} mode="always" />
+              : <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>}
             <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[100px] sm:max-w-none">
               {student_name}
             </span>
@@ -1349,6 +1352,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               const quranFakeStudent: Student = {
                 id: 'shared-report-quran',
                 name: student_name,
+                profileIcon: report_data.profileIcon,
                 dob: sp?.dob,
                 recitationAchievements: sp?.recitationAchievements ?? [],
                 memorizationAchievements: sp?.memorizationAchievements ?? [],
