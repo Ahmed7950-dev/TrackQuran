@@ -205,7 +205,7 @@ const AttendanceCalendar: React.FC<{ members: { id: string; name: string; color:
             <div key={d} className="min-h-[3.5rem] rounded-lg border border-slate-100 dark:border-gray-700 p-1 flex flex-col gap-0.5">
               <span className="text-[10px] font-semibold text-slate-400">{d}</span>
               {people.map((p, idx) => (
-                <span key={idx} className="text-[9px] leading-tight font-bold text-white rounded px-1 py-0.5 truncate" style={{ backgroundColor: p.color }} title={p.name}>{p.name}</span>
+                <span key={idx} className="text-[7px] sm:text-[9px] leading-tight font-bold text-white rounded px-0.5 sm:px-1 py-0.5 truncate" style={{ backgroundColor: p.color }} title={p.name}>{p.name}</span>
               ))}
             </div>
           );
@@ -427,7 +427,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                         <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.name}</span>
                       </div>
                       <span className="flex items-baseline gap-1 flex-shrink-0">
-                        <span className="text-3xl font-extrabold text-teal-600 dark:text-teal-400">{metricsByMember[m.id].points.toFixed(1)}</span>
+                        <span className="text-lg sm:text-3xl font-extrabold text-teal-600 dark:text-teal-400">{metricsByMember[m.id].points.toFixed(1)}</span>
                         <span className="text-xs font-semibold text-slate-400">pts</span>
                       </span>
                     </div>
