@@ -11,7 +11,7 @@ const SITE_URL = 'https://www.lisanquran.com';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
 import { getSharedReport, getPageOfAyah } from '../services/dataService';
-import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA } from '../constants';
+import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import LottieIcon from './LottieIcon';
 import { MILESTONE_LOTTIE } from './MilestoneBadge';
 import Logo from './Logo';
@@ -115,7 +115,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
   const lastHw = allHw[0] ? { range: fmtHomework(allHw[0]), note: allHw[0].note ?? '' } : null;
 
   return {
-    points: recTF.reduce((s: number, a: any) => s + (a.pointsEarned || 0), 0),
+    points: [...recTF, ...memTF].reduce((s: number, a: any) => s + (a.pointsEarned ?? ((a.versesCompleted ?? 0) * 15 * POINTS_PER_WORD)), 0),
     pagesRead: readPagesTF.size,
     pagesMemorized: memPagesTF.size,
     attended,

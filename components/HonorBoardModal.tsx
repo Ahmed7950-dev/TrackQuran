@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Student } from '../types';
 import { useI18n } from '../context/I18nProvider';
-import { getRecitedPagesSet } from '../services/dataService';
-import { TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
+import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
+import { TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS, POINTS_PER_WORD } from '../constants';
 
 interface AvatarProps {
   name: string;
@@ -146,18 +146,22 @@ const HonorBoardModal: React.FC<HonorBoardModalProps> = ({ isOpen, onClose, stud
 
     const calculateScore = (student: Student) => {
       if (view === 'allTime') {
-        const pagesRead = getRecitedPagesSet(student).size;
+        // Memorized pages count as read too (hifz implies reading).
+        const pagesRead = new Set([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size;
         const grossScore = (pagesRead / TOTAL_QURAN_PAGES) * 1_000_000;
         const mistakePenalty = Object.keys(student.mistakes || {}).length * MISTAKE_PENALTY_POINTS;
         return Math.max(0, grossScore - mistakePenalty);
       } else { // monthly
-        const achievements = student.recitationAchievements || [];
+        // Points come from BOTH reading and memorization achievements.
+        const achievements = [...(student.recitationAchievements || []), ...(student.memorizationAchievements || [])];
         const achievementsInMonth = achievements.filter(ach => {
           const achDate = new Date(ach.date);
           const achMonthKey = `${achDate.getFullYear()}-${String(achDate.getMonth() + 1).padStart(2, '0')}`;
           return achMonthKey === currentMonthKey;
         });
-        const grossPoints = achievementsInMonth.reduce((sum, ach) => sum + (ach.pointsEarned || 0), 0);
+        // Reading achievements carry pointsEarned; memorization achievements don't,
+        // so derive their points the same way (verses × ~15 words × points/word).
+        const grossPoints = achievementsInMonth.reduce((sum, ach: any) => sum + (ach.pointsEarned ?? ((ach.versesCompleted ?? 0) * 15 * POINTS_PER_WORD)), 0);
 
         const mistakesInMonth = Object.values(student.mistakes || {}).filter(mistake => {
             const mistakeDate = new Date(mistake.date);

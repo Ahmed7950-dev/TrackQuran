@@ -51,7 +51,8 @@ const getAge = (dob?: string): number | null => {
 
 // Unified score calculation
 const calculateScore = (student: Student): number => {
-    const recitedPages = getRecitedPagesSet(student);
+    // Memorized pages count as read too (hifz implies reading).
+    const recitedPages = new Set([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]);
     const grossScore = (recitedPages.size / TOTAL_QURAN_PAGES) * 1_000_000;
 
     const validMistakes = Object.keys(student.mistakes || {}).filter(key => {
