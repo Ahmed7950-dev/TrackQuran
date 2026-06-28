@@ -6,6 +6,7 @@ import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
+import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
 import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus, ensureShareTokenById } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
@@ -617,7 +618,10 @@ const App: React.FC = () => {
       for (const stu of roster) {
         try {
           const reportId = await getStudentReportId(currentUser.id, stu.id);
-          if (reportId) await syncStudentDataInReport(reportId, stu, computeReportRanks(stu, roster));
+          if (reportId) {
+            const tajweed = await getStudentCompletions(stu.id).catch(() => undefined);
+            await syncStudentDataInReport(reportId, stu, computeReportRanks(stu, roster), tajweed);
+          }
         } catch { /* keep going */ }
       }
     })();

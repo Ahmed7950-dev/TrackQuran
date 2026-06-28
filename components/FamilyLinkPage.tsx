@@ -10,7 +10,7 @@ const SITE_URL = 'https://www.lisanquran.com';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
-import { getSharedReport, getPageOfAyah } from '../services/dataService';
+import { getSharedReport, getPageOfAyah, computeMistakesRate, calculateVersesAndPages } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import LottieIcon from './LottieIcon';
 import { MILESTONE_LOTTIE } from './MilestoneBadge';
@@ -73,8 +73,7 @@ interface Metrics {
   memQuality: number;
   rankAge: { rank: number; total: number } | null;
   rankAll: { rank: number; total: number } | null;
-  mistakesReading: number;
-  mistakesTajweed: number;
+  mistakesRate: number;
   achievedMilestoneIds: string[];
   tajweedLessonNames: string[];
   tafsirVerses: number;
@@ -89,8 +88,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
   const memTF = mem.filter((a: any) => inTimeframe(a.date, tf, now));
   const att = (sp.attendance ?? []).filter((a: any) => inTimeframe(a.date, tf, now));
   const taf = (sp.tafsirReviews ?? []).filter((a: any) => inTimeframe(a.date, tf, now));
-  const tjw = (sp.tajweedCompletions ?? []).filter((a: any) => inTimeframe(a.completedAt, tf, now));
-  const mistakesTF = (Object.values(rd?.mistakes ?? {}) as any[]).filter(m => inTimeframe(m.date, tf, now));
+  const tjw = (sp.tajweedCompletions ?? []); // tajweed lessons: all-time
 
   const memPagesTF = pagesFromAchs(memTF);
   const readPagesTF = new Set<number>([...pagesFromAchs(recTF), ...memPagesTF]);
@@ -126,12 +124,18 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
     memQuality: avgMemQ,
     rankAge: rd?.ranks ? { rank: rd.ranks.readingRank, total: rd.ranks.readingTotal } : null,
     rankAll: rd?.ranks ? { rank: rd.ranks.overallReadingRank, total: rd.ranks.overallReadingTotal } : null,
-    mistakesReading: mistakesTF.filter(m => (m.errorType ?? 'reading') === 'reading').length,
-    mistakesTajweed: mistakesTF.filter(m => m.errorType === 'tajweed').length,
-    achievedMilestoneIds: MILESTONES.filter(m => m.isAchieved(readPagesAll)).map(m => m.id),
+    // Per-page mistakes rate — same as the tutor's student card (all-time).
+    mistakesRate: computeMistakesRate(rec, rd?.mistakes ?? {}),
+    achievedMilestoneIds: MILESTONES.filter(m => m.isAchieved(readPagesAll)).map(m => m.id), // all-time
     tajweedLessonNames: tjw.map((t: any) => t.lessonTitle || t.lessonId).filter(Boolean),
-    tafsirVerses: [...new Set(taf.map((r: any) => r.surah))]
-      .reduce((sum: number, s: number) => sum + (QURAN_METADATA.find(m => m.number === s)?.numberOfAyahs ?? 0), 0),
+    // Actual tafsir verses from each review's ayah range (not whole surahs).
+    tafsirVerses: taf.reduce((sum: number, r: any) => {
+      const ss = r.startSurah ?? r.surah, es = r.endSurah ?? r.surah;
+      if (ss && r.startAyah != null && es && r.endAyah != null) {
+        try { return sum + calculateVersesAndPages(ss, r.startAyah, es, r.endAyah).verses; } catch { return sum + 1; }
+      }
+      return sum + 1;
+    }, 0),
     lastHomework: lastHw,
   };
 }
@@ -287,7 +291,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
     { label: 'Memorization quality', render: m => cell(m, x => x.memQuality.toFixed(1)) },
     { label: 'Rank in age group', render: m => cell(m, x => x.rankAge?.rank ? `#${x.rankAge.rank} of ${x.rankAge.total}` : '—') },
     { label: 'Rank among all students', render: m => cell(m, x => x.rankAll?.rank ? `#${x.rankAll.rank} of ${x.rankAll.total}` : '—') },
-    { label: 'Mistakes rate', render: m => cell(m, x => x.mistakesReading + x.mistakesTajweed) },
+    { label: 'Mistakes rate', render: m => cell(m, x => <span>{x.mistakesRate}<span className="text-xs font-semibold text-slate-400"> /pg</span></span>) },
     { label: 'Milestones', render: m => cell(m, x => (
       x.achievedMilestoneIds.length === 0 ? <span className="text-slate-300">—</span> : (
         <div className="flex items-center justify-center gap-1 flex-wrap">

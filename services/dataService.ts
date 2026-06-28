@@ -571,6 +571,7 @@ export const syncStudentDataInReport = async (
     | 'tafsirMemorizationReviews'
   >,
   ranks?: SharedReportData['ranks'],
+  tajweedCompletions?: Array<{ lessonId: string; lessonTitle: string; completedAt: string }>,
 ): Promise<void> => {
   // Fetch existing data to preserve verses / homeworkVerses / quranicFont
   const { data, error: fetchErr } = await supabase
@@ -598,6 +599,8 @@ export const syncStudentDataInReport = async (
       dob: student.dob,
       tafsirReviews: student.tafsirReviews ?? [],
       tafsirMemorizationReviews: student.tafsirMemorizationReviews ?? [],
+      // Only overwrite when provided; otherwise the spread preserves existing.
+      ...(tajweedCompletions !== undefined ? { tajweedCompletions } : {}),
     } as SharedReportData['studentProgress'],
   };
 
