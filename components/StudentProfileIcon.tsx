@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import LottieIcon from './LottieIcon';
 
 /** Renders a student's animated Lottie profile icon next to their name.
- *  mode 'always' loops continuously; mode 'hover' rests and animates on hover. */
-const StudentProfileIcon: React.FC<{ src?: string; size?: number; mode?: 'always' | 'hover'; className?: string }> = ({ src, size = 24, mode = 'always', className }) => {
+ *  mode 'always' loops continuously; mode 'hover' rests and animates on hover.
+ *  Pass `play` to control playback externally (e.g. from a parent card's hover),
+ *  which overrides the icon's own hover tracking. */
+const StudentProfileIcon: React.FC<{ src?: string; size?: number; mode?: 'always' | 'hover'; play?: boolean; className?: string }> = ({ src, size = 24, mode = 'always', play, className }) => {
   const [hover, setHover] = useState(false);
   if (!src) return null;
   if (mode === 'always') {
@@ -15,7 +17,7 @@ const StudentProfileIcon: React.FC<{ src?: string; size?: number; mode?: 'always
       onMouseLeave={() => setHover(false)}
       className={`inline-flex align-middle flex-shrink-0 ${className ?? ''}`}
     >
-      <LottieIcon src={src} size={size} loop play={hover} playOnHover={false} />
+      <LottieIcon src={src} size={size} loop play={play ?? hover} playOnHover={false} />
     </span>
   );
 };
