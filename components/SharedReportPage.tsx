@@ -131,6 +131,9 @@ const ProgressTab: React.FC<{
     return s;
   }, [memorizationAchievements]);
 
+  // Memorized pages count as read too (hifz implies reading).
+  const readPages = useMemo(() => new Set<number>([...recitedPages, ...memorizedPages]), [recitedPages, memorizedPages]);
+
   // ── Surah quality maps for progress bar ─────────────────────────────────────
   const getSurahQualityMap = (achievements: Array<any>, qualityKey: string): Record<number, number> => {
     const map: Record<number, { total: number; count: number }> = {};
@@ -158,10 +161,16 @@ const ProgressTab: React.FC<{
 
   // ── Reading data ─────────────────────────────────────────────────────────────
   const readingData = useMemo(() => {
-    const totalPages = recitedPages.size;
+    const totalPages = readPages.size;
     const pagesRemaining = TOTAL_QURAN_PAGES - totalPages;
-    const avgQuality = recitationAchievements.length > 0
-      ? recitationAchievements.reduce((s, a) => s + (a.readingQuality || 0), 0) / recitationAchievements.length
+    // Memorized verses count as read with their memorization quality as the
+    // reading quality — blend both lists for the reading average.
+    const readingQualities = [
+      ...recitationAchievements.map(a => a.readingQuality || 0),
+      ...memorizationAchievements.map(a => a.memorizationQuality || 0),
+    ];
+    const avgQuality = readingQualities.length > 0
+      ? readingQualities.reduce((s, q) => s + q, 0) / readingQualities.length
       : 0;
     const sorted = [...recitationAchievements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const last = sorted[0];
@@ -174,7 +183,7 @@ const ProgressTab: React.FC<{
       return acc;
     }, {} as Record<number, number[]>);
     return { totalPages, pagesRemaining, avgQuality, lastAchievementText, tafsirBySurah, sorted };
-  }, [recitedPages, recitationAchievements, tafsirReviews]);
+  }, [readPages, recitationAchievements, memorizationAchievements, tafsirReviews]);
 
   // ── Memorization data ────────────────────────────────────────────────────────
   const memorizationData = useMemo(() => {
@@ -530,7 +539,7 @@ const ProgressTab: React.FC<{
         </div>
         <ProgressSection
           qualityMap={quranBarView === 'reading' ? recitedSurahsQuality : memorizedSurahsQuality}
-          pagesCompleted={quranBarView === 'reading' ? recitedPages.size : memorizedPages.size}
+          pagesCompleted={quranBarView === 'reading' ? readPages.size : memorizedPages.size}
         />
       </div>
 
@@ -540,7 +549,7 @@ const ProgressTab: React.FC<{
           <h3 className="font-semibold text-slate-800">Milestone Journey</h3>
           <Toggle value={milestoneView} onChange={setMilestoneView} />
         </div>
-        <MilestoneSection completedPages={milestoneView === 'reading' ? recitedPages : memorizedPages} />
+        <MilestoneSection completedPages={milestoneView === 'reading' ? readPages : memorizedPages} />
       </div>
 
       {/* ── Mastered Tajweed Rules ──────────────────────────────── */}

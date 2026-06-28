@@ -127,6 +127,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const recitedPages = useMemo(() => getRecitedPagesSet(student), [student]);
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const memorizedPages = useMemo(() => getMemorizedPagesSet(student), [student]);
+    // Memorized pages count as read too (hifz implies reading).
+    const readPages = useMemo(() => new Set<number>([...recitedPages, ...memorizedPages]), [recitedPages, memorizedPages]);
 
     const getAge = (dob: string) => {
         const birthDate = new Date(dob);
@@ -195,15 +197,18 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const readingData = useMemo(() => {
         // FIX: Add explicit type to fix type inference issue with generic function.
         const achievements: RecitationAchievement[] = filterByTimePeriod(student.recitationAchievements, timePeriod);
-        const totalPages = student.recitationAchievements.reduce((sum, ach) => sum + ach.pagesCompleted, 0);
-        const pagesRemaining = TOTAL_QURAN_PAGES - recitedPages.size;
+        // Memorized verses count as read, with their memorization quality acting as
+        // the reading quality — so blend both lists for the reading average.
+        const memAchievements: MemorizationAchievement[] = filterByTimePeriod(student.memorizationAchievements, timePeriod);
+        const pagesRemaining = TOTAL_QURAN_PAGES - readPages.size;
         const totalVerses = achievements.reduce((sum, ach) => sum + ach.versesCompleted, 0);
-        const avgQuality = achievements.length > 0 ? achievements.reduce((sum, ach) => sum + ach.readingQuality, 0) / achievements.length : 0;
+        const readingQualities = [...achievements.map(a => a.readingQuality), ...memAchievements.map(a => a.memorizationQuality)];
+        const avgQuality = readingQualities.length > 0 ? readingQualities.reduce((sum, q) => sum + q, 0) / readingQualities.length : 0;
         const lastAchievement = student.recitationAchievements.length > 0 ? [...student.recitationAchievements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
         const lastAchievementText = lastAchievement ? `${quranMetadata.find(s => s.number === lastAchievement.endSurah)?.name} ${lastAchievement.endAyah}` : 'N/A';
 
-        return { totalPages: recitedPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText };
-    }, [student, timePeriod, quranMetadata, recitedPages]);
+        return { totalPages: readPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText };
+    }, [student, timePeriod, quranMetadata, readPages]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const memorizationData = useMemo(() => {
@@ -853,7 +858,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 </div>
                 <div className="mt-4">
                     {quranBarView === 'reading' 
-                        ? <ProgressSection pagesCompleted={recitedPages.size} qualityMap={recitedSurahsQuality} />
+                        ? <ProgressSection pagesCompleted={readPages.size} qualityMap={recitedSurahsQuality} />
                         : <ProgressSection pagesCompleted={memorizedPages.size} qualityMap={memorizedSurahsQuality} />
                     }
                 </div>
@@ -865,7 +870,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     <ModernToggle value={milestoneView} onChange={setMilestoneView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
                 </div>
                 {milestoneView === 'reading'
-                    ? <MilestoneSection completedPages={recitedPages} />
+                    ? <MilestoneSection completedPages={readPages} />
                     : <MilestoneSection completedPages={memorizedPages} />
                 }
             </div>
