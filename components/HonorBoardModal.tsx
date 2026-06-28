@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Student } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
+import StudentProfileIcon from './StudentProfileIcon';
 import { TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS, POINTS_PER_WORD } from '../constants';
 
 interface AvatarProps {
@@ -78,7 +79,7 @@ interface HonorBoardModalProps {
   students: Student[];
 }
 
-const PodiumPlace: React.FC<{ student: { name: string; score: number }; rank: 1 | 2 | 3 }> = ({ student, rank }) => {
+const PodiumPlace: React.FC<{ student: { name: string; score: number; profileIcon?: string }; rank: 1 | 2 | 3 }> = ({ student, rank }) => {
     const { t } = useI18n();
     const styles = {
         1: {
@@ -115,15 +116,19 @@ const PodiumPlace: React.FC<{ student: { name: string; score: number }; rank: 1 
     return (
         <div className={`relative flex flex-col items-center justify-end w-1/3 ${s.order}`}>
             <div className={`flex flex-col items-center justify-start p-4 ${s.height} w-full`}>
-                <div className="w-24 h-24 rounded-full shadow-lg mb-3">
-                     <Avatar 
-                        name={student.name} 
-                        colors={{ 
-                            avatarBg: s.avatarBg, 
-                            borderColor: s.borderColor,
-                            highlightColor: s.highlightColor
-                        }} 
-                    />
+                <div className="w-24 h-24 rounded-full shadow-lg mb-3 flex items-center justify-center overflow-hidden" style={{ backgroundColor: student.profileIcon ? s.avatarBg : undefined, border: student.profileIcon ? `3px solid ${s.borderColor}` : undefined }}>
+                     {student.profileIcon ? (
+                        <StudentProfileIcon src={student.profileIcon} size={84} mode="always" />
+                     ) : (
+                        <Avatar
+                            name={student.name}
+                            colors={{
+                                avatarBg: s.avatarBg,
+                                borderColor: s.borderColor,
+                                highlightColor: s.highlightColor
+                            }}
+                        />
+                     )}
                 </div>
                 <h4 className="text-xl font-bold text-white text-center">{student.name}</h4>
                 <p className={`text-2xl font-black ${s.nameText}`}>{Math.round(student.score).toLocaleString()}</p>
@@ -178,6 +183,7 @@ const HonorBoardModal: React.FC<HonorBoardModalProps> = ({ isOpen, onClose, stud
         .map(student => ({
             id: student.id,
             name: student.name,
+            profileIcon: student.profileIcon,
             score: calculateScore(student)
         }))
         .filter(s => s.score > 0)
