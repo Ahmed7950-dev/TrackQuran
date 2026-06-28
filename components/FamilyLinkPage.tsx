@@ -24,6 +24,7 @@ const PALETTE = ['#0d9488', '#0284c7', '#7c3aed', '#db2777', '#ea580c', '#16a34a
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const pad = (n: number) => String(n).padStart(2, '0');
+const dayKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const isStatus = (s: unknown, v: string) => String(s ?? '').toLowerCase() === v;
 const surahName = (n: number) => QURAN_METADATA.find(s => s.number === n)?.transliteratedName ?? `Surah ${n}`;
 
