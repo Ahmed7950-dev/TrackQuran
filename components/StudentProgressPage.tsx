@@ -3893,33 +3893,59 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 dark:bg-blue-700" />Tafsir</span>
                                 </div>
                                 {/* Pager — only when the surah spans more than one window */}
-                                {(hasPreviousPages() || hasMorePages()) && (
-                                    <div className="flex items-center gap-3 ms-auto">
+                                <div className="flex items-center gap-3 ms-auto">
+                                    {/* Left: previous 5 pages within the surah, else jump to the previous surah */}
+                                    {hasPreviousPages() ? (
                                         <button
                                             onClick={handlePreviousPages}
-                                            disabled={!hasPreviousPages()}
-                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-white enabled:dark:bg-gray-800 enabled:text-teal-700 enabled:dark:text-orange-300 enabled:border-teal-200 enabled:dark:border-orange-900/50 enabled:hover:bg-teal-50 enabled:dark:hover:bg-orange-900/20 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
+                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                                             </svg>
                                             <span>Previous</span>
                                         </button>
+                                    ) : selectedSurahId > 1 ? (
+                                        <button
+                                            onClick={() => handleSurahSelection(selectedSurahId - 1)}
+                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                                            </svg>
+                                            <span>Previous Surah</span>
+                                        </button>
+                                    ) : null}
+
+                                    {(hasPreviousPages() || hasMorePages()) && (
                                         <span className="px-3.5 py-1.5 rounded-full bg-teal-600 dark:bg-orange-600 text-white text-xs font-bold shadow-sm whitespace-nowrap">
                                             {t('liveSession.page')} {toEasternArabicNumerals(currentPageRange.start)}–{toEasternArabicNumerals(currentPageRange.end)}
                                         </span>
+                                    )}
+
+                                    {/* Right: next 5 pages within the surah, else jump to the next surah */}
+                                    {hasMorePages() ? (
                                         <button
                                             onClick={handleNextPages}
-                                            disabled={!hasMorePages()}
-                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border enabled:bg-teal-600 enabled:dark:bg-orange-600 enabled:text-white enabled:border-teal-600 enabled:dark:border-orange-600 enabled:hover:bg-teal-700 enabled:dark:hover:bg-orange-700 enabled:hover:shadow-md enabled:hover:-translate-y-0.5 enabled:active:translate-y-0 disabled:opacity-0 disabled:pointer-events-none disabled:border-transparent"
+                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
                                             <span>Next</span>
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                                             </svg>
                                         </button>
-                                    </div>
-                                )}
+                                    ) : selectedSurahId < 114 ? (
+                                        <button
+                                            onClick={() => handleSurahSelection(selectedSurahId + 1)}
+                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                        >
+                                            <span>Next Surah</span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </button>
+                                    ) : null}
+                                </div>
                             </div>
                         )}
                         </>
