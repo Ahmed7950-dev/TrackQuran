@@ -93,7 +93,7 @@ function buildQueue(priorities: number[]): string[] {
 type View = 'select' | 'practice' | 'win' | 'airplane';
 type GameChoice = 'tower' | 'airplane';
 
-const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = false }) => {
+const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
   const { t } = useI18n();
 
   const [priorities, setPriorities] = useState<number[]>(() => {
@@ -827,7 +827,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentV
       {view === 'win'      && renderWin()}
       {view === 'airplane' && (
         <div className="max-w-3xl mx-auto px-4 pb-8">
-          <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
+          <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} avatarSrc={avatarSrc} />
         </div>
       )}
     </div>

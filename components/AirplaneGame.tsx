@@ -418,10 +418,13 @@ interface AirplaneGameProps {
   onExit: () => void;
   roomId?: string;
   playerRole?: '1' | '2';
+  /** Student's animated avatar (Lottie JSON path). When set, the local player's
+   *  pilot is shown as this avatar instead of the default pilot. */
+  avatarSrc?: string;
 }
 
 const AirplaneGame: React.FC<AirplaneGameProps> = ({
-  letters, letterForm = 'isolated', onExit, roomId: propRoomId, playerRole,
+  letters, letterForm = 'isolated', onExit, roomId: propRoomId, playerRole, avatarSrc,
 }) => {
   const isP2 = playerRole === '2';
 
@@ -1939,10 +1942,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* Start screen */}
       {status === 'start' && overlay(
         <>
-          {/* Pilot */}
+          {/* Pilot (or the student's own avatar when launched from their link) */}
           <div className="flex flex-col items-center justify-center mb-4">
-            <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 120, height: 120 } as React.CSSProperties} />
-            <p className="text-base font-extrabold text-sky-700 mt-1 text-center">Your pilot is ready to fly, Captain!</p>
+            {avatarSrc
+              ? <LottieAnim src={avatarSrc} width={120} height={120} />
+              : <dotlottie-wc src="/sprites/pilot.json" autoplay loop style={{ width: 120, height: 120 } as React.CSSProperties} />}
+            <p className="text-base font-extrabold text-sky-700 mt-1 text-center">{avatarSrc ? 'You are ready to fly, Captain!' : 'Your pilot is ready to fly, Captain!'}</p>
           </div>
 
           {/* Mode tabs */}
