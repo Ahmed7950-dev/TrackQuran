@@ -418,15 +418,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     else           setEvents([]);
   }, [gcalToken, monday, loadEvents]);
 
-  // Tutor side: mirror a 4-week window of Google busy times into the DB so
+  // Tutor side: mirror an 8-week window of Google busy times into the DB so
   // students can see them as "Booked" on any device (the Google token never
-  // leaves this browser). Covers the typical booking horizon, refreshing as the
-  // tutor opens / navigates the calendar.
+  // leaves this browser). Anchored at the current week (not the viewed one) and
+  // auto-refreshed every 5 minutes while the calendar is open, so changes the
+  // tutor makes in Google show up for students without a manual reload.
   useEffect(() => {
     if (isStudentView || !teacherId || !gcalToken) return;
     let cancelled = false;
-    const start = monday, end = addDays(monday, 28);
-    (async () => {
+    const sync = async () => {
+      const start = getMonday(new Date());      // current week
+      const end   = addDays(start, 56);          // 8 weeks ahead
       try {
         const evs = await fetchGCalEvents(gcalToken, start, end);
         if (cancelled) return;
@@ -435,14 +437,22 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           .map(e => ({ startAt: e.start.dateTime!, endAt: e.end.dateTime! }));
         await syncTutorBusy(teacherId, start.toISOString(), end.toISOString(), slots);
       } catch { /* offline / token expired — ignore */ }
-    })();
-    return () => { cancelled = true; };
-  }, [teacherId, isStudentView, gcalToken, monday]);
+    };
+    sync();
+    const id = setInterval(sync, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [teacherId, isStudentView, gcalToken]);
 
-  // Student side: read the tutor's mirrored busy times for the shown week.
+  // Student side: read the tutor's mirrored busy times for the shown week, and
+  // re-poll every few minutes so newly-synced busy times appear without a reload.
   useEffect(() => {
     if (!isStudentView || !teacherId) { setTutorBusy([]); return; }
-    getTutorBusy(teacherId, monday.toISOString(), addDays(monday, 7).toISOString()).then(setTutorBusy);
+    let cancelled = false;
+    const load = () => getTutorBusy(teacherId, monday.toISOString(), addDays(monday, 7).toISOString())
+      .then(b => { if (!cancelled) setTutorBusy(b); });
+    load();
+    const id = setInterval(load, 3 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [isStudentView, teacherId, monday]);
 
   /* ---------------------------------------------------------------- */
