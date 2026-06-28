@@ -341,11 +341,11 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
             <section className="flex flex-wrap justify-center gap-3">
               {familyLink.members.map((member, i) => (
                 <a key={member.id} href={memberUrl(member)}
-                  className="group flex flex-col items-center gap-2 w-24 p-3 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                  className="group flex flex-col items-center gap-2 w-36 p-3 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
                   {reports[member.id]?.profileIcon ? (
-                    <div className="w-12 h-12 flex items-center justify-center"><StudentProfileIcon src={reports[member.id].profileIcon} size={48} mode="always" /></div>
+                    <div className="w-24 h-24 flex items-center justify-center"><StudentProfileIcon src={reports[member.id].profileIcon} size={96} mode="always" /></div>
                   ) : (
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-extrabold text-white" style={{ backgroundColor: PALETTE[i % PALETTE.length] }}>
+                    <div className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-extrabold text-white" style={{ backgroundColor: PALETTE[i % PALETTE.length] }}>
                       {member.name.charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -412,7 +412,7 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="text-xl w-7 text-center flex-shrink-0">{medal[i] ?? <span className="text-sm font-bold text-slate-400">{i + 1}</span>}</span>
                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
-                        <StudentProfileIcon src={m.profileIcon} size={24} mode="always" />
+                        <StudentProfileIcon src={m.profileIcon} size={48} mode="always" />
                         <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.name}</span>
                       </div>
                       <span className="flex items-baseline gap-1 flex-shrink-0">
