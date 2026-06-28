@@ -727,12 +727,18 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, currentUserRole]);
   
-  // Initialize progress from recitation achievements
+  // Initialize the resume point ("where we left off") from the most recent log —
+  // recitation OR memorization (a recited short surah is logged as hifz, so a
+  // memorization log can be the true last position).
   useEffect(() => {
     const initialProgress: {[key: string]: Progress} = {};
     students.forEach(student => {
-      if (student.recitationAchievements.length > 0) {
-        const lastAchievement = [...student.recitationAchievements].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      const logs = [
+        ...(student.recitationAchievements || []),
+        ...(student.memorizationAchievements || []),
+      ];
+      if (logs.length > 0) {
+        const lastAchievement = [...logs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
         initialProgress[student.id] = { surah: lastAchievement.endSurah, ayah: lastAchievement.endAyah };
       }
     });

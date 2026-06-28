@@ -1526,6 +1526,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
+    const didResumeRef = useRef(false); // resume to the last-log position only once, on first open
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
     // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
@@ -2370,6 +2371,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         };
         fetchTafsir();
     }, [selectedSurahId, showTranslation, verses]);
+
+    // First open: resume to the last-log position once it's available. The initial
+    // useState may have been empty if the resume point loaded after this mounted.
+    // Guarded so it never yanks the user away after they start navigating/logging.
+    useEffect(() => {
+        if (didResumeRef.current || !studentProgress) return;
+        didResumeRef.current = true;
+        setSelectedSurahId(studentProgress.surah);
+        setScrollToVerseKey(`${studentProgress.surah}:${studentProgress.ayah}`);
+    }, [studentProgress]);
 
     useEffect(() => {
         if (scrollToVerseKey && verses.length > 0) {
