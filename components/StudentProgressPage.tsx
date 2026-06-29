@@ -1848,16 +1848,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, []);
 
     type FocusItem =
-        | { kind: 'word';   word: string; surah: number; ayah: number; wordIdx: number }
+        | { kind: 'word';   word: string; surah: number; ayah: number; wordIdx: number; isVerseStart: boolean }
         | { kind: 'marker'; surah: number; ayah: number };
 
     const focusWordList = useMemo<FocusItem[]>(() => {
         const list: FocusItem[] = [];
         verses.forEach(verse => {
             const [surahNum, ayahNum] = verse.verse_key.split(':').map(Number);
-            const words = splitVerseWords(verse.text_uthmani).filter(w => w.trim());
-            words.forEach((word, wordIdx) => {
-                list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx });
+            // Index over the RAW split (same as normal mode) so a mistake's
+            // wordIndex maps to the same physical word in both views; just skip
+            // empty tokens without renumbering.
+            let isVerseStart = true;
+            splitVerseWords(verse.text_uthmani).forEach((word, wordIdx) => {
+                if (!word.trim()) return;
+                list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx, isVerseStart });
+                isVerseStart = false;
             });
             // Insert verse-end marker so ayah number appears between verses
             list.push({ kind: 'marker', surah: surahNum, ayah: ayahNum });
@@ -3871,7 +3876,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     return (
                                                         <div
                                                             key={`fw-${item.surah}:${item.ayah}:${item.wordIdx}`}
-                                                            ref={item.wordIdx === 0 ? (el) => {
+                                                            ref={item.isVerseStart ? (el) => {
                                                                 if (el) verseFirstWordEls.current.set(item.ayah, el);
                                                                 else verseFirstWordEls.current.delete(item.ayah);
                                                             } : undefined}
