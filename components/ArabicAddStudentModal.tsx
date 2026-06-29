@@ -8,6 +8,7 @@ import React, { useRef, useState } from 'react';
 import { ArabicStudent, ArabicDialect, WeeklySlot } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import StudentBillingFields, { StudentBilling } from './StudentBillingFields';
+import ProfileIconPicker from './ProfileIconPicker';
 
 interface Props {
   isOpen: boolean;
@@ -204,6 +205,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
 
   // Form fields
   const [name,        setName]        = useState(existing?.name        ?? '');
+  const [profileIcon, setProfileIcon] = useState<string | undefined>(existing?.profileIcon);
   const [dob,         setDob]         = useState(existing?.dob         ?? '');
   const [forSelf,     setForSelf]     = useState(existing?.forSelf     ?? true);
   const [forWhom,     setForWhom]     = useState(existing?.forWhom     ?? '');
@@ -291,6 +293,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
       id:                 existing?.id ?? `ar-${Date.now()}`,
       teacherId,
       name:               name.trim(),
+      profileIcon,
       dob:                dob  || undefined,
       forSelf,
       forWhom:            forSelf ? undefined : forWhom.trim() || undefined,
@@ -358,6 +361,9 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
                 <label className={lbl}>{t('arabicStudentModal.dob')}</label>
                 <input type="date" value={dob} onChange={e => setDob(e.target.value)} className={inp} />
               </div>
+            </div>
+            <div className="mt-4">
+              <ProfileIconPicker value={profileIcon} onChange={setProfileIcon} />
             </div>
           </Section>
 

@@ -7,6 +7,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
 import { useI18n } from '../context/I18nProvider';
+import StudentProfileIcon from './StudentProfileIcon';
 import {
   getArabicLessons,
   getAllVocabAttemptsForStudent,
@@ -1155,8 +1156,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       {/* ── Hero card ── */}
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 p-6">
         <div className="flex items-start gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-amber-400 dark:bg-amber-600 flex items-center justify-center text-white text-3xl font-extrabold flex-shrink-0">
-            {student.name.charAt(0).toUpperCase()}
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-amber-400 dark:bg-amber-600">
+            {student.profileIcon
+              ? <StudentProfileIcon src={student.profileIcon} size={64} mode="always" />
+              : <span className="text-white text-3xl font-extrabold">{student.name.charAt(0).toUpperCase()}</span>}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{student.name}</h1>

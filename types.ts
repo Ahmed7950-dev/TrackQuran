@@ -261,6 +261,7 @@ export interface ArabicStudent {
   id: string;
   teacherId: string;
   name: string;
+  profileIcon?: string;            // chosen animated avatar path (/avatars/...json)
   dob?: string;                    // ISO date
   forSelf: boolean;
   forWhom?: string;                // e.g. "son", "wife"

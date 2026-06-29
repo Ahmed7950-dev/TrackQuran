@@ -26,6 +26,7 @@ interface ArabicStudentRow {
   id: string;
   teacher_id: string;
   name: string;
+  profile_icon: string | null;
   dob: string | null;
   for_self: boolean;
   for_whom: string | null;
@@ -106,6 +107,7 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     id:                  r.id,
     teacherId:           r.teacher_id,
     name:                r.name,
+    profileIcon:         r.profile_icon ?? undefined,
     dob:                 r.dob        ?? undefined,
     forSelf:             r.for_self,
     forWhom:             r.for_whom   ?? undefined,
@@ -136,6 +138,7 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     id:                  s.id,
     teacher_id:          s.teacherId,
     name:                s.name,
+    profile_icon:        s.profileIcon ?? null,
     dob:                 s.dob         ?? null,
     for_self:            s.forSelf,
     for_whom:            s.forWhom     ?? null,

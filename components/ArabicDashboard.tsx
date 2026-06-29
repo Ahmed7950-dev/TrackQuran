@@ -10,6 +10,7 @@ const SITE_URL = 'https://www.lisanquran.com';
 import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
+import StudentProfileIcon from './StudentProfileIcon';
 import { ensureShareToken } from '../services/arabicService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { getFamilyLinkIdForStudent } from '../services/lessonSessionService';
@@ -440,110 +441,112 @@ interface CardProps {
 const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, isLinked, onClick, onCopyLink, copying, copied }) => {
   const { t } = useI18n();
   const pct = progressPercent(s);
+  const [cardHover, setCardHover] = useState(false);
 
   return (
-    <div className={`group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm border transition-all duration-200 ${
-      isNext
-        ? 'border-amber-400 dark:border-amber-500 shadow-amber-100 dark:shadow-amber-900/30 shadow-md ring-2 ring-amber-300/50 dark:ring-amber-600/30'
-        : 'border-slate-200 dark:border-gray-700 hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600'
-    }`}>
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setCardHover(true)}
+      onMouseLeave={() => setCardHover(false)}
+      className={`group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 cursor-pointer ${
+        isNext
+          ? 'border-amber-400 dark:border-amber-500 shadow-amber-100 dark:shadow-amber-900/30 shadow-md ring-2 ring-amber-300/50 dark:ring-amber-600/30'
+          : 'border-slate-200 dark:border-gray-700 hover:shadow-md hover:scale-[1.01] hover:border-amber-300 dark:hover:border-amber-600'
+      }`}
+    >
       {/* Next lesson badge */}
       {isNext && (
-        <div className="absolute -top-2.5 left-4 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
+        <div className="absolute -top-2.5 left-4 z-10 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
           <span className="text-xs">📅</span>
           <span className="text-xs font-bold text-white">Next lesson</span>
         </div>
       )}
 
-      <button onClick={onClick} className="text-left w-full p-5 pt-6">
-        {/* Avatar + name */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${
-            isNext
-              ? 'bg-amber-200 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200'
-              : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-          }`}>
-            {s.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</p>
-              {isLinked && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full">
-                  🔗 Linked
-                </span>
-              )}
-              {vocabCount > 0 && (
-                <span className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                  {t('arabicPortal.words', { count: vocabCount.toLocaleString() })}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Dialects */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {s.arabicDialects.map(d => (
-            <span key={d} className="px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">
-              {dialectLabel(d)}
-            </span>
-          ))}
-          {s.nationality && (
-            <span className="px-2 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-xs">
-              {s.nationality}
-            </span>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        <div>
-          <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
-            <span>{t('arabicDashboard.lessonProgress')}</span>
-            <span className="font-semibold">{s.completedLessonIds.length} / 60</span>
-          </div>
-          <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-
-        {s.goalDeadline && (
-          <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-            {t('arabicDashboard.goal', { date: new Date(s.goalDeadline).toLocaleDateString() })}
-          </p>
+      {/* Copy link — small corner icon */}
+      <button
+        onClick={onCopyLink}
+        disabled={copying}
+        title={copied ? t('arabicDashboard.linkCopied') : t('arabicDashboard.copyLink')}
+        className={`absolute top-2 right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors ${
+          copied ? 'bg-emerald-500 text-white' : 'bg-white/80 dark:bg-gray-700/80 text-slate-500 dark:text-slate-300 hover:bg-amber-500 hover:text-white'
+        }`}
+      >
+        {copying ? (
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+        ) : copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+          </svg>
         )}
       </button>
 
-      {/* Share link button */}
-      <div className="px-5 pb-4">
-        <button
-          onClick={onCopyLink}
-          disabled={copying}
-          className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border transition-all ${
-            copied
-              ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-              : 'bg-slate-50 dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-700 dark:hover:text-amber-300'
-          }`}
-        >
-          {copying ? (
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-            </svg>
-          ) : copied ? (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
+      {/* Body: avatar (left third) + info (right two-thirds) */}
+      <div className="flex items-stretch">
+        {/* Left third — big avatar */}
+        <div className="w-1/3 flex items-center justify-center p-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-800 dark:to-slate-800/60">
+          {s.profileIcon ? (
+            <StudentProfileIcon src={s.profileIcon} size={112} mode="hover" play={cardHover} className="w-full max-w-[112px] aspect-square h-auto" />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-            </svg>
+            <div className="w-full max-w-[96px] aspect-square rounded-full bg-amber-400 dark:bg-amber-600 flex items-center justify-center text-white text-3xl font-extrabold">
+              {s.name.charAt(0).toUpperCase()}
+            </div>
           )}
-          {copying ? t('arabicDashboard.generating') : copied ? t('arabicDashboard.linkCopied') : t('arabicDashboard.copyLink')}
-        </button>
+        </div>
+
+        {/* Right two-thirds — info */}
+        <div className="w-2/3 min-w-0 p-3 pr-10">
+          {/* Name (big, prominent) */}
+          <h3 className="font-extrabold text-xl leading-tight truncate text-slate-800 dark:text-slate-100">{s.name}</h3>
+
+          {/* Badges (small) */}
+          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+            {isLinked && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-[9px] font-bold rounded-full">🔗 Linked</span>
+            )}
+            {vocabCount > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                </svg>
+                {t('arabicPortal.words', { count: vocabCount.toLocaleString() })}
+              </span>
+            )}
+          </div>
+
+          {/* Dialects (small) */}
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {s.arabicDialects.map(d => (
+              <span key={d} className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-[10px] font-semibold">{dialectLabel(d)}</span>
+            ))}
+            {s.nationality && (
+              <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-400 rounded-full text-[10px]">{s.nationality}</span>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-2">
+            <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+              <span>{t('arabicDashboard.lessonProgress')}</span>
+              <span className="font-semibold">{s.completedLessonIds.length} / 60</span>
+            </div>
+            <div className="h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          {s.goalDeadline && (
+            <p className="mt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+              {t('arabicDashboard.goal', { date: new Date(s.goalDeadline).toLocaleDateString() })}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
