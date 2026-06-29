@@ -1050,10 +1050,12 @@ const App: React.FC = () => {
     if (!student) return;
 
     const { verses, pages } = calculateVersesAndPages(range.start.surah, range.start.ayah, range.end.surah, range.end.ayah);
+    const now = Date.now();
+    const date = new Date().toISOString();
 
-    const newAchievement: MemorizationAchievement = {
-      id: `mem-live-${Date.now()}`,
-      date: new Date().toISOString(),
+    const memAchievement: MemorizationAchievement = {
+      id: `mem-live-${now}`,
+      date,
       startSurah: range.start.surah,
       startAyah: range.start.ayah,
       endSurah: range.end.surah,
@@ -1064,9 +1066,28 @@ const App: React.FC = () => {
       isRevision,
     };
 
+    // Hifz implies reading: log a matching recitation achievement in the SAME
+    // update so it can't be lost to a stale-state race (two separate setState
+    // calls each rebuilt from the old student and the 2nd overwrote the 1st).
+    const recAchievement: RecitationAchievement = {
+      id: `rec-live-${now}`,
+      date,
+      startSurah: range.start.surah,
+      startAyah: range.start.ayah,
+      endSurah: range.end.surah,
+      endAyah: range.end.ayah,
+      readingQuality: quality,
+      tajweedQuality: quality,
+      pagesCompleted: pages,
+      versesCompleted: verses,
+      pointsEarned: isRevision ? 0 : verses * 15 * POINTS_PER_WORD,
+      isRevision,
+    };
+
     const updatedStudent = {
       ...student,
-      memorizationAchievements: [...student.memorizationAchievements, newAchievement],
+      memorizationAchievements: [...student.memorizationAchievements, memAchievement],
+      recitationAchievements: [...student.recitationAchievements, recAchievement],
     };
     handleUpdateStudent(updatedStudent);
   };

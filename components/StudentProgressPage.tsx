@@ -2914,12 +2914,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             onLogRecitationRange(student.id, pendingLogRange, logQuality, true);
             showToast('Reading revision saved');
         } else if (selectedLogType === 'hifz') {
+            // hifz implies reading — the memorization handler logs BOTH atomically
             onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, false); // hifz implies reading
             showToast(t('liveSession.memorizationRangeSaved'));
         } else if (selectedLogType === 'hifz-revision') {
             onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, true); // hifz revision implies reading
             showToast('Hifz revision saved');
         } else if (selectedLogType === 'tafseer') {
             onLogTafseerRange(student.id, pendingLogRange);
