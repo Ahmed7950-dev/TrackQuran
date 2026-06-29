@@ -448,19 +448,21 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, isLi
       onClick={onClick}
       onMouseEnter={() => setCardHover(true)}
       onMouseLeave={() => setCardHover(false)}
-      className={`group relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 cursor-pointer ${
-        isNext
-          ? 'border-amber-400 dark:border-amber-500 shadow-amber-100 dark:shadow-amber-900/30 shadow-md ring-2 ring-amber-300/50 dark:ring-amber-600/30'
-          : 'border-slate-200 dark:border-gray-700 hover:shadow-md hover:scale-[1.01] hover:border-amber-300 dark:hover:border-amber-600'
-      }`}
+      className="group relative cursor-pointer"
     >
-      {/* Next lesson badge */}
+      {/* Next lesson badge — outside the clipping card so it isn't cut off */}
       {isNext && (
-        <div className="absolute -top-2.5 left-4 z-10 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
+        <div className="absolute -top-2.5 left-4 z-20 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
           <span className="text-xs">📅</span>
           <span className="text-xs font-bold text-white">Next lesson</span>
         </div>
       )}
+
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border overflow-hidden transition-all duration-200 ${
+        isNext
+          ? 'border-amber-400 dark:border-amber-500 shadow-amber-100 dark:shadow-amber-900/30 shadow-md ring-2 ring-amber-300/50 dark:ring-amber-600/30'
+          : 'border-slate-200 dark:border-gray-700 hover:shadow-md hover:scale-[1.01] hover:border-amber-300 dark:hover:border-amber-600'
+      }`}>
 
       {/* Copy link — small corner icon */}
       <button
@@ -547,6 +549,7 @@ const StudentCard: React.FC<CardProps> = ({ student: s, vocabCount, isNext, isLi
             </p>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

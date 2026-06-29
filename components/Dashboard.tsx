@@ -293,22 +293,25 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
             onClick={onSelect}
             onMouseEnter={() => setCardHover(true)}
             onMouseLeave={() => setCardHover(false)}
-            className={`
-                relative rounded-xl shadow-sm transition-all cursor-pointer border overflow-hidden
+            className="relative cursor-pointer"
+        >
+            {/* Next lesson badge — outside the clipping card so it isn't cut off */}
+            {isNext && (
+              <div className="absolute -top-2.5 left-4 z-20 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
+                <span className="text-xs">📅</span>
+                <span className="text-xs font-bold text-white">Next lesson</span>
+              </div>
+            )}
+
+            <div className={`
+                relative rounded-xl shadow-sm transition-all border overflow-hidden
                 ${isNext
                     ? 'bg-white dark:bg-gray-800 border-amber-400 dark:border-amber-500 ring-2 ring-amber-300/50 dark:ring-amber-600/30 shadow-md hover:shadow-lg hover:scale-[1.02]'
                     : isInactive
                     ? 'bg-slate-100 dark:bg-gray-800/80 border-dashed border-slate-300 dark:border-gray-700 opacity-80 hover:opacity-100'
                     : 'bg-white dark:bg-gray-800 hover:shadow-lg hover:scale-[1.02] dark:border-gray-700'
                 }
-            `}
-        >
-            {isNext && (
-              <div className="absolute -top-2.5 left-4 z-10 flex items-center gap-1 px-2.5 py-0.5 bg-amber-400 dark:bg-amber-500 rounded-full shadow-sm">
-                <span className="text-xs">📅</span>
-                <span className="text-xs font-bold text-white">Next lesson</span>
-              </div>
-            )}
+            `}>
 
             {/* Copy student link — small corner icon */}
             {teacherId && (
@@ -455,6 +458,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                     <span>{t('studentCard.inactiveWarning', { days: daysSinceLastActivity })}</span>
                 </div>
             )}
+            </div>
         </div>
     );
 };
