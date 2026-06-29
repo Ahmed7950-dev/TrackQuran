@@ -96,6 +96,25 @@ const PLANE_ACCEL_H         = 0.009;  // horizontal — 3× slower
 const PLANE_MAX_VEL_H       = 0.317;  // horizontal max speed
 const PLANE_DRAG            = 0.975;  // slow build-up
 const PLANE_GRAVITY         = 0.003;  // gentle downward drift
+const STICK_EASE            = 0.22;   // analog: velocity-chase rate toward the stick target (~90% in ~10 frames@60)
+
+// ARCADE (touch): ease velocity toward the stick-defined target. NO gravity,
+// NO drag (the easing IS the damping). Mutates v in place. ax/ay in [-1,1], ay+ = down.
+const steerPlane = (v: { x: number; y: number }, ax: number, ay: number) => {
+  const tx = ax * PLANE_MAX_VEL_H, ty = ay * PLANE_MAX_VEL;
+  v.x += (tx - v.x) * STICK_EASE;
+  v.y += (ty - v.y) * STICK_EASE;
+};
+
+// LEGACY keyboard model — byte-identical to the original per-frame physics.
+const applyKeyboardPlane = (v: { x: number; y: number }, up: boolean, down: boolean, left: boolean, right: boolean) => {
+  v.y += PLANE_GRAVITY;
+  if (up)    v.y -= PLANE_ACCEL;
+  if (down)  v.y += PLANE_ACCEL;
+  if (left)  v.x -= PLANE_ACCEL_H;
+  if (right) v.x += PLANE_ACCEL_H;
+  v.x *= PLANE_DRAG; v.y *= PLANE_DRAG;
+};
 const BG_SCROLL_SPEED       = 120;
 const BACKGROUNDS = [
   '/sprites/airplane-bg.png',
@@ -256,14 +275,16 @@ const JetPlane: React.FC<{ src: string; shocked?: boolean; flameRef?: React.Muta
 const SILENT_WAV = 'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
 const Joystick: React.FC<{
-  onKeys: (k: { up: boolean; down: boolean; left: boolean; right: boolean }) => void;
+  onKeys: (k: { up: boolean; down: boolean; left: boolean; right: boolean; ax: number; ay: number; active: boolean }) => void;
   accentColor?: string;
 }> = ({ onKeys, accentColor = '#3b82f6' }) => {
   const baseRef = React.useRef<HTMLDivElement>(null);
   const knobRef = React.useRef<HTMLDivElement>(null);
   const ptrId = React.useRef<number | null>(null);
   const centerRef = React.useRef({ x: 0, y: 0 });
-  const BASE_R = 60, KNOB_R = 26, MAX = BASE_R - KNOB_R, DEAD = 0.12;
+  const BASE_R = 64, KNOB_R = 28, MAX = BASE_R - KNOB_R; // 128px base, 56px knob, MAX=36
+  const DEAD = 0.18;   // radial deadzone fraction of MAX — kills finger jitter
+  const CURVE = 1.5;   // response exponent (>1 = gentle near center, full at rim)
 
   const move = (cx: number, cy: number) => {
     const kn = knobRef.current;
@@ -272,15 +293,22 @@ const Joystick: React.FC<{
     const ox = cx - centerRef.current.x, oy = cy - centerRef.current.y;
     const d = Math.hypot(ox, oy), a = Math.atan2(oy, ox);
     const cd = Math.min(d, MAX);
+    // knob visually clamped to the rim (matches the analog magnitude exactly)
     kn.style.transform = `translate(calc(-50% + ${cd * Math.cos(a)}px), calc(-50% + ${cd * Math.sin(a)}px))`;
-    const nx = ox / MAX, ny = oy / MAX;
-    onKeys({ up: ny < -DEAD, down: ny > DEAD, left: nx < -DEAD, right: nx > DEAD });
+    // radial magnitude from the CLAMPED distance → 0..1, with deadzone + expo curve
+    const mag = cd / MAX;
+    let scaled = 0;
+    if (mag > DEAD) scaled = Math.pow((mag - DEAD) / (1 - DEAD), CURVE);
+    const ax = scaled * Math.cos(a);   // -1..1, +x = right
+    const ay = scaled * Math.sin(a);   // -1..1, +y = DOWN (screen y-down)
+    // booleans derived from shaped axes so they always agree with the analog vector
+    onKeys({ up: ay < -DEAD, down: ay > DEAD, left: ax < -DEAD, right: ax > DEAD, ax, ay, active: true });
   };
 
   const release = () => {
     const kn = knobRef.current;
     if (kn) { kn.style.transition = 'transform 0.15s ease-out'; kn.style.transform = 'translate(-50%, -50%)'; }
-    onKeys({ up: false, down: false, left: false, right: false });
+    onKeys({ up: false, down: false, left: false, right: false, ax: 0, ay: 0, active: false });
     ptrId.current = null;
   };
 
@@ -301,6 +329,7 @@ const Joystick: React.FC<{
       onPointerMove={e => { if (e.pointerId !== ptrId.current) return; e.preventDefault(); move(e.clientX, e.clientY); }}
       onPointerUp={e => { if (e.pointerId === ptrId.current) release(); }}
       onPointerCancel={e => { if (e.pointerId === ptrId.current) release(); }}
+      onLostPointerCapture={e => { if (e.pointerId === ptrId.current) release(); }}
     >
       <div ref={knobRef} style={{
         width: KNOB_R * 2, height: KNOB_R * 2, borderRadius: '50%',
@@ -536,6 +565,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef         = useRef<any>(null);
   const p2RemoteKeysRef    = useRef<{ up: boolean; down: boolean; left: boolean; right: boolean }>({ up: false, down: false, left: false, right: false });
+  // Analog joystick state. active=false → that plane uses the legacy keyboard model.
+  const p1StickRef         = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local P1
+  const p2StickRef         = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local-2P P2
+  const p2RemoteStickRef   = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // host: remote P2 / joiner: own
   const fuelRef            = useRef(START_FUEL);
   const p2FuelRef          = useRef(START_FUEL);
   const scoreRef           = useRef(0);
@@ -991,12 +1024,9 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
       // ── P1 physics (Arrow keys) ───────────────────────────────────────────
       if (!p1CrashedRef.current && !p1IsShocked) {
-        v.y += PLANE_GRAVITY;
-        if (k.ArrowUp)    v.y -= PLANE_ACCEL;
-        if (k.ArrowDown)  v.y += PLANE_ACCEL;
-        if (k.ArrowLeft)  v.x -= PLANE_ACCEL_H;
-        if (k.ArrowRight) v.x += PLANE_ACCEL_H;
-        v.x *= PLANE_DRAG; v.y *= PLANE_DRAG;
+        const s1 = p1StickRef.current;
+        if (s1.active) steerPlane(v, s1.ax, s1.ay);
+        else applyKeyboardPlane(v, k.ArrowUp, k.ArrowDown, k.ArrowLeft, k.ArrowRight);
         v.x = Math.max(-PLANE_MAX_VEL_H, Math.min(PLANE_MAX_VEL_H, v.x));
         v.y = Math.max(-PLANE_MAX_VEL,   Math.min(PLANE_MAX_VEL,   v.y));
         p.x = Math.max(4, Math.min(96, p.x + v.x));
@@ -1013,20 +1043,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       // ── P2 physics (WASD local / remote keys online) ──────────────────────
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
-        v2.y += PLANE_GRAVITY;
-        if (isOnlineNow) {
+        const stick2 = isOnlineNow ? p2RemoteStickRef.current : p2StickRef.current;
+        if (stick2.active) {
+          steerPlane(v2, stick2.ax, stick2.ay);
+        } else if (isOnlineNow) {
           const rk = p2RemoteKeysRef.current;
-          if (rk.up)    v2.y -= PLANE_ACCEL;
-          if (rk.down)  v2.y += PLANE_ACCEL;
-          if (rk.left)  v2.x -= PLANE_ACCEL_H;
-          if (rk.right) v2.x += PLANE_ACCEL_H;
+          applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right);
         } else {
-          if (k.KeyW) v2.y -= PLANE_ACCEL;
-          if (k.KeyS) v2.y += PLANE_ACCEL;
-          if (k.KeyA) v2.x -= PLANE_ACCEL_H;
-          if (k.KeyD) v2.x += PLANE_ACCEL_H;
+          applyKeyboardPlane(v2, k.KeyW, k.KeyS, k.KeyA, k.KeyD);
         }
-        v2.x *= PLANE_DRAG; v2.y *= PLANE_DRAG;
         v2.x = Math.max(-PLANE_MAX_VEL_H, Math.min(PLANE_MAX_VEL_H, v2.x));
         v2.y = Math.max(-PLANE_MAX_VEL,   Math.min(PLANE_MAX_VEL,   v2.y));
         p2.x = Math.max(4, Math.min(96, p2.x + v2.x));
@@ -1186,13 +1211,13 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         const p2 = p2Pos.current, v2 = p2Vel.current;
         const frozen = snap.p2.crashed || snap.p2Shocked;
         if (!frozen) {
-          const rk = p2RemoteKeysRef.current;
-          v2.y += PLANE_GRAVITY;
-          if (rk.up)    v2.y -= PLANE_ACCEL;
-          if (rk.down)  v2.y += PLANE_ACCEL;
-          if (rk.left)  v2.x -= PLANE_ACCEL_H;
-          if (rk.right) v2.x += PLANE_ACCEL_H;
-          v2.x *= PLANE_DRAG; v2.y *= PLANE_DRAG;
+          const stick2 = p2RemoteStickRef.current;
+          if (stick2.active) {
+            steerPlane(v2, stick2.ax, stick2.ay);
+          } else {
+            const rk = p2RemoteKeysRef.current;
+            applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right);
+          }
           v2.x = clamp(v2.x, -PLANE_MAX_VEL_H, PLANE_MAX_VEL_H);
           v2.y = clamp(v2.y, -PLANE_MAX_VEL,   PLANE_MAX_VEL);
           p2.x = clamp(p2.x + v2.x, 4, 96);
@@ -1290,8 +1315,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       setP2RemotePlane(payload.p2Plane); setP2Joined(true);
       if (payload.p2Name) setP2Name(payload.p2Name);
     });
-    ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: { up: boolean; down: boolean; left: boolean; right: boolean } }) => {
-      p2RemoteKeysRef.current = payload;
+    ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: {
+      up: boolean; down: boolean; left: boolean; right: boolean; ax?: number; ay?: number; active?: boolean;
+    } }) => {
+      p2RemoteKeysRef.current = { up: payload.up, down: payload.down, left: payload.left, right: payload.right };
+      // OLD joiner omits analog fields → active defaults false → host uses legacy keyboard branch (binary feel).
+      p2RemoteStickRef.current = { ax: payload.ax ?? 0, ay: payload.ay ?? 0, active: payload.active ?? false };
     });
     ch.on('broadcast', { event: 'fire' }, () => { fireP2Ref.current(); });
     ch.on('broadcast', { event: 'restart' }, () => { startGameRef.current(); });
@@ -1453,7 +1482,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       if (code === 'ArrowRight' || code === 'KeyD') return 'right';
       return null;
     };
-    const sendInput = () => channelRef.current?.send({ type: 'broadcast', event: 'input', payload: { ...p2RemoteKeysRef.current } });
+    const sendInput = () => {
+      p2RemoteStickRef.current = { ax: 0, ay: 0, active: false }; // keyboard → no analog; both ends use bools
+      channelRef.current?.send({ type: 'broadcast', event: 'input',
+        payload: { ...p2RemoteKeysRef.current, ax: 0, ay: 0, active: false } });
+    };
     const down = (e: KeyboardEvent) => {
       const dir = mapKey(e.code);
       if (dir) { e.preventDefault(); p2RemoteKeysRef.current[dir] = true; sendInput(); }
@@ -1472,7 +1505,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   useEffect(() => {
     if (!isP2 || status !== 'playing') return;
     const id = setInterval(() => {
-      channelRef.current?.send({ type: 'broadcast', event: 'input', payload: { ...p2RemoteKeysRef.current } });
+      channelRef.current?.send({ type: 'broadcast', event: 'input',
+        payload: { ...p2RemoteKeysRef.current, ...p2RemoteStickRef.current } });
     }, 100);
     return () => clearInterval(id);
   }, [isP2, status]);
@@ -1716,10 +1750,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         {status === 'playing' && (
           <div className="absolute z-20" style={{ bottom: 20, left: 20 }}>
             <Joystick accentColor="#f97316" onKeys={k => {
-              const prev = p2RemoteKeysRef.current;
-              if (k.up === prev.up && k.down === prev.down && k.left === prev.left && k.right === prev.right) return;
+              const pk = p2RemoteKeysRef.current, ps = p2RemoteStickRef.current;
+              // local prediction reads these immediately
               p2RemoteKeysRef.current = { up: k.up, down: k.down, left: k.left, right: k.right };
-              channelRef.current?.send({ type: 'broadcast', event: 'input', payload: { ...p2RemoteKeysRef.current } });
+              p2RemoteStickRef.current = { ax: k.ax, ay: k.ay, active: k.active };
+              // broadcast on a meaningful change: boolean edge, analog moved >0.05, or active toggled
+              const boolSame = k.up === pk.up && k.down === pk.down && k.left === pk.left && k.right === pk.right;
+              const analogSame = k.active === ps.active && Math.abs(k.ax - ps.ax) < 0.05 && Math.abs(k.ay - ps.ay) < 0.05;
+              if (boolSame && analogSame) return;
+              channelRef.current?.send({ type: 'broadcast', event: 'input',
+                payload: { up: k.up, down: k.down, left: k.left, right: k.right, ax: k.ax, ay: k.ay, active: k.active } });
             }} />
           </div>
         )}
@@ -1909,6 +1949,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <Joystick accentColor="#3b82f6" onKeys={k => {
             keysDown.current.ArrowUp = k.up; keysDown.current.ArrowDown = k.down;
             keysDown.current.ArrowLeft = k.left; keysDown.current.ArrowRight = k.right;
+            p1StickRef.current = { ax: k.ax, ay: k.ay, active: k.active };
           }} />
         </div>
       )}
@@ -1926,6 +1967,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           <Joystick accentColor="#f97316" onKeys={k => {
             keysDown.current.KeyW = k.up; keysDown.current.KeyS = k.down;
             keysDown.current.KeyA = k.left; keysDown.current.KeyD = k.right;
+            p2StickRef.current = { ax: k.ax, ay: k.ay, active: k.active };
           }} />
         </div>
       )}
