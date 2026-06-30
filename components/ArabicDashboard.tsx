@@ -229,7 +229,9 @@ const ArabicDashboard: React.FC<Props> = ({
     setCopyingId(student.id);
     try {
       const token = await ensureShareToken(student);
-      if (!student.shareToken) onUpdateStudent({ ...student, shareToken: token });
+      // Always sync the token into the cached student so a later save never carries
+      // `shareToken: undefined` (which used to null the column and break the link).
+      if (token && student.shareToken !== token) onUpdateStudent({ ...student, shareToken: token });
       // Prefer the unified links: a same-person Arabic+Quran pair, then a
       // calendar-created family, else the Arabic-only portal link.
       const pairToken = await getPortalTokenForStudent('arabic', student.id);

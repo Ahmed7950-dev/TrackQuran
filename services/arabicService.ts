@@ -237,9 +237,17 @@ export async function getArabicStudents(teacherId: string): Promise<ArabicStuden
 }
 
 export async function saveArabicStudent(teacherId: string, student: ArabicStudent): Promise<void> {
+  // The share-link token is owned SOLELY by ensureShareToken / ensureShareTokenById.
+  // A full-row upsert here must never write it: saving a stale student object whose
+  // shareToken is still undefined would null the column and permanently break the
+  // student's already-shared /arabic/s/<token> link. So we omit share_token from the
+  // payload unless we actually hold the value (in which case it's an idempotent
+  // no-op). On conflict, an omitted column keeps its stored value.
+  const { share_token, ...row } = studentToRow(student);
+  const payload = student.shareToken ? { ...row, share_token } : row;
   const { error } = await supabase
     .from('arabic_students')
-    .upsert(studentToRow(student), { onConflict: 'id' });
+    .upsert(payload, { onConflict: 'id' });
   if (error) console.error('saveArabicStudent:', error.message);
 }
 
@@ -1052,13 +1060,11 @@ export async function getStudentByShareToken(token: string): Promise<ArabicStude
 /** Generate (or return existing) share token for a student, persist it, return the token. */
 export async function ensureShareToken(student: ArabicStudent): Promise<string> {
   if (student.shareToken) return student.shareToken;
-  const token = crypto.randomUUID();
-  const { error } = await supabase
-    .from('arabic_students')
-    .update({ share_token: token })
-    .eq('id', student.id);
-  if (error) console.error('ensureShareToken:', error.message);
-  return token;
+  // Don't trust a possibly-stale in-memory object: resolve authoritatively from the
+  // DB so an existing persisted token is reused (and only minted when truly absent).
+  // This stops a second copy-link from issuing a brand-new token for a student who
+  // already has one — which would orphan the link they were already given.
+  return (await ensureShareTokenById(student.id)) ?? crypto.randomUUID();
 }
 
 /**
