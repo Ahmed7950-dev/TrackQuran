@@ -2383,6 +2383,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         if (didResumeRef.current || !studentProgress) return;
         didResumeRef.current = true;
+        // An explicit navigation (e.g. "Go to homework" via jumpToVerseKey) takes
+        // precedence over resuming to the last log — don't clobber it.
+        if (jumpToVerseKey) return;
         setSelectedSurahId(studentProgress.surah);
         setScrollToVerseKey(`${studentProgress.surah}:${studentProgress.ayah}`);
     }, [studentProgress]);
