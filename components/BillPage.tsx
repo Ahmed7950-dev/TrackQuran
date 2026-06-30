@@ -277,7 +277,7 @@ const BillPage: React.FC<BillPageProps> = ({
           {/* Header */}
           <header className="flex items-start justify-between pb-5 border-b-2 border-teal-600">
             <div className="flex items-center">
-              <img src="/TQ LOGO.png" alt="" crossOrigin="anonymous" className="w-56 h-56 rounded-xl object-contain" />
+              <img src="/TQ LOGO.png" alt="" crossOrigin="anonymous" className="w-56 h-auto object-contain" />
             </div>
             <div className="text-end">
               <p className="text-2xl font-black tracking-tight text-slate-900">{t('bill.title')}</p>
