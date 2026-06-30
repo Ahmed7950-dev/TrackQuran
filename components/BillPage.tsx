@@ -164,7 +164,9 @@ const BillPage: React.FC<BillPageProps> = ({
     // capturing the live node (it's centered inside max-w / overflow-x-auto
     // wrappers, which throws off html2canvas's positioning math).
     const holder = document.createElement('div');
-    holder.style.cssText = `position:fixed; left:-100000px; top:0; background:#ffffff; width:${BILL_W}px; pointer-events:none;`;
+    // ABSOLUTE (not fixed): document-position is always (−100000, 0) regardless of
+    // page scroll, so html2canvas crops from y=0 — no scroll-offset shift.
+    holder.style.cssText = `position:absolute; left:-100000px; top:0; background:#ffffff; width:${BILL_W}px; pointer-events:none;`;
     const clone = element.cloneNode(true) as HTMLElement;
     clone.style.transform = 'none';
     clone.style.margin = '0';
