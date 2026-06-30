@@ -6,7 +6,7 @@ import { getStudentRankAndProgress, getOverallRankAndProgress } from '../service
 import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { QURAN_METADATA } from '../constants';
 
-// CDN global (index.html). Same idiom as ExportReportModal.tsx.
+// CDN globals from index.html (html2pdf.bundle also exposes jsPDF as window.jspdf).
 declare const html2pdf: any;
 
 const BILL_W = 794;        // A4 width @96dpi
@@ -157,21 +157,32 @@ const BillPage: React.FC<BillPageProps> = ({
 
     if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
 
-    // Make the PDF PAGE exactly the element's pixel size → the whole bill always
-    // lands on ONE page with no clipping (no CSS-transform scaling, which
-    // html2canvas mis-captures). Printers scale the single page to the paper.
+    const filename = `${(studentName || student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`;
     const w = element.offsetWidth || BILL_W;
     const h = element.scrollHeight;
-    const opt = {
-      margin: 0,
-      filename: `${(studentName || student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: w, width: w, height: h },
-      jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait', hotfixes: ['px_scaling'] },
-      pagebreak: { mode: ['avoid-all'] },
-    };
+
     try {
-      await html2pdf().from(element).set(opt).save();
+      // Rasterise the bill ourselves, then build a PDF page that is EXACTLY the
+      // canvas size and drop the image onto it at 1:1 — one page, full width, no
+      // clipping. (Letting html2pdf auto-layout to A4 was cropping the wide bill.)
+      const canvas: HTMLCanvasElement = await html2pdf()
+        .set({ html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: w, width: w, height: h } })
+        .from(element).toCanvas().get('canvas');
+
+      const jsPDFCtor = (window as any).jspdf?.jsPDF;
+      if (jsPDFCtor) {
+        const pdf = new jsPDFCtor({ unit: 'px', format: [canvas.width, canvas.height], orientation: 'portrait', hotfixes: ['px_scaling'] });
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, canvas.width, canvas.height);
+        pdf.save(filename);
+      } else {
+        // Fallback: page sized to the element's px dimensions.
+        await html2pdf().from(element).set({
+          margin: 0, filename, image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: w, width: w, height: h },
+          jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait', hotfixes: ['px_scaling'] },
+          pagebreak: { mode: ['avoid-all'] },
+        }).save();
+      }
     } catch (err) {
       console.error('Bill PDF failed:', err);
       alert(t('bill.pdfError'));
@@ -196,7 +207,7 @@ const BillPage: React.FC<BillPageProps> = ({
   ];
 
   return (
-    <div className="max-w-3xl mx-auto px-3 py-4">
+    <div className="max-w-[860px] mx-auto px-3 py-4">
       {/* ── EDITING CONTROLS — outside the captured node ── */}
       <div className="space-y-3 mb-5 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 no-print">
         <div className="flex items-center justify-between gap-2">
