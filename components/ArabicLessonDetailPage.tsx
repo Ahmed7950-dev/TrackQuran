@@ -934,7 +934,10 @@ const HomeworkTab: React.FC<{
       if (qtype === 'matching') {
         let pairs: [string, string][] = [];
         try { pairs = JSON.parse(q.correctAnswer ?? '[]'); } catch { /* */ }
-        const rightOpts = pairs.map(p => p[1]);
+        // Decouple the answer dropdown from the row order so the student can't
+        // just pick option i for row i. Sorted (not Math.random) so the order is
+        // stable across re-renders; grading compares by value, so this is safe.
+        const rightOpts = [...pairs.map(p => p[1])].sort((a, b) => a.localeCompare(b));
         return (
           <div className="space-y-2 mt-3">
             {pairs.map((pair, i) => (
