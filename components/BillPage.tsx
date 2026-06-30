@@ -10,7 +10,6 @@ import { QURAN_METADATA } from '../constants';
 declare const html2pdf: any;
 
 const BILL_W = 794;        // A4 width @96dpi
-const PRINTABLE_H = 1040;  // A4 height @96dpi (~1123) minus margins
 const DEFAULT_MIN = 60;    // default lesson length
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -156,19 +155,20 @@ const BillPage: React.FC<BillPageProps> = ({
     const wasDark = root.classList.contains('dark');
     if (wasDark) root.classList.remove('dark');
 
-    const prevTransform = element.style.transform, prevOrigin = element.style.transformOrigin;
-    const fullHeight = element.scrollHeight;
-    if (fullHeight > PRINTABLE_H) { element.style.transformOrigin = 'top center'; element.style.transform = `scale(${PRINTABLE_H / fullHeight})`; }
-
     if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
 
+    // Make the PDF PAGE exactly the element's pixel size → the whole bill always
+    // lands on ONE page with no clipping (no CSS-transform scaling, which
+    // html2canvas mis-captures). Printers scale the single page to the paper.
+    const w = element.offsetWidth || BILL_W;
+    const h = element.scrollHeight;
     const opt = {
-      margin: 0.4,
+      margin: 0,
       filename: `${(studentName || student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0, windowWidth: BILL_W },
-      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css'] },
+      html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: w, width: w, height: h },
+      jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait', hotfixes: ['px_scaling'] },
+      pagebreak: { mode: ['avoid-all'] },
     };
     try {
       await html2pdf().from(element).set(opt).save();
@@ -176,8 +176,6 @@ const BillPage: React.FC<BillPageProps> = ({
       console.error('Bill PDF failed:', err);
       alert(t('bill.pdfError'));
     } finally {
-      element.style.transform = prevTransform;
-      element.style.transformOrigin = prevOrigin;
       if (wasDark) root.classList.add('dark');
       setIsExporting(false);
     }
