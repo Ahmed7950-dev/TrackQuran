@@ -158,35 +158,43 @@ const BillPage: React.FC<BillPageProps> = ({
     if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
 
     const filename = `${(studentName || student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`;
-    const w = element.offsetWidth || BILL_W;
-    const h = element.scrollHeight;
+
+    // Capture an OFF-SCREEN, full-width CLONE pinned at (0,0) with no parent
+    // constraints — this removes every cause of the clipping/shift seen when
+    // capturing the live node (it's centered inside max-w / overflow-x-auto
+    // wrappers, which throws off html2canvas's positioning math).
+    const holder = document.createElement('div');
+    holder.style.cssText = `position:fixed; left:-100000px; top:0; background:#ffffff; width:${BILL_W}px; pointer-events:none;`;
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.style.transform = 'none';
+    clone.style.margin = '0';
+    clone.style.width = `${BILL_W}px`;
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+
+    // Wait for the clone's images (logo) + a paint flush.
+    await Promise.all(Array.from(clone.querySelectorAll('img')).map(img =>
+      img.complete ? Promise.resolve() : new Promise<void>(res => { (img as HTMLImageElement).onload = (img as HTMLImageElement).onerror = () => res(); })));
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
 
     try {
-      // Rasterise the bill ourselves, then build a PDF page that is EXACTLY the
-      // canvas size and drop the image onto it at 1:1 — one page, full width, no
-      // clipping. (Letting html2pdf auto-layout to A4 was cropping the wide bill.)
+      // Let html2canvas auto-measure the full clone (NO width/height/window/x/y
+      // overrides — those were cropping it). Then build a PDF page that is
+      // exactly the canvas size → whole bill on ONE page, no clipping.
       const canvas: HTMLCanvasElement = await html2pdf()
-        .set({ html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: w, width: w, height: h } })
-        .from(element).toCanvas().get('canvas');
+        .set({ html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' } })
+        .from(clone).toCanvas().get('canvas');
 
       const jsPDFCtor = (window as any).jspdf?.jsPDF;
-      if (jsPDFCtor) {
-        const pdf = new jsPDFCtor({ unit: 'px', format: [canvas.width, canvas.height], orientation: 'portrait', hotfixes: ['px_scaling'] });
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, canvas.width, canvas.height);
-        pdf.save(filename);
-      } else {
-        // Fallback: page sized to the element's px dimensions.
-        await html2pdf().from(element).set({
-          margin: 0, filename, image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: w, width: w, height: h },
-          jsPDF: { unit: 'px', format: [w, h], orientation: 'portrait', hotfixes: ['px_scaling'] },
-          pagebreak: { mode: ['avoid-all'] },
-        }).save();
-      }
+      const pdf = new jsPDFCtor({ unit: 'px', format: [canvas.width, canvas.height], orientation: 'portrait', hotfixes: ['px_scaling'] });
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
     } catch (err) {
       console.error('Bill PDF failed:', err);
       alert(t('bill.pdfError'));
     } finally {
+      if (holder.parentNode) holder.parentNode.removeChild(holder);
       if (wasDark) root.classList.add('dark');
       setIsExporting(false);
     }
