@@ -1,0 +1,370 @@
+import React, { useState, useMemo, useRef, useCallback } from 'react';
+import { Student, AttendanceStatus } from '../types';
+import { useI18n } from '../context/I18nProvider';
+import { CURRENCY_SYMBOL, Currency } from './StudentBillingFields';
+import { getStudentRankAndProgress, getOverallRankAndProgress } from '../services/rankingService';
+import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
+import { QURAN_METADATA } from '../constants';
+
+// CDN global (index.html). Same idiom as ExportReportModal.tsx.
+declare const html2pdf: any;
+
+const BILL_W = 794;        // A4 width @96dpi
+const PRINTABLE_H = 1040;  // A4 height @96dpi (~1123) minus margins
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const inMonthOf = (iso: string, y: number, m: number) => {
+  const d = new Date(iso);
+  return d.getFullYear() === y && d.getMonth() === m;
+};
+
+/** Attended lessons in a month: explicit PRESENT + implicit-present (a day with an
+ *  achievement and no explicit record). An explicit record of ANY status wins. */
+function attendedKeysInMonth(student: Student, monthDate: Date): Set<string> {
+  const y = monthDate.getFullYear(), m = monthDate.getMonth();
+  const explicit = new Map<string, AttendanceStatus>();
+  for (const a of student.attendance ?? []) {
+    if (inMonthOf(a.date, y, m)) explicit.set(new Date(a.date).toDateString(), a.status);
+  }
+  const keyOf = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const keys = new Set<string>();
+  for (const a of student.attendance ?? []) {
+    if (inMonthOf(a.date, y, m) && a.status === AttendanceStatus.Present) keys.add(keyOf(a.date));
+  }
+  for (const a of [...(student.recitationAchievements ?? []), ...(student.memorizationAchievements ?? [])]) {
+    if (!inMonthOf(a.date, y, m)) continue;
+    const ds = new Date(a.date).toDateString();
+    if (!explicit.has(ds)) keys.add(keyOf(a.date));
+  }
+  return keys;
+}
+
+interface BillPageProps {
+  student: Student;
+  students: Student[];
+  tutorEmail?: string;
+  receiverName?: string;   // from profiles (per-tutor)
+  iban?: string;           // from profiles (per-tutor)
+  onUpdateStudent: (s: Student) => void;
+  onSaveTutorBillInfo: (info: { receiverName: string; iban: string }) => void;
+}
+
+const BillPage: React.FC<BillPageProps> = ({
+  student, students, tutorEmail, receiverName: tutorReceiver, iban: tutorIban,
+  onUpdateStudent, onSaveTutorBillInfo,
+}) => {
+  const { t, language } = useI18n();
+  const isRtl = language === 'ar';
+  const dateLocale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr' : 'en-US';
+  const billRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // ── Period ──
+  const [billMonth, setBillMonth] = useState<Date>(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
+  const issuedOn = useMemo(() => new Date(), []);
+  const presentDays = useMemo(() => attendedKeysInMonth(student, billMonth), [student, billMonth]);
+  const computedLessons = presentDays.size;
+
+  // ── Editable per-student ──
+  const [payerName, setPayerName] = useState(student.billPayerName ?? '');
+  const [improvementNote, setImprovementNote] = useState(student.billImprovementNote ?? '');
+  const [lessonsInput, setLessonsInput] = useState(student.billLessonsOverride != null ? String(student.billLessonsOverride) : '');
+  const [priceInput, setPriceInput] = useState(
+    student.billPriceOverride != null ? String(student.billPriceOverride)
+      : student.hourlyRate != null ? String(student.hourlyRate) : ''
+  );
+  // ── Editable per-tutor ──
+  const [receiverName, setReceiverName] = useState(tutorReceiver ?? '');
+  const [iban, setIban] = useState(tutorIban ?? '');
+
+  const lessons = lessonsInput.trim() === '' ? computedLessons : (Number(lessonsInput) || 0);
+  const price = priceInput.trim() === '' ? (student.hourlyRate ?? 0) : (Number(priceInput) || 0);
+  const total = lessons * price;
+  const currency: Currency = (student.currency as Currency) ?? 'USD';
+  const sym = CURRENCY_SYMBOL[currency];
+  const currencyLabel = `${currency} ${sym}`;        // e.g. "USD $" / "TRY ₺"
+  const fmt = (n: number) => `${sym}${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+
+  // ── Stats (same primitives as the statistics page) ──
+  const pagesRead = useMemo(() => new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size, [student]);
+  const readingQuality = useMemo(() => {
+    const qs = [
+      ...(student.recitationAchievements ?? []).map(a => a.readingQuality),
+      ...(student.memorizationAchievements ?? []).map(a => a.memorizationQuality),
+    ];
+    return qs.length ? qs.reduce((s, q) => s + q, 0) / qs.length : 0;
+  }, [student]);
+  const readingRank = useMemo(() => getStudentRankAndProgress(student, students, 'reading'), [student, students]);
+  const overallRank = useMemo(() => getOverallRankAndProgress(student, students, 'reading'), [student, students]);
+  const lastRead = useMemo(() => {
+    const all = [...(student.recitationAchievements ?? []), ...(student.memorizationAchievements ?? [])];
+    if (!all.length) return '—';
+    const last = [...all].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    const name = QURAN_METADATA.find(s => s.number === last.endSurah)?.name ?? '';
+    return `${name} ${last.endAyah}`.trim() || '—';
+  }, [student]);
+
+  // ── Persistence (fire-and-forget on blur) ──
+  const persistStudentBill = useCallback(() => {
+    onUpdateStudent({
+      ...student,
+      billPayerName: payerName.trim() || undefined,
+      billImprovementNote: improvementNote.trim() || undefined,
+      billLessonsOverride: lessonsInput.trim() === '' ? undefined : (Number(lessonsInput) || undefined),
+      billPriceOverride: priceInput.trim() === '' ? undefined : (Number(priceInput) || undefined),
+    });
+  }, [student, payerName, improvementNote, lessonsInput, priceInput, onUpdateStudent]);
+  const persistTutorBill = useCallback(() => {
+    onSaveTutorBillInfo({ receiverName: receiverName.trim(), iban: iban.trim() });
+  }, [receiverName, iban, onSaveTutorBillInfo]);
+
+  // ── Calendar grid (Monday-first) ──
+  const calYear = billMonth.getFullYear(), calMonth = billMonth.getMonth();
+  const startWeekday = (new Date(calYear, calMonth, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [...Array(startWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const dayNames = isRtl ? ['ن', 'ث', 'ر', 'خ', 'ج', 'س', 'ح'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  const periodStr = billMonth.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
+  const periodRangeStr = `1–${daysInMonth} ${periodStr}`;          // e.g. "1–30 June 2026"
+  const issuedStr = issuedOn.toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' });
+  const billNumber = `INV-${calYear}${pad(calMonth + 1)}-${(student.name || 'STU').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
+
+  // ── Export to a guaranteed single page ──
+  const handleExportPdf = useCallback(async () => {
+    if (isExporting) return;
+    if (typeof html2pdf === 'undefined') { alert(t('bill.pdfNotLoaded')); return; }
+    setIsExporting(true);
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+
+    const element = billRef.current;
+    if (!element) { setIsExporting(false); return; }
+
+    const root = document.documentElement;
+    const wasDark = root.classList.contains('dark');
+    if (wasDark) root.classList.remove('dark');
+
+    const prevTransform = element.style.transform, prevOrigin = element.style.transformOrigin;
+    const fullHeight = element.scrollHeight;
+    if (fullHeight > PRINTABLE_H) { element.style.transformOrigin = 'top center'; element.style.transform = `scale(${PRINTABLE_H / fullHeight})`; }
+
+    if (document.fonts?.ready) { try { await document.fonts.ready; } catch {} }
+
+    const opt = {
+      margin: 0.4,
+      filename: `${(student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0, windowWidth: BILL_W },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css'] },
+    };
+    try {
+      await html2pdf().from(element).set(opt).save();
+    } catch (err) {
+      console.error('Bill PDF failed:', err);
+      alert(t('bill.pdfError'));
+    } finally {
+      element.style.transform = prevTransform;
+      element.style.transformOrigin = prevOrigin;
+      if (wasDark) root.classList.add('dark');
+      setIsExporting(false);
+    }
+  }, [isExporting, student.name, calYear, calMonth, t]);
+
+  const getButtonText = () => isExporting ? t('bill.exportGenerating') : (typeof html2pdf === 'undefined' ? t('bill.exportLoading') : t('bill.exportPdf'));
+  const isButtonDisabled = isExporting || typeof html2pdf === 'undefined';
+
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400';
+  const labelCls = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1';
+
+  const stats = [
+    { label: t('bill.pagesRead'), value: String(pagesRead) },
+    { label: t('bill.readingQuality'), value: `${readingQuality.toFixed(1)}/10` },
+    { label: t('bill.lastRead'), value: lastRead },
+    { label: t('bill.rankInAgeGroup'), value: readingRank.rank ? `${readingRank.rank} / ${readingRank.totalInGroup}` : '—' },
+    { label: t('bill.rankAmongAll'), value: overallRank.rank ? `${overallRank.rank} / ${overallRank.total}` : '—' },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto px-3 py-4">
+      {/* ── EDITING CONTROLS — outside the captured node ── */}
+      <div className="space-y-3 mb-5 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 no-print">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t('bill.period')}</label>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setBillMonth(p => { const d = new Date(p); d.setMonth(d.getMonth() - 1); return d; })} className="px-2 py-1 rounded bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300">‹</button>
+            <span className="text-sm font-medium min-w-[9rem] text-center text-slate-700 dark:text-slate-200">{periodStr}</span>
+            <button onClick={() => setBillMonth(p => { const d = new Date(p); d.setMonth(d.getMonth() + 1); return d; })} className="px-2 py-1 rounded bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300">›</button>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>{t('bill.payerName')}</label>
+          <input value={payerName} onChange={e => setPayerName(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.payerNamePlaceholder')} className={inputCls} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={labelCls}>{t('bill.lessonsCount')}</label>
+            <input type="number" inputMode="numeric" value={lessonsInput} onChange={e => setLessonsInput(e.target.value)} onBlur={persistStudentBill} placeholder={String(computedLessons)} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>{t('bill.pricePerLesson')} ({sym})</label>
+            <input type="number" inputMode="decimal" value={priceInput} onChange={e => setPriceInput(e.target.value)} onBlur={persistStudentBill} placeholder={String(student.hourlyRate ?? 0)} className={inputCls} />
+          </div>
+        </div>
+        <p className="text-[11px] text-slate-400">{t('bill.lessonsHint')}</p>
+        <div>
+          <label className={labelCls}>{t('bill.improvementNote')}</label>
+          <textarea value={improvementNote} onChange={e => setImprovementNote(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.improvementNotePlaceholder')} rows={2} className={inputCls} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={labelCls}>{t('bill.receiverName')}</label>
+            <input value={receiverName} onChange={e => setReceiverName(e.target.value)} onBlur={persistTutorBill} placeholder={t('bill.receiverNamePlaceholder')} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>{t('bill.iban')}</label>
+            <input dir="ltr" value={iban} onChange={e => setIban(e.target.value)} onBlur={persistTutorBill} placeholder={t('bill.ibanPlaceholder')} className={inputCls} />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button onClick={handleExportPdf} disabled={isButtonDisabled}
+            className="px-5 py-2.5 text-white font-semibold rounded-lg shadow-sm transition-colors bg-teal-600 hover:bg-teal-700 dark:bg-orange-600 dark:hover:bg-orange-700 disabled:bg-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+            {getButtonText()}
+          </button>
+        </div>
+      </div>
+
+      {/* ── CAPTURED INVOICE NODE — fixed width, hard white, theme-proof ── */}
+      <div className="overflow-x-auto">
+        <div ref={billRef} dir={isRtl ? 'rtl' : 'ltr'} style={{ width: `${BILL_W}px` }} className="bg-white text-slate-800 font-sans p-10 mx-auto flex flex-col [&_*]:!shadow-none">
+          {/* Header */}
+          <header className="flex items-start justify-between pb-5 border-b-2 border-teal-600">
+            <div className="flex items-center gap-3">
+              <img src="/TQ LOGO.png" alt="" crossOrigin="anonymous" className="w-14 h-14 rounded-xl object-contain" />
+              <div>
+                <h1 className="text-2xl font-extrabold text-teal-700 leading-none">{t('bill.platformName')}</h1>
+                <p className="text-[11px] text-slate-400 mt-1 tracking-wide uppercase">{t('bill.platformTagline')}</p>
+              </div>
+            </div>
+            <div className="text-end">
+              <p className="text-2xl font-black tracking-tight text-slate-900">{t('bill.title')}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('bill.issuedOn', { date: issuedStr })}</p>
+              <p className="text-xs text-slate-500" dir="ltr">{t('bill.billNo')}&nbsp;{billNumber}</p>
+            </div>
+          </header>
+
+          {/* From / To */}
+          <section className="grid grid-cols-2 gap-6 mt-6">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{t('bill.payerName')}</p>
+              <p className="text-sm font-semibold text-slate-800">{payerName || '—'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-4 text-end">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{t('bill.receiverName')}</p>
+              <p className="text-sm font-semibold text-slate-800">{receiverName || '—'}</p>
+              <p className="text-xs text-slate-500 mt-1 font-mono" dir="ltr" style={{ unicodeBidi: 'isolate' }}>{t('bill.iban')}: {iban || '—'}</p>
+              {tutorEmail && <p className="text-xs text-slate-500 mt-0.5" dir="ltr">{tutorEmail}</p>}
+            </div>
+          </section>
+
+          {/* Student + period */}
+          <section className="flex items-center justify-between mt-5 px-1">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('bill.studentName')}</p>
+              <p className="text-lg font-bold text-slate-900">{student.name}</p>
+            </div>
+            <div className="text-end">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('bill.period')}</p>
+              <p className="text-sm font-semibold text-slate-700">{periodRangeStr}</p>
+            </div>
+          </section>
+
+          {/* Calendar | table + stats */}
+          <section className="grid grid-cols-[260px_1fr] gap-6 mt-5">
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-[11px] font-bold text-slate-600 mb-2 text-center">{t('bill.attendanceTitle')}</p>
+              <div className="grid grid-cols-7 gap-0.5">
+                {dayNames.map((d, i) => <div key={i} className="text-[8px] font-bold text-slate-400 text-center pb-0.5">{d}</div>)}
+                {cells.map((day, i) => {
+                  if (day === null) return <div key={`e${i}`} className="h-7" />;
+                  const key = `${calYear}-${pad(calMonth + 1)}-${pad(day)}`;
+                  const present = presentDays.has(key);
+                  return <div key={key} className={`h-7 rounded-md border flex items-center justify-center text-[9px] ${present ? 'bg-emerald-500 border-emerald-500 text-white font-bold' : 'border-slate-100 text-slate-400'}`}>{day}</div>;
+                })}
+              </div>
+              <div className="flex items-center justify-center gap-1.5 mt-2">
+                <span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block" />
+                <span className="text-[9px] text-slate-500">{t('bill.attended')}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
+                    <th className="text-start font-bold py-2">{t('bill.description')}</th>
+                    <th className="text-center font-bold py-2 w-16">{t('bill.qty')}</th>
+                    <th className="text-end font-bold py-2 w-24">{t('bill.unitPrice')}</th>
+                    <th className="text-end font-bold py-2 w-24">{t('bill.amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-3 text-slate-700">{t('bill.lessonLineItem')}</td>
+                    <td className="py-3 text-center text-slate-700">{lessons}</td>
+                    <td className="py-3 text-end text-slate-700" dir="ltr">{fmt(price)}</td>
+                    <td className="py-3 text-end font-semibold text-slate-900" dir="ltr">{fmt(total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {stats.map(s => (
+                  <div key={s.label} className="rounded-lg bg-slate-50 px-2.5 py-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 leading-tight">{s.label}</p>
+                    <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={s.value}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Improvement note */}
+          {improvementNote.trim() && (
+            <section className="mt-5 rounded-xl bg-teal-50 border border-teal-100 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-teal-600 mb-1">{t('bill.improvementNote')}</p>
+              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{improvementNote}</p>
+            </section>
+          )}
+
+          {/* BIG TOTAL */}
+          <section className="mt-6 flex justify-end">
+            <div className="rounded-2xl bg-gradient-to-br from-teal-600 to-teal-700 text-white px-8 py-5 min-w-[300px] shadow-lg">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-teal-100">{t('bill.total')}</p>
+                <span className="text-[11px] font-bold text-teal-100" dir="ltr">{currencyLabel}</span>
+              </div>
+              <div className="flex items-baseline justify-between mt-1 gap-4">
+                <span className="text-[11px] text-teal-200" dir="ltr">{lessons} × {fmt(price)}</span>
+                <span className="text-4xl font-black tracking-tight" dir="ltr">{fmt(total)}</span>
+              </div>
+              <p className="text-[10px] text-teal-200 mt-1 text-end">{periodRangeStr}</p>
+            </div>
+          </section>
+
+          {/* Footer — contact + thank you / terms */}
+          <footer className="mt-8 pt-5 text-center border-t border-slate-100 space-y-1">
+            <p className="text-[11px] font-semibold text-slate-500">
+              {t('bill.platformName')}{(receiverName || tutorEmail) ? ' · ' : ''}{receiverName}{receiverName && tutorEmail ? ' · ' : ''}<span dir="ltr">{tutorEmail}</span>
+            </p>
+            <p className="text-[10px] text-slate-400">{t('bill.terms')}</p>
+            <p className="text-[10px] text-slate-300">{t('bill.footerThanks')}</p>
+          </footer>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default BillPage;

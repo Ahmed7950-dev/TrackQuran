@@ -8,14 +8,25 @@ import { supabase } from '../lib/supabase';
 // Teacher Profile
 // ============================================================
 
-export const getTeacherProfile = async (userId: string): Promise<{ name: string; tajweed_rules: string[] } | null> => {
+export const getTeacherProfile = async (userId: string): Promise<{ name: string; tajweed_rules: string[]; bill_receiver_name?: string; bill_iban?: string } | null> => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('name, tajweed_rules')
+    .select('name, tajweed_rules, bill_receiver_name, bill_iban')
     .eq('id', userId)
     .single();
   if (error) { console.error('getTeacherProfile:', error.message); return null; }
   return data;
+};
+
+/** Persist the tutor's reusable invoice payee details (same on every bill). */
+export const saveTutorBillInfo = async (
+  teacherId: string, info: { receiverName: string; iban: string },
+): Promise<void> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ bill_receiver_name: info.receiverName, bill_iban: info.iban })
+    .eq('id', teacherId);
+  if (error) console.error('saveTutorBillInfo:', error.message);
 };
 
 export const createTeacherProfile = async (userId: string, name: string): Promise<void> => {
@@ -53,6 +64,10 @@ const rowToStudent = (row: any): Student => ({
   studentType:                 row.student_type                 ?? undefined,
   preplyPercentage:            row.preply_percentage            ?? undefined,
   subscriptionRenewalDate:     row.subscription_renewal_date    ?? undefined,
+  billPayerName:               row.bill_payer_name              ?? undefined,
+  billImprovementNote:         row.bill_improvement_note        ?? undefined,
+  billLessonsOverride:         row.bill_lessons_override        ?? undefined,
+  billPriceOverride:           row.bill_price_override          ?? undefined,
   authUserId:                  row.auth_user_id                 ?? undefined,
   selfRegistered:              row.self_registered              ?? undefined,
   approvalStatus:              row.approval_status              ?? undefined,
@@ -86,6 +101,10 @@ const studentToRow = (teacherId: string, s: Student) => ({
   student_type:                s.studentType ?? null,
   preply_percentage:           s.preplyPercentage ?? null,
   subscription_renewal_date:   s.subscriptionRenewalDate ?? null,
+  bill_payer_name:             s.billPayerName ?? null,
+  bill_improvement_note:       s.billImprovementNote ?? null,
+  bill_lessons_override:       s.billLessonsOverride ?? null,
+  bill_price_override:         s.billPriceOverride ?? null,
   auth_user_id:                s.authUserId ?? null,
   self_registered:             s.selfRegistered ?? false,
   approval_status:             s.approvalStatus ?? 'active',

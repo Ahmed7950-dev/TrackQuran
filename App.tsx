@@ -4,7 +4,7 @@ import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
 import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
@@ -43,6 +43,7 @@ import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
+import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
 import GCalOAuthCallback from './components/GCalOAuthCallback';
@@ -555,13 +556,28 @@ const App: React.FC = () => {
       setAvailabilitySlots([]);
     }
   }, [currentUser]);
+
+  // Tutor's reusable invoice payee details (receiver name + IBAN), loaded from profile.
+  const [tutorBillInfo, setTutorBillInfo] = useState<{ receiverName: string; iban: string }>({ receiverName: '', iban: '' });
+  useEffect(() => {
+    if (currentUser?.role !== 'teacher') { setTutorBillInfo({ receiverName: '', iban: '' }); return; }
+    getTeacherProfile(currentUser.id).then(p => {
+      if (p) setTutorBillInfo({ receiverName: p.bill_receiver_name ?? '', iban: p.bill_iban ?? '' });
+    });
+  }, [currentUser]);
+  const handleSaveTutorBillInfo = (info: { receiverName: string; iban: string }) => {
+    if (currentUser?.role !== 'teacher') return;
+    setTutorBillInfo(info);
+    saveTutorBillInfo(currentUser.id, info);
+  };
+
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>(
     () => (localStorage.getItem('nav_currentStudentView') === 'mistakes' ? 'mistakes' : 'details'),
   );
-  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework';
+  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill';
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     const saved = localStorage.getItem('nav_activeTab');
-    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework'];
+    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill'];
     return saved && (allowed as string[]).includes(saved) ? (saved as ActiveTab) : 'main';
   });
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1644,7 +1660,7 @@ const App: React.FC = () => {
         )}
       </header>
       {/* ── Thin student-tools bar — visible on all student pages (detail + session) ── */}
-      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework'].includes(activeTab) && (() => {
+      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill'].includes(activeTab) && (() => {
         const activeHwCount = (sessionStudent ?? selectedStudent)?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
         const tabs = [
           { id: 'main',            label: 'Main page',                  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.5a.75.75 0 0 0 .75.75H9.75v-6a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v6h4.5a.75.75 0 0 0 .75-.75V9.75M8.25 21h8.25" /></svg> },
@@ -1654,6 +1670,8 @@ const App: React.FC = () => {
           { id: 'quran',           label: 'Quran',                      icon: <LottieIcon src="/al-quran.json" size={20} /> },
           { id: 'lettersTrainer',  label: t('header.lettersTrainer'),   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg> },
           { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
+          // Bill tab — platform students only (tutor-issued invoice; not for Preply).
+          { id: 'bill',            label: t('bill.tab'),                icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l2.25 2.25L15 9.75M9 8.25V6a2.25 2.25 0 0 1 4.5 0v2.25" /></svg> },
         ] as const;
         return (
           <div
@@ -1662,7 +1680,7 @@ const App: React.FC = () => {
             style={{ top: headerHeight }}
           >
             <div className="flex items-center justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-              {tabs.map(tab => {
+              {tabs.filter(tab => tab.id !== 'bill' || (sessionStudent ?? selectedStudent)?.studentType === 'platform').map(tab => {
                 // "Main page" returns to the student's detail page (closes any open
                 // Quran session). It's a normal destination tab — click to go there.
                 if (tab.id === 'main') {
@@ -1889,7 +1907,17 @@ const App: React.FC = () => {
               </section>
             </div>
           );
-        })() : sessionStudent ? (
+        })() : activeTab === 'bill' && currentUser?.role === 'teacher' && (sessionStudent ?? selectedStudent)?.studentType === 'platform' ? (
+          <BillPage
+            student={(sessionStudent ?? selectedStudent)!}
+            students={students}
+            tutorEmail={currentUser.email}
+            receiverName={tutorBillInfo.receiverName}
+            iban={tutorBillInfo.iban}
+            onUpdateStudent={handleUpdateStudent}
+            onSaveTutorBillInfo={handleSaveTutorBillInfo}
+          />
+        ) : sessionStudent ? (
           <StudentProgressPage
             student={sessionStudent}
             students={students}
