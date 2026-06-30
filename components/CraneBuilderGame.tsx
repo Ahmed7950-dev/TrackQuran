@@ -62,7 +62,7 @@ interface Layout {
   hook: { w: number; dy: number };  // hook sprite size + vertical offset
 }
 const DEFAULT_LAYOUT: Layout = {
-  stage: { x: 242, y: 320, w: 345, h: 235 },
+  stage: { x: 180, y: 320, w: 470, h: 235 },   // brick-wall backdrop (natural 2:1 aspect, kept centred)
   crane: { x: -28, y: -26, w: 957, h: 522 },
   cube: { w: 59, h: 60 },
   build: { x: 480, y: 448 },
