@@ -276,12 +276,8 @@ const BillPage: React.FC<BillPageProps> = ({
         <div ref={billRef} dir={isRtl ? 'rtl' : 'ltr'} style={{ width: `${BILL_W}px` }} className="bg-white text-slate-800 font-sans p-10 mx-auto flex flex-col [&_*]:!shadow-none">
           {/* Header */}
           <header className="flex items-start justify-between pb-5 border-b-2 border-teal-600">
-            <div className="flex items-center gap-3">
-              <img src="/TQ LOGO.png" alt="" crossOrigin="anonymous" className="w-14 h-14 rounded-xl object-contain" />
-              <div>
-                <h1 className="text-2xl font-extrabold text-teal-700 leading-none">{t('bill.platformName')}</h1>
-                <p className="text-[11px] text-slate-400 mt-1 tracking-wide uppercase">{t('bill.platformTagline')}</p>
-              </div>
+            <div className="flex items-center">
+              <img src="/TQ LOGO.png" alt="" crossOrigin="anonymous" className="w-24 h-24 rounded-xl object-contain" />
             </div>
             <div className="text-end">
               <p className="text-2xl font-black tracking-tight text-slate-900">{t('bill.title')}</p>

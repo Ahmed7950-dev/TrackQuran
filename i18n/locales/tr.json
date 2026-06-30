@@ -1311,7 +1311,7 @@
     "exportLoading": "Yükleniyor…",
     "pdfNotLoaded": "PDF kütüphanesi yüklenmedi. İnternet bağlantınızı kontrol edip yenileyin.",
     "pdfError": "Üzgünüz, PDF oluşturulurken bir hata oluştu.",
-    "terms": "Ödeme, fatura alındığında yapılmalıdır. Lütfen havale açıklamasına fatura numarasını yazın.",
+    "terms": "Ödeme, fatura alındığında yapılmalıdır.",
     "footerThanks": "Bizimle öğrendiğiniz için teşekkürler"
   }
 }

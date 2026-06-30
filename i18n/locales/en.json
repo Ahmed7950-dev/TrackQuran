@@ -1311,7 +1311,7 @@
     "exportLoading": "Loading…",
     "pdfNotLoaded": "PDF library not loaded. Please check your internet connection and refresh.",
     "pdfError": "Sorry, an error occurred while generating the PDF.",
-    "terms": "Payment due upon receipt. Please use the bill number as the transfer reference.",
+    "terms": "Payment due upon receipt.",
     "footerThanks": "Thank you for learning with us"
   }
 }
