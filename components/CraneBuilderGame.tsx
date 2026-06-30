@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { wordAudioUrl, speakWord } from '../services/wordAudioService';
+import { supabase } from '../lib/supabase';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crane Builder — a Qaedah word-building game.
@@ -134,8 +135,77 @@ function buildPlan(word: string, L: Layout): { slots: Slot[]; cols: number } {
 
 let cubeIdSeq = 1;
 
-const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit: () => void }> = ({ words, topicTitle, onExit }) => {
-  const cleanWords = words.map(w => w.trim()).filter(Boolean);
+// ── Touch analog joystick (cloned from the flight game) ──────────────────────
+const Joystick: React.FC<{
+  onKeys: (k: { up: boolean; down: boolean; left: boolean; right: boolean }) => void;
+  accentColor?: string;
+}> = ({ onKeys, accentColor = '#f59e0b' }) => {
+  const knobRef = useRef<HTMLDivElement>(null);
+  const ptrId = useRef<number | null>(null);
+  const centerRef = useRef({ x: 0, y: 0 });
+  const BASE_R = 62, KNOB_R = 27, MAX = BASE_R - KNOB_R;
+  const DEAD = 0.22;
+  const move = (cx: number, cy: number) => {
+    const kn = knobRef.current; if (!kn) return;
+    kn.style.transition = 'none';
+    const ox = cx - centerRef.current.x, oy = cy - centerRef.current.y;
+    const d = Math.hypot(ox, oy), a = Math.atan2(oy, ox);
+    const cd = Math.min(d, MAX);
+    kn.style.transform = `translate(calc(-50% + ${cd * Math.cos(a)}px), calc(-50% + ${cd * Math.sin(a)}px))`;
+    const mag = cd / MAX;
+    const ax = mag > DEAD ? Math.cos(a) : 0, ay = mag > DEAD ? Math.sin(a) : 0;
+    onKeys({ left: ax < -DEAD, right: ax > DEAD, up: ay < -DEAD, down: ay > DEAD });
+  };
+  const release = () => {
+    const kn = knobRef.current;
+    if (kn) { kn.style.transition = 'transform 0.15s ease-out'; kn.style.transform = 'translate(-50%, -50%)'; }
+    onKeys({ up: false, down: false, left: false, right: false });
+    ptrId.current = null;
+  };
+  return (
+    <div style={{ width: BASE_R * 2, height: BASE_R * 2, borderRadius: '50%', background: `${accentColor}22`, border: `2.5px solid ${accentColor}66`, position: 'relative', touchAction: 'none', userSelect: 'none', flexShrink: 0 }}
+      onPointerDown={e => { if (ptrId.current !== null) return; ptrId.current = e.pointerId; e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); const rc = e.currentTarget.getBoundingClientRect(); centerRef.current = { x: rc.left + rc.width / 2, y: rc.top + rc.height / 2 }; move(e.clientX, e.clientY); }}
+      onPointerMove={e => { if (e.pointerId !== ptrId.current) return; e.preventDefault(); move(e.clientX, e.clientY); }}
+      onPointerUp={e => { if (e.pointerId === ptrId.current) release(); }}
+      onPointerCancel={e => { if (e.pointerId === ptrId.current) release(); }}
+      onLostPointerCapture={e => { if (e.pointerId === ptrId.current) release(); }}>
+      <div ref={knobRef} style={{ width: KNOB_R * 2, height: KNOB_R * 2, borderRadius: '50%', background: accentColor, opacity: 0.85, boxShadow: `0 3px 12px ${accentColor}90`, position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' }} />
+    </div>
+  );
+};
+
+// Snapshot the playing student broadcasts to the watching tutor (~30 Hz).
+interface CraneSnap {
+  wordIndex: number; phase: 'playing' | 'wordDone' | 'allDone';
+  trolleyX: number; hookY: number; held: boolean; placed: number;
+  cubes: Array<{ id: number; glyph: string; kind: 'letter' | 'mark'; x: number; y: number; state: 'ground' | 'held' | 'placed' }>;
+  slots: Array<{ glyph: string; kind: 'letter' | 'mark'; x: number; y: number }>;
+  wrong: { x: number; y: number } | null;
+}
+
+type CraneRole = 'host' | 'player' | 'spectator';
+
+const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit: () => void; roomId?: string; role?: CraneRole }>
+  = ({ words, topicTitle, onExit, roomId, role = 'host' }) => {
+  const isPlayer = role === 'player';        // student playing over a shared link (authoritative)
+  const isSpectator = role === 'spectator';  // tutor watching the student play
+  const isOnline = !!roomId;
+  const isTouch = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+  const showTouch = isPlayer || (role === 'host' && isTouch);
+  const propWords = words.map(w => w.trim()).filter(Boolean);
+  // The student joins via a bare link with no words; the tutor sends them on connect.
+  const [remoteWords, setRemoteWords] = useState<string[] | null>(null);
+  const [remoteTitle, setRemoteTitle] = useState<string | undefined>(undefined);
+  const cleanWords = isPlayer ? (remoteWords ?? []) : propWords;
+  const liveTopicTitle = isPlayer ? remoteTitle : topicTitle;
+  const playerReady = !isPlayer || remoteWords !== null;
+
+  // Realtime plumbing (online sessions only).
+  const channelRef = useRef<ReturnType<typeof supabase.realtime.channel> | null>(null);
+  const netSnapRef = useRef<CraneSnap | null>(null);   // latest snapshot the spectator renders
+  const [peerJoined, setPeerJoined] = useState(false); // spectator: has the student connected?
+  const [copied, setCopied] = useState(false);
+
   const [wordIndex, setWordIndex] = useState(0);
   const [phase, setPhase] = useState<'playing' | 'wordDone' | 'allDone'>('playing');
   const [tick, setTick] = useState(0);          // forces re-render each animation frame
@@ -205,7 +275,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   }, []);
 
   // ── Word audio ─────────────────────────────────────────────────────────────
-  const playWord = useCallback((w: string) => {
+  // playLocal renders the sound on this device; playWord also broadcasts so the
+  // peer (tutor ↔ student) hears the exact same word at the same time.
+  const playLocal = useCallback((w: string) => {
     if (!w) return;
     audioElRef.current?.pause();
     const audio = new Audio(wordAudioUrl(w));
@@ -215,6 +287,11 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     audio.onerror = fallback;
     audio.play().then(() => { audio.onerror = null; }).catch(fallback);
   }, []);
+  const playWord = useCallback((w: string) => {
+    if (!w) return;
+    playLocal(w);
+    if (isOnline) channelRef.current?.send({ type: 'broadcast', event: 'audio', payload: { word: w } });
+  }, [playLocal, isOnline]);
 
   // ── Set up a word: build plan + scatter cubes ───────────────────────────────
   const setupWord = useCallback((w: string) => {
@@ -257,12 +334,14 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
   // Init / advance words.
   useEffect(() => {
+    if (isSpectator) return;       // tutor mirrors the student's broadcast; runs no sim of its own
+    if (!playerReady) return;      // student still waiting for the tutor to send the word list
     if (!word) { setPhase('allDone'); return; }
     setupWord(word);
     setPhase('playing');
     const t = setTimeout(() => playWord(word), 450); // let the scene mount first
     return () => clearTimeout(t);
-  }, [word, setupWord, playWord]);
+  }, [word, isSpectator, playerReady, setupWord, playWord]);
 
   // Re-position the building slots live when the layout is edited (design mode).
   useEffect(() => {
@@ -318,6 +397,13 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     setTick(t => t + 1);
   }, [phase, sfxGrab, sfxPlace, sfxWrong, sfxWin]);
 
+  // Touch joystick → drive the same key set the sim already reads.
+  const setStickKeys = useCallback((k: { up: boolean; down: boolean; left: boolean; right: boolean }) => {
+    const set = (key: string, on: boolean) => { if (on) keys.current.add(key); else keys.current.delete(key); };
+    set('ArrowLeft', k.left); set('ArrowRight', k.right); set('ArrowUp', k.up); set('ArrowDown', k.down);
+    if ((k.left || k.right || k.up || k.down) && showHelp) setShowHelp(false);
+  }, [showHelp]);
+
   // ── Keyboard + game loop ─────────────────────────────────────────────────────
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -336,6 +422,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   }, [tryGrabOrDrop, showHelp]);
 
   useEffect(() => {
+    if (isSpectator) return;   // no local simulation when mirroring the student
     let raf = 0;
     const loop = () => {
       const g = game.current;
@@ -371,6 +458,48 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   // Cleanup audio on unmount.
   useEffect(() => () => { audioElRef.current?.pause(); motorAudioRef.current?.pause(); window.speechSynthesis?.cancel(); acRef.current?.close().catch(() => {}); }, []);
 
+  // ── Realtime session: tutor (spectator) watches the student (player) live ────
+  const configRef = useRef({ words: propWords, topicTitle });
+  configRef.current = { words: propWords, topicTitle };
+  useEffect(() => {
+    if (!isOnline || !roomId) return;
+    const ch = supabase.realtime.channel(`crane-builder-${roomId}`);
+    channelRef.current = ch;
+    if (isSpectator) {
+      const sendConfig = () => ch.send({ type: 'broadcast', event: 'config', payload: { words: configRef.current.words, topicTitle: configRef.current.topicTitle } });
+      ch.on('broadcast', { event: 'join' }, () => { setPeerJoined(true); sendConfig(); });
+      ch.on('broadcast', { event: 'state' }, ({ payload }: { payload: CraneSnap }) => { netSnapRef.current = payload; setPeerJoined(true); setTick(t => (t + 1) % 1000000); });
+      ch.on('broadcast', { event: 'audio' }, ({ payload }: { payload: { word: string } }) => playLocal(payload.word));
+      ch.subscribe(s => { if (s === 'SUBSCRIBED') sendConfig(); });
+    } else if (isPlayer) {
+      ch.on('broadcast', { event: 'config' }, ({ payload }: { payload: { words: string[]; topicTitle?: string } }) => {
+        setRemoteWords(payload.words.map(w => w.trim()).filter(Boolean));
+        setRemoteTitle(payload.topicTitle);
+      });
+      ch.on('broadcast', { event: 'audio' }, ({ payload }: { payload: { word: string } }) => playLocal(payload.word));
+      ch.subscribe(s => { if (s === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'join', payload: {} }); });
+    }
+    return () => { ch.unsubscribe(); channelRef.current = null; };
+  }, [isOnline, roomId, isSpectator, isPlayer, playLocal]);
+
+  // Student → tutor: broadcast the live game state ~30 Hz.
+  useEffect(() => {
+    if (!isPlayer || !isOnline) return;
+    const id = setInterval(() => {
+      const g = game.current;
+      const now = performance.now();
+      channelRef.current?.send({ type: 'broadcast', event: 'state', payload: {
+        wordIndex, phase,
+        trolleyX: Math.round(g.trolleyX), hookY: Math.round(g.hookY),
+        held: g.held !== null, placed: g.placed,
+        cubes: g.cubes.map(c => ({ id: c.id, glyph: c.glyph, kind: c.kind, x: Math.round(c.x), y: Math.round(c.y), state: c.state })),
+        slots: g.slots.map(s => ({ glyph: s.glyph, kind: s.kind, x: Math.round(s.x), y: Math.round(s.y) })),
+        wrong: g.wrongUntil > now ? g.wrongAt : null,
+      } satisfies CraneSnap });
+    }, 33);
+    return () => clearInterval(id);
+  }, [isPlayer, isOnline, wordIndex, phase]);
+
   const nextWord = () => {
     if (wordIndex + 1 >= cleanWords.length) setPhase('allDone');
     else setWordIndex(i => i + 1);
@@ -379,6 +508,22 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
   const g = game.current;
   const wrongActive = g.wrongUntil > performance.now();
+
+  // ── View model: the tutor (spectator) renders the student's broadcast snapshot;
+  //    everyone else renders their own live game model. ──
+  const snap = isSpectator ? netSnapRef.current : null;
+  const vTrolleyX = snap ? snap.trolleyX : g.trolleyX;
+  const vHookY    = snap ? snap.hookY    : g.hookY;
+  const vHeld     = snap ? snap.held     : g.held !== null;
+  const vPlaced   = snap ? snap.placed   : g.placed;
+  const vCubes    = snap ? snap.cubes    : g.cubes;
+  const vSlots    = snap ? snap.slots    : g.slots;
+  const vWrongAt  = snap ? snap.wrong    : (wrongActive ? g.wrongAt : null);
+  const vWordIndex = snap ? snap.wordIndex : wordIndex;
+  const vPhase    = snap ? snap.phase    : phase;
+  const vWord     = cleanWords[vWordIndex] ?? word;
+  const shareLink = roomId ? `${window.location.origin}/crane/${roomId}` : '';
+
   const pct = (x: number) => `${(x / STAGE_W) * 100}%`;
   const pcy = (y: number) => `${(y / STAGE_H) * 100}%`;
 
@@ -447,12 +592,16 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 16, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', color: '#fff', background: 'linear-gradient(rgba(8,20,40,0.55), rgba(8,20,40,0))' }}>
           <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
           <div style={{ flex: 1, fontWeight: 800, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-            🏗️ Crane Builder {topicTitle ? <span style={{ opacity: 0.8, fontWeight: 600 }}>· {topicTitle}</span> : null}
+            🏗️ Crane Builder {liveTopicTitle ? <span style={{ opacity: 0.8, fontWeight: 600 }}>· {liveTopicTitle}</span> : null}
+            {isSpectator && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: peerJoined ? '#86efac' : '#fde047' }}>{peerJoined ? '● Student live' : '○ Waiting…'}</span>}
+            {isPlayer && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#86efac' }}>● Tutor watching</span>}
           </div>
-          <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>Word {Math.min(wordIndex + 1, cleanWords.length)} / {cleanWords.length}</div>
-          <button onClick={() => setDesign(d => !d)} title="Edit layout"
-            style={{ background: design ? '#f59e0b' : 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✎</button>
-          <button onClick={() => playWord(word)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
+          <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>Word {Math.min(vWordIndex + 1, cleanWords.length)} / {cleanWords.length}</div>
+          {role === 'host' && (
+            <button onClick={() => setDesign(d => !d)} title="Edit layout"
+              style={{ background: design ? '#f59e0b' : 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>✎</button>
+          )}
+          <button onClick={() => playWord(vWord)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
         </div>
 
         {/* ── Scenery + static crane (one vector layer, stage coordinate space) ── */}
@@ -564,17 +713,17 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
         {/* ── Dynamic crane parts (HTML, track the hook) ── */}
         {/* Cable — drops from the lower edge of the jib (no trolley box) */}
-        <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(layout.ropeTop), height: pcy(g.hookY - layout.ropeTop), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
+        <div style={{ position: 'absolute', left: pct(vTrolleyX), top: pcy(layout.ropeTop), height: pcy(vHookY - layout.ropeTop), width: 4, transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#1f2937,#4b5563,#1f2937)', zIndex: 5 }} />
         {/* Hook block / electromagnet */}
         {imgOk.hook ? (
           <img src="/sprites/crane-hook.png" alt="" onError={() => dropImg('hook')}
-            style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY + layout.hook.dy), width: layout.hook.w, height: layout.hook.w, transform: 'translate(-50%,-50%)', zIndex: 7, pointerEvents: 'none',
-              filter: g.held !== null ? 'drop-shadow(0 0 10px rgba(239,68,68,0.9)) saturate(1.4)' : 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
+            style={{ position: 'absolute', left: pct(vTrolleyX), top: pcy(vHookY + layout.hook.dy), width: layout.hook.w, height: layout.hook.w, transform: 'translate(-50%,-50%)', zIndex: 7, pointerEvents: 'none',
+              filter: vHeld ? 'drop-shadow(0 0 10px rgba(239,68,68,0.9)) saturate(1.4)' : 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
         ) : (
-          <div style={{ position: 'absolute', left: pct(g.trolleyX), top: pcy(g.hookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
-            background: g.held !== null ? 'linear-gradient(#f87171,#b91c1c)' : 'linear-gradient(#9ca3af,#374151)',
+          <div style={{ position: 'absolute', left: pct(vTrolleyX), top: pcy(vHookY), width: 48, height: 26, transform: 'translate(-50%,-50%)', borderRadius: '8px 8px 12px 12px', zIndex: 7,
+            background: vHeld ? 'linear-gradient(#f87171,#b91c1c)' : 'linear-gradient(#9ca3af,#374151)',
             border: '2px solid #1f2937',
-            boxShadow: g.held !== null ? '0 0 20px rgba(239,68,68,0.85), inset 0 3px 0 rgba(255,255,255,0.35)' : 'inset 0 3px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.4)' }}>
+            boxShadow: vHeld ? '0 0 20px rgba(239,68,68,0.85), inset 0 3px 0 rgba(255,255,255,0.35)' : 'inset 0 3px 0 rgba(255,255,255,0.3), 0 3px 6px rgba(0,0,0,0.4)' }}>
             <div style={{ position: 'absolute', bottom: -4, left: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
             <div style={{ position: 'absolute', bottom: -4, right: 6, width: 8, height: 6, background: '#1f2937', borderRadius: '0 0 3px 3px' }} />
           </div>
@@ -587,13 +736,13 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         )}
 
         {/* ── Building ghost slots (remaining) — sized to match the block footprint ── */}
-        {g.slots.map((s, i) => i >= g.placed && (
+        {vSlots.map((s, i) => i >= vPlaced && (
           <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: `${bookFootprint(layout.cube).w * 100}%`, height: `${bookFootprint(layout.cube).h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
-              border: i === g.placed ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.55)',
-              background: i === g.placed ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
-              boxShadow: i === g.placed ? '0 0 18px rgba(253,224,71,0.6)' : 'none',
-              animation: i === g.placed ? 'craneSlotPulse 1s ease-in-out infinite' : undefined }} />
+              border: i === vPlaced ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.55)',
+              background: i === vPlaced ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
+              boxShadow: i === vPlaced ? '0 0 18px rgba(253,224,71,0.6)' : 'none',
+              animation: i === vPlaced ? 'craneSlotPulse 1s ease-in-out infinite' : undefined }} />
           </div>
         ))}
 
@@ -605,14 +754,14 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         )}
 
         {/* Wrong-placement flash */}
-        {wrongActive && g.wrongAt && (
-          <div style={{ position: 'absolute', left: pct(g.wrongAt.x), top: pcy(g.wrongAt.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 8 }}>
+        {vWrongAt && (
+          <div style={{ position: 'absolute', left: pct(vWrongAt.x), top: pcy(vWrongAt.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 8 }}>
             <div style={{ width: '100%', height: '100%', borderRadius: 10, background: 'rgba(239,68,68,0.55)', border: '3px solid #ef4444', boxSizing: 'border-box', animation: 'craneShake 0.4s' }} />
           </div>
         )}
 
         {/* ── Cubes (ground / held / placed) ── */}
-        {g.cubes.map(c => (
+        {vCubes.map(c => (
           <div key={c.id} style={{ position: 'absolute', left: pct(c.x), top: pcy(c.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: c.state === 'held' ? 9 : c.state === 'placed' ? 4 : 3 }}>
             {renderCube(c.glyph, c.kind, { held: c.state === 'held', placed: c.state === 'placed' })}
           </div>
@@ -668,8 +817,8 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
           </div>
         )}
 
-        {/* Help overlay */}
-        {showHelp && phase === 'playing' && (
+        {/* Help overlay (player & solo only — the tutor just watches) */}
+        {showHelp && phase === 'playing' && !isSpectator && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,20,40,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
             <div style={{ background: '#fff', borderRadius: 16, padding: '22px 26px', maxWidth: 420, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: 40, marginBottom: 6 }}>🏗️</div>
@@ -679,8 +828,12 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
                 Vowels <b>below</b> the letter go first (foundation); vowels <b>on top</b> go after.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13, color: '#334155', marginBottom: 14 }}>
-                <div>← → move</div><div>↑ ↓ raise / lower</div>
-                <div style={{ gridColumn: '1 / -1' }}><b>Space</b> grab / drop</div>
+                {showTouch ? (<>
+                  <div>🕹️ joystick = move</div><div>🧲 button = grab / drop</div>
+                </>) : (<>
+                  <div>← → move</div><div>↑ ↓ raise / lower</div>
+                  <div style={{ gridColumn: '1 / -1' }}><b>Space</b> grab / drop</div>
+                </>)}
               </div>
               <button onClick={() => { setShowHelp(false); playWord(word); }} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}>Start building</button>
             </div>
@@ -688,39 +841,89 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         )}
 
         {/* Word complete */}
-        {phase === 'wordDone' && (
+        {vPhase === 'wordDone' && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,20,40,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
             <div style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: 46 }}>🎉</div>
-              <div style={{ ...HAFS, direction: 'rtl', fontSize: 40, color: '#0f172a', margin: '6px 0 4px' }}>{word}</div>
+              <div style={{ ...HAFS, direction: 'rtl', fontSize: 40, color: '#0f172a', margin: '6px 0 4px' }}>{vWord}</div>
               <p style={{ margin: '0 0 16px', color: '#16a34a', fontWeight: 800 }}>Well built!</p>
-              <button onClick={nextWord} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', fontWeight: 800, cursor: 'pointer' }}>
-                {wordIndex + 1 >= cleanWords.length ? 'Finish 🏁' : 'Next word →'}
-              </button>
+              {isSpectator ? (
+                <p style={{ margin: 0, color: '#64748b', fontWeight: 700 }}>Waiting for the student to continue…</p>
+              ) : (
+                <button onClick={nextWord} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', fontWeight: 800, cursor: 'pointer' }}>
+                  {wordIndex + 1 >= cleanWords.length ? 'Finish 🏁' : 'Next word →'}
+                </button>
+              )}
             </div>
           </div>
         )}
 
         {/* All done */}
-        {phase === 'allDone' && (
+        {vPhase === 'allDone' && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,20,40,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
             <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: 52 }}>🏆</div>
               <h3 style={{ margin: '8px 0', fontWeight: 800, color: '#0f172a' }}>All words built!</h3>
-              <p style={{ margin: '0 0 16px', color: '#475569' }}>You completed every word in this lesson.</p>
+              <p style={{ margin: '0 0 16px', color: '#475569' }}>{isSpectator ? 'The student completed every word in this lesson.' : 'You completed every word in this lesson.'}</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                <button onClick={restart} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}>Play again</button>
+                {!isSpectator && <button onClick={restart} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}>Play again</button>}
                 <button onClick={onExit} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 10, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}>Done</button>
               </div>
             </div>
           </div>
         )}
+
+        {/* ── Tutor share-link / waiting overlay (spectator, until the student connects) ── */}
+        {isSpectator && !peerJoined && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,20,40,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 25, padding: 16 }}>
+            <div style={{ background: '#fff', borderRadius: 18, padding: '26px 28px', maxWidth: 460, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+              <div style={{ fontSize: 42 }}>🔗</div>
+              <h3 style={{ margin: '8px 0 6px', fontWeight: 800, color: '#0f172a' }}>Play live with your student</h3>
+              <p style={{ margin: '0 0 14px', fontSize: 14, color: '#475569' }}>Send this link to your student. They build the word on their device while you watch here — no screen share needed.</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input readOnly value={shareLink} onFocus={e => e.currentTarget.select()}
+                  style={{ flex: 1, border: '2px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#0f172a', background: '#f8fafc', minWidth: 0 }} />
+                <button onClick={() => { navigator.clipboard?.writeText(shareLink).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+                  style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 16px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>{copied ? '✓ Copied' : 'Copy'}</button>
+              </div>
+              <div style={{ marginTop: 16, color: '#64748b', fontSize: 13, fontWeight: 600 }}>○ Waiting for the student to join…</div>
+              <button onClick={onExit} style={{ marginTop: 14, background: 'transparent', color: '#94a3b8', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {/* ── Student connecting overlay (waiting for the tutor to send the words) ── */}
+        {isPlayer && !playerReady && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(8,20,40,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 25, padding: 16 }}>
+            <div style={{ background: '#fff', borderRadius: 18, padding: '28px 30px', maxWidth: 420, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+              <div style={{ fontSize: 42 }}>🏗️</div>
+              <h3 style={{ margin: '10px 0 6px', fontWeight: 800, color: '#0f172a' }}>Connecting to your tutor…</h3>
+              <p style={{ margin: 0, fontSize: 14, color: '#475569' }}>Hold on — your lesson is loading.</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Bottom hint overlay */}
-      <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', zIndex: 16, color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>
-        ← → move · ↑ ↓ raise/lower · <b>Space</b> grab / drop
-      </div>
+      {/* ── Touch controls (student / iPad) — joystick moves the crane, button grabs/drops ── */}
+      {showTouch && !isSpectator && playerReady && (vPhase === 'playing') && (
+        <>
+          <div style={{ position: 'absolute', bottom: 'calc(20px + env(safe-area-inset-bottom))', left: 22, zIndex: 18 }}>
+            <Joystick onKeys={setStickKeys} accentColor="#f59e0b" />
+          </div>
+          <button
+            onPointerDown={e => { e.preventDefault(); if (showHelp) setShowHelp(false); tryGrabOrDrop(); }}
+            style={{ position: 'absolute', bottom: 'calc(28px + env(safe-area-inset-bottom))', right: 26, zIndex: 18, width: 92, height: 92, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.85)', background: vHeld ? 'radial-gradient(circle at 35% 30%, #f87171, #b91c1c)' : 'radial-gradient(circle at 35% 30%, #38bdf8, #0369a1)', color: '#fff', fontWeight: 800, fontSize: 13, boxShadow: '0 6px 18px rgba(0,0,0,0.45)', touchAction: 'none', userSelect: 'none', cursor: 'pointer' }}>
+            <div style={{ fontSize: 28, lineHeight: 1 }}>🧲</div>
+            {vHeld ? 'DROP' : 'GRAB'}
+          </button>
+        </>
+      )}
+
+      {/* Bottom hint overlay (keyboard only) */}
+      {!showTouch && !isSpectator && (
+        <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center', zIndex: 16, color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: 600, textShadow: '0 1px 4px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>
+          ← → move · ↑ ↓ raise/lower · <b>Space</b> grab / drop
+        </div>
+      )}
 
       <style>{`
         @keyframes craneSlotPulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }

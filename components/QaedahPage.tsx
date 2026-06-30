@@ -51,6 +51,7 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   const [childMode,   setChildMode]   = useState(false);
   const [levelFilter, setLevelFilter] = useState<'all' | 1 | 2 | 3>('all');
   const [showCrane,   setShowCrane]   = useState(false);
+  const [craneRoomId, setCraneRoomId] = useState<string | null>(null); // set ⇒ live session (tutor spectates)
 
   // ── Challenge state ───────────────────────────────────────────────────────
   const [queue,       setQueue]      = useState<string[]>([]);
@@ -399,11 +400,18 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
                   ⚔️ Start Challenge — {count} word{count !== 1 ? 's' : ''}
                 </button>
                 <button
-                  onClick={() => setShowCrane(true)}
+                  onClick={() => { setCraneRoomId(null); setShowCrane(true); }}
                   disabled={count === 0}
                   className="px-8 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 bg-sky-600 hover:bg-sky-700 text-white shadow-sky-200 dark:shadow-none"
                 >
                   🏗️ Build the Word
+                </button>
+                <button
+                  onClick={() => { setCraneRoomId(crypto.randomUUID()); setShowCrane(true); }}
+                  disabled={count === 0}
+                  className="px-8 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-lg disabled:opacity-50 bg-violet-600 hover:bg-violet-700 text-white shadow-violet-200 dark:shadow-none"
+                >
+                  🔗 Play Live with Student
                 </button>
               </div>
             );
@@ -620,7 +628,9 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
         <CraneBuilderGame
           words={(levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter)).map(w => w.word)}
           topicTitle={selectedTopic?.titleEn}
-          onExit={() => setShowCrane(false)}
+          roomId={craneRoomId ?? undefined}
+          role={craneRoomId ? 'spectator' : 'host'}
+          onExit={() => { setShowCrane(false); setCraneRoomId(null); }}
         />
       )}
     </div>

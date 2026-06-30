@@ -43,6 +43,7 @@ import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
+import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
@@ -437,6 +438,13 @@ const App: React.FC = () => {
       onExit={() => { window.location.href = '/'; }}
     />
   );
+
+  // ── Crane Builder live session — student joins the tutor's link, no auth ────
+  const craneRoomId = (() => {
+    const m = window.location.pathname.match(/^\/crane\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (craneRoomId) return <CraneBuilderJoinPage roomId={craneRoomId} />;
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
