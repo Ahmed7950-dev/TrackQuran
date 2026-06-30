@@ -2,9 +2,13 @@ import React from 'react';
 import { netEarning } from '../utils/timezones';
 import SearchableTimezone from './SearchableTimezone';
 
+export type Currency = 'USD' | 'TRY';
+export const CURRENCY_SYMBOL: Record<Currency, string> = { USD: '$', TRY: '₺' };
+
 export interface StudentBilling {
   timezone?: string;
   hourlyRate?: number;
+  currency?: Currency;
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
   /** Preply only — monthly subscription renewal date (recurs on this day each month). */
@@ -22,6 +26,8 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
   const pct = value.preplyPercentage ?? 18;
   const rate = value.hourlyRate ?? 0;
   const net = rate > 0 ? netEarning(rate, studentType, pct) : 0;
+  const currency: Currency = value.currency ?? 'USD';
+  const sym = CURRENCY_SYMBOL[currency];
 
   const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400';
   const labelCls = 'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1';
@@ -66,17 +72,41 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
       </div>
       )}
 
+      {/* Currency */}
+      <div>
+        <span className={labelCls}>Currency</span>
+        <div className="flex gap-2">
+          {(['USD', 'TRY'] as const).map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => onChange({ ...value, currency: c })}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                currency === c
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-gray-600 hover:border-teal-400'
+              }`}
+            >
+              {c === 'USD' ? '$ USD' : '₺ TL'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Hourly rate + Preply % */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className={labelCls}>Hourly rate</label>
-          <input
-            type="number" min={0} step="0.5" inputMode="decimal"
-            value={value.hourlyRate ?? ''}
-            onChange={e => onChange({ ...value, hourlyRate: e.target.value === '' ? undefined : Number(e.target.value) })}
-            placeholder="e.g. 20"
-            className={inputCls}
-          />
+          <label className={labelCls}>Hourly rate ({sym})</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">{sym}</span>
+            <input
+              type="number" min={0} step="0.5" inputMode="decimal"
+              value={value.hourlyRate ?? ''}
+              onChange={e => onChange({ ...value, hourlyRate: e.target.value === '' ? undefined : Number(e.target.value) })}
+              placeholder="e.g. 20"
+              className={`${inputCls} pl-7`}
+            />
+          </div>
         </div>
         {studentType === 'preply' && (
           <div>
@@ -113,7 +143,7 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
           <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
             {studentType === 'preply' ? `You receive (after ${pct}% Preply)` : 'You receive (platform)'}
           </span>
-          <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">{net.toFixed(2)} / hr</span>
+          <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">{sym}{net.toFixed(2)} / hr</span>
         </div>
       )}
     </div>

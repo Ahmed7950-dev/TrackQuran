@@ -246,6 +246,7 @@ interface LinkStudent {
   kind: 'quran' | 'arabic';
   timezone?: string;
   hourlyRate?: number;
+  currency?: 'USD' | 'TRY';
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
 }
@@ -270,8 +271,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // Unified linkable-student list — BOTH Quran and Arabic students, so the two
   // calendars act as one unit (same linked events + combined weekly earnings).
   const linkStudents: LinkStudent[] = useMemo(() => [
-    ...quranStudents.map(s => ({ id: s.id, name: s.name, kind: 'quran' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
-    ...arabicStudents.map(s => ({ id: s.id, name: s.name, kind: 'arabic' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
+    ...quranStudents.map(s => ({ id: s.id, name: s.name, kind: 'quran' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
+    ...arabicStudents.map(s => ({ id: s.id, name: s.name, kind: 'arabic' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
   ], [quranStudents, arabicStudents]);
   const linkStudentById = useMemo(() => {
     const m = new Map<string, LinkStudent>();
@@ -1317,7 +1318,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
                   const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
                   const timeRange = `${fmtT(startDT)} - ${fmtT(endDT)}`;
-                  const rateStr = linkedBilling?.hourlyRate != null ? `${linkedBilling.hourlyRate}$/h` : null;
+                  const rateStr = linkedBilling?.hourlyRate != null ? `${linkedBilling.hourlyRate}${linkedBilling.currency === 'TRY' ? '₺' : '$'}/h` : null;
                   // Background by state: Platform-linked = green, Preply-linked = pink, unlinked = white.
                   const isPlatform     = isLinked && linkedBilling?.studentType === 'platform';
                   const isPreplyLinked = isLinked && !isPlatform;

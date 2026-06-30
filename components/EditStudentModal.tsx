@@ -35,7 +35,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   const [ageCategory, setAgeCategory] = useState<AgeCategory>(student.ageCategory ?? 'young_gems');
   const [profileIcon, setProfileIcon] = useState<string | undefined>(student.profileIcon);
   const [billing, setBilling] = useState<StudentBilling>({
-    timezone: student.timezone, hourlyRate: student.hourlyRate,
+    timezone: student.timezone, hourlyRate: student.hourlyRate, currency: student.currency ?? 'USD',
     studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
     subscriptionRenewalDate: student.subscriptionRenewalDate,
   });
@@ -58,7 +58,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
         setAgeCategory(student.ageCategory ?? 'young_gems');
         setProfileIcon(student.profileIcon);
         setBilling({
-          timezone: student.timezone, hourlyRate: student.hourlyRate,
+          timezone: student.timezone, hourlyRate: student.hourlyRate, currency: student.currency ?? 'USD',
           studentType: student.studentType ?? 'preply', preplyPercentage: student.preplyPercentage ?? 18,
           subscriptionRenewalDate: student.subscriptionRenewalDate,
         });
@@ -77,7 +77,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateStudent({ ...student, name, dob: dob || undefined, ageCategory: effectiveCategory, profileIcon,
-      timezone: billing.timezone, hourlyRate: billing.hourlyRate,
+      timezone: billing.timezone, hourlyRate: billing.hourlyRate, currency: billing.currency,
       studentType: billing.studentType, preplyPercentage: billing.preplyPercentage,
       subscriptionRenewalDate: billing.studentType === 'platform' ? undefined : billing.subscriptionRenewalDate });
     onClose();

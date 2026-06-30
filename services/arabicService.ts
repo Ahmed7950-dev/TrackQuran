@@ -43,6 +43,7 @@ interface ArabicStudentRow {
   share_token: string | null;
   active_meet_url: string | null;
   hourly_rate: number | null;
+  currency: string | null;
   student_type: string | null;
   preply_percentage: number | null;
   auth_user_id?: string | null;
@@ -124,6 +125,7 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     shareToken:          r.share_token      ?? undefined,
     activeMeetUrl:       r.active_meet_url  ?? undefined,
     hourlyRate:          r.hourly_rate       ?? undefined,
+    currency:            (r.currency as ArabicStudent['currency']) ?? undefined,
     studentType:         (r.student_type as ArabicStudent['studentType']) ?? undefined,
     preplyPercentage:    r.preply_percentage ?? undefined,
     authUserId:          r.auth_user_id      ?? undefined,
@@ -155,6 +157,7 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     share_token:         s.shareToken      ?? null,
     active_meet_url:     s.activeMeetUrl   ?? null,
     hourly_rate:         s.hourlyRate       ?? null,
+    currency:            s.currency         ?? null,
     student_type:        s.studentType      ?? null,
     preply_percentage:   s.preplyPercentage ?? null,
     auth_user_id:        s.authUserId       ?? null,

@@ -227,6 +227,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
   const [deadline,    setDeadline]    = useState(existing?.goalDeadline ?? '');
   const [billing,     setBilling]     = useState<StudentBilling>({
     hourlyRate: existing?.hourlyRate,
+    currency: existing?.currency ?? 'USD',
     studentType: existing?.studentType ?? 'preply',
     preplyPercentage: existing?.preplyPercentage ?? 18,
   });
@@ -308,6 +309,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
       goalDeadline:       deadline || undefined,
       completedLessonIds: existing?.completedLessonIds ?? [],
       hourlyRate:         billing.hourlyRate,
+      currency:           billing.currency,
       studentType:        billing.studentType,
       preplyPercentage:   billing.preplyPercentage,
       createdAt:          existing?.createdAt ?? new Date().toISOString(),

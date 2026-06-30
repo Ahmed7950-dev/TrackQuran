@@ -32,7 +32,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
   const [manualCategory, setManualCategory] = useState<AgeCategory>('young_gems');
-  const [billing, setBilling] = useState<StudentBilling>({ studentType: 'preply', preplyPercentage: 18 });
+  const [billing, setBilling] = useState<StudentBilling>({ studentType: 'preply', preplyPercentage: 18, currency: 'USD' });
   const [profileIcon, setProfileIcon] = useState<string | undefined>(undefined);
   const [error, setError] = useState('');
   const { t } = useI18n();
@@ -53,7 +53,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
     setName('');
     setDob('');
     setManualCategory('young_gems');
-    setBilling({ studentType: 'preply', preplyPercentage: 18 });
+    setBilling({ studentType: 'preply', preplyPercentage: 18, currency: 'USD' });
     setProfileIcon(undefined);
   };
 
@@ -61,7 +61,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
     setName('');
     setDob('');
     setManualCategory('young_gems');
-    setBilling({ studentType: 'preply', preplyPercentage: 18 });
+    setBilling({ studentType: 'preply', preplyPercentage: 18, currency: 'USD' });
     setError('');
     onClose();
   };

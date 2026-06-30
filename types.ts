@@ -88,6 +88,7 @@ export interface Student {
   // ── Billing / scheduling (tutor-only; never shown to the student) ──
   timezone?: string;                       // IANA tz id, e.g. "America/New_York"
   hourlyRate?: number;                     // tutor's hourly rate for this student
+  currency?: 'USD' | 'TRY';                // billing currency for the rate (default USD)
   studentType?: 'preply' | 'platform';     // preply = commission taken; platform = none
   preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
   subscriptionRenewalDate?: string;        // Preply only — monthly renewal date (YYYY-MM-DD); reminder fires 1 day before
@@ -279,6 +280,7 @@ export interface ArabicStudent {
   activeMeetUrl?: string;          // Google Meet link for the next lesson
   // ── Billing (tutor-only; same as Quran students) ──
   hourlyRate?: number;
+  currency?: 'USD' | 'TRY';
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
   // ── Self-registration (student created their own account via Google) ──
