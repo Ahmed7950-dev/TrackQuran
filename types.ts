@@ -93,10 +93,11 @@ export interface Student {
   preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
   subscriptionRenewalDate?: string;        // Preply only — monthly renewal date (YYYY-MM-DD); reminder fires 1 day before
   // ── Bill / invoice (tutor-only; platform students) ──
+  billStudentName?: string;                // editable name shown on the invoice (defaults to name)
   billPayerName?: string;                  // "bill to" — guardian / payer name
   billImprovementNote?: string;            // free-text "improvement made" note for the invoice
-  billLessonsOverride?: number;            // editable override of computed lessons count for the period
-  billPriceOverride?: number;              // editable override of per-lesson price
+  billPriceOverride?: number;              // editable override of per-60-min-lesson price
+  billDurations?: Record<string, number>;  // per-lesson duration in minutes, keyed by YYYY-MM-DD (default 60)
   // ── Self-registration (student created their own account via Google) ──
   authUserId?: string;                     // Supabase auth uid of the self-registered student
   selfRegistered?: boolean;

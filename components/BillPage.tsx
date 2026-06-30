@@ -11,22 +11,20 @@ declare const html2pdf: any;
 
 const BILL_W = 794;        // A4 width @96dpi
 const PRINTABLE_H = 1040;  // A4 height @96dpi (~1123) minus margins
+const DEFAULT_MIN = 60;    // default lesson length
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const inMonthOf = (iso: string, y: number, m: number) => {
-  const d = new Date(iso);
-  return d.getFullYear() === y && d.getMonth() === m;
-};
+const keyOf = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const inMonthOf = (iso: string, y: number, m: number) => { const d = new Date(iso); return d.getFullYear() === y && d.getMonth() === m; };
 
-/** Attended lessons in a month: explicit PRESENT + implicit-present (a day with an
- *  achievement and no explicit record). An explicit record of ANY status wins. */
-function attendedKeysInMonth(student: Student, monthDate: Date): Set<string> {
+/** Attended-day keys (YYYY-MM-DD) in a month: explicit PRESENT + implicit-present
+ *  (a day with an achievement and no explicit record). Explicit record wins. */
+function attendedKeysInMonth(student: Student, monthDate: Date): string[] {
   const y = monthDate.getFullYear(), m = monthDate.getMonth();
   const explicit = new Map<string, AttendanceStatus>();
   for (const a of student.attendance ?? []) {
     if (inMonthOf(a.date, y, m)) explicit.set(new Date(a.date).toDateString(), a.status);
   }
-  const keyOf = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const keys = new Set<string>();
   for (const a of student.attendance ?? []) {
     if (inMonthOf(a.date, y, m) && a.status === AttendanceStatus.Present) keys.add(keyOf(a.date));
@@ -36,7 +34,7 @@ function attendedKeysInMonth(student: Student, monthDate: Date): Set<string> {
     const ds = new Date(a.date).toDateString();
     if (!explicit.has(ds)) keys.add(keyOf(a.date));
   }
-  return keys;
+  return [...keys].sort(); // ascending YYYY-MM-DD
 }
 
 interface BillPageProps {
@@ -62,28 +60,40 @@ const BillPage: React.FC<BillPageProps> = ({
   // ── Period ──
   const [billMonth, setBillMonth] = useState<Date>(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
   const issuedOn = useMemo(() => new Date(), []);
-  const presentDays = useMemo(() => attendedKeysInMonth(student, billMonth), [student, billMonth]);
-  const computedLessons = presentDays.size;
+  const sessionKeys = useMemo(() => attendedKeysInMonth(student, billMonth), [student, billMonth]);
+  const presentDays = useMemo(() => new Set(sessionKeys), [sessionKeys]);
 
   // ── Editable per-student ──
+  const [studentName, setStudentName] = useState(student.billStudentName ?? student.name);
   const [payerName, setPayerName] = useState(student.billPayerName ?? '');
   const [improvementNote, setImprovementNote] = useState(student.billImprovementNote ?? '');
-  const [lessonsInput, setLessonsInput] = useState(student.billLessonsOverride != null ? String(student.billLessonsOverride) : '');
   const [priceInput, setPriceInput] = useState(
     student.billPriceOverride != null ? String(student.billPriceOverride)
       : student.hourlyRate != null ? String(student.hourlyRate) : ''
   );
+  // Per-lesson durations (minutes), keyed by date. Defaults to 60 for any day not set.
+  const [durations, setDurations] = useState<Record<string, number>>(() => ({ ...(student.billDurations ?? {}) }));
   // ── Editable per-tutor ──
   const [receiverName, setReceiverName] = useState(tutorReceiver ?? '');
   const [iban, setIban] = useState(tutorIban ?? '');
 
-  const lessons = lessonsInput.trim() === '' ? computedLessons : (Number(lessonsInput) || 0);
+  const minutesFor = (k: string) => durations[k] ?? DEFAULT_MIN;
+  const setMinutesFor = (k: string, min: number) => setDurations(prev => ({ ...prev, [k]: Math.max(0, min) }));
+
   const price = priceInput.trim() === '' ? (student.hourlyRate ?? 0) : (Number(priceInput) || 0);
-  const total = lessons * price;
+  const totalMinutes = sessionKeys.reduce((s, k) => s + minutesFor(k), 0);
+  const totalHours = totalMinutes / 60;
+  const total = totalHours * price;
   const currency: Currency = (student.currency as Currency) ?? 'USD';
   const sym = CURRENCY_SYMBOL[currency];
-  const currencyLabel = `${currency} ${sym}`;        // e.g. "USD $" / "TRY ₺"
+  const currencyLabel = `${currency} ${sym}`;        // "USD $" / "TRY ₺"
   const fmt = (n: number) => `${sym}${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  const hoursUnit = t('bill.hoursUnit');
+  const fmtHours = (min: number) => `${Number((min / 60).toFixed(2))} ${hoursUnit}`;   // 60→"1 h", 90→"1.5 h"
+  const fmtSessionDate = (k: string) => {
+    const [y, m, d] = k.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(dateLocale, { day: 'numeric', month: 'long' });
+  };
 
   // ── Stats (same primitives as the statistics page) ──
   const pagesRead = useMemo(() => new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size, [student]);
@@ -108,12 +118,13 @@ const BillPage: React.FC<BillPageProps> = ({
   const persistStudentBill = useCallback(() => {
     onUpdateStudent({
       ...student,
+      billStudentName: studentName.trim() && studentName.trim() !== student.name ? studentName.trim() : undefined,
       billPayerName: payerName.trim() || undefined,
       billImprovementNote: improvementNote.trim() || undefined,
-      billLessonsOverride: lessonsInput.trim() === '' ? undefined : (Number(lessonsInput) || undefined),
       billPriceOverride: priceInput.trim() === '' ? undefined : (Number(priceInput) || undefined),
+      billDurations: Object.keys(durations).length ? durations : undefined,
     });
-  }, [student, payerName, improvementNote, lessonsInput, priceInput, onUpdateStudent]);
+  }, [student, studentName, payerName, improvementNote, priceInput, durations, onUpdateStudent]);
   const persistTutorBill = useCallback(() => {
     onSaveTutorBillInfo({ receiverName: receiverName.trim(), iban: iban.trim() });
   }, [receiverName, iban, onSaveTutorBillInfo]);
@@ -126,7 +137,7 @@ const BillPage: React.FC<BillPageProps> = ({
   const dayNames = isRtl ? ['ن', 'ث', 'ر', 'خ', 'ج', 'س', 'ح'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const periodStr = billMonth.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
-  const periodRangeStr = `1–${daysInMonth} ${periodStr}`;          // e.g. "1–30 June 2026"
+  const periodRangeStr = `1–${daysInMonth} ${periodStr}`;          // "1–30 June 2026"
   const issuedStr = issuedOn.toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' });
   const billNumber = `INV-${calYear}${pad(calMonth + 1)}-${(student.name || 'STU').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`;
 
@@ -153,7 +164,7 @@ const BillPage: React.FC<BillPageProps> = ({
 
     const opt = {
       margin: 0.4,
-      filename: `${(student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`,
+      filename: `${(studentName || student.name || 'student').replace(/ /g, '_')}_${calYear}${pad(calMonth + 1)}_bill.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0, windowWidth: BILL_W },
       jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
@@ -170,7 +181,7 @@ const BillPage: React.FC<BillPageProps> = ({
       if (wasDark) root.classList.add('dark');
       setIsExporting(false);
     }
-  }, [isExporting, student.name, calYear, calMonth, t]);
+  }, [isExporting, studentName, student.name, calYear, calMonth, t]);
 
   const getButtonText = () => isExporting ? t('bill.exportGenerating') : (typeof html2pdf === 'undefined' ? t('bill.exportLoading') : t('bill.exportPdf'));
   const isButtonDisabled = isExporting || typeof html2pdf === 'undefined';
@@ -198,21 +209,45 @@ const BillPage: React.FC<BillPageProps> = ({
             <button onClick={() => setBillMonth(p => { const d = new Date(p); d.setMonth(d.getMonth() + 1); return d; })} className="px-2 py-1 rounded bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300">›</button>
           </div>
         </div>
-        <div>
-          <label className={labelCls}>{t('bill.payerName')}</label>
-          <input value={payerName} onChange={e => setPayerName(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.payerNamePlaceholder')} className={inputCls} />
-        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className={labelCls}>{t('bill.lessonsCount')}</label>
-            <input type="number" inputMode="numeric" value={lessonsInput} onChange={e => setLessonsInput(e.target.value)} onBlur={persistStudentBill} placeholder={String(computedLessons)} className={inputCls} />
+            <label className={labelCls}>{t('bill.studentName')}</label>
+            <input value={studentName} onChange={e => setStudentName(e.target.value)} onBlur={persistStudentBill} placeholder={student.name} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>{t('bill.pricePerLesson')} ({sym})</label>
             <input type="number" inputMode="decimal" value={priceInput} onChange={e => setPriceInput(e.target.value)} onBlur={persistStudentBill} placeholder={String(student.hourlyRate ?? 0)} className={inputCls} />
           </div>
         </div>
-        <p className="text-[11px] text-slate-400">{t('bill.lessonsHint')}</p>
+        <div>
+          <label className={labelCls}>{t('bill.payerName')}</label>
+          <input value={payerName} onChange={e => setPayerName(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.payerNamePlaceholder')} className={inputCls} />
+        </div>
+
+        {/* Per-lesson durations (auto-imported from attendance, editable) */}
+        <div>
+          <label className={labelCls}>{t('bill.sessions')}</label>
+          {sessionKeys.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">{t('bill.noSessions')}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {sessionKeys.map(k => (
+                <div key={k} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-600">
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">{fmtSessionDate(k)}</span>
+                  <span className="flex items-center gap-1">
+                    <input type="number" inputMode="numeric" min={0} step={15} value={minutesFor(k)}
+                      onChange={e => setMinutesFor(k, e.target.value === '' ? 0 : Number(e.target.value))}
+                      onBlur={persistStudentBill}
+                      className="w-16 px-2 py-1 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-xs text-center focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                    <span className="text-[10px] text-slate-400">{t('bill.minutes')}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-slate-400 mt-1">{t('bill.lessonsHint')}</p>
+        </div>
+
         <div>
           <label className={labelCls}>{t('bill.improvementNote')}</label>
           <textarea value={improvementNote} onChange={e => setImprovementNote(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.improvementNotePlaceholder')} rows={2} className={inputCls} />
@@ -273,7 +308,7 @@ const BillPage: React.FC<BillPageProps> = ({
           <section className="flex items-center justify-between mt-5 px-1">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('bill.studentName')}</p>
-              <p className="text-lg font-bold text-slate-900">{student.name}</p>
+              <p className="text-lg font-bold text-slate-900">{studentName || student.name}</p>
             </div>
             <div className="text-end">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t('bill.period')}</p>
@@ -281,7 +316,7 @@ const BillPage: React.FC<BillPageProps> = ({
             </div>
           </section>
 
-          {/* Calendar | table + stats */}
+          {/* Calendar | stats */}
           <section className="grid grid-cols-[260px_1fr] gap-6 mt-5">
             <div className="rounded-xl border border-slate-200 p-3">
               <p className="text-[11px] font-bold text-slate-600 mb-2 text-center">{t('bill.attendanceTitle')}</p>
@@ -300,34 +335,47 @@ const BillPage: React.FC<BillPageProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
-                    <th className="text-start font-bold py-2">{t('bill.description')}</th>
-                    <th className="text-center font-bold py-2 w-16">{t('bill.qty')}</th>
-                    <th className="text-end font-bold py-2 w-24">{t('bill.unitPrice')}</th>
-                    <th className="text-end font-bold py-2 w-24">{t('bill.amount')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-slate-100">
-                    <td className="py-3 text-slate-700">{t('bill.lessonLineItem')}</td>
-                    <td className="py-3 text-center text-slate-700">{lessons}</td>
-                    <td className="py-3 text-end text-slate-700" dir="ltr">{fmt(price)}</td>
-                    <td className="py-3 text-end font-semibold text-slate-900" dir="ltr">{fmt(total)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className="grid grid-cols-3 gap-2 mt-4">
-                {stats.map(s => (
-                  <div key={s.label} className="rounded-lg bg-slate-50 px-2.5 py-2">
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 leading-tight">{s.label}</p>
-                    <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={s.value}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 gap-2 content-start">
+              {stats.map(s => (
+                <div key={s.label} className="rounded-lg bg-slate-50 px-2.5 py-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 leading-tight">{s.label}</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={s.value}>{s.value}</p>
+                </div>
+              ))}
             </div>
+          </section>
+
+          {/* Lesson breakdown — one row per attended date */}
+          <section className="mt-5">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-200">
+                  <th className="text-start font-bold py-2 w-8">#</th>
+                  <th className="text-start font-bold py-2">{t('bill.date')}</th>
+                  <th className="text-center font-bold py-2 w-28">{t('bill.duration')}</th>
+                  <th className="text-end font-bold py-2 w-24">{t('bill.amount')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessionKeys.length === 0 ? (
+                  <tr><td colSpan={4} className="py-4 text-center text-slate-400 text-xs">{t('bill.noSessions')}</td></tr>
+                ) : sessionKeys.map((k, i) => (
+                  <tr key={k} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-400 text-xs">{i + 1}</td>
+                    <td className="py-2 text-slate-700">{fmtSessionDate(k)}</td>
+                    <td className="py-2 text-center text-slate-700" dir="ltr">{fmtHours(minutesFor(k))}</td>
+                    <td className="py-2 text-end font-semibold text-slate-900" dir="ltr">{fmt((minutesFor(k) / 60) * price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="text-[11px] text-slate-500">
+                  <td colSpan={2} className="pt-2">{t('bill.lessonsCount')}: {sessionKeys.length}</td>
+                  <td className="pt-2 text-center" dir="ltr">{Number(totalHours.toFixed(2))} {hoursUnit}</td>
+                  <td className="pt-2 text-end" dir="ltr">{fmt(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </section>
 
           {/* Improvement note */}
@@ -346,7 +394,7 @@ const BillPage: React.FC<BillPageProps> = ({
                 <span className="text-[11px] font-bold text-teal-100" dir="ltr">{currencyLabel}</span>
               </div>
               <div className="flex items-baseline justify-between mt-1 gap-4">
-                <span className="text-[11px] text-teal-200" dir="ltr">{lessons} × {fmt(price)}</span>
+                <span className="text-[11px] text-teal-200" dir="ltr">{Number(totalHours.toFixed(2))} {hoursUnit} × {fmt(price)}</span>
                 <span className="text-4xl font-black tracking-tight" dir="ltr">{fmt(total)}</span>
               </div>
               <p className="text-[10px] text-teal-200 mt-1 text-end">{periodRangeStr}</p>
