@@ -871,6 +871,7 @@ const LetterWithError: React.FC<{
     isCursorActive?: boolean;
     joinLead?: boolean;
     joinTrail?: boolean;
+    focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
 }> = ({
     letter,
     letterKey,
@@ -896,6 +897,7 @@ const LetterWithError: React.FC<{
     isCursorActive,
     joinLead,
     joinTrail,
+    focusMode,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
@@ -1010,7 +1012,7 @@ const LetterWithError: React.FC<{
             )}
             {mistake && mistake.errorText && !isEditing && (
                 <div
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-0.5 sm:mb-3 z-40 pointer-events-auto group"
+                    className={`absolute bottom-full left-1/2 -translate-x-1/2 z-40 pointer-events-auto group ${focusMode ? 'mb-3 sm:mb-6' : 'mb-0.5 sm:mb-3'}`}
                     style={{ zIndex: 40 }}
                     onMouseEnter={(e) => {
                         (e.currentTarget as HTMLElement).style.zIndex = '9999';
@@ -1019,8 +1021,12 @@ const LetterWithError: React.FC<{
                         (e.currentTarget as HTMLElement).style.zIndex = '40';
                     }}
                 >
-                    <div className={`px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg shadow-lg whitespace-nowrap max-w-[180px] sm:max-w-[300px] font-medium transition-all ${
-                        mistake.errorType === 'tajweed' 
+                    <div className={`shadow-lg transition-all ${
+                        focusMode
+                            ? 'px-4 py-2 text-xl sm:text-3xl leading-snug rounded-2xl whitespace-normal break-words max-w-[70vw] sm:max-w-[640px] font-semibold'
+                            : 'px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg whitespace-nowrap max-w-[180px] sm:max-w-[300px] font-medium'
+                    } ${
+                        mistake.errorType === 'tajweed'
                             ? 'bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-200 border-2 border-green-300 dark:border-green-700'
                             : 'bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border-2 border-red-300 dark:border-red-700'
                     } group-hover:shadow-2xl`} title={mistake.errorText}>
@@ -3918,6 +3924,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                                                            focusMode
                                                                         />
                                                                     );
                                                                 })}
