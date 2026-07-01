@@ -869,8 +869,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     setP1CrashAnim(null); setP2CrashAnim(null);
     setP1RemoteCrashAnim(null); setP2RemoteCrashAnim(null);
     setStatus('playing');
+    // Host announces the (re)start so the guest performs a full local reset —
+    // clears its remote crash state (which otherwise hides the plane) and
+    // re-aligns its prediction. Guarded so only the host emits it.
+    if (gameMode === '2p-online' && !isP2) channelRef.current?.send({ type: 'broadcast', event: 'restart', payload: {} });
     startRound(q[0]);
-  }, [letters, startRound, gameMode]);
+  }, [letters, startRound, gameMode, isP2]);
 
   // ── Hit handling ──────────────────────────────────────────────────────────
   const handleHit = useCallback((bubble: Bubble, player: 1 | 2) => {
@@ -1465,6 +1469,12 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       }
     });
 
+    ch.on('broadcast', { event: 'restart' }, () => {
+      // Host restarted: reset our prediction so both planes re-align to the
+      // host's fresh positions, and clear local state via startGame.
+      p2PredInitedRef.current = false;
+      startGameRef.current();
+    });
     ch.subscribe(() => {
       ch.send({ type: 'broadcast', event: 'ready', payload: { p2Plane: p2Plane, p2Name: p2Name } });
     });
@@ -2118,7 +2128,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             </div>
             <div className="flex gap-2 justify-center flex-wrap">
               {isOnline
-                ? <button onClick={startGame} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
+                ? <button onClick={handleRestart} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
                 : <button onClick={() => setStatus('start')} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Play Again</button>}
               <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Exit</button>
             </div>
@@ -2148,7 +2158,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
             </div>
             <div className="flex gap-2 justify-center flex-wrap">
               {isOnline
-                ? <button onClick={startGame} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
+                ? <button onClick={handleRestart} className="px-6 py-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white font-extrabold shadow-md active:scale-95 transition-all">🔄 Restart Game</button>
                 : <button onClick={() => setStatus('start')} className="px-6 py-2.5 rounded-full bg-orange-400 hover:bg-orange-500 text-white font-extrabold shadow-md active:scale-95 transition-all">Try Again</button>}
               <button onClick={onExit} className="px-5 py-2.5 rounded-full bg-white border-2 border-sky-200 text-sky-600 font-bold active:scale-95 transition-all">Exit</button>
             </div>
