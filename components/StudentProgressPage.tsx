@@ -3847,6 +3847,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             style={{
                                                 width: '100%',
                                                 overflow: 'hidden',
+                                                // Vertical room so the mistake note above a word isn't clipped by
+                                                // overflow:hidden. The mask fades left/right only (vertically uniform),
+                                                // so this padding stays fully visible.
+                                                paddingTop: '6rem',
+                                                paddingBottom: '6rem',
                                                 // Fade edges to indicate more content
                                                 WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
                                                 maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
