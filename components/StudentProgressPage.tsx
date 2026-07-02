@@ -1531,6 +1531,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
+    const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
     const didResumeRef = useRef(false); // resume to the last-log position only once, on first open
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
@@ -2492,6 +2493,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return /[\u0600-\u06FF]/.test(str);
     };
 
+    // Convert Arabic-Indic (\u0660-\u0669) and Eastern Arabic (\u06F0-\u06F9) digits to ASCII so a
+    // tutor typing "\u0665\u0660" or "\u0662:\u0662\u0665\u0665" on an Arabic keyboard can jump to pages/verses.
+    const normalizeDigits = (str: string): string =>
+        str.replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+           .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0));
+
     // Strip Arabic diacritical marks (tashkeel) so "\u0627\u0644\u0641\u0627\u062A\u062D\u0629" matches "\u0627\u0644\u0641\u064E\u0627\u062A\u0650\u062D\u064E\u0629"
     const stripArabicDiacritics = (str: string): string =>
         str.replace(/[\u064B-\u065F\u0610-\u061A\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '');
@@ -2596,7 +2603,33 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         
         return bestMatch;
     };
-    
+
+    // Top-N surah matches for the live search typeahead (same scoring as
+    // findBestMatchingSurah, but keeps every candidate above the threshold).
+    const getTopSurahMatches = (term: string, n = 5): { surah: typeof QURAN_METADATA[0], score: number }[] => {
+        const normalizedTerm = normalizeString(term);
+        const isArabicQuery = containsArabic(term);
+        const strippedTerm = isArabicQuery ? stripArabicDiacritics(term.trim()) : normalizedTerm;
+        const threshold = isArabicQuery ? 0.3 : 0.4;
+        const out: { surah: typeof QURAN_METADATA[0], score: number }[] = [];
+        for (const surah of QURAN_METADATA) {
+            const strippedSurahName = stripArabicDiacritics(surah.name);
+            const score = Math.max(
+                isArabicQuery ? calculateSimilarity(strippedTerm, strippedSurahName) : 0,
+                isArabicQuery && strippedSurahName.includes(strippedTerm) ? 0.95 : 0,
+                isArabicQuery && strippedTerm.includes(strippedSurahName) ? 0.9 : 0,
+                calculateSimilarity(normalizedTerm, surah.englishName),
+                calculateSimilarity(normalizedTerm, surah.transliteratedName),
+                calculateSimilarity(normalizedTerm, surah.transliteratedName.replace(/-/g, ' ')),
+                calculateSimilarity(normalizedTerm, surah.transliteratedName.replace(/-/g, '')),
+                !isArabicQuery && surah.englishName.toLowerCase().includes(normalizedTerm) ? 0.7 : 0,
+                !isArabicQuery && surah.transliteratedName.toLowerCase().replace(/-/g, ' ').includes(normalizedTerm) ? 0.7 : 0,
+            );
+            if (score > threshold) out.push({ surah, score });
+        }
+        return out.sort((a, b) => b.score - a.score).slice(0, n);
+    };
+
     const handleSurahSelection = (id: number) => {
         setSelectedSurahId(id);
         // Open at the START of the surah (page range + scroll both target ayah 1).
@@ -2634,13 +2667,65 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return currentPageRange.start > firstPage;
     };
 
+    // ── Live search typeahead — instant suggestions while typing (no network).
+    //    Recognizes page numbers, surah numbers, verse keys (Western or Arabic
+    //    digits) and fuzzy surah names in Arabic / English / transliteration.
+    const searchSuggestions = useMemo(() => {
+        const raw = normalizeDigits(searchInput.trim());
+        if (!raw) return [] as { key: string; icon: string; label: string; sub?: string; go: () => void }[];
+        const out: { key: string; icon: string; label: string; sub?: string; go: () => void }[] = [];
+        const jump = (surahNum: number, verseKey: string) => {
+            if (selectedSurahId !== surahNum) setSelectedSurahId(surahNum);
+            setScrollToVerseKey(verseKey);
+            setShowSearchSuggestions(false);
+        };
+        const openSurah = (id: number) => { handleSurahSelection(id); setShowSearchSuggestions(false); };
+
+        if (/^\d+$/.test(raw)) {
+            const n = parseInt(raw, 10);
+            if (n >= 1 && n <= 604) {
+                out.push({ key: `pg-${n}`, icon: '📄', label: `Page ${n}`, go: () => {
+                    const entry = pageVerseList.find(([p]) => p === n);
+                    if (entry) jump(entry[1], `${entry[1]}:${entry[2]}`);
+                } });
+            }
+            if (n >= 1 && n <= 114) {
+                const s = QURAN_METADATA.find(m => m.number === n);
+                if (s) out.push({ key: `su-${n}`, icon: '📖', label: `${n}. ${s.transliteratedName}`, sub: `${s.name} · ${s.englishName}`, go: () => openSurah(n) });
+            }
+            return out;
+        }
+
+        const vm = raw.match(/^(\d+)\s*[:،]\s*(\d+)$/);
+        if (vm) {
+            const sNum = parseInt(vm[1], 10), aNum = parseInt(vm[2], 10);
+            const s = QURAN_METADATA.find(m => m.number === sNum);
+            if (s) {
+                const ayah = Math.max(1, Math.min(aNum, s.numberOfAyahs));
+                out.push({ key: `vs-${sNum}-${ayah}`, icon: '🎯', label: `Verse ${sNum}:${ayah}`, sub: `${s.transliteratedName}${ayah !== aNum ? ' (closest)' : ''}`, go: () => jump(sNum, `${sNum}:${ayah}`) });
+            }
+            return out;
+        }
+
+        if (raw.length >= 2) {
+            for (const m of getTopSurahMatches(raw, 5)) {
+                out.push({ key: `su-${m.surah.number}`, icon: '📖', label: `${m.surah.number}. ${m.surah.transliteratedName}`, sub: `${m.surah.name} · ${m.surah.englishName}`, go: () => openSurah(m.surah.number) });
+            }
+        }
+        return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchInput, selectedSurahId]);
+
     const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault(); 
-        const term = searchInput.trim(); 
+        e.preventDefault();
+        // Normalize Arabic-Indic digits (and the Arabic comma as a verse separator)
+        // so "٥٠" or "٢،٢٥٥" work like "50" / "2:255".
+        const term = normalizeDigits(searchInput.trim()).replace(/،/g, ':');
         if (!term) return;
-        
-        setIsSearchResultsModalOpen(false); 
-        setSearchResults([]); 
+
+        setShowSearchSuggestions(false);
+        setIsSearchResultsModalOpen(false);
+        setSearchResults([]);
         setIsSearching(true);
         
         // Check if input is a number (page number) - with fuzzy matching
@@ -2739,11 +2824,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             return;
         }
         
-        // Text search in verses
+        // Local-first text search: scan the currently loaded surah (diacritic-
+        // insensitive). During live logging the word being searched is almost
+        // always in the surah on screen — this jumps instantly, no network.
+        if (containsArabic(term)) {
+            const strippedTerm = stripArabicDiacritics(term);
+            const localHits = verses.filter(v => stripArabicDiacritics(v.text_uthmani).includes(strippedTerm));
+            if (localHits.length === 1) {
+                setScrollToVerseKey(localHits[0].verse_key);
+                setIsSearching(false);
+                return;
+            }
+            if (localHits.length > 1) {
+                setSearchResults(localHits.map(v => ({ verse_key: v.verse_key, text: v.text_uthmani })));
+                setIsSearchResultsModalOpen(true);
+                setIsSearching(false);
+                return;
+            }
+        }
+
+        // Global text search (quran.com). Strip diacritics from Arabic queries —
+        // partially-vowelled input returns far fewer/none results otherwise.
         try {
-            const response = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(term)}`); 
+            const apiTerm = containsArabic(term) ? stripArabicDiacritics(term) : term;
+            const response = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(apiTerm)}&size=20`);
             if (!response.ok) throw new Error('Search API failed');
-            const data = await response.json(); 
+            const data = await response.json();
             const results = data.search?.results;
             if (results && results.length > 0) {
                 if (results.length === 1) {
@@ -2782,9 +2888,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     ? `${m.surah.name} (${m.surah.englishName})`
                     : `${m.surah.englishName} (${m.surah.transliteratedName})`
             ).join(', ');
-            alert(`No exact match found for "${term}". Did you mean: ${suggestionText}?`);
+            // Non-blocking: show a toast + reopen the typeahead so the tutor can
+            // pick a suggestion without dismissing a dialog mid-lesson.
+            showToast(`No match for "${term}" — did you mean: ${suggestionText}?`);
+            setShowSearchSuggestions(true);
         } else {
-            alert(t('liveSession.searchNotFound', { query: searchInput }));
+            showToast(t('liveSession.searchNotFound', { query: searchInput }));
         }
         setIsSearching(false);
     };
@@ -3782,13 +3891,35 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </div>
                             </div>
 
-                            {/* Search */}
-                            <form onSubmit={handleSearch} className="flex gap-2 items-center">
-                                <input type="text" value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder={t('liveSession.searchPlaceholder')} className="w-24 px-2 py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
-                                <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600" aria-label={t('liveSession.search')}>
-                                    {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
-                                </button>
-                            </form>
+                            {/* Search — with instant typeahead (pages, verses, surah names) */}
+                            <div className="relative">
+                                <form onSubmit={handleSearch} className="flex gap-2 items-center">
+                                    <input type="text" value={searchInput}
+                                        onChange={e => { setSearchInput(e.target.value); setShowSearchSuggestions(true); }}
+                                        onFocus={() => { if (searchInput.trim()) setShowSearchSuggestions(true); }}
+                                        onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
+                                        onKeyDown={e => { if (e.key === 'Escape') setShowSearchSuggestions(false); }}
+                                        placeholder={t('liveSession.searchPlaceholder')} className="w-24 sm:w-36 px-2 py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
+                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600" aria-label={t('liveSession.search')}>
+                                        {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
+                                    </button>
+                                </form>
+                                {showSearchSuggestions && searchSuggestions.length > 0 && (
+                                    <div className="absolute top-full right-0 mt-1.5 w-72 max-w-[85vw] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                                        {searchSuggestions.map(s => (
+                                            <button key={s.key} type="button"
+                                                onMouseDown={e => { e.preventDefault(); s.go(); }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-teal-50 dark:hover:bg-gray-700 transition-colors">
+                                                <span className="text-base flex-shrink-0">{s.icon}</span>
+                                                <span className="flex-1 min-w-0">
+                                                    <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{s.label}</span>
+                                                    {s.sub && <span className="block text-xs text-slate-400 dark:text-slate-500 truncate" dir="auto">{s.sub}</span>}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     {/* ── Verse navigation bar — shown in sticky toolbar during focus mode ── */}
