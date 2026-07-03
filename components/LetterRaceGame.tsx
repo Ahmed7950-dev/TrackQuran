@@ -53,21 +53,26 @@ interface RacePlayer {
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
 // Selectable racers — 3D animals pre-rendered to top-view PNGs (public/sprites/race-*.png).
+// `ar` = frame aspect ratio (w/h) of the run sprite-sheet frames, used to size the
+// stepping window so exactly one frame shows.
 const ANIMALS = [
-  { key: 'fox',     name: 'Fox' },
-  { key: 'bunny',   name: 'Bunny' },
-  { key: 'cat',     name: 'Cat' },
-  { key: 'dog',     name: 'Dog' },
-  { key: 'lion',    name: 'Lion' },
-  { key: 'bear',    name: 'Bear' },
-  { key: 'wolf',    name: 'Wolf' },
-  { key: 'cow',     name: 'Cow' },
-  { key: 'horse',   name: 'Horse' },
-  { key: 'giraffe', name: 'Giraffe' },
+  { key: 'fox',     name: 'Fox',     ar: 0.317 },
+  { key: 'bunny',   name: 'Bunny',   ar: 0.453 },
+  { key: 'cat',     name: 'Cat',     ar: 0.305 },
+  { key: 'dog',     name: 'Dog',     ar: 0.413 },
+  { key: 'lion',    name: 'Lion',    ar: 0.345 },
+  { key: 'bear',    name: 'Bear',    ar: 0.414 },
+  { key: 'wolf',    name: 'Wolf',    ar: 0.280 },
+  { key: 'cow',     name: 'Cow',     ar: 0.352 },
+  { key: 'horse',   name: 'Horse',   ar: 0.300 },
+  { key: 'giraffe', name: 'Giraffe', ar: 0.335 },
 ];
+const RUN_FRAMES = 8;
+const arFor = (key: string) => ANIMALS.find(a => a.key === key)?.ar ?? 0.35;
 // dir 'up' = running toward the letters → show the animal's back;
 // dir 'down' = running home / portraits → show its face.
 const spriteFor = (key: string, dir: 'up' | 'down' = 'down') => `/sprites/race-${key}-${dir}.png`;
+const stripFor  = (key: string, dir: 'up' | 'down') => `/sprites/race-${key}-${dir}-run.png`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
@@ -198,6 +203,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       });
     });
   }, [pool, playLetterAudio, sfxCount, sfxGo]);
+
+  // Preload the chosen racers' run strips so frame-stepping never pops.
+  useEffect(() => {
+    [p1Char, p2Char].forEach(c => (['up', 'down'] as const).forEach(d => {
+      const im = new Image(); im.src = stripFor(c, d);
+    }));
+  }, [p1Char, p2Char]);
 
   // The match begins on the character-select "Start" button (a user gesture,
   // which also unlocks audio autoplay). Just clean up on unmount.
@@ -366,9 +378,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const sprite = spriteFor(who === 1 ? p1Char : p2Char, p.facing);
+    const char = who === 1 ? p1Char : p2Char;
     const running = p.speed > 0.08;
     const dusty = p.speed > 0.22;
+    const ar = arFor(char);
+    // Play the baked hop cycle by stepping the sprite-sheet frame. Faster
+    // running → faster frame rate. Idle holds frame 0 (grounded pose).
+    const frameMs = running ? Math.max(45, 95 - p.speed * 55) : 999999;
+    const frame = running ? Math.floor(now / frameMs) % RUN_FRAMES : 0;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
@@ -386,16 +403,19 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         )}
         {/* Soft ground shadow */}
         <div style={{ position: 'absolute', left: '50%', bottom: -5, transform: 'translateX(-50%)', width: 46, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.30)', filter: 'blur(2.5px)' }} />
-        {/* Character sprite — contained in a fixed box so tall (giraffe) and
-            short (cow) animals all get a similar on-screen presence. */}
+        {/* Character sprite — a run-cycle strip stepped one frame at a time.
+            The box is exactly one frame wide (height 70 × aspect); the strip is
+            RUN_FRAMES wide and slid by whole frames via translateX. */}
         <div style={{
-          position: 'relative', width: 68, height: 70, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          animation: running ? 'lrRun 0.28s ease-in-out infinite' : 'lrIdle 1.8s ease-in-out infinite',
+          position: 'relative', height: 70, aspectRatio: `${ar}`, overflow: 'hidden',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start',
+          animation: running ? undefined : 'lrIdle 1.9s ease-in-out infinite',
           filter: p.carrying && carrierGrace
             ? `drop-shadow(0 0 10px ${color}) drop-shadow(0 3px 3px rgba(0,0,0,0.3))`
             : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
         }}>
-          <img src={sprite} alt="" draggable={false} style={{ maxHeight: 68, maxWidth: 64, height: 'auto', width: 'auto', objectFit: 'contain' }} />
+          <img src={stripFor(char, p.facing)} alt="" draggable={false}
+            style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)` }} />
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
           <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>P{who}</span>
