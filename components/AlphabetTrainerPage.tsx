@@ -3,6 +3,7 @@ import lottie from 'lottie-web';
 import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import AirplaneGame from './AirplaneGame';
+import LetterRaceGame from './LetterRaceGame';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -90,8 +91,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane';
-type GameChoice = 'tower' | 'airplane';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race';
+type GameChoice = 'tower' | 'airplane' | 'race';
 
 const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
   const { t } = useI18n();
@@ -214,8 +215,8 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
 
   const handleStart = () => {
     if (unique === 0) return;
-    if (childMode && gameChoice === 'airplane') {
-      setView('airplane');
+    if (childMode && (gameChoice === 'airplane' || gameChoice === 'race')) {
+      setView(gameChoice);
       return;
     }
     const q = buildQueue(priorities);
@@ -526,6 +527,50 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                 </button>
               );
             })()}
+
+            {/* Letter Race (2 players, one keyboard) */}
+            {(() => {
+              const active = gameChoice === 'race';
+              return (
+                <button
+                  onClick={() => setGameChoice('race')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 148,
+                    borderColor: active ? '#10b981' : '#d1fae5',
+                    background: active
+                      ? 'linear-gradient(160deg,#059669 0%,#047857 100%)'
+                      : 'linear-gradient(160deg,#f0fdf7 0%,#e2fbef 100%)',
+                    boxShadow: active
+                      ? '0 8px 24px rgba(16,185,129,0.45), 0 2px 8px rgba(16,185,129,0.3)'
+                      : '0 2px 8px rgba(16,185,129,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{
+                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
+                    }} />
+                  )}
+                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 110, height: 110, fontSize: 56, lineHeight: 1 }}>
+                    <span>🏃‍♂️</span><span style={{ fontSize: 40 }}>🏁</span>
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-emerald-700'}`}>
+                      Letter Race
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-emerald-100' : 'text-emerald-500'}`}>
+                      2 players — race &amp; grab it!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -829,6 +874,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
         <div className="max-w-3xl mx-auto px-4 pb-8">
           <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} avatarSrc={avatarSrc} />
         </div>
+      )}
+      {view === 'race' && (
+        <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
       )}
     </div>
   );
