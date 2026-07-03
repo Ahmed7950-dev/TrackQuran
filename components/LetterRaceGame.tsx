@@ -48,6 +48,7 @@ interface RacePlayer {
   carrying: boolean;
   carrySince: number;     // when they picked up / stole the letter (min-carry before a win)
   wrongBuzzAt: number;    // throttle for wrong-letter feedback
+  facing: 'up' | 'down';  // which way the sprite faces (up = toward the letters)
 }
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
@@ -64,7 +65,9 @@ const ANIMALS = [
   { key: 'horse',   name: 'Horse' },
   { key: 'giraffe', name: 'Giraffe' },
 ];
-const spriteFor = (key: string) => `/sprites/race-${key}.png`;
+// dir 'up' = running toward the letters → show the animal's back;
+// dir 'down' = running home / portraits → show its face.
+const spriteFor = (key: string, dir: 'up' | 'down' = 'down') => `/sprites/race-${key}-${dir}.png`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
@@ -96,8 +99,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const game = useRef({
     target: pool[0],
     boxes: [] as LetterBox[],
-    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0 } as RacePlayer,
-    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0 } as RacePlayer,
+    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' } as RacePlayer,
+    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' } as RacePlayer,
     graceUntil: 0,           // no steals until this time (after grab / steal)
     checkP1First: true,      // alternate simultaneous-grab priority for fairness
   });
@@ -169,8 +172,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       color: colors[i % colors.length],
     }));
     game.current.target = target;
-    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0 };
-    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0 };
+    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' };
+    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' };
     game.current.graceUntil = 0;
 
     setPhase('listen');
@@ -278,6 +281,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       if (p.carrying) dir = 1;
       else if (other.carrying) dir = Math.sign(other.y - p.y) || 1;
       else dir = -1;
+      p.facing = dir < 0 ? 'up' : 'down';   // face the way they're heading
       p.y += p.speed * dir;
       p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
       p.speed *= FRICTION;
@@ -362,7 +366,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const sprite = spriteFor(who === 1 ? p1Char : p2Char);
+    const sprite = spriteFor(who === 1 ? p1Char : p2Char, p.facing);
     const running = p.speed > 0.08;
     const dusty = p.speed > 0.22;
     return (
