@@ -29,12 +29,13 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 // Field coordinate space: x and y in 0..100 (percent of the play field).
 const LETTER_Y  = 14;   // y of the letter row (players stop here)
 const START_Y   = 86;   // y of the bottom start/finish line
-const BURST     = 0.22; // speed added per shift press — deliberately small: each
-                        // press only nudges you forward (~1.8% of the field), so
-                        // winning takes sustained fast mashing, not a few taps
-const MAX_SPEED = 0.75; // cap (%/frame)
-const FRICTION  = 0.88; // per-frame decay — stop mashing and you stop quickly
-const STEER     = 0.62; // sideways %/frame while a steer key is held
+const BURST     = 0.055; // speed added per run-key press — tiny (~0.45% of the
+                         // field), so winning takes lots of sustained fast mashing
+const MAX_SPEED = 0.19;  // cap (%/frame) — deliberately slow, high pressure
+const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
+// Steering turns the HEADING (which way "forward" points), not a sideways jump.
+const TURN_RATE = 2.4;   // degrees/frame the head turns while a steer key is held
+const TURN_MAX  = 46;    // max turn from straight-ahead (keeps it a curve, not a slide)
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
 const STEAL_GRACE = 900; // ms after a grab/steal during which no steal can happen
@@ -49,6 +50,7 @@ interface RacePlayer {
   carrySince: number;     // when they picked up / stole the letter (min-carry before a win)
   wrongBuzzAt: number;    // throttle for wrong-letter feedback
   facing: 'up' | 'down';  // which way the sprite faces (up = toward the letters)
+  heading: number;        // steering angle in degrees (0 = straight; +right / -left)
 }
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
@@ -104,8 +106,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const game = useRef({
     target: pool[0],
     boxes: [] as LetterBox[],
-    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' } as RacePlayer,
-    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' } as RacePlayer,
+    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 } as RacePlayer,
+    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 } as RacePlayer,
     graceUntil: 0,           // no steals until this time (after grab / steal)
     checkP1First: true,      // alternate simultaneous-grab priority for fairness
   });
@@ -177,8 +179,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       color: colors[i % colors.length],
     }));
     game.current.target = target;
-    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' };
-    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up' };
+    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 };
+    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 };
     game.current.graceUntil = 0;
 
     setPhase('listen');
@@ -284,9 +286,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     const step = (p: RacePlayer, other: RacePlayer, steerLeft: boolean, steerRight: boolean, who: 1 | 2) => {
       const g = game.current;
       const now = performance.now();
-      // Steering (left/right only)
-      if (steerLeft)  p.x = Math.max(4, p.x - STEER);
-      if (steerRight) p.x = Math.min(96, p.x + STEER);
+      // Steering turns the HEADING (which way forward points); it does not jump
+      // the player sideways. Release to straighten back out. + = screen-right.
+      if (steerRight && !steerLeft)      p.heading = Math.min(TURN_MAX, p.heading + TURN_RATE);
+      else if (steerLeft && !steerRight) p.heading = Math.max(-TURN_MAX, p.heading - TURN_RATE);
+      else                               p.heading *= 0.9;   // ease back to straight
       // Forward direction: carry → run home (down); opponent carries → chase
       // them; otherwise → run to the letter row (up).
       let dir: number;
@@ -294,10 +298,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       else if (other.carrying) dir = Math.sign(other.y - p.y) || 1;
       else dir = -1;
       p.facing = dir < 0 ? 'up' : 'down';   // face the way they're heading
-      p.y += p.speed * dir;
+      // Move along the heading: forward component up/down (dir), side component
+      // from the turn — so they CURVE toward the letter instead of strafing.
+      const rad = p.heading * Math.PI / 180;
+      p.y += p.speed * dir * Math.cos(rad);
+      p.x += p.speed * Math.sin(rad);
       p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
+      p.x = Math.max(4, Math.min(96, p.x));
       p.speed *= FRICTION;
-      if (p.speed < 0.02) p.speed = 0;
+      if (p.speed < 0.01) p.speed = 0;
 
       // At the letter row: grab the target / buzz on a wrong box. Pick the
       // NEAREST overlapping box so standing between two boxes resolves right.
@@ -379,13 +388,16 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
     const char = who === 1 ? p1Char : p2Char;
-    const running = p.speed > 0.08;
-    const dusty = p.speed > 0.22;
+    const running = p.speed > 0.02;
+    const dusty = p.speed > 0.11;
     const ar = arFor(char);
     // Play the baked hop cycle by stepping the sprite-sheet frame. Faster
     // running → faster frame rate. Idle holds frame 0 (grounded pose).
-    const frameMs = running ? Math.max(45, 95 - p.speed * 55) : 999999;
+    const frameMs = running ? Math.max(55, 130 - (p.speed / MAX_SPEED) * 80) : 999999;
     const frame = running ? Math.floor(now / frameMs) % RUN_FRAMES : 0;
+    // The head visibly turns with the heading — a subtle lean, half the steering
+    // angle so it reads as a turn, not tipping over.
+    const tilt = p.heading * 0.5;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
@@ -404,18 +416,19 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         {/* Soft ground shadow */}
         <div style={{ position: 'absolute', left: '50%', bottom: -5, transform: 'translateX(-50%)', width: 46, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.30)', filter: 'blur(2.5px)' }} />
         {/* Character sprite — a run-cycle strip stepped one frame at a time.
-            The box is exactly one frame wide (height 70 × aspect); the strip is
-            RUN_FRAMES wide and slid by whole frames via translateX. */}
+            The rotation wrapper turns the head with the heading; the inner box
+            is exactly one frame wide (height 70 × aspect) and slides the strip
+            by whole frames via translateX. */}
         <div style={{
-          position: 'relative', height: 70, aspectRatio: `${ar}`, overflow: 'hidden',
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start',
-          animation: running ? undefined : 'lrIdle 1.9s ease-in-out infinite',
+          transform: `rotate(${tilt}deg)`, transformOrigin: 'bottom center',
           filter: p.carrying && carrierGrace
             ? `drop-shadow(0 0 10px ${color}) drop-shadow(0 3px 3px rgba(0,0,0,0.3))`
             : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
         }}>
-          <img src={stripFor(char, p.facing)} alt="" draggable={false}
-            style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)` }} />
+          <div style={{ height: 70, aspectRatio: `${ar}`, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+            <img src={stripFor(char, p.facing)} alt="" draggable={false}
+              style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)` }} />
+          </div>
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
           <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>P{who}</span>
