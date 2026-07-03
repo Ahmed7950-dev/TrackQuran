@@ -29,9 +29,11 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 // Field coordinate space: x and y in 0..100 (percent of the play field).
 const LETTER_Y  = 14;   // y of the letter row (players stop here)
 const START_Y   = 86;   // y of the bottom start/finish line
-const BURST     = 0.55; // speed added per shift press
-const MAX_SPEED = 1.35; // cap (%/frame)
-const FRICTION  = 0.93; // per-frame decay — stop mashing and you slow down
+const BURST     = 0.22; // speed added per shift press — deliberately small: each
+                        // press only nudges you forward (~1.8% of the field), so
+                        // winning takes sustained fast mashing, not a few taps
+const MAX_SPEED = 0.75; // cap (%/frame)
+const FRICTION  = 0.88; // per-frame decay — stop mashing and you stop quickly
 const STEER     = 0.62; // sideways %/frame while a steer key is held
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
@@ -343,30 +345,38 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const colorDark = who === 1 ? '#1d4ed8' : '#c2410c';
-    const face = who === 1 ? '😃' : '😜';
+    const sprite = who === 1 ? '/sprites/race-rabbit.png' : '/sprites/race-frog.png';
+    const running = p.speed > 0.08;
+    const dusty = p.speed > 0.22;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
         {p.carrying && (
-          <div style={{ position: 'absolute', bottom: '112%', left: '50%', transform: 'translateX(-50%)', background: '#fff', border: `3px solid ${color}`, borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.25)', animation: 'lrCarry 0.7s ease-in-out infinite' }}>
-            <span dir="rtl" style={{ ...HAFS, fontSize: 26, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
+          <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(#ffffff,#fef9c3)', border: `3px solid ${color}`, borderRadius: 12, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 14px ${color}88, 0 4px 10px rgba(0,0,0,0.25)`, animation: 'lrCarry 0.7s ease-in-out infinite' }}>
+            <span dir="rtl" style={{ ...HAFS, fontSize: 27, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
           </div>
         )}
+        {/* Dust puffs kicked up behind while sprinting */}
+        {dusty && (
+          <>
+            <div style={{ position: 'absolute', left: '12%', [p.carrying ? 'top' : 'bottom']: -10, width: 11, height: 11, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', animation: 'lrDust 0.5s ease-out infinite' } as React.CSSProperties} />
+            <div style={{ position: 'absolute', right: '12%', [p.carrying ? 'top' : 'bottom']: -8, width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.55)', animation: 'lrDust 0.5s ease-out infinite', animationDelay: '0.22s' } as React.CSSProperties} />
+          </>
+        )}
+        {/* Soft ground shadow */}
+        <div style={{ position: 'absolute', left: '50%', bottom: -5, transform: 'translateX(-50%)', width: 46, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.30)', filter: 'blur(2.5px)' }} />
+        {/* Character sprite */}
         <div style={{
-          width: 52, height: 52, borderRadius: '50%',
-          background: `radial-gradient(circle at 32% 28%, ${color}, ${colorDark})`,
-          border: '3.5px solid #fff',
-          boxShadow: p.carrying && carrierGrace
-            ? `0 0 0 4px ${color}55, 0 0 18px ${color}, 0 4px 8px rgba(0,0,0,0.3)`
-            : '0 4px 8px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          animation: p.speed > 0.15 ? 'lrRun 0.25s ease-in-out infinite' : undefined,
+          position: 'relative', width: 60, height: 64, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          animation: running ? 'lrRun 0.28s ease-in-out infinite' : 'lrIdle 1.8s ease-in-out infinite',
+          filter: p.carrying && carrierGrace
+            ? `drop-shadow(0 0 10px ${color}) drop-shadow(0 3px 3px rgba(0,0,0,0.3))`
+            : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
         }}>
-          <span style={{ fontSize: 26, lineHeight: 1 }}>{face}</span>
+          <img src={sprite} alt="" draggable={false} style={{ height: 60, width: 'auto' }} />
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
-          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>P{who}</span>
+          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>P{who}</span>
         </div>
       </div>
     );
@@ -374,26 +384,39 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none' }}>
-      {/* ── Field (top view): striped grass + side lines + finish line ── */}
-      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(to bottom, #4ade80 0, #4ade80 60px, #22c55e 60px, #22c55e 120px)' }} />
-      <div style={{ position: 'absolute', top: 0, bottom: 0, left: '2%',  width: 4, background: 'rgba(255,255,255,0.7)', borderRadius: 2 }} />
-      <div style={{ position: 'absolute', top: 0, bottom: 0, right: '2%', width: 4, background: 'rgba(255,255,255,0.7)', borderRadius: 2 }} />
+      {/* ── Field (top view): mowed-lawn lanes + vignette + bushes + finish line ── */}
+      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(to right, #4fc76a 0, #4fc76a 90px, #3fb95c 90px, #3fb95c 180px)' }} />
+      {/* subtle darker edges so the field reads as a lit stadium */}
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(6,50,20,0.35) 100%)', pointerEvents: 'none' }} />
+      {/* boundary lines */}
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: '2%',  width: 4, background: 'rgba(255,255,255,0.75)', borderRadius: 2 }} />
+      <div style={{ position: 'absolute', top: 0, bottom: 0, right: '2%', width: 4, background: 'rgba(255,255,255,0.75)', borderRadius: 2 }} />
+      {/* bushes along the side margins */}
+      {[8, 24, 40, 56, 72, 88].map(y => (
+        <React.Fragment key={`bush-${y}`}>
+          <div style={{ position: 'absolute', left: '0.2%', top: `${y}%`, width: 24, height: 24, borderRadius: '50%', background: '#15803d', boxShadow: '10px 7px 0 -3px #166534, -4px 10px 0 -5px #14532d, 0 3px 6px rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'absolute', right: '0.2%', top: `${y + 7}%`, width: 22, height: 22, borderRadius: '50%', background: '#166534', boxShadow: '-9px 6px 0 -3px #15803d, 4px 9px 0 -5px #14532d, 0 3px 6px rgba(0,0,0,0.3)' }} />
+        </React.Fragment>
+      ))}
       {/* Start / finish line */}
-      <div style={{ position: 'absolute', left: '2%', right: '2%', top: `${START_Y + 4}%`, height: 14, background: 'repeating-linear-gradient(90deg, #fff 0 14px, #1f2937 14px 28px)', borderRadius: 4, opacity: 0.9 }} />
-      <div style={{ position: 'absolute', left: '3%', top: `${START_Y + 6.5}%`, fontSize: 22 }}>🏁</div>
-      <div style={{ position: 'absolute', right: '3%', top: `${START_Y + 6.5}%`, fontSize: 22 }}>🏁</div>
+      <div style={{ position: 'absolute', left: '2%', right: '2%', top: `${START_Y + 4}%`, height: 15, background: 'repeating-linear-gradient(90deg, #fff 0 14px, #1f2937 14px 28px)', borderRadius: 4, opacity: 0.95, boxShadow: '0 3px 8px rgba(0,0,0,0.25)' }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, top: `${START_Y + 7}%`, textAlign: 'center', color: 'rgba(255,255,255,0.85)', fontWeight: 900, fontSize: 13, letterSpacing: 6, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>FINISH</div>
 
       {/* ── Letter row ── */}
       {g.boxes.map((box, i) => !box.taken && (
         <div key={`${box.letter}-${i}`} style={{
           position: 'absolute', left: `${box.x}%`, top: `${LETTER_Y}%`, transform: 'translate(-50%,-50%)', zIndex: 5,
-          width: 'clamp(44px, 7vw, 68px)', height: 'clamp(44px, 7vw, 68px)',
-          background: '#fff', border: `4px solid ${box.color}`, borderRadius: 16,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 5px 12px rgba(0,0,0,0.25)',
-          animation: now - box.wiggleAt < 500 ? 'lrShake 0.4s' : undefined,
+          animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
-          <span dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px, 3.6vw, 38px)', lineHeight: 1, color: '#0f172a' }}>{getLetterInForm(box.letter, letterForm)}</span>
+          <div style={{
+            width: 'clamp(44px, 7vw, 68px)', height: 'clamp(44px, 7vw, 68px)',
+            background: 'linear-gradient(#ffffff, #eef2f7)', border: `4px solid ${box.color}`, borderRadius: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
+            boxShadow: '0 5px 0 rgba(0,0,0,0.20), 0 9px 14px rgba(0,0,0,0.28)',
+            animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
+          }}>
+            <span dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px, 3.6vw, 38px)', lineHeight: 1, color: '#0f172a' }}>{getLetterInForm(box.letter, letterForm)}</span>
+          </div>
         </div>
       ))}
 
@@ -415,21 +438,29 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
       {/* ── Controls legend ── */}
       <div style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
-        <div style={{ fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>🔵 Left player</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
+          <img src="/sprites/race-rabbit.png" alt="" style={{ height: 22 }} /> Left player
+        </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>LEFT SHIFT</b> (or <b>W</b>) to run · <b>A</b>/<b>D</b> to steer</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
-        <div style={{ fontSize: 12, fontWeight: 900, color: '#c2410c' }}>Right player 🟠</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
+          Right player <img src="/sprites/race-frog.png" alt="" style={{ height: 22 }} />
+        </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>RIGHT SHIFT</b> (or <b>↑</b>) to run · <b>←</b>/<b>→</b> to steer</div>
       </div>
 
       {/* ── Listen overlay ── */}
       {phase === 'listen' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 24, padding: '26px 34px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
-            <div style={{ fontSize: 46 }}>👂</div>
-            <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>Listen to the letter!</h3>
-            <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>Then race to find it and bring it home 🏁</p>
+          <div style={{ background: '#fff', borderRadius: 24, padding: '24px 34px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 6 }}>
+              <img src="/sprites/race-rabbit.png" alt="" style={{ height: 56, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
+              <span style={{ fontWeight: 900, fontSize: 18, color: '#94a3b8' }}>VS</span>
+              <img src="/sprites/race-frog.png" alt="" style={{ height: 52, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: '0.7s' }} />
+            </div>
+            <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>👂 Listen to the letter!</h3>
+            <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>Then race to find it and bring it home!</p>
             <button onClick={() => playLetterAudio(g.target)} style={{ marginTop: 14, background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔊 Hear it again</button>
           </div>
         </div>
@@ -448,7 +479,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       {phase === 'roundWon' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '26px 36px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
-            <div style={{ fontSize: 52 }}>{roundWinner === 1 ? '🔵' : '🟠'}</div>
+            <img src={roundWinner === 1 ? '/sprites/race-rabbit.png' : '/sprites/race-frog.png'} alt="" style={{ height: 72, animation: 'lrIdle 0.6s ease-in-out infinite' }} />
             <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the round! 🎉</h3>
             <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores[0]} — {scores[1]} · next letter coming…</p>
           </div>
@@ -457,9 +488,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
       {/* ── Match won ── */}
       {phase === 'matchWon' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 24, padding: '30px 40px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
-            <div style={{ fontSize: 60 }}>🏆</div>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {/* Confetti rain */}
+          {['#f472b6','#a78bfa','#60a5fa','#34d399','#fbbf24','#fb923c','#f87171','#2dd4bf','#c084fc','#4ade80','#38bdf8','#fde047'].map((c, i) => (
+            <span key={i} style={{ position: 'absolute', left: `${6 + i * 8}%`, top: 0, width: 12, height: 12, background: c, borderRadius: i % 2 ? '50%' : 3, animation: `lrConfetti ${2.2 + (i % 4) * 0.5}s linear ${(i % 5) * 0.35}s infinite` }} />
+          ))}
+          <div style={{ background: '#fff', borderRadius: 24, padding: '30px 40px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
+              <span style={{ fontSize: 48 }}>🏆</span>
+              <img src={roundWinner === 1 ? '/sprites/race-rabbit.png' : '/sprites/race-frog.png'} alt="" style={{ height: 88, animation: 'lrIdle 0.6s ease-in-out infinite' }} />
+              <span style={{ fontSize: 48 }}>🏆</span>
+            </div>
             <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the race!</h3>
             <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores[0]} — {scores[1]} · Amazing running! 🏃💨</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -471,10 +510,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       )}
 
       <style>{`
-        @keyframes lrRun   { 0%,100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.07) rotate(3deg); } }
-        @keyframes lrCarry { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
-        @keyframes lrShake { 0%,100% { transform: translate(-50%,-50%) rotate(0); } 25% { transform: translate(-50%,-50%) rotate(-7deg); } 75% { transform: translate(-50%,-50%) rotate(7deg); } }
-        @keyframes lrPop   { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes lrRun      { 0%,100% { transform: scale(1) rotate(-4deg) translateY(0); } 50% { transform: scale(1.06) rotate(4deg) translateY(-3px); } }
+        @keyframes lrIdle     { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
+        @keyframes lrCarry    { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
+        @keyframes lrShakeBox { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+        @keyframes lrDust     { 0% { transform: scale(0.4); opacity: 0.8; } 100% { transform: scale(1.7) translateY(6px); opacity: 0; } }
+        @keyframes lrPopIn    { 0% { transform: translate(-50%,-50%) scale(0); } 65% { transform: translate(-50%,-50%) scale(1.12); } 100% { transform: translate(-50%,-50%) scale(1); } }
+        @keyframes lrPop      { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes lrConfetti { 0% { transform: translateY(-10vh) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; } }
       `}</style>
     </div>
   );

@@ -552,8 +552,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                       background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
                     }} />
                   )}
-                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 110, height: 110, fontSize: 56, lineHeight: 1 }}>
-                    <span>🏃‍♂️</span><span style={{ fontSize: 40 }}>🏁</span>
+                  <div className="pt-3 px-2 flex items-end justify-center gap-1" style={{ width: 110, height: 110 }}>
+                    <img src="/sprites/race-rabbit.png" alt="" className="h-16 w-auto" />
+                    <img src="/sprites/race-frog.png" alt="" className="h-14 w-auto" />
                   </div>
                   <div className="pb-3 px-3 w-full text-center">
                     <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-emerald-700'}`}>
