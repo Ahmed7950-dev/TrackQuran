@@ -15,7 +15,10 @@
 // silent letters, and so on.
 //
 // Validated against Quran.com's own annotations on 681 verses spanning 13
-// surahs (7,884 labeled letter units): 99.85% agreement.
+// surahs (7,884 labeled letter units): 99.87% agreement, plus four deliberate,
+// pedagogy-driven divergences from their raw data: distinct colors for the two
+// idghām kinds, ghunnah on verse-initial نّ/مّ (the idghām continues across the
+// verse break), izhār (uncolored) at the 75:27 saktah, and U+06E0 marked silent.
 // -----------------------------------------------------------------------------
 
 export type TajweedRule =
@@ -77,6 +80,7 @@ const SUKUN = 'ْ', SUKUN_Q = 'ۡ', SHADDA = 'ّ', MADDAH = 'ٓ', DAGGER = 'ٰ';
 const TANWEEN = ['ً', 'ٌ', 'ٍ']; // fathatan, dammatan, kasratan
 const HIGH_MEEM = 'ۢ', LOW_MEEM = 'ۭ'; // iqlab marks
 const SMALL_WAW = 'ۥ', SMALL_YEH = 'ۦ', SMALL_HIGH_YEH = 'ۧ';
+const SMALL_HIGH_NOON = 'ۨ'; // U+06E8 — hidden noon (21:88 نُـۨجِى) → ikhfa
 const SILENT0 = '۟'; // small high rounded zero — silent letter
 const SILENT2 = '۠'; // small high rectangular zero — not colored by QPC
 const HAMZA_ABOVE = 'ٔ';
@@ -229,11 +233,17 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
           if (IKHFA_SET.has(nb)) { cluster(start, j, 'ikhafa'); if (pullback) set(i - 1, 'ikhafa'); }
           else if (IDGHAM_GH_SET.has(nb) && (has(j, SHADDA) || nb === 'ي' || nb === 'و')) { cluster(start, j, 'idgham_ghunnah'); if (pullback) set(i - 1, 'idgham_ghunnah'); }
           else if (IDGHAM_NO_SET.has(nb) && has(j, SHADDA)) cluster(start, j, 'idgham_wo_ghunnah');
-        } else if (noonSakin && (m.includes(SUKUN) || m.includes(SUKUN_Q)) && nb === 'ر') {
-          // the saktah of 75:27 (مَنْ ۜ رَاق) — QPC still colors it
-          cluster(start, j, 'idgham_wo_ghunnah');
         }
+        // NOTE: 75:27 (مَنْ ۜ رَاقٍ) stays uncolored on purpose — the explicit sukun
+        // + saktah mean Hafs recites izhar there, even though quran.com's dataset
+        // tags it idgham (a known data quirk).
       }
+    }
+
+    // ── Hidden noon written as U+06E8 (a single Quranic occurrence, 21:88) ──
+    if (m.includes(SMALL_HIGH_NOON)) {
+      const j = nextPron(i);
+      if (j !== -1 && IKHFA_SET.has(flat[j].base)) cluster(i, j, 'ikhafa');
     }
 
     // ── Mīm sākinah ──
@@ -258,10 +268,7 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
 
     // ── Ghunnah mushaddadah (نّ / مّ) — not on a tanween carrier (mid-verse),
     //    and not verse-initial (that shadda is cross-verse assimilation). ──
-    if ((b === 'ن' || b === 'م') && m.includes(SHADDA) && (!hasTanween(i) || i === lastPron)) {
-      let p = i - 1; while (p >= 0 && !isLetterUnit(p)) p--;
-      if (p >= 0) set(i, 'ghunnah');
-    }
+    if ((b === 'ن' || b === 'م') && m.includes(SHADDA) && (!hasTanween(i) || i === lastPron)) set(i, 'ghunnah');
 
     // ── Qalqalah: explicit sukun, or stopping on it at the verse end ──
     if (QALQALAH_SET.has(b) && (m.includes(SUKUN) || m.includes(SUKUN_Q) || i === lastPron)) set(i, 'qalaqah');
