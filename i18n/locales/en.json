@@ -387,9 +387,6 @@
     "decreaseScrollSpeed": "Decrease Scroll Speed",
     "increaseScrollSpeed": "Increase Scroll Speed",
     "toggleTranslation": "Toggle Translation",
-    "toggleQalqalah": "Toggle Qalqalah Highlights",
-    "toggleGhunnah": "Toggle Ghunnah Highlights",
-    "toggleMadd": "Toggle Madd Highlights",
     "errorType": "Error Type",
     "tajweedError": "Tajweed Error",
     "readingError": "Reading Error",
@@ -412,7 +409,8 @@
     "removeRangeTitle": "Remove Progress Range",
     "confirmRemoveRange": "Are you sure you want to remove the progress from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?",
     "removeMemorizationRangeTitle": "Remove Memorization Range",
-    "confirmRemoveMemorizationRange": "Are you sure you want to remove the memorization from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?"
+    "confirmRemoveMemorizationRange": "Are you sure you want to remove the memorization from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?",
+    "tajweedColors": "Tajweed colors"
   },
   "lettersTrainer": {
     "pageTitle": "Arabic Letter Distinction Trainer",

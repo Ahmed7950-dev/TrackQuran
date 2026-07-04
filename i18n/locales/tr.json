@@ -387,9 +387,6 @@
     "decreaseScrollSpeed": "Kaydırma Hızını Azalt",
     "increaseScrollSpeed": "Kaydırma Hızını Artır",
     "toggleTranslation": "Çeviriyi Göster/Gizle",
-    "toggleQalqalah": "Qalqalah Vurgularını Göster/Gizle",
-    "toggleGhunnah": "Ghunnah Vurgularını Göster/Gizle",
-    "toggleMadd": "Madd Vurgularını Göster/Gizle",
     "errorType": "Hata Türü",
     "tajweedError": "Tecvid Hatası",
     "readingError": "Okuma Hatası",
@@ -412,7 +409,8 @@
     "removeRangeTitle": "İlerleme Aralığını Kaldır",
     "confirmRemoveRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ilerlemeyi kaldırmak istediğinizden emin misiniz?",
     "removeMemorizationRangeTitle": "Ezberleme Aralığını Kaldır",
-    "confirmRemoveMemorizationRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ezberlemeyi kaldırmak istediğinizden emin misiniz?"
+    "confirmRemoveMemorizationRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ezberlemeyi kaldırmak istediğinizden emin misiniz?",
+    "tajweedColors": "Tecvid renkleri"
   },
   "lettersTrainer": {
     "pageTitle": "Arapça Harf Ayırt Etme Eğitimi",

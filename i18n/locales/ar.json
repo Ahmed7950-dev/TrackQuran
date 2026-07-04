@@ -387,9 +387,6 @@
     "decreaseScrollSpeed": "تقليل سرعة التمرير",
     "increaseScrollSpeed": "زيادة سرعة التمرير",
     "toggleTranslation": "عرض/إخفاء الترجمة",
-    "toggleQalqalah": "تمييز القلقلة",
-    "toggleGhunnah": "تمييز الغنة",
-    "toggleMadd": "تمييز المد",
     "errorType": "نوع الخطأ",
     "tajweedError": "خطأ في التجويد",
     "readingError": "خطأ في القراءة",
@@ -412,7 +409,8 @@
     "removeRangeTitle": "إزالة نطاق التقدم",
     "confirmRemoveRange": "هل أنت متأكد من رغبتك في إزالة التقدم من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟",
     "removeMemorizationRangeTitle": "إزالة نطاق الحفظ",
-    "confirmRemoveMemorizationRange": "هل أنت متأكد من رغبتك في إزالة الحفظ من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟"
+    "confirmRemoveMemorizationRange": "هل أنت متأكد من رغبتك في إزالة الحفظ من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟",
+    "tajweedColors": "ألوان التجويد"
   },
   "lettersTrainer": {
     "pageTitle": "مدرّب التمييز بين الحروف العربية",

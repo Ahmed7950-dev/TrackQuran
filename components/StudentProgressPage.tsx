@@ -11,6 +11,7 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords } from '../utils/quranicMarks';
+import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
@@ -124,25 +125,12 @@ const SpinnerIcon = () => (
 );
 
 
-const QALQALAH_LETTERS = ['ق', 'ط', 'ب', 'ج', 'د'];
-const IKHFA_LETTERS = ['ص', 'ذ', 'ث', 'ك', 'ج', 'ش', 'ق', 'س', 'د', 'ط', 'ز', 'ف', 'ت', 'ض', 'ظ'];
-const IDGHAM_LETTERS = ['ي', 'ر', 'م', 'ل', 'و', 'ن'];
-const IQLAB_LETTER = 'ب';
-const TANWEEN_CHARS = ['ً', 'ٍ', 'ٌ'];
-const SUKUN = 'ۡ'; // U+06E1 - Quranic Sukun
-const MADDAH = '\u0653'; // ARABIC MADDAH ABOVE
-const SMALL_HIGH_MADDA = '\u06e4'; // ARABIC SMALL HIGH MADDA \u2014 Madd L\u0101zim marker
-const SMALL_WAW = '\u06e5';        // ARABIC SMALL WAW \u2014 Madd \u1e62ilah / sub-vowel marker
-const SMALL_YEH = '\u06e6';        // ARABIC SMALL YEH \u2014 Madd \u1e62ilah / sub-vowel marker
-const SILENT_MARKER = '\u06df';    // ARABIC SMALL HIGH ROUNDED ZERO \u2014 silent letter (Madinah Mushaf)
-const MADD_MARKERS = [MADDAH, SMALL_HIGH_MADDA, SMALL_WAW, SMALL_YEH];
 
 // Waqf signs (U+06D6-U+06DF), imala (U+06EA), and ishmam (U+06EB) are now
 // handled by the 'QuranMarkFix' @font-face unicode-range rules in index.html.
 // Font substitution happens at the glyph level so Arabic text stays in a single
 // unbroken text run and Safari/iOS correctly connects letter forms.
 
-const TANWEEN_GHUNNAH_TANWEEN_CHARS = ['\u064b', '\u064c', '\u064d']; // \u064b \u064c \u064d
 
 // Iqlab: U+06E2 (small high meem) stacked on a tanween (U+064B/U+064C). None of
 // the bundled Quranic fonts position this pair correctly \u2014 the meem glyph is
@@ -157,36 +145,7 @@ const hasIqlabMeem = (text: string): boolean =>
 // Iqlab high meem overlay: anchored to the horizontal centre of the unit (above
 // the tanween), width-independent. See the render site in LetterWithError.
 
-// Unicode constants for Ghunnah rules
-const NOON = '\u0646'; // U+0646 - ن
-const MEEM = '\u0645'; // U+0645 - م
-const SHADDAH = '\u0651'; // U+0651 - ّ
-const SUKUN_UNICODE = '\u0652'; // U+0652 - ْ
-const SPACE = '\u0020'; // U+0020 - space
 
-// Letters that trigger Ghunnah for Noon
-const GHUNNAH_TRIGGER_LETTERS = [
-    '\u064A', // ي
-    '\u0646', // ن
-    '\u0645', // م
-    '\u0648', // و
-    '\u0628', // ب
-    '\u0635', // ص
-    '\u0630', // ذ
-    '\u062B', // ث
-    '\u0643', // ك
-    '\u062C', // ج
-    '\u0634', // ش
-    '\u0642', // ق
-    '\u0633', // س
-    '\u062F', // د
-    '\u0637', // ط
-    '\u0632', // ز
-    '\u0641', // ف
-    '\u062A', // ت
-    '\u0636', // ض
-    '\u0638'  // ظ
-];
 
 const isArabicLetter = (char: string | undefined): boolean => {
     if (!char) return false;
@@ -202,25 +161,6 @@ const isArabicLetter = (char: string | undefined): boolean => {
     return false;
 };
 
-const parseWordIntoUnits = (word: string): string[] => {
-    const units: string[] = [];
-    if (!word) return units;
-    let currentUnit = '';
-    for (const char of word) {
-        if (isArabicLetter(char)) {
-            if (currentUnit) {
-                units.push(currentUnit);
-            }
-            currentUnit = char;
-        } else {
-            currentUnit += char;
-        }
-    }
-    if (currentUnit) {
-        units.push(currentUnit);
-    }
-    return units;
-};
 
 // Parse word into individual letters with their indices
 const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
@@ -266,586 +206,12 @@ const NON_FORWARD_JOINING = new Set<string>([
 ]);
 const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !NON_FORWARD_JOINING.has(ch);
 
-// Check if a letter should be highlighted green based on Ghunnah rules
-const shouldHighlightGhunnah = (letter: string, letterIndex: number, word: string, nextWord: string): boolean => {
-    if (!letter || letter.length === 0 || !word) return false;
-    
-    // Note: word might have U+0652 replaced with U+06E1, so we need to check both
-    const QURANIC_SUKUN = '\u06E1'; // U+06E1 - Quranic Sukun (used in the text)
-    
-    // Tanween marks
-    const TANWEEN_FATHA = '\u064B'; // U+064B - Tanween Fatha
-    const TANWEEN_DAMMA = '\u064C'; // U+064C - Tanween Damma
-    const TANWEEN_KASRA = '\u064D'; // U+064D - Tanween Kasra
-    const ARABIC_SMALL_HIGH_MADDA = '\u06ED'; // U+06ED - Arabic Small High Madda
-    const ALIF = '\u0627'; // U+0627 - Alif
-    
-    const letterChar = letter[0]; // Get the base letter (first character)
-    
-    // Vowel marks
-    const FATHA = '\u064E'; // U+064E - Fatha
-    const DAMMA = '\u064F'; // U+064F - Damma
-    const KASRA = '\u0650'; // U+0650 - Kasra
-    
-    const fullText = word + (nextWord ? SPACE + nextWord : '');
-    
-    // Check if letter has fatha, damma, or kasra - if so, exclude from highlighting
-    const hasVowel = letter.includes(FATHA) || letter.includes(DAMMA) || letter.includes(KASRA);
-    
-    // Check for tanween in the letter unit
-    const hasTanween = letter.includes(TANWEEN_FATHA) || 
-                       letter.includes(TANWEEN_DAMMA) || 
-                       letter.includes(TANWEEN_KASRA);
-    
-    // Rule 3: Any of the 3 types of tanween followed by space followed by trigger letters
-    // Check this FIRST before checking if letter is NOON or MEEM, as tanween can be on any letter
-    if (hasTanween) {
-        // Find the position of this letter in the word
-        let letterPos = -1;
-        let currentIndex = 0;
-        for (let i = 0; i < word.length; i++) {
-            if (isArabicLetter(word[i])) {
-                if (currentIndex === letterIndex) {
-                    letterPos = i;
-                    break;
-                }
-                currentIndex++;
-            }
-        }
-        
-        if (letterPos >= 0) {
-            // Count characters in the letter unit (letter + diacritics including tanween)
-            let unitEndPos = letterPos;
-            for (let i = letterPos; i < word.length; i++) {
-                if (isArabicLetter(word[i]) && i > letterPos) {
-                    break;
-                }
-                unitEndPos = i + 1;
-            }
-            
-            // Build fullText to check what comes after the letter unit
-            const fullText = word + (nextWord ? SPACE + nextWord : '');
-            const remainingText = fullText.substring(unitEndPos);
-            
-            // Special case 1: U+064B (tanween fatha) followed directly by U+0627 (alif) followed by space and trigger letter
-            // This should highlight the letter with tanween fatha and the alif
-            if (letter.includes(TANWEEN_FATHA) && remainingText.length >= 2) {
-                // Check if pattern is: U+0627 (alif), then space (no U+06ED in between)
-                let checkPosSimple = 0;
-                // Skip any diacritics to find U+0627 (alif)
-                while (checkPosSimple < remainingText.length && !isArabicLetter(remainingText[checkPosSimple]) && remainingText[checkPosSimple] !== SPACE) {
-                    checkPosSimple++;
-                }
-                
-                if (checkPosSimple < remainingText.length && remainingText[checkPosSimple] === ALIF) {
-                    // Found U+0627, now check for space after it
-                    let spacePosSimple = checkPosSimple + 1;
-                    // Skip any diacritics to find space
-                    while (spacePosSimple < remainingText.length && !isArabicLetter(remainingText[spacePosSimple]) && remainingText[spacePosSimple] !== SPACE) {
-                        spacePosSimple++;
-                    }
-                    
-                    if (spacePosSimple < remainingText.length && remainingText[spacePosSimple] === SPACE) {
-                        // Check if next word exists and starts with a trigger letter
-                        if (nextWord && nextWord.length > 0) {
-                            for (let i = 0; i < nextWord.length; i++) {
-                                if (isArabicLetter(nextWord[i])) {
-                                    if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[i])) {
-                                        return true;
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Special case 2: U+064B (tanween fatha) followed by U+06ED followed by U+0627 followed by space and trigger letter
-            // This should highlight the letter with tanween fatha, U+06ED, and U+0627
-            if (letter.includes(TANWEEN_FATHA) && remainingText.length >= 3) {
-                // Check if pattern is: U+06ED, U+0627, then space
-                let checkPos = 0;
-                // Skip any diacritics to find U+06ED
-                while (checkPos < remainingText.length && !isArabicLetter(remainingText[checkPos]) && remainingText[checkPos] !== ARABIC_SMALL_HIGH_MADDA && remainingText[checkPos] !== SPACE) {
-                    checkPos++;
-                }
-                
-                if (checkPos < remainingText.length && remainingText[checkPos] === ARABIC_SMALL_HIGH_MADDA) {
-                    // Found U+06ED, now check for U+0627 after it
-                    let alifPos = checkPos + 1;
-                    // Skip any diacritics to find U+0627
-                    while (alifPos < remainingText.length && !isArabicLetter(remainingText[alifPos]) && remainingText[alifPos] !== SPACE) {
-                        alifPos++;
-                    }
-                    
-                    if (alifPos < remainingText.length && remainingText[alifPos] === ALIF) {
-                        // Found U+0627, now check for space after it
-                        let spacePos = alifPos + 1;
-                        // Skip any diacritics to find space
-                        while (spacePos < remainingText.length && !isArabicLetter(remainingText[spacePos]) && remainingText[spacePos] !== SPACE) {
-                            spacePos++;
-                        }
-                        
-                        if (spacePos < remainingText.length && remainingText[spacePos] === SPACE) {
-                            // Check if next word exists and starts with a trigger letter
-                            if (nextWord && nextWord.length > 0) {
-                                for (let i = 0; i < nextWord.length; i++) {
-                                    if (isArabicLetter(nextWord[i])) {
-                                        if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[i])) {
-                                            return true;
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Also check if current letter is U+0627 (alif) and look backwards for tanween fatha pattern
-            if (letterChar === ALIF && letterIndex > 0) {
-                // First check for simple pattern: tanween fatha directly before alif (no U+06ED)
-                // Find the position of this alif
-                let alifPosSimple = -1;
-                let currentIndexSimple = 0;
-                for (let i = 0; i < word.length; i++) {
-                    if (isArabicLetter(word[i])) {
-                        if (currentIndexSimple === letterIndex) {
-                            alifPosSimple = i;
-                            break;
-                        }
-                        currentIndexSimple++;
-                    }
-                }
-                
-                if (alifPosSimple > 0) {
-                    // Check the text before alif for tanween fatha
-                    let beforeAlif = word.substring(0, alifPosSimple);
-                    // Find the last Arabic letter before alif
-                    let lastLetterPos = -1;
-                    for (let j = beforeAlif.length - 1; j >= 0; j--) {
-                        if (isArabicLetter(beforeAlif[j])) {
-                            lastLetterPos = j;
-                            break;
-                        }
-                    }
-                    
-                    if (lastLetterPos >= 0) {
-                        // Check if the letter at lastLetterPos has tanween fatha
-                        // Check a few characters after lastLetterPos for tanween fatha
-                        let checkEnd = Math.min(beforeAlif.length, lastLetterPos + 5);
-                        let context = beforeAlif.substring(lastLetterPos, checkEnd);
-                        if (context.includes(TANWEEN_FATHA)) {
-                            // Check if there's U+06ED between tanween and alif (if so, skip this simple pattern)
-                            let afterLastLetter = word.substring(lastLetterPos);
-                            let hasMaddaBetween = afterLastLetter.includes(ARABIC_SMALL_HIGH_MADDA);
-                            
-                            if (!hasMaddaBetween) {
-                                // Simple pattern: tanween fatha directly before alif
-                                // Check if there's space after alif, then trigger letter
-                                const fullTextForSimple = word + (nextWord ? SPACE + nextWord : '');
-                                let afterAlif = fullTextForSimple.substring(alifPosSimple + 1);
-                                // Skip diacritics to find space
-                                let spaceCheckPos = 0;
-                                while (spaceCheckPos < afterAlif.length && !isArabicLetter(afterAlif[spaceCheckPos]) && afterAlif[spaceCheckPos] !== SPACE) {
-                                    spaceCheckPos++;
-                                }
-                                
-                                if (spaceCheckPos < afterAlif.length && afterAlif[spaceCheckPos] === SPACE) {
-                                    // Check if next word starts with trigger letter
-                                    if (nextWord && nextWord.length > 0) {
-                                        for (let k = 0; k < nextWord.length; k++) {
-                                            if (isArabicLetter(nextWord[k])) {
-                                                if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[k])) {
-                                                    return true;
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Also check for pattern with U+06ED: tanween fatha + U+06ED before alif
-                // Find the position of this alif
-                let alifPosMadda = -1;
-                let currentIndexMadda = 0;
-                for (let i = 0; i < word.length; i++) {
-                    if (isArabicLetter(word[i])) {
-                        if (currentIndexMadda === letterIndex) {
-                            alifPosMadda = i;
-                            break;
-                        }
-                        currentIndexMadda++;
-                    }
-                }
-                
-                if (alifPosMadda > 0) {
-                    // Check the text before alif for the pattern
-                    let beforeAlifMadda = word.substring(0, alifPosMadda);
-                    // Look for U+06ED immediately before alif
-                    if (beforeAlifMadda.length > 0) {
-                        // Check last few characters for U+06ED
-                        for (let i = beforeAlifMadda.length - 1; i >= Math.max(0, beforeAlifMadda.length - 10); i--) {
-                            if (beforeAlifMadda[i] === ARABIC_SMALL_HIGH_MADDA) {
-                                // Found U+06ED, check if there's tanween fatha before it
-                                let beforeMadda = beforeAlifMadda.substring(0, i);
-                                // Find the last Arabic letter before U+06ED
-                                let lastLetterPosMadda = -1;
-                                for (let j = beforeMadda.length - 1; j >= 0; j--) {
-                                    if (isArabicLetter(beforeMadda[j])) {
-                                        lastLetterPosMadda = j;
-                                        break;
-                                    }
-                                }
-                                
-                                if (lastLetterPosMadda >= 0) {
-                                    // Check if the letter at lastLetterPos has tanween fatha
-                                    // Check a few characters after lastLetterPos for tanween fatha
-                                    let checkEnd = Math.min(beforeMadda.length, lastLetterPosMadda + 5);
-                                    let context = beforeMadda.substring(lastLetterPosMadda, checkEnd);
-                                    if (context.includes(TANWEEN_FATHA)) {
-                                        // Check if there's space after alif, then trigger letter
-                                        const fullTextMadda = word + (nextWord ? SPACE + nextWord : '');
-                                        let afterAlifMadda = fullTextMadda.substring(alifPosMadda + 1);
-                                        // Skip diacritics to find space
-                                        let spaceCheckPosMadda = 0;
-                                        while (spaceCheckPosMadda < afterAlifMadda.length && !isArabicLetter(afterAlifMadda[spaceCheckPosMadda]) && afterAlifMadda[spaceCheckPosMadda] !== SPACE) {
-                                            spaceCheckPosMadda++;
-                                        }
-                                        
-                                        if (spaceCheckPosMadda < afterAlifMadda.length && afterAlifMadda[spaceCheckPosMadda] === SPACE) {
-                                            // Check if next word starts with trigger letter
-                                            if (nextWord && nextWord.length > 0) {
-                                                for (let k = 0; k < nextWord.length; k++) {
-                                                    if (isArabicLetter(nextWord[k])) {
-                                                        if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[k])) {
-                                                            return true;
-                                                        }
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Also check if current letter unit contains U+06ED (it might be attached to a letter)
-            if (letter.includes(ARABIC_SMALL_HIGH_MADDA)) {
-                // Check if there's tanween fatha before and alif after
-                // Look backwards for tanween fatha
-                let beforeLetter = word.substring(0, letterPos);
-                // Find last Arabic letter before current letter
-                let lastLetterPos = -1;
-                for (let i = beforeLetter.length - 1; i >= 0; i--) {
-                    if (isArabicLetter(beforeLetter[i])) {
-                        lastLetterPos = i;
-                        break;
-                    }
-                }
-                
-                if (lastLetterPos >= 0) {
-                    // Check if letter at lastLetterPos has tanween fatha
-                    let checkStart = Math.max(0, lastLetterPos);
-                    let checkEnd = Math.min(word.length, letterPos);
-                    let context = word.substring(checkStart, checkEnd);
-                    if (context.includes(TANWEEN_FATHA)) {
-                        // Check if alif comes after current letter
-                        const fullText = word + (nextWord ? SPACE + nextWord : '');
-                        let afterLetter = fullText.substring(unitEndPos);
-                        // Find alif in remaining text
-                        for (let i = 0; i < afterLetter.length; i++) {
-                            if (isArabicLetter(afterLetter[i]) && afterLetter[i] === ALIF) {
-                                // Check if space comes after alif
-                                let afterAlif = afterLetter.substring(i + 1);
-                                let spacePos = 0;
-                                while (spacePos < afterAlif.length && !isArabicLetter(afterAlif[spacePos]) && afterAlif[spacePos] !== SPACE) {
-                                    spacePos++;
-                                }
-                                if (spacePos < afterAlif.length && afterAlif[spacePos] === SPACE) {
-                                    // Check if next word starts with trigger letter
-                                    if (nextWord && nextWord.length > 0) {
-                                        for (let j = 0; j < nextWord.length; j++) {
-                                            if (isArabicLetter(nextWord[j])) {
-                                                if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[j])) {
-                                                    return true;
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Regular case: Check if remaining text starts with space (letter with tanween is at end of word)
-            if (remainingText.length >= 1 && remainingText[0] === SPACE) {
-                // Check if next word exists and starts with a trigger letter
-                if (nextWord && nextWord.length > 0) {
-                    // Find the first Arabic letter in nextWord
-                    for (let i = 0; i < nextWord.length; i++) {
-                        if (isArabicLetter(nextWord[i])) {
-                            if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[i])) {
-                                return true;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Only check ن and م for other rules
-    if (letterChar !== NOON && letterChar !== MEEM) return false;
-    
-    // Find the position of this letter in the word by counting Arabic letters
-    let letterPos = -1;
-    let currentIndex = 0;
-    for (let i = 0; i < word.length; i++) {
-        if (isArabicLetter(word[i])) {
-            if (currentIndex === letterIndex) {
-                letterPos = i;
-                break;
-            }
-            currentIndex++;
-        }
-    }
-    
-    if (letterPos < 0) return false;
-    
-    // Count characters in the letter unit (letter + diacritics)
-    let unitEndPos = letterPos;
-    for (let i = letterPos; i < word.length; i++) {
-        if (isArabicLetter(word[i]) && i > letterPos) {
-            break; // Found next letter
-        }
-        unitEndPos = i + 1;
-    }
-    
-    const remainingText = fullText.substring(unitEndPos);
-    
-    // Helper to get next Arabic letter, skipping diacritics
-    const getNextArabicLetter = (text: string, startPos: number): { pos: number; letter: string | null } => {
-        for (let i = startPos; i < text.length; i++) {
-            if (isArabicLetter(text[i])) {
-                return { pos: i, letter: text[i] };
-            }
-            if (text[i] === SPACE) {
-                // Continue after space
-                continue;
-            }
-        }
-        return { pos: -1, letter: null };
-    };
-    
-    // Rule 1: ن or م with shaddah (any type of shaddah, regardless of vowels)
-    if (letterChar === NOON || letterChar === MEEM) {
-        // Check for shaddah in multiple ways to ensure we catch it
-        // 1. Check if shaddah is in the letter unit itself (parseWordIntoLetters attaches diacritics)
-        const hasShaddahInLetter = letter.includes(SHADDAH);
-        
-        // 2. Check if shaddah appears immediately after the letter in remaining text
-        const hasShaddahAfter = remainingText.length >= 1 && remainingText[0] === SHADDAH;
-        
-        // 3. Also check the original word at the letter position (in case parsing missed it)
-        let hasShaddahInWord = false;
-        if (letterPos >= 0 && letterPos < word.length) {
-            // Check a few characters after the letter position for shaddah
-            for (let i = letterPos + 1; i < Math.min(letterPos + 5, word.length); i++) {
-                if (word[i] === SHADDAH) {
-                    hasShaddahInWord = true;
-                    break;
-                }
-                // Stop if we hit another Arabic letter
-                if (isArabicLetter(word[i])) {
-                    break;
-                }
-            }
-        }
-        
-        if (hasShaddahInLetter || hasShaddahAfter || hasShaddahInWord) {
-            // Highlight if it has shaddah, regardless of vowels
-            return true;
-        }
-    }
-    
-    // Rule 2: ن with sukoon or without any vowel coming before trigger letters (same word or between words)
-    if (letterChar === NOON) {
-        if (hasVowel) {
-            return false; // Exclude if has fatha, damma, or kasra
-        }
-        
-        // Check if ن has sukoon or no vowel
-        const hasSukun = letter.includes(SUKUN_UNICODE) || letter.includes(QURANIC_SUKUN);
-        const hasNoVowel = !hasVowel && !hasSukun && !hasTanween;
-        
-        if (hasSukun || hasNoVowel) {
-            // Check next letter in same word or next word
-            const next = getNextArabicLetter(remainingText, 0);
-            if (next.letter && GHUNNAH_TRIGGER_LETTERS.includes(next.letter)) {
-                return true;
-            }
-            
-            // Check if there's a space and next word starts with trigger letter
-            if (remainingText.length >= 1 && remainingText[0] === SPACE) {
-                if (nextWord && nextWord.length > 0) {
-                    for (let i = 0; i < nextWord.length; i++) {
-                        if (isArabicLetter(nextWord[i])) {
-                            if (GHUNNAH_TRIGGER_LETTERS.includes(nextWord[i])) {
-                                return true;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Rule 4: م (with vowel, sukoon, or without vowels) coming before another م or ب
-    if (letterChar === MEEM) {
-        if (hasVowel) {
-            return false; // Exclude if has fatha, damma, or kasra
-        }
-        
-        // Check if next letter is م or ب (in same word or next word)
-        const next = getNextArabicLetter(remainingText, 0);
-        if (next.letter && (next.letter === MEEM || next.letter === '\u0628')) {
-            return true;
-        }
-        
-        // Check if there's a space and next word starts with م or ب
-        if (remainingText.length >= 1 && remainingText[0] === SPACE) {
-            if (nextWord && nextWord.length > 0) {
-                for (let i = 0; i < nextWord.length; i++) {
-                    if (isArabicLetter(nextWord[i])) {
-                        if (nextWord[i] === MEEM || nextWord[i] === '\u0628') {
-                            return true;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    return false;
-};
-
-// Check if a letter should be highlighted pink based on Madd rules
-const shouldHighlightMadd = (letter: string, letterIndex: number, word: string, prevWord: string): boolean => {
-    if (!letter || letter.length === 0 || !word) return false;
-    
-    const letterChar = letter[0]; // Get the base letter (first character)
-    
-    // Check if the letter unit contains any madd marker
-    // (MADDAH U+0653, SMALL HIGH MADDA U+06E4, SMALL WAW U+06E5, SMALL YEH U+06E6)
-    if (MADD_MARKERS.some(m => letter.includes(m))) {
-        return true;
-    }
-
-    // Check if the current letter is a standalone madd marker
-    if (MADD_MARKERS.includes(letterChar) || MADD_MARKERS.includes(letter)) {
-        return true;
-    }
-    
-    // Check if MADDAH appears immediately after this letter in the remaining text
-    // Find the position of this letter in the word
-    let letterPos = -1;
-    let currentIndex = 0;
-    for (let i = 0; i < word.length; i++) {
-        if (isArabicLetter(word[i])) {
-            if (currentIndex === letterIndex) {
-                letterPos = i;
-                break;
-            }
-            currentIndex++;
-        }
-    }
-    
-    if (letterPos >= 0) {
-        // Count characters in the letter unit (letter + diacritics)
-        let unitEndPos = letterPos;
-        for (let i = letterPos; i < word.length; i++) {
-            if (isArabicLetter(word[i]) && i > letterPos) {
-                break;
-            }
-            unitEndPos = i + 1;
-        }
-        
-        // Check if a madd marker appears immediately after this letter
-        const remainingText = word.substring(unitEndPos);
-        if (remainingText.length >= 1 && MADD_MARKERS.includes(remainingText[0])) {
-            return true;
-        }
-
-        // Also check if a madd marker appears anywhere in the remaining diacritics of this letter
-        for (let i = 0; i < Math.min(remainingText.length, 10); i++) {
-            if (MADD_MARKERS.includes(remainingText[i])) {
-                return true;
-            }
-            if (isArabicLetter(remainingText[i])) {
-                break;
-            }
-        }
-    }
-    
-    return false;
-};
-
-// Check if a letter should be highlighted light blue based on Qalqalah rules
-const shouldHighlightQalqalah = (letter: string, letterIndex: number, word: string, isLastWordInVerse: boolean, isLastLetterOfWord: boolean): boolean => {
-    if (!letter || letter.length === 0 || !word) return false;
-    
-    const letterChar = letter[0]; // Get the base letter (first character)
-    
-    // Check if the letter is one of the Qalqalah letters: ق, ط, ب, ج, د
-    if (!QALQALAH_LETTERS.includes(letterChar)) {
-        return false;
-    }
-    
-    // Check if the letter has sukun (U+0652 or U+06E1)
-    const SUKUN_UNICODE = '\u0652'; // U+0652 - Standard Sukun
-    const QURANIC_SUKUN = '\u06E1'; // U+06E1 - Quranic Sukun
-    const hasSukun = letter.includes(SUKUN_UNICODE) || letter.includes(QURANIC_SUKUN);
-    
-    // Check if it's at the end of the verse (last word and last letter)
-    if (isLastWordInVerse && isLastLetterOfWord) {
-        return true;
-    }
-    
-    // Check if it has sukun
-    if (hasSukun) {
-        return true;
-    }
-    
-    return false;
-};
-
-
-// Silent letters are marked in the Madinah Mushaf with U+06DF (Small High Rounded Zero).
-// These letters are written but not pronounced (e.g. the alif in "أَنَا", the wāw in
-// "أُولَٰئِكَ", the lām in الشَّمْس when reading wasl). Returns true if this letter is silent.
-const shouldHighlightSilent = (letter: string): boolean => {
-    if (!letter) return false;
-    return letter.includes(SILENT_MARKER);
-};
+// Tajweed rule detection now lives in services/tajweedColorService.ts (verse-level
+// engine validated against Quran.com's tajweed annotations). The generated classes
+// below color letter units per rule, with dark-mode variants.
+const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
+    .map(r => `.tj-${r}{color:${TAJWEED_RULES[r].color}} .dark .tj-${r}{color:${TAJWEED_RULES[r].colorDark}}`)
+    .join('\n');
 
 // Component for rendering a letter with error marking
 const LetterWithError: React.FC<{
@@ -858,14 +224,8 @@ const LetterWithError: React.FC<{
     onTextChange: (text: string) => void;
     onTextSubmit: (key: string, text: string) => void;
     onTextCancel: () => void;
-    showQalqalah: boolean;
-    showGhunnah: boolean;
-    showMadd: boolean;
+    tajweedClass?: string; // 'tj-<rule>' color class from the tajweed engine
     clickState: number; // 0 = none, 1 = yellow (pending), 2 = marked
-    word: string; // Full word for Ghunnah context
-    nextWord: string; // Next word for Ghunnah context
-    prevWord: string; // Previous word for Madd context
-    letterIndex: number; // Index of letter in word
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
     isCursorActive?: boolean;
@@ -882,16 +242,8 @@ const LetterWithError: React.FC<{
     onTextChange,
     onTextSubmit,
     onTextCancel,
-    showQalqalah,
-    showGhunnah,
-    showMadd,
+    tajweedClass,
     clickState,
-    word,
-    nextWord,
-    prevWord,
-    letterIndex,
-    isLastWordInVerse,
-    isLastLetterOfWord,
     onLongPress,
     isFocused,
     isCursorActive,
@@ -1049,11 +401,7 @@ const LetterWithError: React.FC<{
                 onTouchStart={startLongPress}
                 onTouchEnd={cancelLongPress}
                 onTouchCancel={cancelLongPress}
-                className={`inline cursor-pointer transition-colors ${isCursorActive ? 'cursor-pointer-glow' : ''} ${
-                    shouldHighlightSilent(letter)
-                        ? '!text-slate-400 dark:!text-slate-500'
-                        : `${showGhunnah && shouldHighlightGhunnah(letter, letterIndex, word, nextWord) ? '!text-green-600 dark:!text-green-400' : ''} ${showMadd && shouldHighlightMadd(letter, letterIndex, word, prevWord) ? '!text-pink-600 dark:!text-pink-400' : ''} ${showQalqalah && shouldHighlightQalqalah(letter, letterIndex, word, isLastWordInVerse, isLastLetterOfWord) ? '!text-sky-500 dark:!text-sky-400' : ''}`
-                }`}
+                className={`inline cursor-pointer transition-colors ${isCursorActive ? 'cursor-pointer-glow' : ''} ${tajweedClass ?? ''}`}
                 // NOTE: do NOT add `position: relative` + `z-index` here. iOS Safari has a
                 // long-standing bug where an INLINE element with position:relative and a
                 // z-index intermittently fails to paint its background-color (the mistake
@@ -1085,223 +433,6 @@ const LetterWithError: React.FC<{
 };
 
 LetterWithError.displayName = 'LetterWithError';
-
-const TajweedWord: React.FC<{
-    word: string;
-    nextWord: string;
-    isLastWordInVerse: boolean;
-    showQalqalah: boolean;
-    showGhunnah: boolean;
-    showMadd: boolean;
-}> = React.memo(({ word, nextWord, isLastWordInVerse, showQalqalah, showGhunnah, showMadd }) => {
-    const units = parseWordIntoUnits(word);
-
-    const getFirstArabicLetter = (w: string): string | null => {
-        if (!w) return null;
-        for (const char of w) {
-            if (isArabicLetter(char)) return char;
-        }
-        return null;
-    };
-
-    const processUnitWithSpecialChars = (unitText: string, unitIndex: number, className: string = '') =>
-        <span key={unitIndex} className={className}>{unitText}</span>;
-
-    const renderedUnits = units.map((unit, index) => {
-
-        // --- SILENT LETTER (always on, no toggle) ---
-        // Letters bearing U+06DF (Small High Rounded Zero) are silent in continuous reading.
-        // Examples: alif in "أَنَا", wāw in "أُولَٰئِكَ", lām in "ٱلشَّمْس". Show in grey.
-        if (unit.includes(SILENT_MARKER)) {
-            return processUnitWithSpecialChars(unit, index, 'text-slate-400 dark:text-slate-500');
-        }
-
-        // --- MADD RULE (Madd Far'ee — secondary madds) ---
-        // Markers: U+0653 MADDAH ABOVE (Muttasil/Munfasil), U+06E4 SMALL HIGH MADDA (Lazim),
-        // U+06E5 SMALL WAW & U+06E6 SMALL YEH (Madd Silah and similar sub-vowels).
-        if (showMadd && MADD_MARKERS.some(m => unit.includes(m))) {
-            return processUnitWithSpecialChars(unit, index, 'text-pink-600');
-        }
-
-        let ghunnahRuleApplied = false;
-
-        // --- GHUNNAH RULES ---
-        if (showGhunnah) {
-            // Build full text context: current word + space + next word for pattern matching
-            const fullText = word + (nextWord ? SPACE + nextWord : '');
-
-            // Find the position of this unit's start in the word
-            let unitStartPos = 0;
-            for (let i = 0; i < index; i++) {
-                unitStartPos += units[i].length;
-            }
-
-            // --- Tanween + ghunnah trigger ---
-            // Any of the 3 tanweens (ً ٌ ٍ) followed by a ghunnah trigger letter in the next
-            // word triggers Idghaam-with-Ghunnah / Iqlab / Ikhfaa — color the bearing letter green.
-            const hasTanween = TANWEEN_GHUNNAH_TANWEEN_CHARS.some(t => unit.includes(t));
-            if (hasTanween && nextWord) {
-                let firstNextLetter: string | null = null;
-                for (const ch of nextWord) {
-                    if (isArabicLetter(ch)) { firstNextLetter = ch; break; }
-                }
-                if (firstNextLetter && GHUNNAH_TRIGGER_LETTERS.includes(firstNextLetter)) {
-                    ghunnahRuleApplied = true;
-                }
-            }
-
-            // Check if this unit starts with U+0646 (ن) or U+0645 (م)
-            const unitStartsWithNoon = !ghunnahRuleApplied && unit.startsWith(NOON);
-            const unitStartsWithMeem = !ghunnahRuleApplied && unit.startsWith(MEEM);
-            
-            if (unitStartsWithNoon || unitStartsWithMeem) {
-                // Find the exact position of the letter in the full text
-                const letterPos = unitStartPos;
-                const letter = fullText[letterPos];
-                
-                // Skip diacritics in the current unit to get the position after the letter and its diacritics
-                let posAfterLetter = letterPos + 1;
-                // Skip any diacritics that might be in the same unit
-                while (posAfterLetter < fullText.length && posAfterLetter < unitStartPos + unit.length) {
-                    const char = fullText[posAfterLetter];
-                    // Check if it's a diacritic (not an Arabic letter and not space)
-                    if (!isArabicLetter(char) && char !== SPACE) {
-                        posAfterLetter++;
-                    } else {
-                        break;
-                    }
-                }
-                
-                const remainingText = fullText.substring(posAfterLetter);
-                
-                // Rule 1: U+0646 followed by U+0652 followed by trigger letters
-                if (letter === NOON && remainingText.length >= 2) {
-                    if (remainingText[0] === SUKUN_UNICODE && GHUNNAH_TRIGGER_LETTERS.includes(remainingText[1])) {
-                        ghunnahRuleApplied = true;
-                    }
-                    // Rule 2: U+0646 followed by trigger letters (no sukun) - skip diacritics first
-                    else {
-                        let nextLetterPos = 0;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos]) && remainingText[nextLetterPos] !== SPACE) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && GHUNNAH_TRIGGER_LETTERS.includes(remainingText[nextLetterPos])) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                    // Rule 3: U+0646 followed by U+0652 followed by space followed by trigger letters
-                    if (!ghunnahRuleApplied && remainingText.length >= 3 && remainingText[0] === SUKUN_UNICODE && remainingText[1] === SPACE) {
-                        let nextLetterPos = 2;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos])) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && GHUNNAH_TRIGGER_LETTERS.includes(remainingText[nextLetterPos])) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                    // Rule 4: U+0646 followed by space followed by trigger letters
-                    if (!ghunnahRuleApplied && remainingText.length >= 2 && remainingText[0] === SPACE) {
-                        let nextLetterPos = 1;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos])) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && GHUNNAH_TRIGGER_LETTERS.includes(remainingText[nextLetterPos])) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                }
-                
-                // Rule 5: U+0646 or U+0645 followed by U+0651 (shaddah)
-                if (!ghunnahRuleApplied) {
-                    // Check if shaddah is in the unit itself or right after
-                    if (unit.includes(SHADDAH) || (remainingText.length >= 1 && remainingText[0] === SHADDAH)) {
-                        ghunnahRuleApplied = true;
-                    }
-                }
-                
-                // Rule 6-9: U+0645 rules
-                if (!ghunnahRuleApplied && letter === MEEM) {
-                    // Rule 6: U+0645 followed by U+0652 followed by U+0645 or U+0628
-                    if (remainingText.length >= 2 && remainingText[0] === SUKUN_UNICODE) {
-                        let nextLetterPos = 1;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos])) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && (remainingText[nextLetterPos] === MEEM || remainingText[nextLetterPos] === '\u0628')) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                    // Rule 7: U+0645 followed by U+0645 or U+0628 (skip diacritics)
-                    if (!ghunnahRuleApplied && remainingText.length >= 1) {
-                        let nextLetterPos = 0;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos]) && remainingText[nextLetterPos] !== SPACE) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && (remainingText[nextLetterPos] === MEEM || remainingText[nextLetterPos] === '\u0628')) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                    // Rule 8: U+0645 followed by U+0652 followed by space followed by U+0645 or U+0628
-                    if (!ghunnahRuleApplied && remainingText.length >= 3 && remainingText[0] === SUKUN_UNICODE && remainingText[1] === SPACE) {
-                        let nextLetterPos = 2;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos])) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && (remainingText[nextLetterPos] === MEEM || remainingText[nextLetterPos] === '\u0628')) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                    // Rule 9: U+0645 followed by space followed by U+0645 or U+0628
-                    if (!ghunnahRuleApplied && remainingText.length >= 2 && remainingText[0] === SPACE) {
-                        let nextLetterPos = 1;
-                        while (nextLetterPos < remainingText.length && !isArabicLetter(remainingText[nextLetterPos])) {
-                            nextLetterPos++;
-                        }
-                        if (nextLetterPos < remainingText.length && (remainingText[nextLetterPos] === MEEM || remainingText[nextLetterPos] === '\u0628')) {
-                            ghunnahRuleApplied = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (ghunnahRuleApplied) {
-            return processUnitWithSpecialChars(unit, index, 'text-green-600');
-        }
-
-        // --- QALQALAH RULE ---
-        if (showQalqalah) {
-             const baseLetter = unit[0];
-             if (QALQALAH_LETTERS.includes(baseLetter)) {
-                 const hasSukun = unit.includes(SUKUN);
-                 // Is this unit the last *letter* of the word?
-                 let isLastLetterOfWord = true;
-                 for (let i = index + 1; i < units.length; i++) {
-                     if (getFirstArabicLetter(units[i])) {
-                         isLastLetterOfWord = false;
-                         break;
-                     }
-                 }
-                 
-                 if (hasSukun || (isLastWordInVerse && isLastLetterOfWord)) {
-                     return processUnitWithSpecialChars(unit, index, 'text-sky-500 dark:text-sky-400');
-                 }
-             }
-        }
-        
-        return processUnitWithSpecialChars(unit, index);
-    });
-
-    // If the word carries a mark the selected font renders wrong (silent U+06DF,
-    // imāla U+06EA, ishmām U+06EB), render the WHOLE word in the corrective font
-    // so letters stay joined and the mark attaches (see correctiveWordFont).
-    const wordFont = correctiveWordFont(word);
-    if (wordFont) {
-        return <span style={{ fontFamily: wordFont }}>{renderedUnits}</span>;
-    }
-    return <>{renderedUnits}</>;
-});
-
 
 type SurahStatus = {
     id: number;
@@ -1543,9 +674,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     );
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
-    const [showQalqalah, setShowQalqalah] = useState(false);
-    const [showGhunnah, setShowGhunnah] = useState(false);
-    const [showMadd, setShowMadd] = useState(false);
+    // One switch for the full tajweed color-coding (QPC palette, all rules).
+    const [showTajweed, setShowTajweed] = useState(true);
+    const verseTajweedMaps = useMemo(() => {
+        const m = new Map<string, Map<string, TajweedRule>>();
+        if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
+        return m;
+    }, [verses, showTajweed]);
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
@@ -3364,16 +2499,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
                                     onTextCancel={handleLetterTextCancel}
-                                    showQalqalah={showQalqalah}
-                                    showGhunnah={showGhunnah}
-                                    showMadd={showMadd}
+                                    tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
                                     clickState={clickState}
-                                    word={word}
-                                    nextWord={wordsArray[wordIndex + 1] || ''}
-                                    prevWord={wordsArray[wordIndex - 1] || ''}
-                                    letterIndex={letterIndex}
-                                    isLastWordInVerse={isLastWordInVerse}
-                                    isLastLetterOfWord={isLastLetterOfWord}
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
@@ -3836,7 +2963,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         onClick={() => setShowToolsMenu(p => !p)}
                                         title="Tools"
                                         className={`h-7 px-2.5 flex items-center gap-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${
-                                            showToolsMenu || showTranslation || showQalqalah || showGhunnah || showMadd || teacherNote
+                                            showToolsMenu || showTranslation || showTajweed || teacherNote
                                                 ? 'bg-teal-600 text-white shadow-md'
                                                 : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30'
                                         }`}
@@ -3854,17 +2981,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             </button>
 
                                             <div className="border-t border-slate-100 dark:border-gray-700 my-1" />
-                                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">Tajweed Highlights</p>
-
-                                            <button onClick={() => setShowQalqalah(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showQalqalah ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                <span className="w-3 h-3 rounded-full bg-sky-400 flex-shrink-0" />{t('liveSession.toggleQalqalah')}
+                                            <button onClick={() => setShowTajweed(p => !p)} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${showTajweed ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
+                                                <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: 'conic-gradient(#FF7E1E, #9400A8, #169777, #26BFFD, #DD0008, #537FFF, #FF7E1E)' }} />
+                                                {t('liveSession.tajweedColors')}
                                             </button>
-                                            <button onClick={() => setShowGhunnah(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showGhunnah ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" />{t('liveSession.toggleGhunnah')}
-                                            </button>
-                                            <button onClick={() => setShowMadd(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showMadd ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                <span className="w-3 h-3 rounded-full bg-pink-500 flex-shrink-0" />{t('liveSession.toggleMadd')}
-                                            </button>
+                                            {showTajweed && (
+                                                <div className="grid grid-cols-1 gap-0.5 px-2 pb-1 max-h-44 overflow-y-auto">
+                                                    {TAJWEED_LEGEND_ORDER.map(ruleId => (
+                                                        <div key={ruleId} className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                                                            <span className="w-2 h-2 rounded-full flex-shrink-0 tj-dot" style={{ background: TAJWEED_RULES[ruleId].color }} />
+                                                            <span className="truncate">{TAJWEED_RULES[ruleId].label}</span>
+                                                            <span dir="rtl" className="ms-auto opacity-80">{TAJWEED_RULES[ruleId].labelAr}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                             {/* Teacher's Notes */}
                                             {!readOnly && (<>
@@ -4047,16 +3178,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onTextChange={setErrorTextInput}
                                                                             onTextSubmit={handleLetterTextSubmit}
                                                                             onTextCancel={handleLetterTextCancel}
-                                                                            showQalqalah={showQalqalah}
-                                                                            showGhunnah={showGhunnah}
-                                                                            showMadd={showMadd}
+                                                                            tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
                                                                             clickState={cs}
-                                                                            word={item.word}
-                                                                            nextWord={nextWordStr}
-                                                                            prevWord={prevWordStr}
-                                                                            letterIndex={li}
-                                                                            isLastWordInVerse={false}
-                                                                            isLastLetterOfWord={li === letters.length - 1}
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
@@ -4193,6 +3316,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     </svg>
                 </button>
             )}
+            <style>{TAJWEED_CSS}</style>
             <SearchResultsModal isOpen={isSearchResultsModalOpen} onClose={() => setIsSearchResultsModalOpen(false)} results={searchResults} query={searchInput} onSelect={handleSelectSearchResult} />
             <ConfirmationModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} })} onConfirm={confirmModalState.onConfirm} title={confirmModalState.title} message={confirmModalState.message} />
 
