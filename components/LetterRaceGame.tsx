@@ -34,8 +34,9 @@ const BURST     = 0.055; // speed added per run-key press — tiny (~0.45% of th
 const MAX_SPEED = 0.19;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
 // Steering turns the HEADING (which way "forward" points), not a sideways jump.
-const TURN_RATE = 2.4;   // degrees/frame the head turns while a steer key is held
-const TURN_MAX  = 46;    // max turn from straight-ahead (keeps it a curve, not a slide)
+// Each key PRESS ratchets the heading one notch and it stays there (no recenter).
+const STEER_STEP = 9;    // degrees the head turns per key press
+const TURN_MAX   = 54;   // max turn from straight-ahead (keeps it a curve, not a slide)
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
 const STEAL_GRACE = 900; // ms after a grab/steal during which no steal can happen
@@ -244,6 +245,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       // Each *distinct press* of a run key is a burst of speed — holding does nothing.
       if (P1_RUN.includes(e.code) && !e.repeat) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + BURST);
       if (P2_RUN.includes(e.code) && !e.repeat) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + BURST);
+      // Steering ratchets the heading a notch per press and stays there.
+      const turn = (pl: RacePlayer, d: number) => { pl.heading = Math.max(-TURN_MAX, Math.min(TURN_MAX, pl.heading + d * STEER_STEP)); };
+      if (e.code === 'KeyA')      turn(g.p1, -1);
+      if (e.code === 'KeyD')      turn(g.p1, +1);
+      if (e.code === 'ArrowLeft') turn(g.p2, -1);
+      if (e.code === 'ArrowRight')turn(g.p2, +1);
     };
     const up = (e: KeyboardEvent) => { keys.current.delete(e.code); };
     // Focus loss eats keyup events — clear held keys so nobody drifts into the
@@ -283,14 +290,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   useEffect(() => {
     if (phase !== 'race') return;
     let raf = 0;
-    const step = (p: RacePlayer, other: RacePlayer, steerLeft: boolean, steerRight: boolean, who: 1 | 2) => {
+    const step = (p: RacePlayer, other: RacePlayer, who: 1 | 2) => {
       const g = game.current;
       const now = performance.now();
-      // Steering turns the HEADING (which way forward points); it does not jump
-      // the player sideways. Release to straighten back out. + = screen-right.
-      if (steerRight && !steerLeft)      p.heading = Math.min(TURN_MAX, p.heading + TURN_RATE);
-      else if (steerLeft && !steerRight) p.heading = Math.max(-TURN_MAX, p.heading - TURN_RATE);
-      else                               p.heading *= 0.9;   // ease back to straight
+      // Heading is set by key presses (see keydown handler) and STAYS put — the
+      // player keeps whatever way it's pointing until you tap the other steer key.
       // Forward direction: carry → run home (down); opponent carries → chase
       // them; otherwise → run to the letter row (up).
       let dir: number;
@@ -341,16 +345,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
     const loop = () => {
       const g = game.current;
-      const k = keys.current;
       const now = performance.now();
 
       // Alternate who is processed first so simultaneous grabs are fair.
-      const order: Array<[RacePlayer, RacePlayer, boolean, boolean, 1 | 2]> = g.checkP1First
-        ? [[g.p1, g.p2, k.has('KeyA'), k.has('KeyD'), 1], [g.p2, g.p1, k.has('ArrowLeft'), k.has('ArrowRight'), 2]]
-        : [[g.p2, g.p1, k.has('ArrowLeft'), k.has('ArrowRight'), 2], [g.p1, g.p2, k.has('KeyA'), k.has('KeyD'), 1]];
+      const order: Array<[RacePlayer, RacePlayer, 1 | 2]> = g.checkP1First
+        ? [[g.p1, g.p2, 1], [g.p2, g.p1, 2]]
+        : [[g.p2, g.p1, 2], [g.p1, g.p2, 1]];
       g.checkP1First = !g.checkP1First;
-      for (const [p, other, sl, sr, who] of order) {
-        if (step(p, other, sl, sr, who)) return; // round ended — stop the loop
+      for (const [p, other, who] of order) {
+        if (step(p, other, who)) return; // round ended — stop the loop
       }
 
       // Steal: PUSH the carrier to take the letter — the robber must actually be
