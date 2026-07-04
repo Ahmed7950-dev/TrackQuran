@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- iOS Home Screen icon: must be a PNG (iOS ignores SVG here) — a wrong/missing
+         one is why Safari fell back to the "L" letter icon. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <!-- iOS: launch as a standalone web app (true fullscreen, no Safari chrome)
          when the user adds the site to their Home Screen. iOS Safari does not
