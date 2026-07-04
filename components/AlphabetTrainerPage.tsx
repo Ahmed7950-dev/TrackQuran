@@ -553,8 +553,8 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                     }} />
                   )}
                   <div className="pt-3 px-2 flex items-end justify-center gap-1" style={{ width: 110, height: 110 }}>
-                    <img src="/sprites/race-fox.png" alt="" className="h-20 w-auto object-contain" />
-                    <img src="/sprites/race-lion.png" alt="" className="h-20 w-auto object-contain" />
+                    <img src="/sprites/race-fox-down.png" alt="" className="h-20 w-auto object-contain" />
+                    <img src="/sprites/race-lion-down.png" alt="" className="h-20 w-auto object-contain" />
                   </div>
                   <div className="pb-3 px-3 w-full text-center">
                     <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-emerald-700'}`}>
