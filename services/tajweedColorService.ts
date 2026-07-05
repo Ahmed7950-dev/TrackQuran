@@ -67,6 +67,28 @@ export const TAJWEED_RULES: Record<TajweedRule, TajweedRuleMeta> = {
   slnt:                { label: 'Silent letter',          labelAr: 'حرف لا يُنطق',     color: '#AAAAAA', colorDark: '#8A8A8A' },
 };
 
+// Short, teacher-facing explanation of each rule (English + Arabic) for the
+// "what do these colors mean?" info panel.
+export const TAJWEED_DESCRIPTIONS: Record<TajweedRule, { en: string; ar: string }> = {
+  ghunnah:             { en: 'Nasal sound held ~2 counts on a doubled ن or م.',                 ar: 'غُنّة بمقدار حركتين على النون أو الميم المشدّدة.' },
+  ikhafa:              { en: 'Nūn sākinah / tanwīn hidden with light nasalization before 15 letters.', ar: 'إخفاء النون الساكنة والتنوين مع غُنّة عند خمسة عشر حرفاً.' },
+  ikhafa_shafawi:      { en: 'Mīm sākinah hidden with nasalization before ب.',                    ar: 'إخفاء الميم الساكنة عند حرف الباء.' },
+  idgham_ghunnah:      { en: 'Nūn / tanwīn merged into ي و م ن with nasalization.',              ar: 'إدغام بغُنّة في حروف (يَنْمُو).' },
+  idgham_wo_ghunnah:   { en: 'Nūn / tanwīn merged into ل ر without nasalization.',                ar: 'إدغام بلا غُنّة في اللام والراء.' },
+  idgham_shafawi:      { en: 'Mīm sākinah merged into a following م.',                            ar: 'إدغام الميم الساكنة في الميم.' },
+  idgham_mutajanisayn: { en: 'Two letters of the same articulation point assimilate.',           ar: 'إدغام حرفين من مخرج واحد (متجانسين).' },
+  idgham_mutaqaribayn: { en: 'Two letters of close articulation points assimilate.',             ar: 'إدغام حرفين متقاربين في المخرج.' },
+  iqlab:               { en: 'Nūn / tanwīn turns into a hidden mīm before ب.',                    ar: 'قلب النون الساكنة والتنوين ميماً عند الباء.' },
+  qalaqah:             { en: 'Echoing bounce on ق ط ب ج د when sākin.',                            ar: 'قلقلة حروف (قُطْبُ جَدٍّ) عند سكونها.' },
+  madda_normal:        { en: 'Natural prolongation of 2 counts.',                                 ar: 'مدّ طبيعي بمقدار حركتين.' },
+  madda_permissible:   { en: 'Prolongation at a stop — 2, 4 or 6 counts.',                        ar: 'مدّ عارض للسكون (2 أو 4 أو 6 حركات).' },
+  madda_necessary:     { en: 'Obligatory prolongation of 6 counts.',                              ar: 'مدّ لازم بمقدار ست حركات.' },
+  madda_obligatory:    { en: 'Prolongation before a hamza — 4 to 5 counts.',                      ar: 'مدّ واجب متصل (4 إلى 5 حركات).' },
+  ham_wasl:            { en: 'Connecting hamza — silent when continuing from before.',            ar: 'همزة وصل تسقط عند الوصل.' },
+  laam_shamsiyah:      { en: 'Lām not pronounced before a sun letter.',                           ar: 'لام شمسية لا تُنطق.' },
+  slnt:                { en: 'A written letter that is not pronounced.',                           ar: 'حرف يُكتب ولا يُنطق.' },
+};
+
 // Legend display order: pronunciation rules first, silent/gray last.
 export const TAJWEED_LEGEND_ORDER: TajweedRule[] = [
   'ghunnah', 'ikhafa', 'ikhafa_shafawi', 'idgham_ghunnah', 'idgham_wo_ghunnah',

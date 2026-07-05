@@ -410,7 +410,9 @@
     "confirmRemoveRange": "Are you sure you want to remove the progress from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?",
     "removeMemorizationRangeTitle": "Remove Memorization Range",
     "confirmRemoveMemorizationRange": "Are you sure you want to remove the memorization from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?",
-    "tajweedColors": "Tajweed colors"
+    "tajweedColors": "Tajweed colors",
+    "tajweedInfo": "What do these colors mean?",
+    "tajweedInfoTitle": "Tajweed colors"
   },
   "lettersTrainer": {
     "pageTitle": "Arabic Letter Distinction Trainer",

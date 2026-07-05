@@ -410,7 +410,9 @@
     "confirmRemoveRange": "هل أنت متأكد من رغبتك في إزالة التقدم من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟",
     "removeMemorizationRangeTitle": "إزالة نطاق الحفظ",
     "confirmRemoveMemorizationRange": "هل أنت متأكد من رغبتك في إزالة الحفظ من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟",
-    "tajweedColors": "ألوان التجويد"
+    "tajweedColors": "ألوان التجويد",
+    "tajweedInfo": "ماذا تعني هذه الألوان؟",
+    "tajweedInfoTitle": "ألوان التجويد"
   },
   "lettersTrainer": {
     "pageTitle": "مدرّب التمييز بين الحروف العربية",

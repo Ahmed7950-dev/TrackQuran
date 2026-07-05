@@ -410,7 +410,9 @@
     "confirmRemoveRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ilerlemeyi kaldırmak istediğinizden emin misiniz?",
     "removeMemorizationRangeTitle": "Ezberleme Aralığını Kaldır",
     "confirmRemoveMemorizationRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ezberlemeyi kaldırmak istediğinizden emin misiniz?",
-    "tajweedColors": "Tecvid renkleri"
+    "tajweedColors": "Tecvid renkleri",
+    "tajweedInfo": "Bu renkler ne anlama geliyor?",
+    "tajweedInfoTitle": "Tecvid renkleri"
   },
   "lettersTrainer": {
     "pageTitle": "Arapça Harf Ayırt Etme Eğitimi",
