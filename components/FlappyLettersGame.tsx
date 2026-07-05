@@ -69,6 +69,16 @@ const GAME_CONFIG = {
     bubbleR: 6.2,            // bubble radius (height-%)
     announceDelayMs: 350,    // pause before the next letter is spoken
   },
+  // Pixel-art scenes (craftpix mountain pack). One is picked at random on
+  // every game start and tiled horizontally (repeat-x) while scrolling with
+  // the world for a parallax movement feel.
+  backgrounds: [
+    '/sprites/flappy-bg/green-peaks.png',
+    '/sprites/flappy-bg/sunset.png',
+    '/sprites/flappy-bg/ice.png',
+    '/sprites/flappy-bg/winter.png',
+    '/sprites/flappy-bg/rocky.png',
+  ],
   characters: [
     // Birds fly toward the RIGHT (the world scrolls left). Files exported
     // facing left ("revert" downloads) carry flip: true and are mirrored.
@@ -187,6 +197,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   const [p1Name, setP1Name] = useState('');
   const [p2Name, setP2Name] = useState('');
   const [menuStep, setMenuStep] = useState<1 | 2>(1); // pick player 1 first, then player 2
+  const [bgUrl, setBgUrl] = useState<string>(GAME_CONFIG.backgrounds[0]);
 
   const phaseRef = useRef<Phase>('menu');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -204,6 +215,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     targetIdx: 0,
     scrolledSinceCluster: 999, // spawn a column immediately
     bubbleSeq: 0,
+    bgShift: 0,                // accumulated background scroll (width-%)
     endMsg: '',
     winnerIdx: -1 as number,   // -1 = nobody finished the set
   });
@@ -298,9 +310,11 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       targetIdx: 0,
       scrolledSinceCluster: 999,
       bubbleSeq: 0,
+      bgShift: 0,
       endMsg: '',
       winnerIdx: -1,
     };
+    setBgUrl(GAME_CONFIG.backgrounds[Math.floor(Math.random() * GAME_CONFIG.backgrounds.length)]);
     setPhase('ready');
     announce(250);
   }, [pool, p1Char, p2Char, p1Name, p2Name, announce]);
@@ -403,8 +417,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       }
 
       if (ph === 'ready') {
-        // gentle hover while waiting for the first flap
+        // gentle hover while waiting for the first flap; the scenery drifts
         g.players.forEach((p, i) => { p.y = (i === 0 ? 46 : 54) + Math.sin(now / 400 + i * 2) * 2.2; p.vy = 0; });
+        g.bgShift += 1.5 * dt;
         setTick(t => t + 1);
         return;
       }
@@ -433,8 +448,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         }
       });
 
-      // world scroll + spawning
+      // world scroll + spawning (background at 0.55× = parallax depth)
       const dx = speed * dt;
+      g.bgShift += dx * 0.55;
       g.bubbles.forEach(b => { b.x -= dx; });
       g.bubbles = g.bubbles.filter(b => b.x > -12 && (!b.taken || now - b.takenAt < 450));
       g.scrolledSinceCluster += dx;
@@ -473,23 +489,24 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         touchAction: 'manipulation',
       }}
     >
-      {/* drifting clouds */}
-      {[12, 38, 64, 85].map((x, i) => (
-        <div key={i} style={{
-          position: 'absolute', left: `${x}%`, top: `${8 + (i % 3) * 9}%`, width: 110, height: 38,
-          background: '#ffffffcc', borderRadius: 40, filter: 'blur(2px)',
-          animation: `flCloud ${28 + i * 7}s linear infinite`,
-        }} />
-      ))}
+      {/* pixel-art scenery — tiled horizontally, scrolls with the world */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: `url(${bgUrl})`,
+        backgroundRepeat: 'repeat-x',
+        backgroundSize: 'auto 100%',
+        backgroundPositionX: `${-(g.bgShift / 100) * (typeof window !== 'undefined' ? window.innerWidth : 1000)}px`,
+        imageRendering: 'pixelated',
+      }} />
 
       {/* ── Field ── */}
       <div ref={fieldRef} onPointerDown={onFieldPointerDown} style={{ position: 'absolute', inset: 0 }}>
-        {/* ceiling + ground */}
-        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: `${CEILING_Y}%`, background: 'linear-gradient(#0ea5e9aa,#0ea5e900)' }} />
+        {/* ceiling + ground danger zones (scene-agnostic overlays) */}
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: `${CEILING_Y}%`, background: 'linear-gradient(#0f172a88,#0f172a00)' }} />
         <div style={{
           position: 'absolute', left: 0, right: 0, top: `${GROUND_Y}%`, bottom: 0,
-          background: 'linear-gradient(#4ade80 0%, #22c55e 30%, #15803d 100%)',
-          borderTop: '4px solid #16a34a', boxShadow: '0 -6px 18px rgba(21,128,61,0.25)',
+          background: 'linear-gradient(rgba(15,23,42,0.18), rgba(15,23,42,0.5))',
+          borderTop: '3px solid rgba(255,255,255,0.85)',
         }} />
 
         {/* letter bubbles */}
@@ -700,12 +717,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         </div>
       )}
 
-      <style>{`
-        @keyframes flCloud {
-          from { transform: translateX(20vw); }
-          to   { transform: translateX(-120vw); }
-        }
-      `}</style>
     </div>
   );
 };
