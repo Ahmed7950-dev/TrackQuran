@@ -60,10 +60,10 @@ const GAME_CONFIG = {
     baseSpeed: 13,           // world scroll speed (width-%/s) at start
     speedRampPerLetter: 0.9, // extra speed per collected letter
     maxSpeed: 30,
-    clusterSpacing: 38,      // width-% scrolled between letter columns
-    spacingMinRatio: 0.7,    // spacing shrinks with progress down to this ×
-    emptySlotsStart: 3,      // flyable gaps per column at the start
-    emptySlotsMin: 1,        // …tightening down to this many
+    clusterSpacing: 52,      // width-% scrolled between letter columns
+    spacingMinRatio: 0.8,    // spacing shrinks with progress down to this ×
+    emptySlotsStart: 4,      // flyable gaps per column at the start
+    emptySlotsMin: 2,        // …tightening down to this many
     tightenEvery: 4,         // collect this many letters → one fewer gap
     slotsY: [13, 28, 43, 58, 72, 86], // vertical letter slots (sky → ground)
     bubbleR: 6.2,            // bubble radius (height-%)
@@ -160,14 +160,14 @@ const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excl
   ({ value, onChange, excluded, color, label }) => (
     <div style={{ background: '#ffffff14', borderRadius: 18, padding: '12px 14px', minWidth: 230 }}>
       <div style={{ color, fontWeight: 900, fontSize: 14, marginBottom: 8, textAlign: 'center' }}>{label}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 300 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 420 }}>
         {GAME_CONFIG.characters.map(c => (
           <button
             key={c.id}
             onClick={() => onChange(c.id)}
             disabled={c.id === excluded}
             style={{
-              width: 64, height: 64, borderRadius: 14, cursor: c.id === excluded ? 'not-allowed' : 'pointer',
+              width: 92, height: 92, borderRadius: 16, cursor: c.id === excluded ? 'not-allowed' : 'pointer',
               border: value === c.id ? `3px solid ${color}` : '3px solid #ffffff22',
               background: value === c.id ? '#ffffff2e' : '#ffffff10',
               opacity: c.id === excluded ? 0.35 : 1,
@@ -175,7 +175,7 @@ const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excl
             }}
             title={c.name}
           >
-            <CharacterSprite char={c} heightPx={44} />
+            <CharacterSprite char={c} heightPx={70} />
           </button>
         ))}
       </div>
