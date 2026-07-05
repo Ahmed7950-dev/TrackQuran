@@ -4,6 +4,7 @@ import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import AirplaneGame from './AirplaneGame';
 import LetterRaceGame from './LetterRaceGame';
+import FlappyLettersGame from './FlappyLettersGame';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -91,8 +92,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race';
-type GameChoice = 'tower' | 'airplane' | 'race';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy';
+type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy';
 
 const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
   const { t } = useI18n();
@@ -215,7 +216,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
 
   const handleStart = () => {
     if (unique === 0) return;
-    if (childMode && (gameChoice === 'airplane' || gameChoice === 'race')) {
+    if (childMode && (gameChoice === 'airplane' || gameChoice === 'race' || gameChoice === 'flappy')) {
       setView(gameChoice);
       return;
     }
@@ -572,6 +573,50 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                 </button>
               );
             })()}
+
+            {/* Flappy Letters (1-2 players, flap to the announced letter) */}
+            {(() => {
+              const active = gameChoice === 'flappy';
+              return (
+                <button
+                  onClick={() => setGameChoice('flappy')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 148,
+                    borderColor: active ? '#f59e0b' : '#fde68a',
+                    background: active
+                      ? 'linear-gradient(160deg,#d97706 0%,#b45309 100%)'
+                      : 'linear-gradient(160deg,#fffbeb 0%,#fef3c7 100%)',
+                    boxShadow: active
+                      ? '0 8px 24px rgba(245,158,11,0.45), 0 2px 8px rgba(245,158,11,0.3)'
+                      : '0 2px 8px rgba(245,158,11,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{
+                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
+                    }} />
+                  )}
+                  <div className="pt-3 px-2">
+                    <LottieAnim src="/sprites/dragon1.json" width={110} height={110} />
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-amber-700'}`}>
+                      Flappy Letters
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-amber-100' : 'text-amber-500'}`}>
+                      Flap to the letter you hear!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -875,6 +920,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
         <div className="max-w-3xl mx-auto px-4 pb-8">
           <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} avatarSrc={avatarSrc} />
         </div>
+      )}
+      {view === 'flappy' && (
+        <FlappyLettersGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
       )}
       {view === 'race' && (
         <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
