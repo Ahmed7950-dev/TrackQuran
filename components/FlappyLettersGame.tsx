@@ -46,6 +46,7 @@ export interface GameCharacter {
   size: number;
   hitboxR: number;
   aspect?: number; // animation frame w/h (default ~1.15) — sizes the lottie box
+  flip?: boolean;  // mirror horizontally (for art exported facing left)
 }
 
 // Coordinates: x in 0..100 (% of field width), y in 0..100 (% of field height).
@@ -69,12 +70,19 @@ const GAME_CONFIG = {
     announceDelayMs: 350,    // pause before the next letter is spoken
   },
   characters: [
-    { id: 'dragon1',    name: 'Dragon',     type: 'lottie', src: '/sprites/dragon1.json',    size: 13, hitboxR: 3.4 },
-    { id: 'dragon2',    name: 'Drako',      type: 'lottie', src: '/sprites/dragon2.json',    size: 12, hitboxR: 3.4, aspect: 1.78 },
-    { id: 'helicopter', name: 'Helicopter', type: 'lottie', src: '/sprites/helicopter.json', size: 12, hitboxR: 3.2 },
-    { id: 'plane1',     name: 'Plane',      type: 'lottie', src: '/sprites/plane1.json',     size: 12, hitboxR: 3.2 },
-    { id: 'rocket',     name: 'Rocket',     type: 'lottie', src: '/sprites/rocket.json',     size: 12, hitboxR: 3.2 },
-    { id: 'ufo',        name: 'UFO',        type: 'lottie', src: '/sprites/ufo.json',        size: 12, hitboxR: 3.2 },
+    // Birds fly toward the RIGHT (the world scrolls left). Files exported
+    // facing left ("revert" downloads) carry flip: true and are mirrored.
+    { id: 'toucan',        name: 'Toucan',      type: 'lottie', src: '/sprites/birds/toucan.json',        size: 9,   hitboxR: 2.4, aspect: 1.07 },
+    { id: 'parrot',        name: 'Parrot',      type: 'lottie', src: '/sprites/birds/parrot.json',        size: 9,   hitboxR: 2.4, aspect: 0.95, flip: true },
+    { id: 'cute-bird',     name: 'Cutie',       type: 'lottie', src: '/sprites/birds/cute-bird.json',     size: 8.5, hitboxR: 2.4, aspect: 1 },
+    { id: 'bird',          name: 'Bluebird',    type: 'lottie', src: '/sprites/birds/bird.json',          size: 8.5, hitboxR: 2.4, aspect: 1.78, flip: true },
+    { id: 'flying-bird',   name: 'Swifty',      type: 'lottie', src: '/sprites/birds/flying-bird.json',   size: 8.5, hitboxR: 2.4, aspect: 1, flip: true },
+    { id: 'bird-flying',   name: 'Sky',         type: 'lottie', src: '/sprites/birds/bird-flying.json',   size: 8.5, hitboxR: 2.4, aspect: 1.78 },
+    { id: 'falcon',        name: 'Falcon',      type: 'lottie', src: '/sprites/birds/falcon.json',        size: 10,  hitboxR: 2.4, aspect: 0.72 },
+    { id: 'flying-bird-2', name: 'Dove',        type: 'lottie', src: '/sprites/birds/flying-bird-2.json', size: 8.5, hitboxR: 2.4, aspect: 1 },
+    { id: 'hummingbird',   name: 'Hummingbird', type: 'lottie', src: '/sprites/birds/hummingbird.json',   size: 8.5, hitboxR: 2.4, aspect: 1, flip: true },
+    { id: 'chudik',        name: 'Chudik',      type: 'lottie', src: '/sprites/birds/chudik.json',        size: 8.5, hitboxR: 2.4, aspect: 1 },
+    { id: 'red-bird',      name: 'Red Bird',    type: 'lottie', src: '/sprites/birds/red-bird.json',      size: 8.5, hitboxR: 2.4, aspect: 1 },
   ] as GameCharacter[],
 };
 
@@ -89,6 +97,7 @@ const BUBBLE_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24', '#
 type Phase = 'menu' | 'ready' | 'play' | 'paused' | 'over';
 
 interface Flyer {
+  name: string;
   x: number; y: number; vy: number;
   alive: boolean;
   collected: number;
@@ -130,10 +139,11 @@ const CharacterSprite: React.FC<{ char: GameCharacter; heightPx: number; style?:
     }).catch(() => {});
     return () => { cancelled = true; anim?.destroy(); };
   }, [char.src, char.type]);
+  const flipStyle: React.CSSProperties = char.flip ? { transform: 'scaleX(-1)' } : {};
   if (char.type === 'sprite') {
-    return <img src={char.src} alt="" draggable={false} style={{ height: heightPx, width: 'auto', objectFit: 'contain', ...style }} />;
+    return <img src={char.src} alt="" draggable={false} style={{ height: heightPx, width: 'auto', objectFit: 'contain', ...flipStyle, ...style }} />;
   }
-  return <div ref={ref} style={{ height: heightPx, width: heightPx * (char.aspect ?? 1.15), pointerEvents: 'none', ...style }} />;
+  return <div ref={ref} style={{ height: heightPx, width: heightPx * (char.aspect ?? 1.15), pointerEvents: 'none', ...flipStyle, ...style }} />;
 };
 
 const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excluded?: string; color: string; label: string }> =
@@ -174,6 +184,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   const [mode, setMode] = useState<1 | 2>(1);
   const [p1Char, setP1Char] = useState(GAME_CONFIG.characters[0].id);
   const [p2Char, setP2Char] = useState(GAME_CONFIG.characters[1].id);
+  const [p1Name, setP1Name] = useState('');
+  const [p2Name, setP2Name] = useState('');
+  const [menuStep, setMenuStep] = useState<1 | 2>(1); // pick player 1 first, then player 2
 
   const phaseRef = useRef<Phase>('menu');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -273,10 +286,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   const startRun = useCallback(() => {
     timersRef.current.forEach(clearTimeout); timersRef.current = [];
     const players: Flyer[] = [
-      { x: P1_X, y: 46, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p1Char },
+      { name: p1Name.trim() || 'Player 1', x: P1_X, y: 46, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p1Char },
     ];
     if (modeRef.current === 2) {
-      players.push({ x: P2_X, y: 54, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p2Char });
+      players.push({ name: p2Name.trim() || 'Player 2', x: P2_X, y: 54, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p2Char });
     }
     game.current = {
       players,
@@ -290,7 +303,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     };
     setPhase('ready');
     announce(250);
-  }, [pool, p1Char, p2Char, announce]);
+  }, [pool, p1Char, p2Char, p1Name, p2Name, announce]);
 
   const endRun = useCallback((msg: string, winnerIdx: number) => {
     game.current.endMsg = msg;
@@ -346,6 +359,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.repeat) return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return; // typing a name
       if (e.code === 'ShiftLeft') { e.preventDefault(); flap(0); }
       else if (e.code === 'ShiftRight') { e.preventDefault(); flap(1); }
       else if (e.code === 'Space' || e.code === 'Enter') {
@@ -448,7 +462,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   // ── Render helpers ──────────────────────────────────────────────────────────
   const g = game.current;
   const target = currentTarget();
-  const displayTarget = target ? getLetterInForm(target, letterForm) : '';
   const totalSet = g.queue.length || pool.length;
 
   return (
@@ -516,10 +529,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               transition: 'scale 0.1s',
               filter: p.alive ? `drop-shadow(0 4px 6px rgba(2,6,23,0.25)) drop-shadow(0 0 0 ${PLAYER_COLORS[i]})` : 'grayscale(0.8)',
             }}>
-              <div style={{
-                position: 'absolute', inset: -6, borderRadius: '50%',
-                border: `3px solid ${PLAYER_COLORS[i]}${p.alive ? '88' : '33'}`,
-              }} />
               <CharacterSprite char={c} heightPx={Math.round(window.innerHeight * c.size / 100)} />
             </div>
           );
@@ -537,13 +546,12 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
             ← Exit
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#ffffffe8', borderRadius: 18, padding: '6px 14px', boxShadow: '0 4px 14px rgba(2,6,23,0.18)' }}>
-            <span style={{ fontSize: 11, fontWeight: 900, color: '#64748b', letterSpacing: 1 }}>{g.targetIdx}/{totalSet}</span>
-            <span dir="rtl" style={{ ...HAFS, fontSize: 34, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: '#64748b', letterSpacing: 1 }}>{g.targetIdx}/{totalSet}</span>
             <button
               onClick={(e) => { e.stopPropagation(); if (target) playLetterAudio(target); }}
               onPointerDown={(e) => e.stopPropagation()}
-              style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '7px 11px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}
-            >🔊</button>
+              style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 12, padding: '8px 16px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}
+            >🔊 Listen</button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {g.players.map((p, i) => (
@@ -553,6 +561,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
                 opacity: p.alive ? 1 : 0.55,
               }}>
                 <CharacterSprite char={charById(p.charId)} heightPx={22} />
+                <span style={{ fontWeight: 800, fontSize: 12, color: '#334155', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <span style={{ fontWeight: 900, fontSize: 14, color: '#0f172a' }}>{p.collected}</span>
                 {!p.alive && <span style={{ fontSize: 13 }}>💥</span>}
               </div>
@@ -594,7 +603,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
               {[1, 2].map(m => (
-                <button key={m} onClick={() => setMode(m as 1 | 2)} style={{
+                <button key={m} onClick={() => { setMode(m as 1 | 2); setMenuStep(1); }} style={{
                   background: mode === m ? '#0ea5e9' : '#ffffff18', color: '#fff', border: mode === m ? '3px solid #7dd3fc' : '3px solid transparent',
                   borderRadius: 16, padding: '10px 22px', fontWeight: 900, fontSize: 16, cursor: 'pointer',
                 }}>
@@ -603,18 +612,53 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
-              <CharPicker value={p1Char} onChange={setP1Char} excluded={mode === 2 ? p2Char : undefined} color="#38bdf8" label={mode === 2 ? 'Left player (Left ⇧)' : 'Choose your flyer'} />
-              {mode === 2 && (
-                <CharPicker value={p2Char} onChange={setP2Char} excluded={p1Char} color="#fbbf24" label="Right player (Right ⇧)" />
+            {/* one player configures at a time: player 1 first, then player 2 */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              {menuStep === 1 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <input
+                    value={p1Name}
+                    onChange={e => setP1Name(e.target.value)}
+                    placeholder={mode === 2 ? 'Player 1 — your name' : 'Your name'}
+                    maxLength={16}
+                    style={{ background: '#ffffff14', border: '2px solid #38bdf8', color: '#fff', borderRadius: 14, padding: '10px 16px', fontWeight: 800, fontSize: 15, textAlign: 'center', outline: 'none', width: 240 }}
+                  />
+                  <CharPicker value={p1Char} onChange={setP1Char} excluded={mode === 2 ? p2Char : undefined} color="#38bdf8"
+                    label={mode === 2 ? `${p1Name.trim() || 'Player 1'} (Left ⇧) — pick your bird` : 'Pick your bird'} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <input
+                    value={p2Name}
+                    onChange={e => setP2Name(e.target.value)}
+                    placeholder="Player 2 — your name"
+                    maxLength={16}
+                    style={{ background: '#ffffff14', border: '2px solid #fbbf24', color: '#fff', borderRadius: 14, padding: '10px 16px', fontWeight: 800, fontSize: 15, textAlign: 'center', outline: 'none', width: 240 }}
+                  />
+                  <CharPicker value={p2Char} onChange={setP2Char} excluded={p1Char} color="#fbbf24"
+                    label={`${p2Name.trim() || 'Player 2'} (Right ⇧) — pick your bird`} />
+                </div>
               )}
             </div>
 
-            <button onClick={startRun} style={{
-              background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none',
-              borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: 'pointer',
-              boxShadow: '0 10px 30px rgba(34,197,94,0.4)',
-            }}>▶ Start</button>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center' }}>
+              {menuStep === 2 && (
+                <button onClick={() => setMenuStep(1)} style={{ background: '#ffffff18', color: '#fff', border: 'none', borderRadius: 16, padding: '13px 22px', fontWeight: 900, fontSize: 16, cursor: 'pointer' }}>← Back</button>
+              )}
+              {mode === 2 && menuStep === 1 ? (
+                <button onClick={() => setMenuStep(2)} style={{
+                  background: 'linear-gradient(160deg,#0ea5e9,#0284c7)', color: '#fff', border: 'none',
+                  borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: 'pointer',
+                  boxShadow: '0 10px 30px rgba(14,165,233,0.4)',
+                }}>Next → Player 2</button>
+              ) : (
+                <button onClick={startRun} style={{
+                  background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none',
+                  borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: 'pointer',
+                  boxShadow: '0 10px 30px rgba(34,197,94,0.4)',
+                }}>▶ Start</button>
+              )}
+            </div>
             <div style={{ marginTop: 14 }}>
               <button onClick={onExit} style={{ background: 'transparent', color: '#94a3b8', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>← Back to letters</button>
             </div>
@@ -635,7 +679,8 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
                   background: g.winnerIdx === i ? '#f0fdf4' : '#f8fafc',
                 }}>
                   <CharacterSprite char={charById(p.charId)} heightPx={52} />
-                  <div style={{ fontWeight: 900, fontSize: 20, color: '#0f172a', marginTop: 6 }}>{p.collected}/{totalSet}</div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: '#475569', marginTop: 4, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                  <div style={{ fontWeight: 900, fontSize: 20, color: '#0f172a', marginTop: 2 }}>{p.collected}/{totalSet}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: p.alive ? '#16a34a' : '#dc2626' }}>
                     {g.winnerIdx === i ? 'Winner!' : p.alive ? 'Survived' : 'Crashed'}
                   </div>
@@ -645,7 +690,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
             <button onClick={startRun} style={{ background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none', borderRadius: 16, padding: '12px 30px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
               🔄 Restart
             </button>
-            <button onClick={() => setPhase('menu')} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
+            <button onClick={() => { setMenuStep(1); setPhase('menu'); }} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
               Players
             </button>
             <button onClick={onExit} style={{ background: 'transparent', color: '#64748b', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: 15 }}>

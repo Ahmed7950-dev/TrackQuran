@@ -599,7 +599,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                     }} />
                   )}
                   <div className="pt-3 px-2">
-                    <LottieAnim src="/sprites/dragon1.json" width={110} height={110} />
+                    <LottieAnim src="/sprites/birds/toucan.json" width={110} height={110} />
                   </div>
                   <div className="pb-3 px-3 w-full text-center">
                     <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-amber-700'}`}>
