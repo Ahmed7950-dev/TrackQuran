@@ -109,7 +109,12 @@
     "surahCol": "Sure",
     "readingCol": "Tilavet",
     "hifzCol": "Hıfz",
-    "tafseerCol": "Tefsir"
+    "tafseerCol": "Tefsir",
+    "mistakesRate": "Hata Oranı",
+    "errorsPerPage": "hata / sayfa",
+    "mistakesBreakdown": "{{total}} toplam · {{reading}} okuma · {{tajweed}} tecvid",
+    "noMistakesYet": "Okunan sayfalarda hata yok — aferin!",
+    "lastMemorization": "Son Ezber"
   },
   "login": {
     "title": "LISAN & QURAN'a Hoş Geldiniz",

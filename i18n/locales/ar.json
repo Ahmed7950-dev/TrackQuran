@@ -109,7 +109,12 @@
     "surahCol": "السورة",
     "readingCol": "تلاوة",
     "hifzCol": "حفظ",
-    "tafseerCol": "تفسير"
+    "tafseerCol": "تفسير",
+    "mistakesRate": "معدل الأخطاء",
+    "errorsPerPage": "خطأ / صفحة",
+    "mistakesBreakdown": "{{total}} إجمالي · {{reading}} قراءة · {{tajweed}} تجويد",
+    "noMistakesYet": "لا توجد أخطاء في الصفحات المقروءة — أحسنت!",
+    "lastMemorization": "آخر حفظ"
   },
   "login": {
     "title": "أهلاً بك في LISAN & QURAN",

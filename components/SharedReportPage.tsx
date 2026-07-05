@@ -1332,7 +1332,9 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 masteredTajweedRules: sp.masteredTajweedRules,
                 tafsirReviews: sp.tafsirReviews,
                 tafsirMemorizationReviews: sp.tafsirMemorizationReviews,
-                mistakes: {},
+                // Real mistakes so the Mistakes-rate stat shows true numbers in
+                // the portal (same source the Quran tab uses for its fakeStudent).
+                mistakes: (report_data.mistakes ?? {}) as Record<string, Mistake>,
               };
               return (
                 <StudentDetailPage

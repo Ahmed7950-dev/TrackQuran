@@ -1,5 +1,5 @@
 import React, { useState, useMemo, Fragment, useEffect } from 'react';
-import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion } from '../types';
+import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion, Mistake } from '../types';
 import { getStudentCompletions } from '../services/tajweedService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import LottieIcon from './LottieIcon';
@@ -52,17 +52,109 @@ const filterByTimePeriod = <T extends { date: string }>(items: T[], timePeriod: 
     return items.filter(item => new Date(item.date) >= startDate);
 };
 
-const StatCard: React.FC<{ title: string; value: string | number; subtext?: string; icon: React.ReactNode }> = ({ title, value, subtext, icon }) => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm flex items-start h-full">
-        <div className="bg-teal-100 dark:bg-orange-900/50 text-teal-600 dark:text-orange-400 p-3 rounded-lg me-4">
-            {icon}
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats section building blocks — playful flat-color cards with per-domain hues
+// ─────────────────────────────────────────────────────────────────────────────
+
+type StatAccent = 'teal' | 'sky' | 'violet' | 'rose' | 'orange' | 'amber';
+
+/** Full literal class strings only — Tailwind is build-time scanned. */
+const STAT_ACCENTS: Record<StatAccent, { chip: string; bar: string }> = {
+    teal:   { chip: 'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-300',         bar: 'bg-teal-500 dark:bg-teal-400' },
+    sky:    { chip: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300',             bar: 'bg-sky-500 dark:bg-sky-400' },
+    violet: { chip: 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300', bar: 'bg-violet-500 dark:bg-violet-400' },
+    rose:   { chip: 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300',         bar: 'bg-rose-500 dark:bg-rose-400' },
+    orange: { chip: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300', bar: 'bg-orange-500 dark:bg-orange-400' },
+    amber:  { chip: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300',     bar: 'bg-amber-500 dark:bg-amber-400' },
+};
+
+/**
+ * Colorful flat PNG icon chip with automatic inline-SVG fallback if the file
+ * 404s. While the PNG shows, the chip stays neutral so the icon's own colors
+ * pop; the tinted chip class only colors the monochrome SVG fallback.
+ */
+const StatIcon: React.FC<{ src?: string; fallback: React.ReactNode; chipClass: string; size?: 'sm' | 'md' }> = ({ src, fallback, chipClass, size = 'md' }) => {
+    const [failed, setFailed] = useState(false);
+    const showImg = src && !failed;
+    const chip = showImg ? 'bg-white/70 dark:bg-gray-900/40 border border-slate-100 dark:border-gray-700' : chipClass;
+    return (
+        <div className={`${size === 'md' ? 'w-11 h-11 rounded-2xl' : 'w-9 h-9 rounded-xl'} ${chip} flex items-center justify-center shrink-0`}>
+            {showImg
+                ? <img src={src} alt="" loading="lazy" className={size === 'md' ? 'w-7 h-7 object-contain' : 'w-5 h-5 object-contain'} onError={() => setFailed(true)} />
+                : fallback}
         </div>
-        <div className="min-w-0">
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{title}</p>
-            <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 break-words">{value}</p>
-            {subtext && <p className="text-xs text-slate-400 dark:text-slate-500 break-words">{subtext}</p>}
+    );
+};
+
+const StatCard: React.FC<{
+    title: string;
+    value: string | number;
+    subtext?: string;
+    icon: React.ReactNode;      // inline-SVG fallback (kept from old design)
+    accent: StatAccent;
+    iconSrc?: string;           // /icons/stats/*.png flat-color icon
+    unit?: string;              // small unit rendered after the value (e.g. "err / page")
+    progress?: number;          // 0–100 → thin animated bar under the value
+    ltrValue?: boolean;         // isolate "3 / 12", "0.42" so they never flip in RTL
+}> = ({ title, value, subtext, icon, accent, iconSrc, unit, progress, ltrValue }) => {
+    const { language } = useI18n();
+    const a = STAT_ACCENTS[accent];
+    // Letter-spacing visually breaks joined Arabic script — suppress it there.
+    const tracking = language === 'ar' ? '' : 'tracking-widest';
+    return (
+        <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-2xl border border-slate-100 dark:border-gray-700 shadow-sm flex items-start gap-3 h-full">
+            <StatIcon src={iconSrc} fallback={icon} chipClass={a.chip} />
+            <div className="min-w-0 flex-1">
+                <p className={`text-[10px] font-bold uppercase ${tracking} text-slate-400 dark:text-slate-500`}>{title}</p>
+                <p className="mt-0.5 text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 break-words leading-tight">
+                    {ltrValue ? <span dir="ltr">{value}</span> : value}
+                    {unit && <span className="ms-1 text-xs font-bold text-slate-400 dark:text-slate-500 tracking-normal">{unit}</span>}
+                </p>
+                {typeof progress === 'number' && (
+                    <div className="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+                        <div className={`h-full rounded-full ${a.bar} transition-all duration-500`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+                    </div>
+                )}
+                {subtext && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500 break-words">{subtext}</p>}
+            </div>
         </div>
-    </div>
+    );
+};
+
+/** Compact centered tile for the attendance trio — 3-up even on phones. */
+const AttendanceTile: React.FC<{
+    label: string; value: number; sub: string;
+    iconSrc: string; icon: React.ReactNode;
+    boxClass: string; valueClass: string; chipClass: string;
+}> = ({ label, value, sub, iconSrc, icon, boxClass, valueClass, chipClass }) => {
+    const { language } = useI18n();
+    const tracking = language === 'ar' ? '' : 'tracking-widest';
+    return (
+        <div className={`rounded-2xl border p-3 sm:p-4 flex flex-col items-center text-center gap-1.5 h-full ${boxClass}`}>
+            <StatIcon src={iconSrc} fallback={icon} chipClass={chipClass} size="sm" />
+            <p dir="ltr" className={`text-3xl font-black tabular-nums leading-none ${valueClass}`}>{value}</p>
+            <div className="min-w-0">
+                <p className={`text-[10px] font-bold uppercase ${tracking} text-slate-500 dark:text-slate-400 leading-tight break-words`}>{label}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 break-words">{sub}</p>
+            </div>
+        </div>
+    );
+};
+
+/** Section shell: rounded-2xl card with a soft gradient header strip + icon chip. */
+const StatSection: React.FC<{
+    title: string; icon: React.ReactNode; iconSrc?: string;
+    headerClass: string; chipClass: string;
+    headerExtra?: React.ReactNode; children: React.ReactNode;
+}> = ({ title, icon, iconSrc, headerClass, chipClass, headerExtra, children }) => (
+    <section className="rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+        <div className={`flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-gray-700 ${headerClass}`}>
+            <StatIcon src={iconSrc} fallback={icon} chipClass={chipClass} size="sm" />
+            <h3 className="font-extrabold text-base sm:text-lg text-slate-700 dark:text-slate-100">{title}</h3>
+            {headerExtra}
+        </div>
+        <div className="p-4 sm:p-5">{children}</div>
+    </section>
 );
 
 const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, overrideRanks, readOnly = false }) => {
@@ -213,6 +305,21 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
         return { totalPages: readPages.size, pagesRemaining, totalVerses, avgQuality, lastAchievementText };
     }, [student, timePeriod, quranMetadata, readPages]);
+
+    // Mistakes per page read — identical semantics to the Dashboard's `err/pg`
+    // metric: numerator = mistake keys whose page is among the read pages,
+    // denominator = readPages.size. Deliberately NOT filtered by timePeriod
+    // (the page denominator is cumulative, same as the Dashboard).
+    const mistakesRate = useMemo(() => {
+        const valid = Object.entries((student.mistakes || {}) as Record<string, Mistake>).filter(([key]) => {
+            const [surah, ayah] = key.split(':').map(Number);
+            return !isNaN(surah) && !isNaN(ayah) && readPages.has(getPageOfAyah(surah, ayah));
+        });
+        const reading = valid.filter(([, m]) => !m.errorType || m.errorType === 'reading').length;
+        const tajweed = valid.filter(([, m]) => m.errorType === 'tajweed').length;
+        const pages = readPages.size;
+        return { rate: pages > 0 ? (reading + tajweed) / pages : 0, reading, tajweed, total: reading + tajweed };
+    }, [student.mistakes, readPages]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const memorizationData = useMemo(() => {
@@ -810,39 +917,113 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 ))}
             </select></div>
             
-            <div className="space-y-6">
-                <div className="p-4 bg-slate-100 dark:bg-gray-800/50 rounded-lg">
-                    <h3 className="font-bold text-lg text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.attendanceTitle')}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <StatCard title={t('studentDetail.present')} value={attendanceData.present} subtext={t('studentDetail.daysAttended')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.absent')} value={attendanceData.absent} subtext={t('studentDetail.daysMissed')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.28-11.22a.75.75 0 0 0-1.06 0l-4.25 4.25a.75.75 0 1 0 1.06 1.06L10 8.56l3.72 3.72a.75.75 0 1 0 1.06-1.06l-4.25-4.25Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.rescheduled')} value={attendanceData.rescheduled} subtext={t('studentDetail.daysRescheduled')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-2.75-7.5a.75.75 0 0 0 0 1.5h5.5a.75.75 0 0 0 0-1.5h-5.5Z" clipRule="evenodd" /></svg>} />
+            <div className="space-y-5">
+
+                {/* ── Attendance ── */}
+                <StatSection
+                    title={t('studentDetail.attendanceTitle')}
+                    headerClass="bg-gradient-to-r from-amber-50 to-orange-50/60 dark:from-amber-900/20 dark:to-orange-900/10"
+                    chipClass="bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0h18" /></svg>}
+                >
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        <AttendanceTile
+                            label={t('studentDetail.present')} value={attendanceData.present} sub={t('studentDetail.daysAttended')}
+                            iconSrc="/icons/stats/present.png"
+                            boxClass="bg-emerald-50/80 border-emerald-100 dark:bg-emerald-900/15 dark:border-emerald-900/40"
+                            valueClass="text-emerald-600 dark:text-emerald-300"
+                            chipClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>}
+                        />
+                        <AttendanceTile
+                            label={t('studentDetail.absent')} value={attendanceData.absent} sub={t('studentDetail.daysMissed')}
+                            iconSrc="/icons/stats/absent.png"
+                            boxClass="bg-red-50/80 border-red-100 dark:bg-red-900/15 dark:border-red-900/40"
+                            valueClass="text-red-500 dark:text-red-300"
+                            chipClass="bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300"
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.28-11.22a.75.75 0 0 0-1.06 0l-4.25 4.25a.75.75 0 1 0 1.06 1.06L10 8.56l3.72 3.72a.75.75 0 1 0 1.06-1.06l-4.25-4.25Z" clipRule="evenodd" /></svg>}
+                        />
+                        <AttendanceTile
+                            label={t('studentDetail.rescheduled')} value={attendanceData.rescheduled} sub={t('studentDetail.daysRescheduled')}
+                            iconSrc="/icons/stats/rescheduled.png"
+                            boxClass="bg-orange-50/80 border-orange-100 dark:bg-orange-900/15 dark:border-orange-900/40"
+                            valueClass="text-orange-500 dark:text-orange-300"
+                            chipClass="bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300"
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clipRule="evenodd" /></svg>}
+                        />
                     </div>
-                </div>
+                </StatSection>
 
-                <hr className="border-slate-200 dark:border-gray-700" />
-
-                <div className="p-4 bg-slate-100 dark:bg-gray-800/50 rounded-lg">
-                    <h3 className="font-bold text-lg text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.readingProgress')}</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                        <StatCard title={t('studentDetail.lastRecitation')} value={readingData.lastAchievementText} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.pagesRead')} value={readingData.totalPages} subtext={t('studentDetail.toKhatm', { pages: readingData.pagesRemaining })} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.5 2A1.5 1.5 0 0 0 2 3.5v13A1.5 1.5 0 0 0 3.5 18h13a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-13Zm1.25 1.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H4.75Z" /></svg>} />
-                        <StatCard title={t('studentDetail.readingQuality')} value={readingData.avgQuality.toFixed(1)} subtext={t('studentDetail.averageOutOf10')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.868 2.884c.321-.772 1.415-.772 1.736 0l1.99 4.785a.75.75 0 0 0 .562.41l5.257.764c.818.119 1.145 1.121.556 1.704l-3.804 3.709a.75.75 0 0 0-.217.665l.9 5.236c.14.815-.713 1.44-1.442 1.054L10 18.232l-4.703 2.473c-.729.386-1.582-.239-1.442-1.054l.9-5.236a.75.75 0 0 0-.217-.665l-3.804-3.709c-.59-.583-.262-1.585.556-1.704l5.257-.764a.75.75 0 0 0 .562.41l1.99-4.785Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.rankInAgeGroup')} value={`${readingRank} / ${readingTotal}`} subtext={readingPagesToNext !== null ? t('studentDetail.pagesToNextRank', { pages: readingPagesToNext }) : t('studentDetail.topOfClass')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M15.22 6.268a.75.75 0 0 1 .968-.432l3.5 1.5a.75.75 0 0 1 0 1.328l-3.5 1.5a.75.75 0 0 1-.968-.432V6.268ZM3.75 3A1.75 1.75 0 0 0 2 4.75v10.5A1.75 1.75 0 0 0 3.75 17h6.5A1.75 1.75 0 0 0 12 15.25v-2.016a.75.75 0 0 1 1.5 0v2.016a3.25 3.25 0 0 1-3.25 3.25h-6.5A3.25 3.25 0 0 1 .5 15.25V4.75A3.25 3.25 0 0 1 3.75 1.5h6.5A3.25 3.25 0 0 1 13.5 4.75v2.016a.75.75 0 0 1-1.5 0V4.75a1.75 1.75 0 0 0-1.75-1.75h-6.5Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.rankAmongAll')} value={`${overallRank} / ${overallTotal}`} subtext={t('studentDetail.allAgeGroups')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Z" /></svg>} />
+                {/* ── Reading Progress (incl. mistakes-rate card) ── */}
+                <StatSection
+                    title={t('studentDetail.readingProgress')}
+                    iconSrc="/icons/stats/reading.png"
+                    headerClass="bg-gradient-to-r from-teal-50 to-cyan-50/60 dark:from-teal-900/20 dark:to-cyan-900/10"
+                    chipClass="bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-300"
+                    headerExtra={<span className="ms-auto shrink-0 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-700 dark:bg-orange-900/50 dark:text-orange-300">{t('studentDetail.completePercent', { percent: Math.round((readingData.totalPages / TOTAL_QURAN_PAGES) * 100) })}</span>}
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 16.82A7.462 7.462 0 0 1 15 15.5c.71 0 1.396.098 2.046.282A.75.75 0 0 0 18 15.06v-11a.75.75 0 0 0-.546-.721A9.006 9.006 0 0 0 15 3a8.963 8.963 0 0 0-4.25 1.065V16.82ZM9.25 4.065A8.963 8.963 0 0 0 5 3c-.85 0-1.673.118-2.454.339A.75.75 0 0 0 2 4.06v11a.75.75 0 0 0 .954.721A7.506 7.506 0 0 1 5 15.5c1.579 0 3.042.487 4.25 1.32V4.065Z" /></svg>}
+                >
+                    <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                        <StatCard accent="sky" iconSrc="/icons/stats/bookmark.png"
+                            title={t('studentDetail.lastRecitation')} value={readingData.lastAchievementText}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="teal" iconSrc="/icons/stats/pages.png"
+                            title={t('studentDetail.pagesRead')} value={readingData.totalPages}
+                            subtext={t('studentDetail.toKhatm', { pages: readingData.pagesRemaining })}
+                            progress={(readingData.totalPages / TOTAL_QURAN_PAGES) * 100}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.5 2A1.5 1.5 0 0 0 2 3.5v13A1.5 1.5 0 0 0 3.5 18h13a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-13Zm1.25 1.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H4.75Z" /></svg>} />
+                        <StatCard accent="amber" iconSrc="/icons/stats/stars.png"
+                            title={t('studentDetail.readingQuality')} value={readingData.avgQuality.toFixed(1)}
+                            subtext={t('studentDetail.averageOutOf10')}
+                            progress={readingData.avgQuality * 10} ltrValue
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.868 2.884c.321-.772 1.415-.772 1.736 0l1.99 4.785a.75.75 0 0 0 .562.41l5.257.764c.818.119 1.145 1.121.556 1.704l-3.804 3.709a.75.75 0 0 0-.217.665l.9 5.236c.14.815-.713 1.44-1.442 1.054L10 18.232l-4.703 2.473c-.729.386-1.582-.239-1.442-1.054l.9-5.236a.75.75 0 0 0-.217-.665l-3.804-3.709c-.59-.583-.262-1.585.556-1.704l5.257-.764a.75.75 0 0 0 .562.41l1.99-4.785Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="rose" iconSrc="/icons/stats/mistakes.png"
+                            title={t('studentDetail.mistakesRate')} value={mistakesRate.rate.toFixed(2)}
+                            unit={t('studentDetail.errorsPerPage')} ltrValue
+                            subtext={mistakesRate.total > 0
+                                ? t('studentDetail.mistakesBreakdown', { total: mistakesRate.total, reading: mistakesRate.reading, tajweed: mistakesRate.tajweed })
+                                : t('studentDetail.noMistakesYet')}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625l6.28-10.875ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="orange" iconSrc="/icons/stats/trophy.png"
+                            title={t('studentDetail.rankInAgeGroup')} value={`${readingRank} / ${readingTotal}`} ltrValue
+                            subtext={readingPagesToNext !== null ? t('studentDetail.pagesToNextRank', { pages: readingPagesToNext }) : t('studentDetail.topOfClass')}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M15.22 6.268a.75.75 0 0 1 .968-.432l3.5 1.5a.75.75 0 0 1 0 1.328l-3.5 1.5a.75.75 0 0 1-.968-.432V6.268ZM3.75 3A1.75 1.75 0 0 0 2 4.75v10.5A1.75 1.75 0 0 0 3.75 17h6.5A1.75 1.75 0 0 0 12 15.25v-2.016a.75.75 0 0 1 1.5 0v2.016a3.25 3.25 0 0 1-3.25 3.25h-6.5A3.25 3.25 0 0 1 .5 15.25V4.75A3.25 3.25 0 0 1 3.75 1.5h6.5A3.25 3.25 0 0 1 13.5 4.75v2.016a.75.75 0 0 1-1.5 0V4.75a1.75 1.75 0 0 0-1.75-1.75h-6.5Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="violet" iconSrc="/icons/stats/podium.png"
+                            title={t('studentDetail.rankAmongAll')} value={`${overallRank} / ${overallTotal}`} ltrValue
+                            subtext={t('studentDetail.allAgeGroups')}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Z" /></svg>} />
                     </div>
-                </div>
+                </StatSection>
 
-                <hr className="border-slate-200 dark:border-gray-700" />
-
-                <div className="p-4 bg-slate-100 dark:bg-gray-800/50 rounded-lg">
-                    <h3 className="font-bold text-lg text-slate-700 dark:text-slate-200 mb-4">{t('studentDetail.memorizationProgress')}</h3>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                        <StatCard title={t('studentDetail.pagesMemorized')} value={memorizationData.totalPages} subtext={t('studentDetail.toKhatm', { pages: memorizationData.pagesRemaining })} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 2a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 2ZM9.03 6.03a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 1.06l-2.5 2.5a.75.75 0 0 1-1.06 0ZM5.25 9.75a.75.75 0 0 0-1.5 0v.5c0 2.9 2.35 5.25 5.25 5.25s5.25-2.35 5.25-5.25v-.5a.75.75 0 0 0-1.5 0v.5a3.75 3.75 0 1 1-7.5 0v-.5Z" /></svg>} />
-                        <StatCard title={t('studentDetail.memorizationQuality')} value={memorizationData.avgQuality.toFixed(1)} subtext={t('studentDetail.averageOutOf10')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M12.106 4.99a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06 0l-3.25-3.25a.75.75 0 0 1 0-1.06l7.5-7.5Zm-2.12 9.122 4.37-4.37-2.12-2.122-4.37 4.37 2.12 2.122ZM7.88 5.53 4.63 8.78l2.12 2.121 3.25-3.25-2.12-2.121Z" clipRule="evenodd" /></svg>} />
-                        <StatCard title={t('studentDetail.rankInAgeGroup')} value={`${hifdhRank} / ${hifdhTotal}`} subtext={hifdhPagesToNext !== null ? t('studentDetail.pagesToNextRank', { pages: hifdhPagesToNext }) : t('studentDetail.topOfClass')} icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M15.28 4.72a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0l-2.5-2.5a.75.75 0 0 1 1.06-1.06L9 10.44l5.72-5.72a.75.75 0 0 1 1.06 0ZM18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg>} />
+                {/* ── Memorization Progress (Hifdh) ── */}
+                <StatSection
+                    title={t('studentDetail.memorizationProgress')}
+                    iconSrc="/icons/stats/hifdh.png"
+                    headerClass="bg-gradient-to-r from-violet-50 to-indigo-50/60 dark:from-violet-900/20 dark:to-indigo-900/10"
+                    chipClass="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300"
+                    headerExtra={<span className="ms-auto shrink-0 px-2.5 py-1 rounded-full text-xs font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">{t('studentDetail.completePercent', { percent: Math.round((memorizationData.totalPages / TOTAL_QURAN_PAGES) * 100) })}</span>}
+                    icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 2a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 2ZM9.03 6.03a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 1.06l-2.5 2.5a.75.75 0 0 1-1.06 0ZM5.25 9.75a.75.75 0 0 0-1.5 0v.5c0 2.9 2.35 5.25 5.25 5.25s5.25-2.35 5.25-5.25v-.5a.75.75 0 0 0-1.5 0v.5a3.75 3.75 0 1 1-7.5 0v-.5Z" /></svg>}
+                >
+                    <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                        <StatCard accent="sky" iconSrc="/icons/stats/bookmark.png"
+                            title={t('studentDetail.lastMemorization')} value={memorizationData.lastAchievementText}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="violet" iconSrc="/icons/stats/memorized.png"
+                            title={t('studentDetail.pagesMemorized')} value={memorizationData.totalPages}
+                            subtext={t('studentDetail.toKhatm', { pages: memorizationData.pagesRemaining })}
+                            progress={(memorizationData.totalPages / TOTAL_QURAN_PAGES) * 100}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10 2a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 2ZM9.03 6.03a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 1.06l-2.5 2.5a.75.75 0 0 1-1.06 0ZM5.25 9.75a.75.75 0 0 0-1.5 0v.5c0 2.9 2.35 5.25 5.25 5.25s5.25-2.35 5.25-5.25v-.5a.75.75 0 0 0-1.5 0v.5a3.75 3.75 0 1 1-7.5 0v-.5Z" /></svg>} />
+                        <StatCard accent="amber" iconSrc="/icons/stats/stars.png"
+                            title={t('studentDetail.memorizationQuality')} value={memorizationData.avgQuality.toFixed(1)}
+                            subtext={t('studentDetail.averageOutOf10')}
+                            progress={memorizationData.avgQuality * 10} ltrValue
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M12.106 4.99a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06 0l-3.25-3.25a.75.75 0 0 1 0-1.06l7.5-7.5Zm-2.12 9.122 4.37-4.37-2.12-2.122-4.37 4.37 2.12 2.122ZM7.88 5.53 4.63 8.78l2.12 2.121 3.25-3.25-2.12-2.121Z" clipRule="evenodd" /></svg>} />
+                        <StatCard accent="orange" iconSrc="/icons/stats/trophy.png"
+                            title={t('studentDetail.rankInAgeGroup')} value={`${hifdhRank} / ${hifdhTotal}`} ltrValue
+                            subtext={hifdhPagesToNext !== null ? t('studentDetail.pagesToNextRank', { pages: hifdhPagesToNext }) : t('studentDetail.topOfClass')}
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M15.28 4.72a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0l-2.5-2.5a.75.75 0 0 1 1.06-1.06L9 10.44l5.72-5.72a.75.75 0 0 1 1.06 0ZM18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg>} />
                     </div>
-                </div>
+                </StatSection>
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">

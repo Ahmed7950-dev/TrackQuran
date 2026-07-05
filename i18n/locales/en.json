@@ -109,7 +109,12 @@
     "surahCol": "Surah",
     "readingCol": "Reading",
     "hifzCol": "Hifz",
-    "tafseerCol": "Tafseer"
+    "tafseerCol": "Tafseer",
+    "mistakesRate": "Mistakes Rate",
+    "errorsPerPage": "err / page",
+    "mistakesBreakdown": "{{total}} total · {{reading}} reading · {{tajweed}} tajweed",
+    "noMistakesYet": "No mistakes on read pages — great job!",
+    "lastMemorization": "Last Memorization"
   },
   "login": {
     "title": "Welcome to LISAN & QURAN",
