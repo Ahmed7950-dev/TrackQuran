@@ -225,6 +225,7 @@ const LetterWithError: React.FC<{
     onTextSubmit: (key: string, text: string) => void;
     onTextCancel: () => void;
     tajweedClass?: string; // 'tj-<rule>' color class from the tajweed engine
+    tajweedTitle?: string; // rule name shown on hover (student side only)
     clickState: number; // 0 = none, 1 = yellow (pending), 2 = marked
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
@@ -243,6 +244,7 @@ const LetterWithError: React.FC<{
     onTextSubmit,
     onTextCancel,
     tajweedClass,
+    tajweedTitle,
     clickState,
     onLongPress,
     isFocused,
@@ -401,6 +403,7 @@ const LetterWithError: React.FC<{
                 onTouchStart={startLongPress}
                 onTouchEnd={cancelLongPress}
                 onTouchCancel={cancelLongPress}
+                title={tajweedTitle}
                 className={`inline cursor-pointer transition-colors ${isCursorActive ? 'cursor-pointer-glow' : ''} ${tajweedClass ?? ''}`}
                 // NOTE: do NOT add `position: relative` + `z-index` here. iOS Safari has a
                 // long-standing bug where an INLINE element with position:relative and a
@@ -767,7 +770,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [localCursorKey, setLocalCursorKey] = useState<string | null>(null);
     const onCursorMoveRef = useRef(onCursorMove);
     useEffect(() => { onCursorMoveRef.current = onCursorMove; }, [onCursorMove]);
-    const { t } = useI18n();
+    const { t, language } = useI18n();
+    // Localized name of a tajweed rule — shown to the student on hover.
+    const tajweedLabel = useCallback((r: TajweedRule) => (
+        language === 'ar' ? TAJWEED_RULES[r].labelAr : TAJWEED_RULES[r].label
+    ), [language]);
 
     const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
     const handleDecreaseSpeed = () => setScrollSpeed(prev => Math.max(1, prev - 5));
@@ -2500,6 +2507,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onTextSubmit={handleLetterTextSubmit}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
+                                    tajweedTitle={readOnly ? (() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? tajweedLabel(r) : undefined; })() : undefined}
                                     clickState={clickState}
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
@@ -3176,6 +3184,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onTextSubmit={handleLetterTextSubmit}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
+                                                                            tajweedTitle={readOnly ? (() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? tajweedLabel(r) : undefined; })() : undefined}
                                                                             clickState={cs}
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
