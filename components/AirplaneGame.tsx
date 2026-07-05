@@ -3,7 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import lottie from 'lottie-web';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { safeCopy } from '../utils';
-import { supabase } from '../lib/supabase';
+import { createGameChannel } from '../services/p2pGameChannel';
 
 declare global {
   namespace JSX {
@@ -564,6 +564,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // ── Online refs ───────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef         = useRef<any>(null);
+  // true while game traffic flows over the direct WebRTC path (vs Supabase relay)
+  const [directPath, setDirectPath] = useState(false);
   const p2RemoteKeysRef    = useRef<{ up: boolean; down: boolean; left: boolean; right: boolean }>({ up: false, down: false, left: false, right: false });
   // Analog joystick state. active=false → that plane uses the legacy keyboard model.
   const p1StickRef         = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local P1
@@ -1314,7 +1316,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   useEffect(() => {
     if (gameMode !== '2p-online' || !onlineRoomId || isP2) return;
-    const ch = supabase.channel(`letter-flight:${onlineRoomId}`, { config: { broadcast: { self: false } } });
+    const ch = createGameChannel(`letter-flight:${onlineRoomId}`, 'host');
+    ch.onPathChange(setDirectPath);
     ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { p2Plane: number; p2Name?: string } }) => {
       setP2RemotePlane(payload.p2Plane); setP2Joined(true);
       if (payload.p2Name) setP2Name(payload.p2Name);
@@ -1374,7 +1377,8 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
 
   const joinOnlineGame = useCallback(() => {
     if (!propRoomId) return;
-    const ch = supabase.channel(`letter-flight:${propRoomId}`, { config: { broadcast: { self: false } } });
+    const ch = createGameChannel(`letter-flight:${propRoomId}`, 'guest');
+    ch.onPathChange(setDirectPath);
 
     ch.on('broadcast', { event: 'state' }, ({ payload }: { payload: P2Snapshot }) => {
       // Always store latest snapshot for DOM updates
@@ -1813,6 +1817,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       {/* Background */}
       <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 0, backgroundImage: `url(${bgImage})`, backgroundRepeat: 'repeat-x', backgroundSize: 'auto 100%' }} />
       <FullscreenButton />
+      {(gameMode === '2p-online' || isP2) && (
+        <div title={directPath ? 'Direct player-to-player connection' : 'Relayed via server'} style={{ position: 'fixed', bottom: 6, left: 6, zIndex: 95, background: directPath ? '#16a34ac9' : '#475569c9', color: '#fff', borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 800, pointerEvents: 'none' }}>
+          {directPath ? '⚡ Direct' : '☁️ Relay'}
+        </div>
+      )}
 
       {/* ── Shock overlays ── */}
       {status === 'playing' && p2Shocked && (

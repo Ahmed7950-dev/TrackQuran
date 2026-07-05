@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import lottie from 'lottie-web';
-import { supabase } from '../lib/supabase';
+import { createGameChannel } from '../services/p2pGameChannel';
 import { safeCopy } from '../utils';
 
 declare global {
@@ -501,6 +501,9 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   const p2FireCooldownRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef        = useRef<any>(null);
+  // true while game traffic flows over the direct WebRTC path (vs Supabase relay)
+  const [directPath, setDirectPath] = useState(false);
+
   const p2RemoteKeysRef   = useRef<{up:boolean;down:boolean;left:boolean;right:boolean}>({ up:false,down:false,left:false,right:false });
   // Analog joystick state. active=false → that plane uses the legacy keyboard model.
   const p1StickRef        = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local P1
@@ -1119,7 +1122,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     if (gameMode !== '2p-online' || isP2 || onlineRoomId) return;
     const id = crypto.randomUUID();
     setOnlineRoomId(id);
-    const ch = supabase.realtime.channel(`word-flight-${id}`);
+    const ch = createGameChannel(`word-flight-${id}`, 'host');
+    ch.onPathChange(setDirectPath);
     ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { p2Plane: number; p2Name?: string } }) => {
       setP2RemotePlane(payload.p2Plane); setP2Joined(true);
       if (payload.p2Name) setP2Name(payload.p2Name);
@@ -1172,7 +1176,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   // ── P2 join online ─────────────────────────────────────────────────────────
   const joinOnlineGame = useCallback(() => {
     if (!propRoomId) return;
-    const ch = supabase.realtime.channel(`word-flight-${propRoomId}`);
+    const ch = createGameChannel(`word-flight-${propRoomId}`, 'guest');
+    ch.onPathChange(setDirectPath);
     ch.on('broadcast', { event: 'state' }, ({ payload }: { payload: WP2Snapshot }) => {
       latestSnapRef.current = payload;
       if (payload.status !== status) setStatus(payload.status);
@@ -1515,6 +1520,11 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     <div className="select-none" style={{ position:'fixed', inset:0, zIndex:50, background:'#1a6fc4', touchAction:'none' }}>
       <div ref={bgDivRef} className="absolute inset-0 pointer-events-none" style={{ zIndex:0, backgroundImage:`url(${bgImage})`, backgroundRepeat:'repeat-x', backgroundSize:'auto 100%' }} />
       <FullscreenButton />
+      {(gameMode === '2p-online' || isP2) && (
+        <div title={directPath ? 'Direct player-to-player connection' : 'Relayed via server'} style={{ position: 'fixed', bottom: 6, left: 6, zIndex: 95, background: directPath ? '#16a34ac9' : '#475569c9', color: '#fff', borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 800, pointerEvents: 'none' }}>
+          {directPath ? '⚡ Direct' : '☁️ Relay'}
+        </div>
+      )}
 
       {status === 'playing' && p2Shocked && <div className="absolute pointer-events-none wf-shock-overlay" style={{ right:0, top:0, bottom:0, width:'50%', background:'rgba(147,197,253,0.3)', zIndex:5 }}/>}
       {status === 'playing' && p1Shocked && <div className="absolute pointer-events-none wf-shock-overlay" style={{ left:0, top:0, bottom:0, width:'50%', background:'rgba(147,197,253,0.3)', zIndex:5 }}/>}
