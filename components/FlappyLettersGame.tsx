@@ -13,9 +13,10 @@ import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 // IN ORDER. Touching a wrong letter is not deadly — it just burns the chance:
 // the word is replaced by a fresh one. Completing a word earns a ⭐ (shown
 // next to the player's name); the goal is to collect as many stars as
-// possible. Death comes only from the dragons that fly in from the right (and
-// the ground/ceiling). Speed, letter density, and dragon frequency all ramp
-// up as stars are earned.
+// possible. Death comes ONLY from the dragons that fly in from the right —
+// the ground and ceiling are soft (the bird just rests/bumps). Every round
+// opens with a 3-2-1 countdown. Speed, letter density, and dragon frequency
+// all ramp up as stars are earned. Online, each player flaps with SPACE.
 //
 // 2P: each player has their OWN word (always two different words of the same
 // length). Word lengths follow the same schedule for both players: their
@@ -160,7 +161,7 @@ const buildTiers = (words: string[]): WordTiers => {
   return tiers;
 };
 
-type Phase = 'menu' | 'ready' | 'play' | 'paused' | 'over';
+type Phase = 'menu' | 'count' | 'play' | 'paused' | 'over';
 
 interface Flyer {
   name: string;
@@ -189,6 +190,7 @@ interface Dragon { id: number; x: number; y: number }
 // Host → guest snapshot (compact keys; rides the unreliable P2P channel).
 interface NetSnapshot {
   ph: Phase;
+  cn: string;   // countdown display during the 'count' phase
   bg: string;
   speed: number;
   em: string; wi: number;
@@ -328,6 +330,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   const [p2Name, setP2Name] = useState('');
   const [menuStep, setMenuStep] = useState<1 | 2>(1); // pick player 1 first, then player 2
   const [bgUrl, setBgUrl] = useState<string>(GAME_CONFIG.backgrounds[0]);
+  const [countNum, setCountNum] = useState('3');
+  const countRef = useRef('3');
+  useEffect(() => { countRef.current = countNum; }, [countNum]);
 
   const phaseRef = useRef<Phase>('menu');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -390,6 +395,8 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   const sfxWrong   = useCallback(() => tone([200, 140], 0.14, 'sawtooth', 0.15), [tone]);
   const sfxCrash   = useCallback(() => tone([220, 150, 90], 0.12, 'sawtooth', 0.2), [tone]);
   const sfxFlap    = useCallback(() => tone([340], 0.05, 'triangle', 0.06), [tone]);
+  const sfxCount   = useCallback(() => tone([440], 0.12, 'square', 0.14), [tone]);
+  const sfxGo      = useCallback(() => tone([880], 0.25, 'square', 0.16), [tone]);
   const sfxStar    = useCallback(() => tone([523, 659, 784, 1047], 0.11, 'sine', 0.22), [tone]);
 
   // ── Difficulty as a function of TOTAL stars earned this run ────────────────
@@ -441,8 +448,13 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     };
     players.forEach((_, i) => dealWord(i));
     setBgUrl(GAME_CONFIG.backgrounds[Math.floor(Math.random() * GAME_CONFIG.backgrounds.length)]);
-    setPhase('ready');
-  }, [p1Char, p2Char, p1Name, p2Name, dealWord]);
+    // 3…2…1… countdown, then the birds drop and it's on
+    setPhase('count');
+    setCountNum('3'); sfxCount();
+    after(800,  () => { setCountNum('2'); sfxCount(); });
+    after(1600, () => { setCountNum('1'); sfxCount(); });
+    after(2400, () => { sfxGo(); setPhase('play'); });
+  }, [p1Char, p2Char, p1Name, p2Name, dealWord, after, sfxCount, sfxGo]);
 
   const endRun = useCallback(() => {
     const g = game.current;
@@ -537,8 +549,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   // own bird (players[1]) — applied locally for instant feel (client-side
   // prediction) AND sent to the host on the reliable channel.
   const flap = useCallback((pIdx: number) => {
-    const ph = phaseRef.current;
-    if (ph !== 'ready' && ph !== 'play') return;
+    if (phaseRef.current !== 'play') return;
     const g = game.current;
     const idx = isP2 ? 1 : modeRef.current === 1 ? 0 : pIdx;
     const p = g.players[idx];
@@ -547,8 +558,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     p.flapAt = performance.now();
     sfxFlap();
     if (isP2) channelRef.current?.send({ type: 'broadcast', event: 'flap', payload: {} });
-    if (ph === 'ready' && !isP2) setPhase('play');
-    if (ph === 'ready' && isP2) setPhase('play'); // optimistic; snapshots confirm
   }, [D.flapVy, sfxFlap, isP2]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
@@ -557,14 +566,20 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     const down = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return; // typing a name
+      const online = modeRef.current === 'online' || isP2RefConst;
       if (e.code === 'ShiftLeft') { e.preventDefault(); flap(0); }
       else if (e.code === 'ShiftRight') { e.preventDefault(); if (!(modeRef.current === 'online' && !isP2RefConst)) flap(1); }
+      else if (e.code === 'Space' && online) {
+        // online: each player's own Space bar is their flap key
+        e.preventDefault();
+        flap(isP2RefConst ? 1 : 0);
+      }
       else if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
         const ph = phaseRef.current;
-        if (ph === 'play') setPhase('paused');
+        if (ph === 'play' && !online) setPhase('paused');
         else if (ph === 'paused') setPhase('play');
-        else if (ph === 'over') startRun();
+        else if (ph === 'over' && !isP2RefConst) startRun();
       }
     };
     window.addEventListener('keydown', down);
@@ -573,8 +588,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
 
   // ── Touch: tap your half of the field to flap ───────────────────────────────
   const onFieldPointerDown = useCallback((e: React.PointerEvent) => {
-    const ph = phaseRef.current;
-    if (ph !== 'ready' && ph !== 'play') return;
+    if (phaseRef.current !== 'play') return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const leftHalf = (e.clientX - rect.left) < rect.width / 2;
     if (isP2 || modeRef.current === 'online') { flap(isP2 ? 1 : 0); return; } // online: whole screen = your bird
@@ -598,8 +612,8 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         if (r.height > 0) aspectRef.current = r.width / r.height;
       }
 
-      if (ph === 'ready') {
-        // gentle hover while waiting for the first flap; the scenery drifts
+      if (ph === 'count') {
+        // gentle hover during the countdown; the scenery drifts
         g.players.forEach((p, i) => { p.y = (i === 0 ? 46 : 54) + Math.sin(now / 400 + i * 2) * 2.2; p.vy = 0; });
         g.bgShift += 1.5 * dt;
         setTick(t => t + 1);
@@ -617,7 +631,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         p.y += p.vy * dt;
         if (!p.alive) return;
         const r = charById(p.charId).hitboxR;
-        if (p.y + r >= GROUND_Y || p.y - r <= CEILING_Y) { eliminate(i); return; }
+        // top and bottom are SOFT: the bird rests on the ground / bumps the
+        // ceiling instead of dying — only dragons are deadly.
+        if (p.y + r >= GROUND_Y) { p.y = GROUND_Y - r; p.vy = Math.min(0, p.vy); }
+        if (p.y - r <= CEILING_Y) { p.y = CEILING_Y + r; p.vy = Math.max(0, p.vy); }
         // dragons are deadly
         for (const d of g.dragons) {
           const dx = (d.x - p.x) * aspect;
@@ -694,6 +711,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       const now = performance.now();
       const snap: NetSnapshot = {
         ph: phaseRef.current,
+        cn: countRef.current,
         bg: bgUrl,
         speed: speedNow(g.players.reduce((s, p) => s + p.stars, 0)),
         em: g.endMsg, wi: g.winnerIdx,
@@ -744,6 +762,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       g.dragons = payload.ds;
       g.endMsg = payload.em; g.winnerIdx = payload.wi;
       if (payload.bg !== bgUrlRef.current) setBgUrl(payload.bg);
+      if (payload.cn && payload.cn !== countRef.current) setCountNum(payload.cn);
       if (payload.ph !== phaseRef.current) setPhase(payload.ph);
     });
     ch.subscribe((status: string) => {
@@ -776,7 +795,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       const snap = snapRef.current;
       if (!snap || !g.players.length) return;
       const ph = phaseRef.current;
-      if (ph !== 'play' && ph !== 'ready') { setTick(t => t + 1); return; }
+      if (ph !== 'play' && ph !== 'count') { setTick(t => t + 1); return; }
       const [sp1, sp2] = snap.s.ps;
       // host bird: smooth interpolation toward the latest snapshot
       if (sp1) { g.players[0].x = sp1.x; g.players[0].y += (sp1.y - g.players[0].y) * P1_LERP; }
@@ -787,7 +806,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
           me.vy = Math.min(D.maxFallVy, me.vy + D.gravity * dt);
           me.y += me.vy * dt;
           me.y += (sp2.y - me.y) * RECONCILE_NUDGE;
-          me.y = Math.max(CEILING_Y, Math.min(GROUND_Y, me.y));
+          const mr = charById(me.charId).hitboxR;
+          me.y = Math.max(CEILING_Y + mr, Math.min(GROUND_Y - mr, me.y));
+          if (me.y >= GROUND_Y - mr) me.vy = Math.min(0, me.vy);
         } else {
           me.y += (sp2.y - me.y) * P1_LERP; me.vy = sp2.vy;
         }
@@ -942,14 +963,18 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         </div>
       )}
 
-      {/* ── Ready hint ── */}
-      {phase === 'ready' && (
-        <div style={{ position: 'absolute', left: 0, right: 0, top: '62%', textAlign: 'center', pointerEvents: 'none' }}>
-          <div style={{ display: 'inline-block', background: '#0f172acc', color: '#fff', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 'clamp(14px,2.2vw,20px)' }}>
-            {mode === 2 || isOnline ? '⇧ Flap and catch YOUR word’s letters in order — dodge the dragons!' : 'Catch your word’s letters in order — dodge the dragons!'}
+      {/* ── Countdown ── */}
+      {phase === 'count' && (
+        <div style={{ position: 'absolute', left: 0, right: 0, top: '38%', textAlign: 'center', pointerEvents: 'none' }}>
+          <div key={countNum} style={{ fontSize: 'clamp(72px,14vw,150px)', fontWeight: 900, color: '#fff', textShadow: '0 6px 24px rgba(2,6,23,0.55)', animation: 'flCountPop 0.75s ease' }}>
+            {countNum}
+          </div>
+          <div style={{ display: 'inline-block', background: '#0f172acc', color: '#fff', borderRadius: 16, padding: '10px 20px', fontWeight: 900, fontSize: 'clamp(13px,2vw,18px)', marginTop: 6 }}>
+            {isOnline ? 'Press SPACE to flap — catch YOUR word’s letters in order!' : mode === 2 ? '⇧ Left / Right Shift to flap — catch YOUR word’s letters in order!' : 'Catch your word’s letters in order — dodge the dragons!'}
           </div>
         </div>
       )}
+      <style>{`@keyframes flCountPop { 0% { transform: scale(2.2); opacity: 0; } 40% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }`}</style>
 
       {/* ── Paused ── */}
       {phase === 'paused' && (
