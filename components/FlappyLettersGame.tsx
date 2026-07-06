@@ -79,6 +79,7 @@ const GAME_CONFIG = {
     dragonGapShrinkPerStar: 0.07,
     dragonSpeedFactor: 1.12, // dragons fly a bit faster than the letters
     wrongGraceMs: 900,       // after a wrong grab, ignore further wrong touches
+    starsToWin: 10,          // first player to bank this many stars wins
   },
   // ⭐ awarded per completed word (Lottie), and the dragon obstacle.
   starSrc: '/sprites/star.json',
@@ -131,6 +132,20 @@ const isArabicBase = (ch: string) => {
 };
 const baseLetters = (word: string): string[] =>
   [...word].filter(isArabicBase).map(ch => (ch === 'ٱ' ? 'ا' : ch));
+
+// Split a word into letter units (base char + its harakat) so the word can be
+// rendered with one span per letter — the next-needed letter gets highlighted
+// while Arabic joining is preserved (same-font inline spans shape correctly,
+// exactly like the per-letter reader in StudentProgressPage).
+const wordUnits = (word: string): { u: string; base: boolean }[] => {
+  const units: { u: string; base: boolean }[] = [];
+  for (const ch of word) {
+    if (isArabicBase(ch)) units.push({ u: ch, base: true });
+    else if (units.length) units[units.length - 1].u += ch;
+    else units.push({ u: ch, base: false });
+  }
+  return units;
+};
 
 // Word-length schedule (shared by both players so their words always have the
 // same letter count): the first 3 completed words → 3 letters, the next 3 →
@@ -274,23 +289,51 @@ const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excl
     </div>
   );
 
-// Word card: the player's current word. Flashes red on a wrong grab and pops
-// a star burst on completion (the NEXT letter to catch is highlighted on its
-// bubble in the player's color).
-const WordCard: React.FC<{ p: Flyer; color: string }> = ({ p, color }) => {
+// Player panel: name + star count on top, the current word below with the
+// NEXT letter to catch highlighted in yellow (collected letters turn green).
+// Flashes red on a wrong grab and pops a star burst on completion.
+const PlayerPanel: React.FC<{ p: Flyer; color: string; align: 'start' | 'end'; starsToWin: number }> = ({ p, color, align, starsToWin }) => {
   const failing = performance.now() - p.failAt < 700;
   const starring = performance.now() - p.starAt < 1100;
+  let seqIdx = -1;
   return (
-    <div style={{
-      position: 'relative', background: '#ffffffee', borderRadius: 16, padding: '4px 14px 7px',
-      border: `3px solid ${failing ? '#ef4444' : color}`,
-      boxShadow: failing ? '0 0 0 4px #ef444455' : '0 4px 14px rgba(2,6,23,0.2)',
-      textAlign: 'center', minWidth: 140,
-    }}>
-      <div dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px,3.8vh,38px)', lineHeight: 1.35, color: '#0f172a' }}>{p.word}</div>
-      {starring && (
-        <div style={{ position: 'absolute', top: -34, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-          <StarLottie key={p.starAt} sizePx={84} loop={false} />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: align === 'start' ? 'flex-start' : 'flex-end', gap: 5 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, background: '#ffffffe0',
+        border: `3px solid ${color}`, borderRadius: 14, padding: '4px 10px',
+        opacity: p.alive ? 1 : 0.55,
+      }}>
+        <CharacterSprite char={charById(p.charId)} heightPx={22} />
+        <span style={{ fontWeight: 800, fontSize: 12, color: '#334155', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+        <StarLottie sizePx={22} />
+        <span style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{p.stars}<span style={{ fontSize: 10, color: '#94a3b8' }}>/{starsToWin}</span></span>
+        {!p.alive && <span style={{ fontSize: 13 }}>💥</span>}
+      </div>
+      {p.alive && p.word && (
+        <div style={{
+          position: 'relative', background: '#ffffffee', borderRadius: 16, padding: '4px 14px 7px',
+          border: `3px solid ${failing ? '#ef4444' : color}`,
+          boxShadow: failing ? '0 0 0 4px #ef444455' : '0 4px 14px rgba(2,6,23,0.2)',
+          textAlign: 'center', minWidth: 130,
+        }}>
+          <div dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px,3.8vh,38px)', lineHeight: 1.35, color: '#0f172a' }}>
+            {wordUnits(p.word).map((unit, k) => {
+              if (unit.base) seqIdx++;
+              const state = !unit.base ? 'todo' : seqIdx < p.seqPos ? 'done' : seqIdx === p.seqPos ? 'next' : 'todo';
+              return (
+                <span key={k} style={{
+                  color: state === 'done' ? '#16a34a' : '#0f172a',
+                  background: state === 'next' ? '#fde047' : 'transparent',
+                  borderRadius: state === 'next' ? 6 : 0,
+                }}>{unit.u}</span>
+              );
+            })}
+          </div>
+          {starring && (
+            <div style={{ position: 'absolute', top: -34, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+              <StarLottie key={p.starAt} sizePx={84} loop={false} />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -495,6 +538,13 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       if (p.seqPos >= p.seq.length) {
         p.stars++; p.starAt = now;
         sfxStar();
+        if (p.stars >= D.starsToWin) {
+          // first to the target wins — game over right here
+          g.endMsg = g.players.length === 1 ? `You did it — ${D.starsToWin} stars! 🏆` : `${p.name} wins!`;
+          g.winnerIdx = pIdx;
+          setPhase('over');
+          return;
+        }
         dealWord(pIdx); // next word (length follows the star schedule)
       }
     } else {
@@ -942,42 +992,23 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         })}
       </div>
 
-      {/* ── HUD: exit + name/star chips ── */}
+      {/* ── HUD: player 1 panel on the LEFT, player 2 on the RIGHT ── */}
       {phase !== 'menu' && (
-        <div style={{
-          position: 'absolute', top: 10, left: 0, right: 0, display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', padding: '0 14px', gap: 10,
-        }}>
-          <button onClick={onExit} style={{ background: '#0f172acc', color: '#fff', border: 'none', borderRadius: 12, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
-            ← Exit
-          </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {g.players.map((p, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 6, background: '#ffffffe0',
-                border: `3px solid ${PLAYER_COLORS[i]}`, borderRadius: 14, padding: '4px 10px',
-                opacity: p.alive ? 1 : 0.55,
-              }}>
-                <CharacterSprite char={charById(p.charId)} heightPx={22} />
-                <span style={{ fontWeight: 800, fontSize: 12, color: '#334155', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                <StarLottie sizePx={22} />
-                <span style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{p.stars}</span>
-                {!p.alive && <span style={{ fontSize: 13 }}>💥</span>}
-              </div>
-            ))}
+        <>
+          <div style={{ position: 'absolute', top: 10, left: 10, pointerEvents: 'none' }}>
+            {g.players[0] && <PlayerPanel p={g.players[0]} color={PLAYER_COLORS[0]} align="start" starsToWin={D.starsToWin} />}
           </div>
-        </div>
-      )}
-
-      {/* ── Word cards: your word, letters in order ── */}
-      {phase !== 'menu' && (
-        <div style={{
-          position: 'absolute', top: 56, left: 0, right: 0, display: 'flex',
-          justifyContent: g.players.length === 2 ? 'space-around' : 'center',
-          padding: '0 12px', pointerEvents: 'none',
-        }}>
-          {g.players.map((p, i) => p.alive && <WordCard key={i} p={p} color={PLAYER_COLORS[i]} />)}
-        </div>
+          {g.players[1] && (
+            <div style={{ position: 'absolute', top: 10, right: 10, pointerEvents: 'none' }}>
+              <PlayerPanel p={g.players[1]} color={PLAYER_COLORS[1]} align="end" starsToWin={D.starsToWin} />
+            </div>
+          )}
+          <button onClick={onExit} style={{
+            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+            background: '#0f172acc', color: '#fff', border: 'none', borderRadius: 12,
+            padding: '7px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13,
+          }}>← Exit</button>
+        </>
       )}
 
       {/* ── Countdown ── */}
@@ -1012,7 +1043,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
               🐦 Flappy Letters
             </div>
             <div style={{ color: '#7dd3fc', fontWeight: 700, fontSize: 'clamp(13px,1.8vw,17px)', marginBottom: 18 }}>
-              Catch your word&rsquo;s letters in order, win stars — and dodge the dragons!
+              Catch your word&rsquo;s letters in order — first to 10 ⭐ wins. Dodge the dragons!
             </div>
 
             {!isP2 && (
