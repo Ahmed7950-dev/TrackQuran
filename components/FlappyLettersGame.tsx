@@ -342,6 +342,15 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const aspectRef = useRef(16 / 9); // field width / height — for circle collisions
+  // The field is position:fixed inset:0, so viewport size IS field size.
+  // Measured on resize only — reading layout inside the rAF loop causes
+  // forced reflows (a major jank source).
+  useEffect(() => {
+    const measure = () => { if (window.innerHeight > 0) aspectRef.current = window.innerWidth / window.innerHeight; };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // ── Word pool: Qaedah lists (all topics) merged over the built-in fallback ──
   const tiersRef = useRef<WordTiers>(buildTiers(FALLBACK_WORDS));
@@ -607,11 +616,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       const ph = phaseRef.current;
       const g = game.current;
 
-      if (fieldRef.current) {
-        const r = fieldRef.current.getBoundingClientRect();
-        if (r.height > 0) aspectRef.current = r.width / r.height;
-      }
-
       if (ph === 'count') {
         // gentle hover during the countdown; the scenery drifts
         g.players.forEach((p, i) => { p.y = (i === 0 ? 46 : 54) + Math.sin(now / 400 + i * 2) * 2.2; p.vy = 0; });
@@ -849,15 +853,29 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         touchAction: 'manipulation',
       }}
     >
-      {/* pixel-art scenery — tiled horizontally, scrolls with the world */}
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: `url(${bgUrl})`,
-        backgroundRepeat: 'repeat-x',
-        backgroundSize: 'auto 100%',
-        backgroundPositionX: `${-(g.bgShift / 100) * (typeof window !== 'undefined' ? window.innerWidth : 1000)}px`,
-        imageRendering: 'pixelated',
-      }} />
+      {/* pixel-art scenery — a tiling strip moved with translate3d so the
+          scroll runs on the compositor (animating background-position repaints
+          the whole viewport every frame = jank). */}
+      {(() => {
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1000;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
+        const tileW = vh * (576 / 324); // scene images are 576×324
+        const shiftPx = (g.bgShift / 100) * vw;
+        return (
+          <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0,
+              width: vw + 2 * tileW,
+              backgroundImage: `url(${bgUrl})`,
+              backgroundRepeat: 'repeat-x',
+              backgroundSize: 'auto 100%',
+              imageRendering: 'pixelated',
+              transform: `translate3d(${-(shiftPx % tileW)}px, 0, 0)`,
+              willChange: 'transform',
+            }} />
+          </div>
+        );
+      })()}
 
       {/* ── Field ── */}
       <div ref={fieldRef} onPointerDown={onFieldPointerDown} style={{ position: 'absolute', inset: 0 }}>
@@ -873,9 +891,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         {(phase !== 'menu') && g.bubbles.map(b => {
           return (
             <div key={b.id} style={{
-              position: 'absolute', left: `${b.x}%`, top: `${b.y}%`,
-              transform: `translate(-50%, -50%) scale(${b.taken ? (b.wrong ? 0.4 : 1.6) : 1})`,
+              position: 'absolute', left: 0, top: 0,
+              transform: `translate3d(${b.x}vw, ${b.y}vh, 0) translate(-50%, -50%) scale(${b.taken ? (b.wrong ? 0.4 : 1.6) : 1})`,
               opacity: b.taken ? 0 : 1,
+              willChange: 'transform',
               transition: b.taken ? 'transform 0.4s ease, opacity 0.4s ease' : undefined,
               width: `${D.bubbleR * 2}vh`, height: `${D.bubbleR * 2}vh`,
               maxWidth: 96, maxHeight: 96,
@@ -895,8 +914,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         {/* dragons — the only deadly obstacle, flying right → left */}
         {(phase !== 'menu') && g.dragons.map(d => (
           <div key={d.id} style={{
-            position: 'absolute', left: `${d.x}%`, top: `${d.y}%`,
-            transform: 'translate(-50%, -50%)',
+            position: 'absolute', left: 0, top: 0,
+            transform: `translate3d(${d.x}vw, ${d.y}vh, 0) translate(-50%, -50%)`,
+            willChange: 'transform',
             filter: 'drop-shadow(0 4px 8px rgba(2,6,23,0.3))',
           }}>
             <CharacterSprite char={GAME_CONFIG.obstacle} heightPx={Math.round(window.innerHeight * GAME_CONFIG.obstacle.size / 100)} />
@@ -910,10 +930,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
           const justFlapped = performance.now() - p.flapAt < 130;
           return (
             <div key={i} style={{
-              position: 'absolute', left: `${p.x}%`, top: `${p.y}%`,
-              transform: `translate(-50%, -50%) rotate(${p.alive ? tilt : 90}deg) scale(${justFlapped ? 1.12 : 1})`,
+              position: 'absolute', left: 0, top: 0,
+              transform: `translate3d(${p.x}vw, ${p.y}vh, 0) translate(-50%, -50%) rotate(${p.alive ? tilt : 90}deg) scale(${justFlapped ? 1.12 : 1})`,
               opacity: p.alive ? 1 : 0.55,
-              transition: 'scale 0.1s',
+              willChange: 'transform',
               filter: p.alive ? 'drop-shadow(0 4px 6px rgba(2,6,23,0.25))' : 'grayscale(0.8)',
             }}>
               <CharacterSprite char={c} heightPx={Math.round(window.innerHeight * c.size / 100)} />
