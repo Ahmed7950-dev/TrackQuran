@@ -66,12 +66,12 @@ const GAME_CONFIG = {
     baseSpeed: 13,           // world scroll speed (width-%/s) at start
     speedRampPerStar: 1.4,   // extra speed per star earned (all players)
     maxSpeed: 32,
-    clusterSpacing: 52,      // width-% scrolled between letter columns
-    spacingMinRatio: 0.55,   // spacing shrinks with stars down to this ×
-    spacingShrinkPerStar: 0.045,
-    emptySlotsStart: 4,      // flyable gaps per column at the start
-    emptySlotsMin: 1,        // …tightening down to this many
-    tightenEvery: 2,         // stars per lost gap
+    clusterSpacing: 52,      // width-% scrolled between letter columns (CONSTANT
+    spacingMinRatio: 1,      // — letter density does NOT ramp with progress;
+    spacingShrinkPerStar: 0, //   only speed and dragon frequency get harder)
+    emptySlotsStart: 4,      // flyable gaps per column
+    emptySlotsMin: 4,        // (kept equal to start → column fill never tightens)
+    tightenEvery: 2,
     slotsY: [13, 28, 43, 58, 72, 86], // vertical letter slots (sky → ground)
     bubbleR: 6.2,            // bubble radius (height-%)
     dragonGapStart: 150,     // width-% scrolled between dragons at the start
@@ -115,8 +115,8 @@ const P1_LERP = 0.3;           // guest interpolation for the host's bird
 
 const GROUND_Y = 92;   // top of the ground strip
 const CEILING_Y = 2;
-const P1_X = 22;       // fixed flyer columns (width-%)
-const P2_X = 34;
+const P1_X = 22;       // both flyers share one column (width-%), stacked
+const P2_X = 22;       // vertically (P1 hovers at y=46, P2 at y=54)
 const PLAYER_COLORS = ['#38bdf8', '#fbbf24'];
 
 const BUBBLE_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24', '#fb923c', '#f87171', '#2dd4bf', '#c084fc', '#4ade80', '#38bdf8'];
