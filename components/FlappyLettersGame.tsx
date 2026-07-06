@@ -839,8 +839,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   const g = game.current;
   const shareLink = onlineRoomId ? `${ONLINE_SITE_URL}/flappy-letters/${onlineRoomId}` : '';
   const copyLink = () => { navigator.clipboard?.writeText(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }).catch(() => {}); };
-  const neededByColor = new Map<string, string>(); // letter → highlight color
-  g.players.forEach((p, i) => { if (p.alive && p.seq[p.seqPos]) neededByColor.set(p.seq[p.seqPos], PLAYER_COLORS[i]); });
 
   return (
     <div
@@ -873,7 +871,6 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
 
         {/* letter bubbles */}
         {(phase !== 'menu') && g.bubbles.map(b => {
-          const hl = !b.taken ? neededByColor.get(b.letter) : undefined;
           return (
             <div key={b.id} style={{
               position: 'absolute', left: `${b.x}%`, top: `${b.y}%`,
@@ -885,7 +882,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
               borderRadius: '50%',
               background: `radial-gradient(circle at 32% 28%, #ffffffee 0%, ${b.color} 55%)`,
               border: '3px solid #ffffffcc',
-              boxShadow: hl ? `0 0 0 4px ${hl}` : '0 6px 16px rgba(2,6,23,0.22)',
+              boxShadow: '0 6px 16px rgba(2,6,23,0.22)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <span dir="rtl" style={{ ...HAFS, fontSize: `${D.bubbleR * 1.05}vh`, lineHeight: 1, color: '#0f172a', fontWeight: 700 }}>
