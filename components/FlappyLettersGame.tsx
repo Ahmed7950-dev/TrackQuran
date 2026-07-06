@@ -645,8 +645,11 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     return () => window.removeEventListener('keydown', down);
   }, [flap, startRun]);
 
-  // ── Touch: tap your half of the field to flap ───────────────────────────────
-  const onFieldPointerDown = useCallback((e: React.PointerEvent) => {
+  // ── Touch: tap ANYWHERE on the screen to flap (iPad-friendly — HUD panels
+  // and overlays don't swallow the tap; only real buttons do). Local 2P still
+  // splits the screen into left/right halves.
+  const onScreenPointerDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest?.('button, input')) return; // let buttons be buttons
     if (phaseRef.current !== 'play') return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const leftHalf = (e.clientX - rect.left) < rect.width / 2;
@@ -897,6 +900,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   return (
     <div
       dir="ltr"
+      onPointerDown={onScreenPointerDown}
       style={{
         position: 'fixed', inset: 0, zIndex: 60, overflow: 'hidden', userSelect: 'none',
         background: 'linear-gradient(#7dd3fc 0%, #bae6fd 45%, #e0f2fe 75%, #f0f9ff 100%)',
@@ -928,7 +932,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       })()}
 
       {/* ── Field ── */}
-      <div ref={fieldRef} onPointerDown={onFieldPointerDown} style={{ position: 'absolute', inset: 0 }}>
+      <div ref={fieldRef} style={{ position: 'absolute', inset: 0 }}>
         {/* ceiling + ground danger zones (scene-agnostic overlays) */}
         <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: `${CEILING_Y}%`, background: 'linear-gradient(#0f172a88,#0f172a00)' }} />
         <div style={{
@@ -1003,11 +1007,18 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
               <PlayerPanel p={g.players[1]} color={PLAYER_COLORS[1]} align="end" starsToWin={D.starsToWin} />
             </div>
           )}
-          <button onClick={onExit} style={{
-            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-            background: '#0f172acc', color: '#fff', border: 'none', borderRadius: 12,
-            padding: '7px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13,
-          }}>← Exit</button>
+          <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
+            <button onClick={onExit} style={{
+              background: '#0f172acc', color: '#fff', border: 'none', borderRadius: 12,
+              padding: '7px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13,
+            }}>← Exit</button>
+            {!isP2 && (phase === 'play' || phase === 'paused') && (
+              <button onClick={startRun} title="Restart the round" style={{
+                background: '#16a34acc', color: '#fff', border: 'none', borderRadius: 12,
+                padding: '7px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13,
+              }}>↻ Restart</button>
+            )}
+          </div>
         </>
       )}
 
