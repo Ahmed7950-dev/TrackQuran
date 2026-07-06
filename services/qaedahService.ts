@@ -129,6 +129,15 @@ export async function listQaedahWords(topicId: string): Promise<QaedahWord[]> {
   return (data ?? []).map((r: WordRow) => rowToWord(r));
 }
 
+/** All Qaedah words across every topic — used by games that need a word pool. */
+export async function listAllQaedahWords(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('qaedah_words')
+    .select('word');
+  if (error) { console.error('listAllQaedahWords:', error); return []; }
+  return (data ?? []).map((r: { word: string }) => r.word).filter(Boolean);
+}
+
 export async function createQaedahWord(input: {
   topicId: string;
   word: string;

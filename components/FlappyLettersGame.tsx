@@ -1,25 +1,31 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
-import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
+import { ARABIC_LETTERS } from '../services/letterAudioService';
+import { listAllQaedahWords } from '../services/qaedahService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Flappy Letters — a Flappy-Bird-style listening game for 1–2 players.
+// Flappy Letters — a Flappy-Bird-style WORD game for 1–2 players.
 //
-// Gravity constantly pulls the flyer down; a Shift press gives one upward flap
-// (Left Shift = left player, Right Shift = right player; on touch, tap your
-// half of the screen). Letter bubbles scroll in from the right, some near the
-// ground and some up in the sky. Exactly one letter is announced at a time:
-// flying into the announced letter collects it and advances to the next; flying
-// into ANY other letter — or the ground or the ceiling — eliminates that
-// player. Collect the whole set to win; in 2P the survivor plays on.
+// A Qaedah word is shown at the top (no audio). The player flaps (Left/Right
+// Shift, or tap your half of the screen) and must fly into the word's letters
+// IN ORDER. Touching a wrong letter is not deadly — it just burns the chance:
+// the word is replaced by a fresh one. Completing a word earns a ⭐ (shown
+// next to the player's name); the goal is to collect as many stars as
+// possible. Death comes only from the dragons that fly in from the right (and
+// the ground/ceiling). Speed, letter density, and dragon frequency all ramp
+// up as stars are earned.
 //
-// Uses the same letter audio as Letter Flight/Race (letterAudioUrl + TTS
-// fallback). All content is data-driven via GAME_CONFIG below: letters come in
-// through props (any alphabet works), direction flips the HUD for LTR sets,
-// difficulty is a handful of tunable constants, and characters are a registry
-// of Lottie JSON animations (type 'lottie') or static images (type 'sprite') —
-// adding a character is a pure asset + registry-entry drop, and the hitbox is
-// independent of the animation.
+// 2P: each player has their OWN word (always two different words of the same
+// length). Word lengths follow the same schedule for both players: their
+// first 3 completed words are 3-letter words, the next 3 are 4-letter words,
+// and every word after that has 5 letters (a failed word is retried with a
+// new word of the same length). Winner = most stars when everyone crashes.
+//
+// Words come from the Qaedah lists in Supabase (all topics, fetched once at
+// mount) with a built-in fallback list so the game always works offline.
+// Characters are a registry of Lottie JSON animations (type 'lottie') or
+// static images (type 'sprite') — adding one is a pure asset + registry drop,
+// and the hitbox is independent of the animation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
@@ -35,9 +41,6 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 }
 
 // ── Character registry (§ data-driven) ──────────────────────────────────────
-// type 'lottie' renders the JSON via lottie-web; type 'sprite' renders an <img>.
-// `size` = display height in field-height %, `hitboxR` = collision radius in
-// field-height % (deliberately smaller than the art and independent of it).
 export interface GameCharacter {
   id: string;
   name: string;
@@ -58,20 +61,26 @@ const GAME_CONFIG = {
     flapVy: -46,             // upward velocity applied by one flap
     maxFallVy: 85,           // terminal fall speed
     baseSpeed: 13,           // world scroll speed (width-%/s) at start
-    speedRampPerLetter: 0.9, // extra speed per collected letter
-    maxSpeed: 30,
+    speedRampPerStar: 1.4,   // extra speed per star earned (all players)
+    maxSpeed: 32,
     clusterSpacing: 52,      // width-% scrolled between letter columns
-    spacingMinRatio: 0.8,    // spacing shrinks with progress down to this ×
+    spacingMinRatio: 0.55,   // spacing shrinks with stars down to this ×
+    spacingShrinkPerStar: 0.045,
     emptySlotsStart: 4,      // flyable gaps per column at the start
-    emptySlotsMin: 2,        // …tightening down to this many
-    tightenEvery: 4,         // collect this many letters → one fewer gap
+    emptySlotsMin: 1,        // …tightening down to this many
+    tightenEvery: 2,         // stars per lost gap
     slotsY: [13, 28, 43, 58, 72, 86], // vertical letter slots (sky → ground)
     bubbleR: 6.2,            // bubble radius (height-%)
-    announceDelayMs: 350,    // pause before the next letter is spoken
+    dragonGapStart: 150,     // width-% scrolled between dragons at the start
+    dragonGapMin: 60,
+    dragonGapShrinkPerStar: 0.07,
+    dragonSpeedFactor: 1.12, // dragons fly a bit faster than the letters
+    wrongGraceMs: 900,       // after a wrong grab, ignore further wrong touches
   },
-  // Pixel-art scenes (craftpix mountain pack). One is picked at random on
-  // every game start and tiled horizontally (repeat-x) while scrolling with
-  // the world for a parallax movement feel.
+  // ⭐ awarded per completed word (Lottie), and the dragon obstacle.
+  starSrc: '/sprites/star.json',
+  obstacle: { id: 'dragon', name: 'Dragon', type: 'lottie', src: '/sprites/dragon-obstacle.json', size: 15, hitboxR: 4, aspect: 1 } as GameCharacter,
+  // Pixel-art scenes — one picked at random per game start, tiled + scrolled.
   backgrounds: [
     '/sprites/flappy-bg/green-peaks.png',
     '/sprites/flappy-bg/sunset.png',
@@ -104,15 +113,61 @@ const PLAYER_COLORS = ['#38bdf8', '#fbbf24'];
 
 const BUBBLE_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24', '#fb923c', '#f87171', '#2dd4bf', '#c084fc', '#4ade80', '#38bdf8'];
 
+// ── Word helpers ─────────────────────────────────────────────────────────────
+// Base letters of a word: Arabic letters only, no harakat, no tatweel. Qaedah
+// words may use Quranic orthography — hamzat-wasl ٱ (U+0671) is collected as
+// a plain ا so it matches the letter bubbles.
+const isArabicBase = (ch: string) => {
+  const c = ch.charCodeAt(0);
+  return (c >= 0x0621 && c <= 0x064A && c !== 0x0640) || c === 0x0671;
+};
+const baseLetters = (word: string): string[] =>
+  [...word].filter(isArabicBase).map(ch => (ch === 'ٱ' ? 'ا' : ch));
+
+// Word-length schedule (shared by both players so their words always have the
+// same letter count): the first 3 completed words → 3 letters, the next 3 →
+// 4 letters, everything after → 5. A failed word retries at the same length.
+const lengthForStars = (stars: number) => (stars < 3 ? 3 : stars < 6 ? 4 : 5);
+
+// Built-in fallback pool (works offline / before the Qaedah lists load).
+const FALLBACK_WORDS = [
+  // 3 base letters
+  'كَتَبَ', 'قَرَأَ', 'ذَهَبَ', 'جَلَسَ', 'شَرِبَ', 'لَعِبَ', 'فَتَحَ', 'نَصَرَ', 'خَرَجَ', 'دَخَلَ',
+  'رَكِبَ', 'سَمِعَ', 'عَمِلَ', 'غَسَلَ', 'صَبَرَ', 'ضَحِكَ', 'طَبَخَ', 'ظَهَرَ', 'حَمَلَ', 'زَرَعَ',
+  'قَمَر', 'جَبَل', 'عِنَب', 'جَمَل', 'وَلَد', 'بَيْت',
+  // 4 base letters
+  'مَكْتَب', 'مَسْجِد', 'دَفْتَر', 'مَلْعَب', 'مَطْبَخ', 'مَغْرِب', 'مَشْرِق', 'أَرْنَب',
+  'كَوْكَب', 'مَنْزِل', 'مَرْكَب', 'مَصْنَع', 'مَخْبَز', 'بُسْتَان', 'شُبَّاك', 'مُعَلِّم',
+  // 5 base letters
+  'مِفْتَاح', 'مَدْرَسَة', 'سَفِينَة', 'مَكْتَبَة', 'تُفَّاحَة', 'مِنْشَفَة', 'مَلْعَقَة',
+  'طَاوِلَة', 'مِصْبَاح', 'صَابُون', 'حَقِيبَة', 'شَجَرَة', 'سَيَّارَة',
+];
+
+type WordTiers = Record<3 | 4 | 5, string[]>;
+const buildTiers = (words: string[]): WordTiers => {
+  const tiers: WordTiers = { 3: [], 4: [], 5: [] };
+  for (const w of words) {
+    const n = baseLetters(w).length;
+    if (n === 3 || n === 4 || n === 5) tiers[n].push(w);
+  }
+  return tiers;
+};
+
 type Phase = 'menu' | 'ready' | 'play' | 'paused' | 'over';
 
 interface Flyer {
   name: string;
   x: number; y: number; vy: number;
   alive: boolean;
-  collected: number;
-  diedAt: number;        // performance.now() when eliminated (for the fall anim)
-  flapAt: number;        // last flap (wing-pop scale)
+  stars: number;
+  word: string;          // current word (with harakat, as authored)
+  seq: string[];         // its base letters, in collect order
+  seqPos: number;        // next letter index to collect
+  graceUntil: number;    // wrong-touches ignored until this time
+  failAt: number;        // last wrong grab (red flash on the word card)
+  starAt: number;        // last star earned (celebration pop)
+  diedAt: number;
+  flapAt: number;
   charId: string;
 }
 interface Bubble {
@@ -120,8 +175,9 @@ interface Bubble {
   letter: string;
   x: number; y: number;
   color: string;
-  taken: boolean; takenAt: number;
+  taken: boolean; takenAt: number; wrong?: boolean;
 }
+interface Dragon { id: number; x: number; y: number }
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -156,6 +212,22 @@ const CharacterSprite: React.FC<{ char: GameCharacter; heightPx: number; style?:
   return <div ref={ref} style={{ height: heightPx, width: heightPx * (char.aspect ?? 1.15), pointerEvents: 'none', ...flipStyle, ...style }} />;
 };
 
+// Small looping star (HUD) / one-shot star burst (celebration).
+const StarLottie: React.FC<{ sizePx: number; loop?: boolean }> = ({ sizePx, loop = true }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    let anim: ReturnType<typeof lottie.loadAnimation> | undefined;
+    let cancelled = false;
+    fetch(GAME_CONFIG.starSrc).then(r => r.json()).then(data => {
+      if (cancelled || !ref.current) return;
+      anim = lottie.loadAnimation({ container: ref.current, animationData: data, renderer: 'svg', loop, autoplay: true });
+    }).catch(() => {});
+    return () => { cancelled = true; anim?.destroy(); };
+  }, [loop]);
+  return <div ref={ref} style={{ width: sizePx, height: sizePx, pointerEvents: 'none' }} />;
+};
+
 const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excluded?: string; color: string; label: string }> =
   ({ value, onChange, excluded, color, label }) => (
     <div style={{ background: '#ffffff14', borderRadius: 18, padding: '12px 14px', minWidth: 230 }}>
@@ -182,12 +254,45 @@ const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excl
     </div>
   );
 
+// Word card: the word itself + one chip per letter (green = collected,
+// yellow = collect this next, gray = later). Flashes red on a wrong grab and
+// pops a star burst on completion.
+const WordCard: React.FC<{ p: Flyer; color: string }> = ({ p, color }) => {
+  const failing = performance.now() - p.failAt < 700;
+  const starring = performance.now() - p.starAt < 1100;
+  return (
+    <div style={{
+      position: 'relative', background: '#ffffffee', borderRadius: 16, padding: '4px 14px 7px',
+      border: `3px solid ${failing ? '#ef4444' : color}`,
+      boxShadow: failing ? '0 0 0 4px #ef444455' : '0 4px 14px rgba(2,6,23,0.2)',
+      textAlign: 'center', minWidth: 140,
+    }}>
+      <div dir="rtl" style={{ ...HAFS, fontSize: 'clamp(22px,3.4vh,34px)', lineHeight: 1.35, color: '#0f172a' }}>{p.word}</div>
+      <div dir="rtl" style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 2 }}>
+        {p.seq.map((ch, i) => (
+          <span key={i} style={{
+            ...HAFS, width: 24, height: 24, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, lineHeight: 1, fontWeight: 700,
+            background: i < p.seqPos ? '#22c55e' : i === p.seqPos ? '#fde047' : '#e2e8f0',
+            color: i < p.seqPos ? '#fff' : '#0f172a',
+            boxShadow: i === p.seqPos ? '0 0 0 2px #f59e0b' : 'none',
+          }}>{`‌${ch}‌`}</span>
+        ))}
+      </div>
+      {starring && (
+        <div style={{ position: 'absolute', top: -34, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+          <StarLottie key={p.starAt} sizePx={84} loop={false} />
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface FlappyLettersProps { letters: string[]; letterForm?: LetterForm; onExit: () => void }
 
 const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyLettersProps) => {
-  const pool = letters.length ? letters : ARABIC_LETTERS;
+  const pool = letters.length ? letters : ARABIC_LETTERS; // distractor letters
   const D = GAME_CONFIG.difficulty;
-  const rtl = GAME_CONFIG.direction === 'rtl';
 
   const [phase, setPhase] = useState<Phase>('menu');
   const [, setTick] = useState(0);
@@ -207,32 +312,35 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
   const fieldRef = useRef<HTMLDivElement>(null);
   const aspectRef = useRef(16 / 9); // field width / height — for circle collisions
 
+  // ── Word pool: Qaedah lists (all topics) merged over the built-in fallback ──
+  const tiersRef = useRef<WordTiers>(buildTiers(FALLBACK_WORDS));
+  useEffect(() => {
+    let cancelled = false;
+    listAllQaedahWords().then(words => {
+      if (cancelled || !words.length) return;
+      const merged = buildTiers([...words, ...FALLBACK_WORDS]);
+      // keep a tier only if the Qaedah+fallback mix still has enough variety
+      ([3, 4, 5] as const).forEach(n => { if (merged[n].length >= 4) tiersRef.current[n] = merged[n]; });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Mutable game model (read/written inside the rAF loop) ──────────────────
   const game = useRef({
     players: [] as Flyer[],
     bubbles: [] as Bubble[],
-    queue: [] as string[],
-    targetIdx: 0,
+    dragons: [] as Dragon[],
     scrolledSinceCluster: 999, // spawn a column immediately
+    scrolledSinceDragon: 0,
     bubbleSeq: 0,
+    dragonSeq: 0,
     bgShift: 0,                // accumulated background scroll (width-%)
     endMsg: '',
-    winnerIdx: -1 as number,   // -1 = nobody finished the set
+    winnerIdx: -1 as number,
   });
   const timersRef = useRef<number[]>([]);
   const after = useCallback((ms: number, fn: () => void) => {
     timersRef.current.push(window.setTimeout(fn, ms));
-  }, []);
-
-  // ── Letter audio (same files as Letter Flight/Race, TTS fallback) ──────────
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playLetterAudio = useCallback((letter: string) => {
-    let fell = false;
-    const fallback = () => { if (!fell) { fell = true; speakLetter(letter); } };
-    const el = audioRef.current ?? (audioRef.current = new Audio());
-    el.onerror = fallback;
-    el.src = letterAudioUrl(letter);
-    el.play().catch(fallback);
   }, []);
 
   // ── Sound effects (Web Audio) ───────────────────────────────────────────────
@@ -252,30 +360,125 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       });
     } catch { /* audio unavailable */ }
   }, []);
-  const sfxCollect = useCallback(() => tone([523, 659, 784], 0.09, 'sine', 0.2), [tone]);
+  const sfxCollect = useCallback(() => tone([523, 659], 0.09, 'sine', 0.2), [tone]);
+  const sfxWrong   = useCallback(() => tone([200, 140], 0.14, 'sawtooth', 0.15), [tone]);
   const sfxCrash   = useCallback(() => tone([220, 150, 90], 0.12, 'sawtooth', 0.2), [tone]);
   const sfxFlap    = useCallback(() => tone([340], 0.05, 'triangle', 0.06), [tone]);
-  const sfxWin     = useCallback(() => tone([523, 659, 784, 1047], 0.13, 'sine', 0.2), [tone]);
+  const sfxStar    = useCallback(() => tone([523, 659, 784, 1047], 0.11, 'sine', 0.22), [tone]);
 
-  // ── Difficulty as a function of progress (letters collected so far) ────────
-  const speedNow    = (idx: number) => Math.min(D.maxSpeed, D.baseSpeed + D.speedRampPerLetter * idx);
-  const spacingNow  = (idx: number) => D.clusterSpacing * Math.max(D.spacingMinRatio, 1 - 0.02 * idx);
-  const emptiesNow  = (idx: number) => Math.max(D.emptySlotsMin, D.emptySlotsStart - Math.floor(idx / D.tightenEvery));
+  // ── Difficulty as a function of TOTAL stars earned this run ────────────────
+  const totalStars  = () => game.current.players.reduce((s, p) => s + p.stars, 0);
+  const speedNow    = (s: number) => Math.min(D.maxSpeed, D.baseSpeed + D.speedRampPerStar * s);
+  const spacingNow  = (s: number) => D.clusterSpacing * Math.max(D.spacingMinRatio, 1 - D.spacingShrinkPerStar * s);
+  const emptiesNow  = (s: number) => Math.max(D.emptySlotsMin, D.emptySlotsStart - Math.floor(s / D.tightenEvery));
+  const dragonGapNow = (s: number) => Math.max(D.dragonGapMin, D.dragonGapStart * (1 - D.dragonGapShrinkPerStar * s));
 
-  const currentTarget = () => game.current.queue[game.current.targetIdx];
+  // ── Deal a word to a player (shared length tier; ≠ the other's word) ────────
+  const dealWord = useCallback((pIdx: number) => {
+    const g = game.current;
+    const p = g.players[pIdx];
+    const tier = tiersRef.current[lengthForStars(g.players.reduce((s, pl) => s + pl.stars, 0))];
+    const other = g.players[1 - pIdx]?.word;
+    const candidates = tier.filter(w => w !== p.word && w !== other);
+    const word = (candidates.length ? candidates : tier)[Math.floor(Math.random() * (candidates.length ? candidates.length : tier.length))];
+    p.word = word;
+    p.seq = baseLetters(word);
+    p.seqPos = 0;
+  }, []);
 
-  // ── Column spawner: one target instance + distractors, ≥1 flyable gap ───────
+  // ── Lifecycle: set up a fresh run (used by Start and Restart) ───────────────
+  const startRun = useCallback(() => {
+    timersRef.current.forEach(clearTimeout); timersRef.current = [];
+    const mkFlyer = (name: string, x: number, y: number, charId: string): Flyer => ({
+      name, x, y, vy: 0, alive: true, stars: 0,
+      word: '', seq: [], seqPos: 0, graceUntil: 0, failAt: 0, starAt: 0,
+      diedAt: 0, flapAt: 0, charId,
+    });
+    const players: Flyer[] = [mkFlyer(p1Name.trim() || 'Player 1', P1_X, 46, p1Char)];
+    if (modeRef.current === 2) players.push(mkFlyer(p2Name.trim() || 'Player 2', P2_X, 54, p2Char));
+    game.current = {
+      players,
+      bubbles: [],
+      dragons: [],
+      scrolledSinceCluster: 999,
+      scrolledSinceDragon: -40, // breathing room before the first dragon
+      bubbleSeq: 0,
+      dragonSeq: 0,
+      bgShift: 0,
+      endMsg: '',
+      winnerIdx: -1,
+    };
+    players.forEach((_, i) => dealWord(i));
+    setBgUrl(GAME_CONFIG.backgrounds[Math.floor(Math.random() * GAME_CONFIG.backgrounds.length)]);
+    setPhase('ready');
+  }, [p1Char, p2Char, p1Name, p2Name, dealWord]);
+
+  const endRun = useCallback(() => {
+    const g = game.current;
+    const stars = g.players.map(p => p.stars);
+    if (g.players.length === 1) {
+      g.endMsg = stars[0] > 0 ? `${stars[0]} star${stars[0] === 1 ? '' : 's'} earned!` : 'Crashed!';
+      g.winnerIdx = stars[0] > 0 ? 0 : -1;
+    } else if (stars[0] === stars[1]) {
+      g.endMsg = "It's a tie!";
+      g.winnerIdx = -1;
+    } else {
+      const w = stars[0] > stars[1] ? 0 : 1;
+      g.endMsg = `${g.players[w].name} wins!`;
+      g.winnerIdx = w;
+    }
+    setPhase('over');
+    if (g.winnerIdx >= 0) sfxStar();
+  }, [sfxStar]);
+
+  // ── Letter grab: right letter advances the word; wrong letter burns it ─────
+  const grabLetter = useCallback((pIdx: number, bubble: Bubble) => {
+    const g = game.current;
+    const p = g.players[pIdx];
+    const now = performance.now();
+    if (bubble.letter === p.seq[p.seqPos]) {
+      bubble.taken = true; bubble.takenAt = now;
+      p.seqPos++;
+      sfxCollect();
+      if (p.seqPos >= p.seq.length) {
+        p.stars++; p.starAt = now;
+        sfxStar();
+        dealWord(pIdx); // next word (length follows the star schedule)
+      }
+    } else {
+      if (now < p.graceUntil) return; // just failed — don't chain-punish
+      bubble.taken = true; bubble.takenAt = now; bubble.wrong = true;
+      p.failAt = now;
+      p.graceUntil = now + D.wrongGraceMs;
+      sfxWrong();
+      dealWord(pIdx); // lose the chance — fresh word, same length
+    }
+  }, [dealWord, sfxCollect, sfxStar, sfxWrong, D.wrongGraceMs]);
+
+  const eliminate = useCallback((pIdx: number) => {
+    const g = game.current;
+    const p = g.players[pIdx];
+    if (!p.alive) return;
+    p.alive = false; p.diedAt = performance.now(); p.vy = Math.max(p.vy, 10);
+    sfxCrash();
+    if (g.players.every(pl => !pl.alive)) {
+      after(700, () => { if (phaseRef.current === 'play') endRun(); });
+    }
+  }, [after, endRun, sfxCrash]);
+
+  // ── Column spawner: each alive player's NEXT letter + distractors ───────────
   const spawnCluster = useCallback(() => {
     const g = game.current;
-    const target = currentTarget();
-    if (!target) return;
+    const needed = [...new Set(g.players.filter(p => p.alive).map(p => p.seq[p.seqPos]).filter(Boolean))];
+    if (!needed.length) return;
     const slots = shuffle(D.slotsY.map((y, i) => ({ y, i })));
-    const empties = emptiesNow(g.targetIdx);
-    const filled = slots.slice(0, Math.max(1, slots.length - empties));
-    const targetSlot = filled[Math.floor(Math.random() * filled.length)];
-    const others = pool.filter(l => l !== target);
+    const empties = emptiesNow(totalStars());
+    const filled = slots.slice(0, Math.max(needed.length, slots.length - empties));
+    const neededSlots = filled.slice(0, needed.length);
+    const distractorPool = [...new Set([...pool, ...ARABIC_LETTERS])].filter(l => !needed.includes(l));
     filled.forEach(slot => {
-      const letter = slot === targetSlot ? target : others[Math.floor(Math.random() * others.length)];
+      const nIdx = neededSlots.indexOf(slot);
+      const letter = nIdx >= 0 ? needed[nIdx] : distractorPool[Math.floor(Math.random() * distractorPool.length)];
       g.bubbles.push({
         id: g.bubbleSeq++,
         letter,
@@ -287,73 +490,15 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     });
   }, [pool, D]);
 
-  const announce = useCallback((delayMs = 0) => {
-    const t = currentTarget();
-    if (!t) return;
-    if (delayMs) after(delayMs, () => playLetterAudio(t));
-    else playLetterAudio(t);
-  }, [after, playLetterAudio]);
-
-  // ── Lifecycle: set up a fresh run (used by Start and Restart) ───────────────
-  const startRun = useCallback(() => {
-    timersRef.current.forEach(clearTimeout); timersRef.current = [];
-    const players: Flyer[] = [
-      { name: p1Name.trim() || 'Player 1', x: P1_X, y: 46, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p1Char },
-    ];
-    if (modeRef.current === 2) {
-      players.push({ name: p2Name.trim() || 'Player 2', x: P2_X, y: 54, vy: 0, alive: true, collected: 0, diedAt: 0, flapAt: 0, charId: p2Char });
-    }
-    game.current = {
-      players,
-      bubbles: [],
-      queue: shuffle(pool),
-      targetIdx: 0,
-      scrolledSinceCluster: 999,
-      bubbleSeq: 0,
-      bgShift: 0,
-      endMsg: '',
-      winnerIdx: -1,
-    };
-    setBgUrl(GAME_CONFIG.backgrounds[Math.floor(Math.random() * GAME_CONFIG.backgrounds.length)]);
-    setPhase('ready');
-    announce(250);
-  }, [pool, p1Char, p2Char, p1Name, p2Name, announce]);
-
-  const endRun = useCallback((msg: string, winnerIdx: number) => {
-    game.current.endMsg = msg;
-    game.current.winnerIdx = winnerIdx;
-    setPhase('over');
-    if (winnerIdx >= 0) sfxWin();
-  }, [sfxWin]);
-
-  // ── Collect / eliminate ─────────────────────────────────────────────────────
-  const collect = useCallback((pIdx: number, bubble: Bubble) => {
+  const spawnDragon = useCallback(() => {
     const g = game.current;
-    bubble.taken = true; bubble.takenAt = performance.now();
-    g.players[pIdx].collected++;
-    sfxCollect();
-    g.targetIdx++;
-    if (g.targetIdx >= g.queue.length) {
-      const isTie = g.players.length === 2 && g.players[0].collected === g.players[1].collected;
-      const best = Math.max(...g.players.map(p => p.collected));
-      endRun(isTie ? "It's a tie!" : 'All letters collected!', isTie ? -1 : g.players.findIndex(p => p.collected === best));
-      return;
-    }
-    announce(D.announceDelayMs);
-  }, [announce, endRun, sfxCollect, D.announceDelayMs]);
+    g.dragons.push({ id: g.dragonSeq++, x: 112, y: 14 + Math.random() * 66 });
+  }, []);
 
-  const eliminate = useCallback((pIdx: number) => {
-    const g = game.current;
-    const p = g.players[pIdx];
-    if (!p.alive) return;
-    p.alive = false; p.diedAt = performance.now(); p.vy = Math.max(p.vy, 10);
-    sfxCrash();
-    if (g.players.every(pl => !pl.alive)) {
-      after(700, () => {
-        if (phaseRef.current === 'play') endRun(g.players.length === 2 ? 'Both flyers crashed!' : 'Crashed!', -1);
-      });
-    }
-  }, [after, endRun, sfxCrash]);
+  // Dev-only test hook (vite dev server only; stripped from prod builds)
+  if ((import.meta as any).env?.DEV) {
+    (window as any).__flappyTest = { game, grabLetter, dealWord, eliminate };
+  }
 
   // ── Flap input ──────────────────────────────────────────────────────────────
   const flap = useCallback((pIdx: number) => {
@@ -382,14 +527,11 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         if (ph === 'play') setPhase('paused');
         else if (ph === 'paused') setPhase('play');
         else if (ph === 'over') startRun();
-      } else if (e.code === 'KeyR') {
-        const t = currentTarget();
-        if (t && (phaseRef.current === 'play' || phaseRef.current === 'ready' || phaseRef.current === 'paused')) playLetterAudio(t);
       }
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [flap, startRun, playLetterAudio]);
+  }, [flap, startRun]);
 
   // ── Touch: tap your half of the field to flap ───────────────────────────────
   const onFieldPointerDown = useCallback((e: React.PointerEvent) => {
@@ -425,24 +567,31 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       }
       if (ph !== 'play') return; // menu/over/paused are static — no re-render
 
-      const speed = speedNow(g.targetIdx);
+      const stars = totalStars();
+      const speed = speedNow(stars);
       const aspect = aspectRef.current;
 
-      // physics
+      // physics + collisions
       g.players.forEach((p, i) => {
         p.vy = Math.min(D.maxFallVy, p.vy + D.gravity * dt);
         p.y += p.vy * dt;
         if (!p.alive) return;
         const r = charById(p.charId).hitboxR;
         if (p.y + r >= GROUND_Y || p.y - r <= CEILING_Y) { eliminate(i); return; }
-        // bubble collisions
+        // dragons are deadly
+        for (const d of g.dragons) {
+          const dx = (d.x - p.x) * aspect;
+          const dy = d.y - p.y;
+          const rr = GAME_CONFIG.obstacle.hitboxR + r;
+          if (dx * dx + dy * dy <= rr * rr) { eliminate(i); return; }
+        }
+        // letters advance (or burn) the word — never deadly
         for (const b of g.bubbles) {
           if (b.taken) continue;
-          const dx = (b.x - p.x) * aspect; // convert width-% → height-% units
+          const dx = (b.x - p.x) * aspect;
           const dy = b.y - p.y;
           if (dx * dx + dy * dy <= (D.bubbleR + r) * (D.bubbleR + r)) {
-            if (b.letter === currentTarget()) collect(i, b);
-            else eliminate(i);
+            grabLetter(i, b);
             break;
           }
         }
@@ -453,32 +602,36 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       g.bgShift += dx * 0.55;
       g.bubbles.forEach(b => { b.x -= dx; });
       g.bubbles = g.bubbles.filter(b => b.x > -12 && (!b.taken || now - b.takenAt < 450));
+      const ddx = dx * D.dragonSpeedFactor;
+      g.dragons.forEach(d => { d.x -= ddx; });
+      g.dragons = g.dragons.filter(d => d.x > -18);
       g.scrolledSinceCluster += dx;
-      if (g.scrolledSinceCluster >= spacingNow(g.targetIdx)) {
+      if (g.scrolledSinceCluster >= spacingNow(stars)) {
         g.scrolledSinceCluster = 0;
         spawnCluster();
       }
+      g.scrolledSinceDragon += dx;
+      if (g.scrolledSinceDragon >= dragonGapNow(stars)) {
+        g.scrolledSinceDragon = 0;
+        spawnDragon();
+      }
 
-      // dead players fall off screen
-      g.players = g.players.map(p => p); // keep identities
       setTick(t => t + 1);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [D, collect, eliminate, spawnCluster]);
+  }, [D, grabLetter, eliminate, spawnCluster, spawnDragon]);
 
   // cleanup timers/audio on unmount
   useEffect(() => () => {
     timersRef.current.forEach(clearTimeout);
-    audioRef.current?.pause();
-    window.speechSynthesis?.cancel();
     acRef.current?.close().catch(() => {});
   }, []);
 
-  // ── Render helpers ──────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
   const g = game.current;
-  const target = currentTarget();
-  const totalSet = g.queue.length || pool.length;
+  const neededByColor = new Map<string, string>(); // letter → highlight color
+  g.players.forEach((p, i) => { if (p.alive && p.seq[p.seqPos]) neededByColor.set(p.seq[p.seqPos], PLAYER_COLORS[i]); });
 
   return (
     <div
@@ -511,27 +664,38 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
 
         {/* letter bubbles */}
         {(phase !== 'menu') && g.bubbles.map(b => {
-          const isTarget = !b.taken && b.letter === target;
+          const hl = !b.taken ? neededByColor.get(b.letter) : undefined;
           return (
             <div key={b.id} style={{
               position: 'absolute', left: `${b.x}%`, top: `${b.y}%`,
-              transform: `translate(-50%, -50%) scale(${b.taken ? 1.6 : 1})`,
+              transform: `translate(-50%, -50%) scale(${b.taken ? (b.wrong ? 0.4 : 1.6) : 1})`,
               opacity: b.taken ? 0 : 1,
               transition: b.taken ? 'transform 0.4s ease, opacity 0.4s ease' : undefined,
-              width: `${GAME_CONFIG.difficulty.bubbleR * 2}vh`, height: `${GAME_CONFIG.difficulty.bubbleR * 2}vh`,
+              width: `${D.bubbleR * 2}vh`, height: `${D.bubbleR * 2}vh`,
               maxWidth: 96, maxHeight: 96,
               borderRadius: '50%',
               background: `radial-gradient(circle at 32% 28%, #ffffffee 0%, ${b.color} 55%)`,
               border: '3px solid #ffffffcc',
-              boxShadow: isTarget ? `0 0 0 4px ${b.color}55, 0 6px 16px rgba(2,6,23,0.25)` : '0 6px 16px rgba(2,6,23,0.22)',
+              boxShadow: hl ? `0 0 0 4px ${hl}` : '0 6px 16px rgba(2,6,23,0.22)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span dir="rtl" style={{ ...HAFS, fontSize: `${GAME_CONFIG.difficulty.bubbleR * 1.05}vh`, lineHeight: 1, color: '#0f172a', fontWeight: 700 }}>
+              <span dir="rtl" style={{ ...HAFS, fontSize: `${D.bubbleR * 1.05}vh`, lineHeight: 1, color: '#0f172a', fontWeight: 700 }}>
                 {getLetterInForm(b.letter, letterForm)}
               </span>
             </div>
           );
         })}
+
+        {/* dragons — the only deadly obstacle, flying right → left */}
+        {(phase !== 'menu') && g.dragons.map(d => (
+          <div key={d.id} style={{
+            position: 'absolute', left: `${d.x}%`, top: `${d.y}%`,
+            transform: 'translate(-50%, -50%)',
+            filter: 'drop-shadow(0 4px 8px rgba(2,6,23,0.3))',
+          }}>
+            <CharacterSprite char={GAME_CONFIG.obstacle} heightPx={Math.round(window.innerHeight * GAME_CONFIG.obstacle.size / 100)} />
+          </div>
+        ))}
 
         {/* flyers */}
         {(phase !== 'menu') && g.players.map((p, i) => {
@@ -544,7 +708,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               transform: `translate(-50%, -50%) rotate(${p.alive ? tilt : 90}deg) scale(${justFlapped ? 1.12 : 1})`,
               opacity: p.alive ? 1 : 0.55,
               transition: 'scale 0.1s',
-              filter: p.alive ? `drop-shadow(0 4px 6px rgba(2,6,23,0.25)) drop-shadow(0 0 0 ${PLAYER_COLORS[i]})` : 'grayscale(0.8)',
+              filter: p.alive ? 'drop-shadow(0 4px 6px rgba(2,6,23,0.25))' : 'grayscale(0.8)',
             }}>
               <CharacterSprite char={c} heightPx={Math.round(window.innerHeight * c.size / 100)} />
             </div>
@@ -552,24 +716,15 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         })}
       </div>
 
-      {/* ── HUD ── */}
+      {/* ── HUD: exit + name/star chips ── */}
       {phase !== 'menu' && (
         <div style={{
           position: 'absolute', top: 10, left: 0, right: 0, display: 'flex', alignItems: 'center',
           justifyContent: 'space-between', padding: '0 14px', gap: 10,
-          flexDirection: rtl ? 'row-reverse' : 'row',
         }}>
           <button onClick={onExit} style={{ background: '#0f172acc', color: '#fff', border: 'none', borderRadius: 12, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
             ← Exit
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#ffffffe8', borderRadius: 18, padding: '6px 14px', boxShadow: '0 4px 14px rgba(2,6,23,0.18)' }}>
-            <span style={{ fontSize: 12, fontWeight: 900, color: '#64748b', letterSpacing: 1 }}>{g.targetIdx}/{totalSet}</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); if (target) playLetterAudio(target); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 12, padding: '8px 16px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}
-            >🔊 Listen</button>
-          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {g.players.map((p, i) => (
               <div key={i} style={{
@@ -579,7 +734,8 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               }}>
                 <CharacterSprite char={charById(p.charId)} heightPx={22} />
                 <span style={{ fontWeight: 800, fontSize: 12, color: '#334155', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                <span style={{ fontWeight: 900, fontSize: 14, color: '#0f172a' }}>{p.collected}</span>
+                <StarLottie sizePx={22} />
+                <span style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{p.stars}</span>
                 {!p.alive && <span style={{ fontSize: 13 }}>💥</span>}
               </div>
             ))}
@@ -587,11 +743,22 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
         </div>
       )}
 
+      {/* ── Word cards: your word, letters in order ── */}
+      {phase !== 'menu' && (
+        <div style={{
+          position: 'absolute', top: 56, left: 0, right: 0, display: 'flex',
+          justifyContent: g.players.length === 2 ? 'space-around' : 'center',
+          padding: '0 12px', pointerEvents: 'none',
+        }}>
+          {g.players.map((p, i) => p.alive && <WordCard key={i} p={p} color={PLAYER_COLORS[i]} />)}
+        </div>
+      )}
+
       {/* ── Ready hint ── */}
       {phase === 'ready' && (
         <div style={{ position: 'absolute', left: 0, right: 0, top: '62%', textAlign: 'center', pointerEvents: 'none' }}>
           <div style={{ display: 'inline-block', background: '#0f172acc', color: '#fff', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 'clamp(14px,2.2vw,20px)' }}>
-            {mode === 2 ? '⇧ Left Shift / Right Shift ⇧ — flap to start!' : 'Press Shift (or tap) to flap — go get your letter!'}
+            {mode === 2 ? '⇧ Flap and catch YOUR word’s letters in order — dodge the dragons!' : 'Catch your word’s letters in order — dodge the dragons!'}
           </div>
         </div>
       )}
@@ -615,7 +782,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               🐦 Flappy Letters
             </div>
             <div style={{ color: '#7dd3fc', fontWeight: 700, fontSize: 'clamp(13px,1.8vw,17px)', marginBottom: 18 }}>
-              Listen, flap, and catch only the letter you hear!
+              Catch your word&rsquo;s letters in order, win stars — and dodge the dragons!
             </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
@@ -697,9 +864,12 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
                 }}>
                   <CharacterSprite char={charById(p.charId)} heightPx={52} />
                   <div style={{ fontWeight: 800, fontSize: 13, color: '#475569', marginTop: 4, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                  <div style={{ fontWeight: 900, fontSize: 20, color: '#0f172a', marginTop: 2 }}>{p.collected}/{totalSet}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: p.alive ? '#16a34a' : '#dc2626' }}>
-                    {g.winnerIdx === i ? 'Winner!' : p.alive ? 'Survived' : 'Crashed'}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 2 }}>
+                    <StarLottie sizePx={26} />
+                    <span style={{ fontWeight: 900, fontSize: 22, color: '#0f172a' }}>{p.stars}</span>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: g.winnerIdx === i ? '#16a34a' : '#dc2626' }}>
+                    {g.winnerIdx === i ? 'Winner!' : 'Crashed'}
                   </div>
                 </div>
               ))}

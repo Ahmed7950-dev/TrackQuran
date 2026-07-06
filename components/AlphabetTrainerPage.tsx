@@ -606,7 +606,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                       Flappy Letters
                     </div>
                     <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-amber-100' : 'text-amber-500'}`}>
-                      Flap to the letter you hear!
+                      Catch words, win stars!
                     </div>
                   </div>
                   {active && (
