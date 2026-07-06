@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
+import { QRCodeSVG } from 'qrcode.react';
 import { ARABIC_LETTERS } from '../services/letterAudioService';
 import { listAllQaedahWords } from '../services/qaedahService';
+import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Flappy Letters — a Flappy-Bird-style WORD game for 1–2 players.
@@ -104,6 +106,12 @@ const GAME_CONFIG = {
   ] as GameCharacter[],
 };
 
+const ONLINE_SITE_URL = 'https://www.lisanquran.com';
+const SNAPSHOT_MS = 33;        // host → guest state rate (~30Hz, unreliable channel)
+const RECONCILE_NUDGE = 0.06;  // guest pulls its predicted bird toward the host's
+const RECONCILE_SNAP = 10;     // ...and hard-snaps when the error exceeds this
+const P1_LERP = 0.3;           // guest interpolation for the host's bird
+
 const GROUND_Y = 92;   // top of the ground strip
 const CEILING_Y = 2;
 const P1_X = 22;       // fixed flyer columns (width-%)
@@ -177,6 +185,17 @@ interface Bubble {
   taken: boolean; takenAt: number; wrong?: boolean;
 }
 interface Dragon { id: number; x: number; y: number }
+
+// Host → guest snapshot (compact keys; rides the unreliable P2P channel).
+interface NetSnapshot {
+  ph: Phase;
+  bg: string;
+  speed: number;
+  em: string; wi: number;
+  ps: { x: number; y: number; vy: number; alive: boolean; stars: number; word: string; seqPos: number; name: string; charId: string; failAge: number; starAge: number }[];
+  bs: { id: number; letter: string; x: number; y: number; color: string; taken: boolean }[];
+  ds: Dragon[];
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -276,15 +295,33 @@ const WordCard: React.FC<{ p: Flyer; color: string }> = ({ p, color }) => {
   );
 };
 
-interface FlappyLettersProps { letters: string[]; letterForm?: LetterForm; onExit: () => void }
+interface FlappyLettersProps {
+  letters: string[];
+  letterForm?: LetterForm;
+  onExit: () => void;
+  roomId?: string;          // set when joining an online room via link
+  playerRole?: '1' | '2';   // '2' = the joining guest
+}
 
-const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyLettersProps) => {
+const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: propRoomId, playerRole }: FlappyLettersProps) => {
+  const isP2 = playerRole === '2';
   const pool = letters.length ? letters : ARABIC_LETTERS; // distractor letters
   const D = GAME_CONFIG.difficulty;
 
   const [phase, setPhase] = useState<Phase>('menu');
   const [, setTick] = useState(0);
-  const [mode, setMode] = useState<1 | 2>(1);
+  const [mode, setMode] = useState<1 | 2 | 'online'>(1);
+  // ── Online 2P (host creates a room; guest joins via link/QR) ──
+  const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
+  const [p2Joined, setP2Joined] = useState(false);
+  const [guestJoined, setGuestJoined] = useState(false);   // guest pressed Join
+  const [gotFirstSnap, setGotFirstSnap] = useState(false); // guest received state
+  const [qrOpen, setQrOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [directPath, setDirectPath] = useState(false);
+  const channelRef = useRef<P2PGameChannel | null>(null);
+  const guestInfoRef = useRef<{ name: string; charId: string } | null>(null);
+  const snapRef = useRef<{ s: NetSnapshot; at: number } | null>(null);
   const [p1Char, setP1Char] = useState(GAME_CONFIG.characters[0].id);
   const [p2Char, setP2Char] = useState(GAME_CONFIG.characters[1].id);
   const [p1Name, setP1Name] = useState('');
@@ -294,8 +331,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
 
   const phaseRef = useRef<Phase>('menu');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
-  const modeRef = useRef<1 | 2>(1);
+  const modeRef = useRef<1 | 2 | 'online'>(1);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  const isOnline = mode === 'online' || isP2;
 
   const fieldRef = useRef<HTMLDivElement>(null);
   const aspectRef = useRef(16 / 9); // field width / height — for circle collisions
@@ -384,6 +422,11 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     });
     const players: Flyer[] = [mkFlyer(p1Name.trim() || 'Player 1', P1_X, 46, p1Char)];
     if (modeRef.current === 2) players.push(mkFlyer(p2Name.trim() || 'Player 2', P2_X, 54, p2Char));
+    else if (modeRef.current === 'online') {
+      const gi = guestInfoRef.current;
+      if (!gi) return; // can't start before the guest joins
+      players.push(mkFlyer(gi.name, P2_X, 54, gi.charId));
+    }
     game.current = {
       players,
       bubbles: [],
@@ -485,30 +528,37 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
 
   // Dev-only test hook (vite dev server only; stripped from prod builds)
   if ((import.meta as any).env?.DEV) {
-    (window as any).__flappyTest = { game, grabLetter, dealWord, eliminate };
+    (window as any).__flappyTest = { game, grabLetter, dealWord, eliminate, channelRef, snapRef, guestInfoRef };
   }
 
   // ── Flap input ──────────────────────────────────────────────────────────────
+  // Local flap: on the host, pIdx 0 = own bird and 1 = the remote guest's bird
+  // (driven by received 'flap' events). On the guest, everything maps to its
+  // own bird (players[1]) — applied locally for instant feel (client-side
+  // prediction) AND sent to the host on the reliable channel.
   const flap = useCallback((pIdx: number) => {
     const ph = phaseRef.current;
     if (ph !== 'ready' && ph !== 'play') return;
     const g = game.current;
-    const idx = modeRef.current === 1 ? 0 : pIdx;
+    const idx = isP2 ? 1 : modeRef.current === 1 ? 0 : pIdx;
     const p = g.players[idx];
     if (!p || !p.alive) return;
     p.vy = D.flapVy;
     p.flapAt = performance.now();
     sfxFlap();
-    if (ph === 'ready') setPhase('play');
-  }, [D.flapVy, sfxFlap]);
+    if (isP2) channelRef.current?.send({ type: 'broadcast', event: 'flap', payload: {} });
+    if (ph === 'ready' && !isP2) setPhase('play');
+    if (ph === 'ready' && isP2) setPhase('play'); // optimistic; snapshots confirm
+  }, [D.flapVy, sfxFlap, isP2]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
+  const isP2RefConst = isP2; // stable for the listener below
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return; // typing a name
       if (e.code === 'ShiftLeft') { e.preventDefault(); flap(0); }
-      else if (e.code === 'ShiftRight') { e.preventDefault(); flap(1); }
+      else if (e.code === 'ShiftRight') { e.preventDefault(); if (!(modeRef.current === 'online' && !isP2RefConst)) flap(1); }
       else if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
         const ph = phaseRef.current;
@@ -527,11 +577,13 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     if (ph !== 'ready' && ph !== 'play') return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const leftHalf = (e.clientX - rect.left) < rect.width / 2;
+    if (isP2 || modeRef.current === 'online') { flap(isP2 ? 1 : 0); return; } // online: whole screen = your bird
     flap(modeRef.current === 1 ? 0 : (leftHalf ? 0 : 1));
-  }, [flap]);
+  }, [flap, isP2]);
 
-  // ── Main loop (delta-time based, 60fps target) ──────────────────────────────
+  // ── Main loop (delta-time based, 60fps target) — host/local only ───────────
   useEffect(() => {
+    if (isP2) return; // the guest runs its own prediction loop below
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
@@ -608,7 +660,153 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [D, grabLetter, eliminate, spawnCluster, spawnDragon]);
+  }, [D, grabLetter, eliminate, spawnCluster, spawnDragon, isP2]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ONLINE — HOST side: room channel, remote flaps, 30Hz snapshots
+  // ─────────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isP2 || mode !== 'online') return;
+    const id = onlineRoomId ?? crypto.randomUUID();
+    if (!onlineRoomId) { setOnlineRoomId(id); return; } // re-run with the id set
+    const ch = createGameChannel(`flappy-letters:${id}`, 'host');
+    ch.onPathChange(setDirectPath);
+    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { name: string; charId: string } }) => {
+      guestInfoRef.current = { name: payload.name || 'Player 2', charId: payload.charId };
+      setP2Joined(true);
+      // if a run is already set up, refresh P2's identity live
+      const g = game.current;
+      if (g.players[1]) { g.players[1].name = guestInfoRef.current.name; g.players[1].charId = payload.charId; }
+    });
+    ch.on('broadcast', { event: 'flap' }, () => { flap(1); });
+    ch.subscribe();
+    channelRef.current = ch;
+    return () => { ch.unsubscribe(); channelRef.current = null; };
+  }, [mode, isP2, onlineRoomId, flap]);
+
+  // Host → guest snapshots (both the 'fast' P2P channel and the fallback ride
+  // through the same send() — see p2pGameChannel).
+  useEffect(() => {
+    if (isP2 || mode !== 'online' || phase === 'menu' || !channelRef.current) return;
+    const iv = setInterval(() => {
+      const g = game.current;
+      if (!g.players.length) return;
+      const now = performance.now();
+      const snap: NetSnapshot = {
+        ph: phaseRef.current,
+        bg: bgUrl,
+        speed: speedNow(g.players.reduce((s, p) => s + p.stars, 0)),
+        em: g.endMsg, wi: g.winnerIdx,
+        ps: g.players.map(p => ({
+          x: p.x, y: p.y, vy: p.vy, alive: p.alive, stars: p.stars,
+          word: p.word, seqPos: p.seqPos, name: p.name, charId: p.charId,
+          failAge: Math.min(2000, now - p.failAt), starAge: Math.min(2000, now - p.starAt),
+        })),
+        bs: g.bubbles.filter(b => !b.taken || now - b.takenAt < 400).map(b => ({ id: b.id, letter: b.letter, x: b.x, y: b.y, color: b.color, taken: b.taken })),
+        ds: g.dragons,
+      };
+      channelRef.current?.send({ type: 'broadcast', event: 'state', payload: snap });
+    }, SNAPSHOT_MS);
+    return () => clearInterval(iv);
+  }, [mode, isP2, phase, bgUrl]);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ONLINE — GUEST side: join, receive snapshots, predict own bird
+  // ─────────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isP2 || !propRoomId || !guestJoined) return;
+    const ch = createGameChannel(`flappy-letters:${propRoomId}`, 'guest');
+    ch.onPathChange(setDirectPath);
+    ch.on('broadcast', { event: 'state' }, ({ payload }: { payload: NetSnapshot }) => {
+      const now = performance.now();
+      snapRef.current = { s: payload, at: now };
+      setGotFirstSnap(true);
+      const g = game.current;
+      // (re)build local flyers to match the host's
+      while (g.players.length < payload.ps.length) {
+        g.players.push({ name: '', x: payload.ps[g.players.length].x, y: payload.ps[g.players.length].y, vy: 0, alive: true, stars: 0, word: '', seq: [], seqPos: 0, graceUntil: 0, failAt: 0, starAt: 0, diedAt: 0, flapAt: 0, charId: GAME_CONFIG.characters[0].id });
+      }
+      payload.ps.forEach((sp, i) => {
+        const p = g.players[i];
+        const wordChanged = p.word !== sp.word;
+        p.name = sp.name; p.charId = sp.charId; p.alive = sp.alive; p.stars = sp.stars;
+        p.word = sp.word; p.seqPos = sp.seqPos;
+        if (wordChanged) p.seq = baseLetters(sp.word);
+        p.failAt = now - sp.failAge; p.starAt = now - sp.starAge;
+        if (i === 0) { /* host bird: interpolated in the guest loop */ }
+        else {
+          // own bird: reconcile prediction toward authority
+          const err = Math.abs(p.y - sp.y);
+          if (err > RECONCILE_SNAP || !sp.alive || phaseRef.current !== 'play') { p.y = sp.y; p.vy = sp.vy; }
+        }
+      });
+      g.bubbles = payload.bs.map(b => ({ ...b, takenAt: b.taken ? now : 0 }));
+      g.dragons = payload.ds;
+      g.endMsg = payload.em; g.winnerIdx = payload.wi;
+      if (payload.bg !== bgUrlRef.current) setBgUrl(payload.bg);
+      if (payload.ph !== phaseRef.current) setPhase(payload.ph);
+    });
+    ch.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        const send = () => ch.send({ type: 'broadcast', event: 'ready', payload: { name: p2Name.trim() || 'Player 2', charId: p2Char } });
+        send();
+        const iv = setInterval(() => { if (snapRef.current) clearInterval(iv); else send(); }, 2500);
+        timersRef.current.push(iv as unknown as number);
+      }
+    });
+    channelRef.current = ch;
+    return () => { ch.unsubscribe(); channelRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isP2, propRoomId, guestJoined]);
+
+  const bgUrlRef = useRef(bgUrl);
+  useEffect(() => { bgUrlRef.current = bgUrl; }, [bgUrl]);
+
+  // Guest render loop: own bird = local physics (prediction), host bird =
+  // interpolation, bubbles/dragons = dead-reckoning between snapshots.
+  useEffect(() => {
+    if (!isP2) return;
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.035, (now - last) / 1000);
+      last = now;
+      const g = game.current;
+      const snap = snapRef.current;
+      if (!snap || !g.players.length) return;
+      const ph = phaseRef.current;
+      if (ph !== 'play' && ph !== 'ready') { setTick(t => t + 1); return; }
+      const [sp1, sp2] = snap.s.ps;
+      // host bird: smooth interpolation toward the latest snapshot
+      if (sp1) { g.players[0].x = sp1.x; g.players[0].y += (sp1.y - g.players[0].y) * P1_LERP; }
+      // own bird: local physics + gentle reconcile
+      const me = g.players[1];
+      if (me && sp2) {
+        if (ph === 'play' && me.alive) {
+          me.vy = Math.min(D.maxFallVy, me.vy + D.gravity * dt);
+          me.y += me.vy * dt;
+          me.y += (sp2.y - me.y) * RECONCILE_NUDGE;
+          me.y = Math.max(CEILING_Y, Math.min(GROUND_Y, me.y));
+        } else {
+          me.y += (sp2.y - me.y) * P1_LERP; me.vy = sp2.vy;
+        }
+        me.x = sp2.x;
+      }
+      // world dead-reckoning at the host's speed
+      if (ph === 'play') {
+        const dx = snap.s.speed * dt;
+        g.bubbles.forEach(b => { b.x -= dx; });
+        g.dragons.forEach(d => { d.x -= dx * D.dragonSpeedFactor; });
+        g.bgShift += dx * 0.55;
+      } else {
+        g.bgShift += 1.5 * dt;
+      }
+      setTick(t => t + 1);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [isP2, D]);
 
   // cleanup timers/audio on unmount
   useEffect(() => () => {
@@ -618,6 +816,8 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const g = game.current;
+  const shareLink = onlineRoomId ? `${ONLINE_SITE_URL}/flappy-letters/${onlineRoomId}` : '';
+  const copyLink = () => { navigator.clipboard?.writeText(shareLink).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }).catch(() => {}); };
   const neededByColor = new Map<string, string>(); // letter → highlight color
   g.players.forEach((p, i) => { if (p.alive && p.seq[p.seqPos]) neededByColor.set(p.seq[p.seqPos], PLAYER_COLORS[i]); });
 
@@ -746,7 +946,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
       {phase === 'ready' && (
         <div style={{ position: 'absolute', left: 0, right: 0, top: '62%', textAlign: 'center', pointerEvents: 'none' }}>
           <div style={{ display: 'inline-block', background: '#0f172acc', color: '#fff', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 'clamp(14px,2.2vw,20px)' }}>
-            {mode === 2 ? '⇧ Flap and catch YOUR word’s letters in order — dodge the dragons!' : 'Catch your word’s letters in order — dodge the dragons!'}
+            {mode === 2 || isOnline ? '⇧ Flap and catch YOUR word’s letters in order — dodge the dragons!' : 'Catch your word’s letters in order — dodge the dragons!'}
           </div>
         </div>
       )}
@@ -773,20 +973,33 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               Catch your word&rsquo;s letters in order, win stars — and dodge the dragons!
             </div>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
-              {[1, 2].map(m => (
-                <button key={m} onClick={() => { setMode(m as 1 | 2); setMenuStep(1); }} style={{
-                  background: mode === m ? '#0ea5e9' : '#ffffff18', color: '#fff', border: mode === m ? '3px solid #7dd3fc' : '3px solid transparent',
-                  borderRadius: 16, padding: '10px 22px', fontWeight: 900, fontSize: 16, cursor: 'pointer',
-                }}>
-                  {m === 1 ? '1 Player' : '2 Players'}
-                </button>
-              ))}
-            </div>
+            {!isP2 && (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
+                {([1, 2, 'online'] as const).map(m => (
+                  <button key={String(m)} onClick={() => { setMode(m); setMenuStep(1); }} style={{
+                    background: mode === m ? '#0ea5e9' : '#ffffff18', color: '#fff', border: mode === m ? '3px solid #7dd3fc' : '3px solid transparent',
+                    borderRadius: 16, padding: '10px 22px', fontWeight: 900, fontSize: 16, cursor: 'pointer',
+                  }}>
+                    {m === 1 ? '1 Player' : m === 2 ? '2 Players' : '🌐 Online'}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* one player configures at a time: player 1 first, then player 2 */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-              {menuStep === 1 ? (
+              {isP2 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <input
+                    value={p2Name}
+                    onChange={e => setP2Name(e.target.value)}
+                    placeholder="Your name"
+                    maxLength={16}
+                    style={{ background: '#ffffff14', border: '2px solid #fbbf24', color: '#fff', borderRadius: 14, padding: '10px 16px', fontWeight: 800, fontSize: 15, textAlign: 'center', outline: 'none', width: 240 }}
+                  />
+                  <CharPicker value={p2Char} onChange={setP2Char} color="#fbbf24" label="Pick your bird" />
+                </div>
+              ) : menuStep === 1 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                   <input
                     value={p1Name}
@@ -813,21 +1026,47 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               )}
             </div>
 
+            {/* online host: share link + QR + join status */}
+            {!isP2 && mode === 'online' && onlineRoomId && (
+              <div style={{ background: '#ffffff10', borderRadius: 18, padding: '12px 16px', maxWidth: 430, margin: '0 auto 14px' }}>
+                <div style={{ color: '#7dd3fc', fontWeight: 800, fontSize: 12, marginBottom: 6 }}>Share this link with Player 2:</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ flex: 1, background: '#ffffff14', borderRadius: 10, padding: '7px 10px', fontSize: 10, color: '#cbd5e1', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareLink}</div>
+                  <button onClick={copyLink} style={{ background: linkCopied ? '#22c55e' : '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '7px 12px', fontWeight: 900, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 10 }}>
+                  <button onClick={() => setQrOpen(true)} style={{ background: '#fff', border: 'none', borderRadius: 12, padding: 6, cursor: 'pointer' }} title="Tap to enlarge">
+                    <QRCodeSVG value={shareLink} size={110} level="M" />
+                  </button>
+                  <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700 }}>Tap the QR to enlarge · scan to join 📱</span>
+                </div>
+                {p2Joined
+                  ? <div style={{ color: '#4ade80', fontWeight: 900, fontSize: 13, marginTop: 8 }}>✅ {guestInfoRef.current?.name} joined — ready to fly!</div>
+                  : <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: 12, marginTop: 8 }}>⏳ Waiting for Player 2…</div>}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'center' }}>
               {menuStep === 2 && (
                 <button onClick={() => setMenuStep(1)} style={{ background: '#ffffff18', color: '#fff', border: 'none', borderRadius: 16, padding: '13px 22px', fontWeight: 900, fontSize: 16, cursor: 'pointer' }}>← Back</button>
               )}
-              {mode === 2 && menuStep === 1 ? (
+              {isP2 ? (
+                <button onClick={() => setGuestJoined(true)} disabled={guestJoined} style={{
+                  background: guestJoined ? '#475569' : 'linear-gradient(160deg,#f59e0b,#d97706)', color: '#fff', border: 'none',
+                  borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: guestJoined ? 'default' : 'pointer',
+                  boxShadow: guestJoined ? 'none' : '0 10px 30px rgba(245,158,11,0.4)',
+                }}>{guestJoined ? (gotFirstSnap ? '✅ Connected — waiting for host…' : '⏳ Joining…') : '🔗 Join game'}</button>
+              ) : mode === 2 && menuStep === 1 ? (
                 <button onClick={() => setMenuStep(2)} style={{
                   background: 'linear-gradient(160deg,#0ea5e9,#0284c7)', color: '#fff', border: 'none',
                   borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: 'pointer',
                   boxShadow: '0 10px 30px rgba(14,165,233,0.4)',
                 }}>Next → Player 2</button>
               ) : (
-                <button onClick={startRun} style={{
-                  background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none',
-                  borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: 'pointer',
-                  boxShadow: '0 10px 30px rgba(34,197,94,0.4)',
+                <button onClick={startRun} disabled={mode === 'online' && !p2Joined} style={{
+                  background: (mode === 'online' && !p2Joined) ? '#475569' : 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none',
+                  borderRadius: 18, padding: '14px 44px', fontWeight: 900, fontSize: 20, cursor: (mode === 'online' && !p2Joined) ? 'default' : 'pointer',
+                  boxShadow: (mode === 'online' && !p2Joined) ? 'none' : '0 10px 30px rgba(34,197,94,0.4)',
                 }}>▶ Start</button>
               )}
             </div>
@@ -835,6 +1074,24 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
               <button onClick={onExit} style={{ background: 'transparent', color: '#94a3b8', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>← Back to letters</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* enlarged QR */}
+      {qrOpen && (
+        <div onClick={() => setQrOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(8,15,30,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 24, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            <QRCodeSVG value={shareLink} size={Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 90, 380)} level="M" />
+            <span style={{ fontSize: 14, color: '#475569', fontWeight: 800 }}>Scan to join as Player 2 🐦</span>
+          </div>
+          <button onClick={() => setQrOpen(false)} style={{ marginTop: 18, padding: '10px 26px', borderRadius: 999, background: '#fff', color: '#0f172a', fontWeight: 900, border: 'none', cursor: 'pointer' }}>Close ✕</button>
+        </div>
+      )}
+
+      {/* connection path badge (online only) */}
+      {isOnline && phase !== 'menu' && (
+        <div title={directPath ? 'Direct player-to-player connection' : 'Relayed via server'} style={{ position: 'fixed', bottom: 6, left: 6, zIndex: 95, background: directPath ? '#16a34ac9' : '#475569c9', color: '#fff', borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 800, pointerEvents: 'none' }}>
+          {directPath ? '⚡ Direct' : '☁️ Relay'}
         </div>
       )}
 
@@ -862,12 +1119,17 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit }: FlappyL
                 </div>
               ))}
             </div>
-            <button onClick={startRun} style={{ background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none', borderRadius: 16, padding: '12px 30px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
-              🔄 Restart
-            </button>
-            <button onClick={() => { setMenuStep(1); setPhase('menu'); }} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
-              Players
-            </button>
+            {!isP2 && (
+              <button onClick={startRun} style={{ background: 'linear-gradient(160deg,#22c55e,#16a34a)', color: '#fff', border: 'none', borderRadius: 16, padding: '12px 30px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
+                🔄 Restart
+              </button>
+            )}
+            {!isP2 && mode !== 'online' && (
+              <button onClick={() => { setMenuStep(1); setPhase('menu'); }} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 16, padding: '12px 22px', fontWeight: 900, fontSize: 18, cursor: 'pointer', marginRight: 8 }}>
+                Players
+              </button>
+            )}
+            {isP2 && <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginBottom: 10 }}>Waiting for the host to restart…</div>}
             <button onClick={onExit} style={{ background: 'transparent', color: '#64748b', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: 15 }}>
               Exit
             </button>

@@ -43,6 +43,7 @@ import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
+import FlappyLettersGame from './components/FlappyLettersGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -434,6 +435,20 @@ const App: React.FC = () => {
       letters={[]}
       letterForm="isolated"
       roomId={letterFlightRoomId}
+      playerRole="2"
+      onExit={() => { window.location.href = '/'; }}
+    />
+  );
+
+  // ── Flappy Letters online 2P — no auth required ────────────────────────────
+  const flappyRoomId = (() => {
+    const m = window.location.pathname.match(/^\/flappy-letters\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (flappyRoomId) return (
+    <FlappyLettersGame
+      letters={[]}
+      roomId={flappyRoomId}
       playerRole="2"
       onExit={() => { window.location.href = '/'; }}
     />
