@@ -95,7 +95,6 @@ const GAME_CONFIG = {
     { id: 'parrot',        name: 'Parrot',      type: 'lottie', src: '/sprites/birds/parrot.json',        size: 9,   hitboxR: 2.4, aspect: 0.95, flip: true },
     { id: 'cute-bird',     name: 'Cutie',       type: 'lottie', src: '/sprites/birds/cute-bird.json',     size: 8.5, hitboxR: 2.4, aspect: 1 },
     { id: 'bird',          name: 'Bluebird',    type: 'lottie', src: '/sprites/birds/bird.json',          size: 8.5, hitboxR: 2.4, aspect: 1.78, flip: true },
-    { id: 'flying-bird',   name: 'Swifty',      type: 'lottie', src: '/sprites/birds/flying-bird.json',   size: 8.5, hitboxR: 2.4, aspect: 1, flip: true },
     { id: 'bird-flying',   name: 'Sky',         type: 'lottie', src: '/sprites/birds/bird-flying.json',   size: 8.5, hitboxR: 2.4, aspect: 1.78 },
     { id: 'falcon',        name: 'Falcon',      type: 'lottie', src: '/sprites/birds/falcon.json',        size: 10,  hitboxR: 2.4, aspect: 0.72 },
     { id: 'flying-bird-2', name: 'Dove',        type: 'lottie', src: '/sprites/birds/flying-bird-2.json', size: 8.5, hitboxR: 2.4, aspect: 1 },
@@ -254,9 +253,9 @@ const CharPicker: React.FC<{ value: string; onChange: (id: string) => void; excl
     </div>
   );
 
-// Word card: the word itself + one chip per letter (green = collected,
-// yellow = collect this next, gray = later). Flashes red on a wrong grab and
-// pops a star burst on completion.
+// Word card: the player's current word. Flashes red on a wrong grab and pops
+// a star burst on completion (the NEXT letter to catch is highlighted on its
+// bubble in the player's color).
 const WordCard: React.FC<{ p: Flyer; color: string }> = ({ p, color }) => {
   const failing = performance.now() - p.failAt < 700;
   const starring = performance.now() - p.starAt < 1100;
@@ -267,18 +266,7 @@ const WordCard: React.FC<{ p: Flyer; color: string }> = ({ p, color }) => {
       boxShadow: failing ? '0 0 0 4px #ef444455' : '0 4px 14px rgba(2,6,23,0.2)',
       textAlign: 'center', minWidth: 140,
     }}>
-      <div dir="rtl" style={{ ...HAFS, fontSize: 'clamp(22px,3.4vh,34px)', lineHeight: 1.35, color: '#0f172a' }}>{p.word}</div>
-      <div dir="rtl" style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 2 }}>
-        {p.seq.map((ch, i) => (
-          <span key={i} style={{
-            ...HAFS, width: 24, height: 24, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, lineHeight: 1, fontWeight: 700,
-            background: i < p.seqPos ? '#22c55e' : i === p.seqPos ? '#fde047' : '#e2e8f0',
-            color: i < p.seqPos ? '#fff' : '#0f172a',
-            boxShadow: i === p.seqPos ? '0 0 0 2px #f59e0b' : 'none',
-          }}>{`‌${ch}‌`}</span>
-        ))}
-      </div>
+      <div dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px,3.8vh,38px)', lineHeight: 1.35, color: '#0f172a' }}>{p.word}</div>
       {starring && (
         <div style={{ position: 'absolute', top: -34, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
           <StarLottie key={p.starAt} sizePx={84} loop={false} />
