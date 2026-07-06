@@ -10,7 +10,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit } from '../utils/quranicMarks';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -232,6 +232,7 @@ const LetterWithError: React.FC<{
     isCursorActive?: boolean;
     joinLead?: boolean;
     joinTrail?: boolean;
+    markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
 }> = ({
     letter,
@@ -251,6 +252,7 @@ const LetterWithError: React.FC<{
     isCursorActive,
     joinLead,
     joinTrail,
+    markLineHeight = 2.6,
     focusMode,
 }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -415,7 +417,12 @@ const LetterWithError: React.FC<{
                 // box-decoration-break:clone keeps the highlight painting if a letter wraps.
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
-                {hasIqlabMeem(letter) ? (
+                {hasLowMeem(letter) ? (
+                    // Iqlab LOW meem (U+06ED, kasratan iqlab — e.g. 104:9): the fonts
+                    // overprint it onto the kasratan, so it is stripped from the text
+                    // and re-drawn below the unit at a measured per-unit clearance.
+                    renderLowMeemUnit((joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : ''), letter, markLineHeight)
+                ) : hasIqlabMeem(letter) ? (
                     // Iqlab meem overlay. We strip the U+06E2 from the inline text (so the
                     // tanween renders cleanly) and re-draw it ourselves above the tanween.
                     // The tanween is a combining mark, so it always renders centred above its
@@ -427,7 +434,7 @@ const LetterWithError: React.FC<{
                     // RTL), and top raises it just above the tanween.
                     <span style={{ position: 'relative', display: 'inline' }}>
                         {(joinLead ? ZWJ : '') + letter.replace(/ۢ/g, '') + (joinTrail ? ZWJ : '')}
-                        <span style={{ position: 'absolute', top: '-0.34em', left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: "'Hafs', serif" }}>{IQLAB_HIGH_MEEM}</span>
+                        <span style={{ position: 'absolute', top: '-0.34em', left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: 'inherit' }}>{IQLAB_HIGH_MEEM}</span>
                     </span>
                 ) : (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '')}
             </span>
@@ -2507,6 +2514,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onTextSubmit={handleLetterTextSubmit}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
+                                    markLineHeight={showTranslation ? 2.8 : 2.6}
                                     tajweedTitle={readOnly ? (() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? tajweedLabel(r) : undefined; })() : undefined}
                                     clickState={clickState}
                                     isFocused={highlightedLetterKey === letterKey}
@@ -3184,6 +3192,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onTextSubmit={handleLetterTextSubmit}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
+                                                                            markLineHeight={2.2}
                                                                             tajweedTitle={readOnly ? (() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? tajweedLabel(r) : undefined; })() : undefined}
                                                                             clickState={cs}
                                                                             isFocused={highlightedLetterKey === lk}

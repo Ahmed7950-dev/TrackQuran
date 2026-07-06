@@ -7,7 +7,7 @@ import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, splitVerseWords } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -783,7 +783,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         padding: '0'
                     }}
                 >
-                    {letter}
+                    {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 10 / 7) : letter}
                 </span>
             </span>
         );
@@ -813,7 +813,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 return (
                     <React.Fragment key={wordKey}>
                         <span className={`px-1 rounded-md ${wordMistakeLevel ? getMistakeColor(wordMistakeLevel) : ''}`}>
-                            {renderWordWithMarks(word, wordKey)}
+                            {renderWordWithMarks(word, wordKey, 10 / 7)}
                         </span>
                         {' '}
                     </React.Fragment>
