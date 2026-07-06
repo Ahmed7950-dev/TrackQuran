@@ -11,7 +11,6 @@
     "postinstall": "npm run sync-pdfjs || true"
   },
   "dependencies": {
-    "@google/genai": "^1.22.0",
     "@supabase/supabase-js": "^2.105.3",
     "lottie-web": "^5.13.0",
     "pdfjs-dist": "^5.7.284",

@@ -16,7 +16,6 @@ import Footer from './components/Footer';
 import Logo from './components/Logo';
 import AddStudentModal from './components/AddStudentModal';
 import { useAuth } from './context/AuthProvider';
-import StudentViewOnlyPage from './components/StudentViewOnlyPage';
 import MistakesReviewPage from './components/MistakesReviewPage';
 import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';

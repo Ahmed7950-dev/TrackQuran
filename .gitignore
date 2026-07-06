@@ -29,3 +29,6 @@ dist-ssr
 
 # Supabase CLI local cache (auto-regenerated)
 supabase/.temp/
+
+# Local pre-patch font backups (public/Fonts is the live, hand-patched set)
+/Fonts/
