@@ -985,7 +985,13 @@
     "errSaveFailed": "Değişiklikler kaydedilemedi.",
     "errSelectTrueFalse": "Doğru veya Yanlış'ı doğru cevap olarak seçin.",
     "cancel": "İptal",
-    "errAddBlank": "\"+ Boşluk\" düğmesiyle en az bir boşluk (___) ekleyin."
+    "errAddBlank": "\"+ Boşluk\" düğmesiyle en az bir boşluk (___) ekleyin.",
+    "reviewLater": "🔖 Sonra tekrar",
+    "savedAlready": "🔖 Kaydedildi",
+    "savedForRevision": "Kaydedildi!",
+    "revisionSession": "Tekrar",
+    "reviseSaved": "Kaydedilen kelimeleri çalış ({{count}})",
+    "reviseSavedDesc": "Sadece kaydettiğin kelimeleri çalış"
   },
   "alphabetTrainer": {
     "pageTitle": "Arapça Alfabe Pratiği",

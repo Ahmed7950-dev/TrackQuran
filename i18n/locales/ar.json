@@ -985,7 +985,13 @@
     "errSaveFailed": "فشل حفظ التغييرات.",
     "errSelectTrueFalse": "حدد صح أو خطأ كإجابة صحيحة.",
     "cancel": "إلغاء",
-    "errAddBlank": "أضف فراغًا واحدًا على الأقل (___)."
+    "errAddBlank": "أضف فراغًا واحدًا على الأقل (___).",
+    "reviewLater": "🔖 للمراجعة",
+    "savedAlready": "🔖 محفوظة",
+    "savedForRevision": "تم الحفظ!",
+    "revisionSession": "مراجعة",
+    "reviseSaved": "مراجعة الكلمات المحفوظة ({{count}})",
+    "reviseSavedDesc": "تدرّب على الكلمات التي حفظتها فقط"
   },
   "alphabetTrainer": {
     "pageTitle": "تدريب الحروف العربية",

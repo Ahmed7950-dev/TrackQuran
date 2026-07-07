@@ -1019,7 +1019,13 @@
     "errSaveFailed": "Failed to save changes.",
     "errSelectTrueFalse": "Select True or False as the correct answer.",
     "cancel": "Cancel",
-    "errAddBlank": "Add at least one blank (___) using the \"+ Blank\" button."
+    "errAddBlank": "Add at least one blank (___) using the \"+ Blank\" button.",
+    "reviewLater": "🔖 Review later",
+    "savedAlready": "🔖 Saved",
+    "savedForRevision": "Saved!",
+    "revisionSession": "Revision",
+    "reviseSaved": "Revise saved words ({{count}})",
+    "reviseSavedDesc": "Drill just the words you saved"
   },
   "landing": {
     "announcementBar": "✦ Free trial class — Meet your teacher before you commit. No card required.",

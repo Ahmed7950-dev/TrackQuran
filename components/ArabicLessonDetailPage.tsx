@@ -2201,6 +2201,30 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [saving, setSaving]         = useState(false);
   const [flipped, setFlipped]       = useState(false);
 
+  // ── "Review later" revision list ──────────────────────────────────────────
+  // A personal set of word IDs the learner chose to drill again later. Stored
+  // in localStorage (per lesson + student, works with or without a selected
+  // student and without any server round-trip). `reviewingSaved` marks a
+  // challenge that runs ONLY the saved words — answering "I know" there clears
+  // the word from the list.
+  const revisionKey = `arabicVocabRevision:${lessonId}:${selectedStudentId || 'self'}`;
+  const [revisionIds, setRevisionIds] = useState<Set<string>>(new Set());
+  const [reviewingSaved, setReviewingSaved] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(revisionKey);
+      setRevisionIds(new Set<string>(raw ? JSON.parse(raw) as string[] : []));
+    } catch { setRevisionIds(new Set()); }
+  }, [revisionKey]);
+
+  const persistRevision = (next: Set<string>) => {
+    setRevisionIds(next);
+    try { localStorage.setItem(revisionKey, JSON.stringify([...next])); } catch { /* quota / private mode */ }
+  };
+  const savedWords = words.filter(w => revisionIds.has(w.id));
+
   useEffect(() => {
     getVocabWords(lessonId).then(ws => { setWords(ws); setLoading(false); });
   }, [lessonId]);
@@ -2215,27 +2239,55 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   const startChallenge = () => {
     setShuffled(shuffleArray(words)); setCardIndex(0);
-    setWrongWords([]);
+    setWrongWords([]); setReviewingSaved(false);
+    setPhase('active');
+  };
+
+  /** Practise ONLY the saved-for-revision words. */
+  const startRevisionChallenge = () => {
+    if (!savedWords.length) return;
+    setShuffled(shuffleArray(savedWords)); setCardIndex(0);
+    setWrongWords([]); setReviewingSaved(true);
     setPhase('active');
   };
 
   const restartChallenge = () => {
-    setShuffled(shuffleArray(words)); setCardIndex(0);
+    setShuffled(shuffleArray(reviewingSaved ? savedWords : words)); setCardIndex(0);
     setPhase('active');
   };
 
-  /** "I know" — move to next card */
-  const handleKnow = () => {
+  /** Advance to the next card, or finish the run. */
+  const advanceCard = () => {
     if (cardIndex + 1 >= shuffled.length) {
       setPhase('complete');
-      if (selectedStudentId) saveSpacedRep();
-      // Save any wrong words accumulated before the final correct streak
-      if (selectedStudentId && wrongWords.length > 0) {
+      // A revision-only run doesn't re-schedule the whole lesson's spaced rep.
+      if (!reviewingSaved && selectedStudentId) saveSpacedRep();
+      if (!reviewingSaved && selectedStudentId && wrongWords.length > 0) {
         saveVocabMistakes(selectedStudentId, wrongWords.map(w => ({ wordId: w.id, lessonId }))).catch(console.error);
       }
     } else {
       setCardIndex(i => i + 1);
     }
+  };
+
+  /** "I know" — in a revision run this also clears the word from the list. */
+  const handleKnow = () => {
+    if (reviewingSaved) {
+      const word = shuffled[cardIndex];
+      if (word && revisionIds.has(word.id)) {
+        const next = new Set<string>(revisionIds); next.delete(word.id); persistRevision(next);
+      }
+    }
+    advanceCard();
+  };
+
+  /** "Review later" — add the word to the revision list and move on (no penalty). */
+  const handleSaveForRevision = () => {
+    const word = shuffled[cardIndex];
+    if (word && !revisionIds.has(word.id)) persistRevision(new Set<string>(revisionIds).add(word.id));
+    setSavedFlash(true);
+    window.setTimeout(() => setSavedFlash(false), 900);
+    advanceCard();
   };
 
   /** "Not Sure" — record word as wrong, show answer, then restart */
@@ -2318,7 +2370,10 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     return (
       <div className="max-w-3xl mx-auto p-10 space-y-8">
         <div className="flex items-center justify-between">
-          <span className="text-base text-slate-500 dark:text-slate-400">{t('arabicLessonDetail.cardOf', { n: cardIndex + 1, total: shuffled.length })}</span>
+          <span className="text-base text-slate-500 dark:text-slate-400">
+            {reviewingSaved && <span className="mr-2 inline-block px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-bold align-middle">🔖 {t('arabicLessonDetail.revisionSession')}</span>}
+            {t('arabicLessonDetail.cardOf', { n: cardIndex + 1, total: shuffled.length })}
+          </span>
           <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -2345,10 +2400,10 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mt-4">
+        <div className="grid grid-cols-3 gap-3 sm:gap-5 mt-4">
           {/* Not Sure button */}
           <button onClick={() => { setFlipped(true); handleNotSure(); }}
-            className="group flex flex-col items-center justify-center gap-3 py-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 transition-all shadow-sm">
+            className="group flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 transition-all shadow-sm">
             <svg className="w-10 h-10 text-red-500 dark:text-red-400 group-hover:scale-110 transition-transform" viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path d="m54.47021 44.459c-2.59771-3.29311-13.30316-6.74373-15.55609-7.442a35.687 35.687 0 0 0 -.44635-3.85693 12.1115 12.1115 0 0 0 3.38965-6.10737 5.33833 5.33833 0 0 0 1.84158-6.63125 15.86778 15.86778 0 0 0 .36444-5.08649 16.08178 16.08178 0 0 0 -.94532-4.11816 6.18869 6.18869 0 0 0 1.4795-3.11133 1.33544 1.33544 0 0 0 -1.48828-1.52734 8.02887 8.02887 0 0 1 -5.05225-.86622 16.30427 16.30427 0 0 0 -12.35547-.001c-4.8548 2.27275-8.21593 8.78178-6.477 15.20617a5.49549 5.49549 0 0 0 2.29738 6.25192 13.10539 13.10539 0 0 0 3.20392 5.97485 36.27915 36.27915 0 0 0 -.44855 3.87927c-2.33026.69617-12.78967 3.95831-15.37744 7.14783-2.33938 2.88471-3.17727 13.09956-3.26516 14.25483a1 1 0 0 0 1.99414.15235c.22558-2.9668 1.17236-11.11036 2.82422-13.14747 1.8833-2.32128 10.26562-5.23535 14.084-6.39648 4.48152 5.49784 7.01416 5.12012 7.01416 5.12012 2.58008 0 5.8335-3.56934 7.12256-5.11719 3.8584 1.2207 12.34472 4.27539 14.22607 6.66016 1.58057 2.0039 2.38037 9.96582 2.55518 12.86523a.9999.9999 0 0 0 1.99609-.12012c-.06789-1.13086-.72902-11.1289-2.98098-13.98338zm-27.91992-36.93752c3.77491-1.76757 8.80274-.873 10.72119.03125a10.468 10.468 0 0 0 5.10452 1.10743 3.22376 3.22376 0 0 1 -.9043 1.3623 1.31716 1.31716 0 0 0 -.37939 1.50293 14.12089 14.12089 0 0 1 .98 3.99512 13.867 13.867 0 0 1 -.21192 4.02051 8.966 8.966 0 0 1 -1.46142-4.7295 1.33542 1.33542 0 0 0 -1.71827-1.248 26.0117 26.0117 0 0 1 -14.38281.04882 1.33147 1.33147 0 0 0 -1.70508 1.22461 8.1478 8.1478 0 0 1 -1.65531 4.61325c-.84566-4.62851 1.40407-9.95686 5.61279-11.92872zm-3.16015 18.81934a1.00094 1.00094 0 0 0 -.51319-.69141 3.49381 3.49381 0 0 1 -1.86071-3.53717c.83685-.27554 3.10076-2.95691 3.51013-6.36712a28.05229 28.05229 0 0 0 13.92138-.042c.25144 2.58886 2.09919 6.708 3.75013 6.66693a3.66306 3.66306 0 0 1 -1.78675 3.254.997.997 0 0 0 -.44433.67578 9.49692 9.49692 0 0 1 -4.66455 6.68067c-.15918.084-3.93995 2.01074-7.17725.34375a10.52343 10.52343 0 0 1 -4.73486-6.98343zm8.15771 15.81348c-1.30658-.007-3.72931-2.3042-5.337-4.23743a29.60949 29.60949 0 0 1 .32122-3.21136c2.96526 1.91969 7.07172 1.5756 10.1026-.18537a31.34117 31.34117 0 0 1 .348 3.41767c-3.73339 4.37668-5.43482 4.21649-5.43482 4.21649z"/>
               <path d="m49.66748 56.4375h-9a1 1 0 0 1 0-2h9a1 1 0 0 1 0 2z"/>
@@ -2361,11 +2416,20 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
               <path d="m50.2583 15.958a3.84738 3.84738 0 0 1 1.832-3.748c1.03028-.67969 1.166-1.00683 1.08155-1.48242-.273-1.53231-3.38546-1.29425-2.98292.1748a1 1 0 0 1 -1.92871.5293c-1.16663-4.24892 6.13698-5.22647 6.88041-1.05568.35351 1.98437-1.20167 3.01074-1.94874 3.5039a1.86009 1.86009 0 0 0 -.94043 1.916.99987.99987 0 0 1 -1.99316.1621z"/>
               <circle cx="51.309" cy="18.618" r=".954"/>
             </svg>
-            <span className="text-red-600 dark:text-red-400 font-bold text-base">{t('arabicLessonDetail.notSure')}</span>
+            <span className="text-red-600 dark:text-red-400 font-bold text-sm sm:text-base text-center leading-tight">{t('arabicLessonDetail.notSure')}</span>
+          </button>
+          {/* Review later — save to the personal revision list, keep going */}
+          <button onClick={handleSaveForRevision}
+            className="group relative flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 hover:border-rose-300 dark:hover:border-rose-700 transition-all shadow-sm">
+            {savedFlash && <span className="absolute -top-2 right-2 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow animate-pulse">{t('arabicLessonDetail.savedForRevision')}</span>}
+            <svg className="w-9 h-9 sm:w-10 sm:h-10 text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 2a2 2 0 0 0-2 2v17a1 1 0 0 0 1.53.848L12 17.94l6.47 3.908A1 1 0 0 0 20 21V4a2 2 0 0 0-2-2H6z"/>
+            </svg>
+            <span className="text-rose-600 dark:text-rose-400 font-bold text-sm sm:text-base text-center leading-tight">{revisionIds.has(shuffled[cardIndex]?.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')}</span>
           </button>
           {/* I Know button */}
           <button onClick={handleKnow}
-            className="group flex flex-col items-center justify-center gap-3 py-6 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all shadow-sm">
+            className="group flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all shadow-sm">
             <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" viewBox="0 0 511.981 511.981" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
               <path d="m495.502 236.263c0-13.943-5.405-26.767-15.219-36.109-9.477-9.021-22.134-13.988-35.641-13.988l-162.409.005c-16.464-17.908-21.958-44.092-13.27-65.004 13.031-31.362 12.298-56.688-2.45-84.684-11.503-21.836-40.53-39.068-60.886-36.162-12.265 1.752-20.815 10.203-23.461 23.186-.871 4.273-1.131 9.309-1.434 15.14-.838 16.181-1.987 38.342-16.159 65.492-8.273 15.85-11.13 32.729-13.651 47.623-4.637 27.396-7.396 43.662-34.698 46.645v-2.718c0-5.523-4.477-10-10-10h-79.745c-5.523 0-10 4.477-10 10v294.035c0 5.523 4.477 10 10 10h79.747c5.523 0 10-4.477 10-10v-2.805c18.363 1.452 36.906 6.572 56.363 11.959 23.27 6.443 47.331 13.105 71.701 13.105h112.143c30.679 0 55.501-16.171 66.4-43.259 6.207-15.427 6.479-31.339 1.319-43.197 7.605-5.464 13.936-13.05 18.544-22.471 8.322-17.01 9.151-36.271 2.793-51.103 10.897-8.542 17.625-20.821 20.692-32.648 3.592-13.852 2.572-27.342-2.22-37.645 18.45-7.413 31.541-25.096 31.541-45.397zm-50.079 29.099-50 1.087c-5.521.12-9.9 4.693-9.78 10.215.12 5.521 4.698 9.88 10.215 9.78l46.76-1.017c5.417 4.956 7.292 16.949 4.204 28.856-1.755 6.769-9.489 28.854-35.313 28.854-5.523 0-10 4.477-10 10s4.477 10 10 10c5.839 0 11.188-.757 16.062-2.124 3.48 9.364 2.561 22.216-2.839 33.252-2.771 5.665-8.338 14.068-18.253 18.42-.29.106-.577.227-.857.362-3.794 1.536-8.202 2.481-13.301 2.481-5.523 0-10 4.477-10 10s4.477 10 10 10c4.732 0 9.298-.551 13.651-1.624 2.543 6.26 2.738 16.342-1.692 27.353-3.717 9.238-15.819 30.724-47.845 30.724h-112.145c-21.652 0-43.37-6.014-66.363-12.38-20.081-5.56-40.752-11.273-61.701-12.737v-79.162c0-5.523-4.477-10-10-10s-10 4.477-10 10v92.021h-59.747v-274.035h59.747v92.014c0 5.523 4.477 10 10 10s10-4.477 10-10v-79.225c44.37-4.023 49.689-35.446 54.417-63.377 2.385-14.089 4.851-28.657 11.661-41.706 16.189-31.015 17.521-56.709 18.402-73.712.261-5.03.486-9.374 1.058-12.182 1.244-6.104 4.107-7.01 6.692-7.379 11.005-1.571 32.208 10.207 40.363 25.685 11.989 22.757 12.459 41.735 1.675 67.688-9.547 22.979-6.491 50.531 6.882 72.679h-12.329c-5.522 0-10 4.478-10 10s4.478 10 10 10l199.595-.006c8.349 0 16.109 3.009 21.85 8.474 5.81 5.53 9.009 13.209 9.009 21.623.001 15.684-13.492 28.737-30.078 29.098z"/>
               <path d="m106.226 332.702c-5.523 0-10 4.48-10 10.003s4.477 10 10 10 10-4.477 10-10v-.007c0-5.523-4.477-9.996-10-9.996z"/>
@@ -2435,6 +2499,12 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
               ))}
             </div>
           </div>
+        )}
+        {savedWords.length > 0 && (
+          <button onClick={startRevisionChallenge}
+            className="w-full py-4 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl transition-colors text-base flex items-center justify-center gap-2">
+            🔖 {t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}
+          </button>
         )}
         <div className="flex gap-4">
           <button onClick={startChallenge}
@@ -2569,6 +2639,18 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                     <span className="block text-xs text-sky-600/70 dark:text-sky-300/60">Catch the falling words</span>
                   </span>
                 </button>
+
+                {/* Revise saved words — only when the learner has saved some */}
+                {savedWords.length > 0 && (
+                  <button onClick={startRevisionChallenge}
+                    className="group flex items-center gap-3 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50/60 dark:bg-rose-900/10 px-4 py-3 text-left hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:border-rose-300 dark:hover:border-rose-700 hover:shadow-sm transition-all">
+                    <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-rose-100 dark:bg-rose-900/30 ring-1 ring-rose-200/60 dark:ring-rose-800/40 flex items-center justify-center text-2xl">🔖</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-rose-800 dark:text-rose-200 truncate">{t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}</span>
+                      <span className="block text-xs text-rose-600/70 dark:text-rose-300/60">{t('arabicLessonDetail.reviseSavedDesc')}</span>
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}
