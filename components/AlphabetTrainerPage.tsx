@@ -5,6 +5,7 @@ import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import AirplaneGame from './AirplaneGame';
 import LetterRaceGame from './LetterRaceGame';
 import FlappyLettersGame from './FlappyLettersGame';
+import OddLetterGame from './OddLetterGame';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -92,8 +93,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy';
-type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter';
+type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter';
 
 const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
   const { t } = useI18n();
@@ -215,6 +216,8 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
   };
 
   const handleStart = () => {
+    // Odd-letter has its own letter set → launch even with no alphabet selected.
+    if (childMode && gameChoice === 'oddletter') { setView('oddletter'); return; }
     if (unique === 0) return;
     if (childMode && (gameChoice === 'airplane' || gameChoice === 'race' || gameChoice === 'flappy')) {
       setView(gameChoice);
@@ -440,7 +443,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
           <p className="text-center text-sm mb-3 font-extrabold text-indigo-600 tracking-wide">
             🎮 Pick your game!
           </p>
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-4 justify-center flex-wrap">
             {/* Castle Battle */}
             {(() => {
               const active = gameChoice === 'tower';
@@ -617,6 +620,45 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                 </button>
               );
             })()}
+
+            {/* Find the Odd Letter */}
+            {(() => {
+              const active = gameChoice === 'oddletter';
+              return (
+                <button
+                  onClick={() => setGameChoice('oddletter')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 148,
+                    borderColor: active ? '#0d9488' : '#99f6e4',
+                    background: active ? 'linear-gradient(160deg,#0d9488 0%,#0f766e 100%)' : 'linear-gradient(160deg,#f0fdfa 0%,#ccfbf1 100%)',
+                    boxShadow: active ? '0 8px 24px rgba(13,148,136,0.45), 0 2px 8px rgba(13,148,136,0.3)' : '0 2px 8px rgba(13,148,136,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)' }} />
+                  )}
+                  <div className="pt-3 px-2 flex items-center justify-center gap-1" style={{ width: 110, height: 110 }}>
+                    <span dir="rtl" style={{ fontFamily: "'Hafs','Amiri Quran',serif", fontSize: 46, lineHeight: 1, color: active ? '#fff' : '#0f766e' }}>ح</span>
+                    <span dir="rtl" style={{ fontFamily: "'Hafs','Amiri Quran',serif", fontSize: 46, lineHeight: 1, color: active ? '#fde047' : '#f59e0b' }}>ج</span>
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-teal-700'}`}>
+                      Find the Odd Letter
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-teal-100' : 'text-teal-500'}`}>
+                      Spot the imposter!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -652,7 +694,7 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
           >{t('alphabetTrainer.clearAll')}</button>
           <button
             onClick={handleStart}
-            disabled={unique === 0}
+            disabled={unique === 0 && !(childMode && gameChoice === 'oddletter')}
             className={`px-6 py-2 text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
               childMode
                 ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md shadow-orange-200'
@@ -926,6 +968,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
       )}
       {view === 'race' && (
         <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
+      )}
+      {view === 'oddletter' && (
+        <OddLetterGame onExit={() => setView('select')} />
       )}
     </div>
   );

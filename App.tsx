@@ -43,6 +43,7 @@ import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
+import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -451,6 +452,15 @@ const App: React.FC = () => {
       playerRole="2"
       onExit={() => { window.location.href = '/'; }}
     />
+  );
+
+  // ── Find the Odd Letter online 2P — no auth required ───────────────────────
+  const oddLetterRoomId = (() => {
+    const m = window.location.pathname.match(/^\/odd-letter\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (oddLetterRoomId) return (
+    <OddLetterGame roomId={oddLetterRoomId} playerRole="2" onExit={() => { window.location.href = '/'; }} />
   );
 
   // ── Crane Builder live session — student joins the tutor's link, no auth ────
