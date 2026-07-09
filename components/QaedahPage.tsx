@@ -423,6 +423,11 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
 
   // ─── VIEW: CHALLENGE ──────────────────────────────────────────────────────
   const renderChallenge = () => {
+    // Font size scales inversely with the word's letter count so ANY word fills
+    // the card width without clipping (a single word can't wrap). ~150vw / n
+    // letters ≈ fits 94vw; capped so short words don't get absurdly huge.
+    const baseLen = Math.max(1, [...word].filter(c => { const x = c.charCodeAt(0); return x >= 0x0621 && x <= 0x064A; }).length);
+    const bigWordFont = `clamp(3rem, ${Math.round(150 / baseLen)}vw, 13rem)`;
     // Shared top bar — includes Adult/Child toggle (challenge page only)
     const topBar = (
       <div className="flex items-center gap-3">
@@ -534,19 +539,20 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
             {topBar}
           </div>
 
-          {/* Word card */}
-          <div className="flex justify-center mb-10">
+          {/* Word card — fills the screen so the word is as big as possible */}
+          <div className="flex justify-center mb-8">
             <div
               key={`${pos}-${word}`}
               className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
-              style={{ width: 'min(260px,75vw)', height: 'min(180px,50vw)', minHeight: 120 }}
+              style={{ width: 'min(900px, 94vw)', height: 'min(56vh, 540px)', minHeight: 220, padding: '0 20px' }}
             >
               <span
                 style={{
                   ...HAFS,
-                  fontSize: 'clamp(3rem,14vw,6rem)',
-                  lineHeight: 1.2,
+                  fontSize: bigWordFont,
+                  lineHeight: 1.15,
                   direction: 'rtl',
+                  whiteSpace: 'nowrap',
                 }}
                 className="text-slate-700 dark:text-slate-200"
               >{word}</span>
