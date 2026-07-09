@@ -58,8 +58,9 @@ function makeGrid(round: number): Grid {
   let base = group[rand(group.length)];
   let imposter = group[rand(group.length)];
   while (imposter === base) imposter = group[rand(group.length)];
-  // grid grows a little each round (harder). round1 ≈ 7×7 → round5 ≈ 11×11
-  const n = 6 + round;
+  // grid grows each round (harder): round1 = 11×11 (121 letters) →
+  // round5 = 19×19 (361). More letters + smaller glyphs = tougher spot.
+  const n = 9 + round * 2;
   const rows = n, cols = n;
   return { round, base, imposter, rows, cols, impIndex: rand(rows * cols) };
 }
@@ -312,7 +313,7 @@ const OddLetterGame: React.FC<Props> = ({ onExit, roomId: propRoomId, playerRole
 
   // ── Render: the letter grid ────────────────────────────────────────────────────
   const renderGrid = (gr: Grid, opts: { revealIdx?: number } = {}) => (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gr.cols}, 1fr)`, gap: 'clamp(2px,0.6vw,6px)', width: '100%', maxWidth: 'min(92vw, 640px)', margin: '0 auto' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gr.cols}, 1fr)`, gap: 'clamp(1px,0.35vw,3px)', width: '100%', maxWidth: 'min(96vw, 760px)', margin: '0 auto' }}>
       {Array.from({ length: gr.rows * gr.cols }, (_, i) => {
         const isImp = i === gr.impIndex;
         const wrong = wrongCells.has(i);
@@ -321,11 +322,11 @@ const OddLetterGame: React.FC<Props> = ({ onExit, roomId: propRoomId, playerRole
           <button key={i} onClick={() => onCellClick(i)} disabled={locked || phase !== 'playing'}
             style={{
               aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: 'none', borderRadius: 'clamp(4px,1vw,10px)', cursor: locked ? 'not-allowed' : 'pointer',
+              border: 'none', borderRadius: 'clamp(2px,0.5vw,6px)', cursor: locked ? 'not-allowed' : 'pointer',
               background: reveal ? '#22c55e' : wrong ? '#fecaca' : '#ffffff',
               color: reveal ? '#fff' : '#0f172a',
               boxShadow: reveal ? '0 0 0 3px #16a34a' : '0 1px 2px rgba(2,6,23,0.08)',
-              ...HAFS, fontSize: `clamp(11px, ${Math.floor(60 / gr.cols)}vw, 34px)`, lineHeight: 1,
+              ...HAFS, fontSize: `clamp(8px, ${(72 / gr.cols).toFixed(1)}vw, 26px)`, lineHeight: 1,
               transition: 'background 0.15s',
             }}>
             <span dir="rtl">{isImp ? gr.imposter : gr.base}</span>
