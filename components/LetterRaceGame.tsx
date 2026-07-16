@@ -59,7 +59,7 @@ interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boole
 // front/back sprite strips (public/sprites/race-runner-*.png). Both players run
 // the SAME character; Player 2 wears a CSS hue-rotate tint so the two racers
 // are instantly tellable apart.
-const RUNNER_AR = 0.683; // frame aspect ratio (w/h) of the strip frames
+const RUNNER_AR = 0.737; // frame aspect ratio (w/h) of the strip frames
 const RUN_FRAMES = 8;
 const P2_TINT = 'hue-rotate(165deg)';
 const tintFor = (who: 1 | 2) => (who === 2 ? P2_TINT : 'none');
