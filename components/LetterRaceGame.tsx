@@ -65,8 +65,8 @@ const P2_TINT = 'hue-rotate(165deg)';
 const tintFor = (who: 1 | 2) => (who === 2 ? P2_TINT : 'none');
 // dir 'up' = running toward the letters → the runner's back;
 // dir 'down' = running home / portraits → the face.
-const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png`;
-const stripFor  = (dir: 'up' | 'down') => `/sprites/race-runner-${dir}-run.png`;
+const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png?v=2`;
+const stripFor  = (dir: 'up' | 'down') => `/sprites/race-runner-${dir}-run.png?v=2`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
