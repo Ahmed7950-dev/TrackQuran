@@ -34,8 +34,22 @@ import { supabase } from '../lib/supabase';
 // Events that are high-frequency + loss-tolerant → unreliable channel.
 const FAST_EVENTS = new Set(['state', 'input']);
 const SIG_EVENT = 'rtc-sig';
+
+// TURN keeps strict-NAT / mobile-carrier players on a fast WebRTC relay
+// (~20-50ms added) instead of dropping to the Supabase broadcast fallback
+// (chat-grade latency). Provide one via env (free tiers: Metered, Cloudflare):
+//   VITE_TURN_URLS       comma-separated turn:/turns: urls
+//   VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL
+// Without env config we stay STUN-only (strict NATs use the Supabase path).
+const IM_ENV = (import.meta as any).env ?? {};
+const ENV_TURN_URLS = (IM_ENV.VITE_TURN_URLS as string | undefined)?.split(',').map(s => s.trim()).filter(Boolean);
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    ...(ENV_TURN_URLS?.length
+      ? [{ urls: ENV_TURN_URLS, username: IM_ENV.VITE_TURN_USERNAME ?? '', credential: IM_ENV.VITE_TURN_CREDENTIAL ?? '' }]
+      : []),
+  ],
 };
 const HELLO_INTERVAL_MS = 2500; // guest re-announces until P2P is up
 

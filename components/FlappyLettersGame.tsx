@@ -109,10 +109,8 @@ const GAME_CONFIG = {
 };
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
-const SNAPSHOT_MS = 33;        // host → guest state rate (~30Hz, unreliable channel)
-const RECONCILE_NUDGE = 0.06;  // guest pulls its predicted bird toward the host's
-const RECONCILE_SNAP = 10;     // ...and hard-snaps when the error exceeds this
-const P1_LERP = 0.3;           // guest interpolation for the host's bird
+const SNAPSHOT_MS = 33;        // state rate both directions (~30Hz, unreliable channel)
+const P1_LERP = 0.3;           // interpolation for the OPPONENT's bird (both sides)
 
 const GROUND_Y = 92;   // top of the ground strip
 const CEILING_Y = 2;
@@ -209,9 +207,19 @@ interface NetSnapshot {
   bg: string;
   speed: number;
   em: string; wi: number;
-  ps: { x: number; y: number; vy: number; alive: boolean; stars: number; word: string; seqPos: number; name: string; charId: string; failAge: number; starAge: number }[];
+  ps: { x: number; y: number; vy: number; alive: boolean; stars: number; word: string; seqPos: number; name: string; charId: string; failAge: number; starAge: number; flapAge: number }[];
   bs: { id: number; letter: string; x: number; y: number; color: string; taken: boolean }[];
   ds: Dragon[];
+}
+
+// Guest → host own-bird state (the guest is the AUTHORITY for its own bird:
+// physics, deaths and letter pickups all happen on the guest's screen with
+// zero network in the loop — the host only mirrors this for display, word
+// spawning and win/end arbitration). Event name 'input' → unreliable channel.
+interface GuestState {
+  y: number; vy: number; alive: boolean; stars: number;
+  word: string; seqPos: number;
+  failAge: number; starAge: number; flapAge: number;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -526,19 +534,32 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     if (g.winnerIdx >= 0) sfxStar();
   }, [sfxStar]);
 
+  // Guest-side: bubbles the local player took, so host snapshots (which lag the
+  // grab by a beat) don't resurrect them; also relayed to the host for display.
+  const localTakenRef = useRef(new Map<number, { at: number; wrong: boolean }>());
+
   // ── Letter grab: right letter advances the word; wrong letter burns it ─────
+  // Runs on whichever side OWNS the bird: host for players[0] (and both birds
+  // offline), guest for its own players[1]. The guest defers the actual win
+  // declaration to the host (its stars travel in the 'input' state stream).
   const grabLetter = useCallback((pIdx: number, bubble: Bubble) => {
     const g = game.current;
     const p = g.players[pIdx];
     const now = performance.now();
+    const guestTook = (wrong: boolean) => {
+      if (!isP2) return;
+      localTakenRef.current.set(bubble.id, { at: now, wrong });
+      channelRef.current?.send({ type: 'broadcast', event: 'grab', payload: { id: bubble.id, wrong } });
+    };
     if (bubble.letter === p.seq[p.seqPos]) {
       bubble.taken = true; bubble.takenAt = now;
+      guestTook(false);
       p.seqPos++;
       sfxCollect();
       if (p.seqPos >= p.seq.length) {
         p.stars++; p.starAt = now;
         sfxStar();
-        if (p.stars >= D.starsToWin) {
+        if (p.stars >= D.starsToWin && !isP2) {
           // first to the target wins — game over right here
           g.endMsg = g.players.length === 1 ? `You did it — ${D.starsToWin} stars! 🏆` : `${p.name} wins!`;
           g.winnerIdx = pIdx;
@@ -550,12 +571,13 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     } else {
       if (now < p.graceUntil) return; // just failed — don't chain-punish
       bubble.taken = true; bubble.takenAt = now; bubble.wrong = true;
+      guestTook(true);
       p.failAt = now;
       p.graceUntil = now + D.wrongGraceMs;
       sfxWrong();
       dealWord(pIdx); // lose the chance — fresh word, same length
     }
-  }, [dealWord, sfxCollect, sfxStar, sfxWrong, D.wrongGraceMs]);
+  }, [dealWord, sfxCollect, sfxStar, sfxWrong, D.wrongGraceMs, D.starsToWin, isP2]);
 
   const eliminate = useCallback((pIdx: number) => {
     const g = game.current;
@@ -597,16 +619,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     g.dragons.push({ id: g.dragonSeq++, x: 112, y: 14 + Math.random() * 66 });
   }, []);
 
-  // Dev-only test hook (vite dev server only; stripped from prod builds)
-  if ((import.meta as any).env?.DEV) {
-    (window as any).__flappyTest = { game, grabLetter, dealWord, eliminate, channelRef, snapRef, guestInfoRef };
-  }
-
   // ── Flap input ──────────────────────────────────────────────────────────────
-  // Local flap: on the host, pIdx 0 = own bird and 1 = the remote guest's bird
-  // (driven by received 'flap' events). On the guest, everything maps to its
-  // own bird (players[1]) — applied locally for instant feel (client-side
-  // prediction) AND sent to the host on the reliable channel.
+  // Purely LOCAL on both sides: each player owns their own bird's physics, so a
+  // tap never waits on the network (the position streams to the other side for
+  // display only). On the host, pIdx 0 = own bird; on the guest, players[1].
   const flap = useCallback((pIdx: number) => {
     if (phaseRef.current !== 'play') return;
     const g = game.current;
@@ -616,8 +632,12 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     p.vy = D.flapVy;
     p.flapAt = performance.now();
     sfxFlap();
-    if (isP2) channelRef.current?.send({ type: 'broadcast', event: 'flap', payload: {} });
   }, [D.flapVy, sfxFlap, isP2]);
+
+  // Dev-only test hook (vite dev server only; stripped from prod builds)
+  if ((import.meta as any).env?.DEV) {
+    (window as any).__flappyTest = { game, grabLetter, dealWord, eliminate, channelRef, snapRef, guestInfoRef, flap, localTakenRef };
+  }
 
   // ── Keyboard ────────────────────────────────────────────────────────────────
   const isP2RefConst = isP2; // stable for the listener below
@@ -682,8 +702,15 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       const speed = speedNow(stars);
       const aspect = aspectRef.current;
 
-      // physics + collisions
+      // physics + collisions — only for birds THIS side owns. Online, the
+      // guest's bird (players[1]) is simulated on the guest's screen and
+      // mirrored here via its 'input' stream (interpolated for smoothness).
       g.players.forEach((p, i) => {
+        if (modeRef.current === 'online' && i === 1) {
+          const gs = guestStateRef.current;
+          if (gs) { p.y += (gs.y - p.y) * P1_LERP; }
+          return;
+        }
         p.vy = Math.min(D.maxFallVy, p.vy + D.gravity * dt);
         p.y += p.vy * dt;
         if (!p.alive) return;
@@ -737,8 +764,9 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   }, [D, grabLetter, eliminate, spawnCluster, spawnDragon, isP2]);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ONLINE — HOST side: room channel, remote flaps, 30Hz snapshots
+  // ONLINE — HOST side: room channel, guest-bird mirror, 30Hz snapshots
   // ─────────────────────────────────────────────────────────────────────────────
+  const guestStateRef = useRef<GuestState | null>(null);
   useEffect(() => {
     if (isP2 || mode !== 'online') return;
     const id = onlineRoomId ?? crypto.randomUUID();
@@ -752,11 +780,34 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       const g = game.current;
       if (g.players[1]) { g.players[1].name = guestInfoRef.current.name; g.players[1].charId = payload.charId; }
     });
-    ch.on('broadcast', { event: 'flap' }, () => { flap(1); });
+    // The guest owns its bird: mirror everything it reports (position is
+    // interpolated in the loop; the rest applies here), arbitrate death + win.
+    ch.on('broadcast', { event: 'input' }, ({ payload: gs }: { payload: GuestState }) => {
+      guestStateRef.current = gs;
+      const g = game.current;
+      const p = g.players[1];
+      if (!p) return;
+      const now = performance.now();
+      p.vy = gs.vy; p.stars = gs.stars; p.seqPos = gs.seqPos;
+      if (p.word !== gs.word) { p.word = gs.word; p.seq = baseLetters(gs.word); }
+      p.failAt = now - gs.failAge; p.starAt = now - gs.starAge; p.flapAt = now - gs.flapAge;
+      if (!gs.alive && p.alive) eliminate(1); // died on its own screen
+      if (gs.alive && gs.stars >= D.starsToWin && phaseRef.current === 'play') {
+        g.endMsg = `${p.name} wins!`;
+        g.winnerIdx = 1;
+        setPhase('over');
+        sfxStar();
+      }
+    });
+    // Guest took a bubble — reflect it on the host's screen (word state above).
+    ch.on('broadcast', { event: 'grab' }, ({ payload }: { payload: { id: number; wrong: boolean } }) => {
+      const b = game.current.bubbles.find(bb => bb.id === payload.id);
+      if (b && !b.taken) { b.taken = true; b.takenAt = performance.now(); b.wrong = payload.wrong; }
+    });
     ch.subscribe();
     channelRef.current = ch;
     return () => { ch.unsubscribe(); channelRef.current = null; };
-  }, [mode, isP2, onlineRoomId, flap]);
+  }, [mode, isP2, onlineRoomId, eliminate, sfxStar, D.starsToWin]);
 
   // Host → guest snapshots (both the 'fast' P2P channel and the fallback ride
   // through the same send() — see p2pGameChannel).
@@ -776,6 +827,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
           x: p.x, y: p.y, vy: p.vy, alive: p.alive, stars: p.stars,
           word: p.word, seqPos: p.seqPos, name: p.name, charId: p.charId,
           failAge: Math.min(2000, now - p.failAt), starAge: Math.min(2000, now - p.starAt),
+          flapAge: Math.min(1000, now - p.flapAt),
         })),
         bs: g.bubbles.filter(b => !b.taken || now - b.takenAt < 400).map(b => ({ id: b.id, letter: b.letter, x: b.x, y: b.y, color: b.color, taken: b.taken })),
         ds: g.dragons,
@@ -786,7 +838,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   }, [mode, isP2, phase, bgUrl]);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // ONLINE — GUEST side: join, receive snapshots, predict own bird
+  // ONLINE — GUEST side: join, mirror the host's world, OWN its bird locally
   // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isP2 || !propRoomId || !guestJoined) return;
@@ -801,21 +853,39 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       while (g.players.length < payload.ps.length) {
         g.players.push({ name: '', x: payload.ps[g.players.length].x, y: payload.ps[g.players.length].y, vy: 0, alive: true, stars: 0, word: '', seq: [], seqPos: 0, graceUntil: 0, failAt: 0, starAt: 0, diedAt: 0, flapAt: 0, charId: GAME_CONFIG.characters[0].id });
       }
-      payload.ps.forEach((sp, i) => {
-        const p = g.players[i];
-        const wordChanged = p.word !== sp.word;
-        p.name = sp.name; p.charId = sp.charId; p.alive = sp.alive; p.stars = sp.stars;
-        p.word = sp.word; p.seqPos = sp.seqPos;
-        if (wordChanged) p.seq = baseLetters(sp.word);
-        p.failAt = now - sp.failAge; p.starAt = now - sp.starAge;
-        if (i === 0) { /* host bird: interpolated in the guest loop */ }
-        else {
-          // own bird: reconcile prediction toward authority
-          const err = Math.abs(p.y - sp.y);
-          if (err > RECONCILE_SNAP || !sp.alive || phaseRef.current !== 'play') { p.y = sp.y; p.vy = sp.vy; }
-        }
+      // Host's bird (players[0]) mirrors the snapshot. Our OWN bird (players[1])
+      // is fully local — only identity comes from the wire.
+      const sp1 = payload.ps[0];
+      if (sp1) {
+        const p = g.players[0];
+        const wordChanged = p.word !== sp1.word;
+        p.name = sp1.name; p.charId = sp1.charId; p.alive = sp1.alive; p.stars = sp1.stars;
+        p.word = sp1.word; p.seqPos = sp1.seqPos;
+        if (wordChanged) p.seq = baseLetters(sp1.word);
+        p.failAt = now - sp1.failAge; p.starAt = now - sp1.starAge; p.flapAt = now - sp1.flapAge;
+      }
+      const sp2 = payload.ps[1];
+      const me = g.players[1];
+      if (me && sp2) { me.name = sp2.name; me.charId = sp2.charId; }
+      // Round (re)start: the host flipped to the countdown — reset OUR bird.
+      if (payload.ph === 'count' && phaseRef.current !== 'count' && me) {
+        me.y = 54; me.vy = 0; me.alive = true; me.stars = 0;
+        me.graceUntil = 0; me.failAt = 0; me.starAt = 0; me.diedAt = 0; me.flapAt = 0;
+        localTakenRef.current.clear();
+        dealWord(1);
+      }
+      // First contact mid-run (e.g. rejoin): make sure we hold a word.
+      if (me && !me.word && (payload.ph === 'count' || payload.ph === 'play')) dealWord(1);
+      // World: host's bubbles/dragons, but a bubble WE just took stays taken
+      // locally even if this snapshot predates the host learning about it.
+      const taken = localTakenRef.current;
+      for (const [id, t] of taken) { if (now - t.at > 3000) taken.delete(id); }
+      g.bubbles = payload.bs.map(b => {
+        const mine = taken.get(b.id);
+        return mine
+          ? { ...b, taken: true, takenAt: mine.at, wrong: mine.wrong }
+          : { ...b, takenAt: b.taken ? now : 0 };
       });
-      g.bubbles = payload.bs.map(b => ({ ...b, takenAt: b.taken ? now : 0 }));
       g.dragons = payload.ds;
       g.endMsg = payload.em; g.winnerIdx = payload.wi;
       if (payload.bg !== bgUrlRef.current) setBgUrl(payload.bg);
@@ -838,8 +908,10 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
   const bgUrlRef = useRef(bgUrl);
   useEffect(() => { bgUrlRef.current = bgUrl; }, [bgUrl]);
 
-  // Guest render loop: own bird = local physics (prediction), host bird =
-  // interpolation, bubbles/dragons = dead-reckoning between snapshots.
+  // Guest loop: OWN bird = 100% local simulation (physics, dragon deaths and
+  // letter grabs all resolve on this screen — the network never sits between a
+  // tap and the bird, so it can NOT lag). Host bird = interpolation. World =
+  // dead-reckoning between host snapshots.
   useEffect(() => {
     if (!isP2) return;
     let raf = 0;
@@ -853,23 +925,49 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       if (!snap || !g.players.length) return;
       const ph = phaseRef.current;
       if (ph !== 'play' && ph !== 'count') { setTick(t => t + 1); return; }
-      const [sp1, sp2] = snap.s.ps;
+      const sp1 = snap.s.ps[0];
       // host bird: smooth interpolation toward the latest snapshot
       if (sp1) { g.players[0].x = sp1.x; g.players[0].y += (sp1.y - g.players[0].y) * P1_LERP; }
-      // own bird: local physics + gentle reconcile
+      // own bird: the guest is the authority — same rules as the host loop
       const me = g.players[1];
-      if (me && sp2) {
-        if (ph === 'play' && me.alive) {
+      if (me) {
+        me.x = P2_X;
+        if (ph === 'count') {
+          me.y = 54 + Math.sin(now / 400 + 2) * 2.2; me.vy = 0;
+        } else {
           me.vy = Math.min(D.maxFallVy, me.vy + D.gravity * dt);
           me.y += me.vy * dt;
-          me.y += (sp2.y - me.y) * RECONCILE_NUDGE;
-          const mr = charById(me.charId).hitboxR;
-          me.y = Math.max(CEILING_Y + mr, Math.min(GROUND_Y - mr, me.y));
-          if (me.y >= GROUND_Y - mr) me.vy = Math.min(0, me.vy);
-        } else {
-          me.y += (sp2.y - me.y) * P1_LERP; me.vy = sp2.vy;
+          if (me.alive) {
+            const r = charById(me.charId).hitboxR;
+            const aspect = aspectRef.current;
+            // soft ground/ceiling — only dragons are deadly
+            if (me.y + r >= GROUND_Y) { me.y = GROUND_Y - r; me.vy = Math.min(0, me.vy); }
+            if (me.y - r <= CEILING_Y) { me.y = CEILING_Y + r; me.vy = Math.max(0, me.vy); }
+            for (const d of g.dragons) {
+              const ddx = (d.x - me.x) * aspect;
+              const ddy = d.y - me.y;
+              const rr = GAME_CONFIG.obstacle.hitboxR + r;
+              if (ddx * ddx + ddy * ddy <= rr * rr) {
+                // die on OUR screen (what we see is what kills us); the host
+                // hears about it in the state stream and runs the end logic
+                me.alive = false; me.diedAt = now; me.vy = Math.max(me.vy, 10);
+                sfxCrash();
+                break;
+              }
+            }
+            if (me.alive) {
+              for (const b of g.bubbles) {
+                if (b.taken) continue;
+                const bdx = (b.x - me.x) * aspect;
+                const bdy = b.y - me.y;
+                if (bdx * bdx + bdy * bdy <= (D.bubbleR + r) * (D.bubbleR + r)) {
+                  grabLetter(1, b);
+                  break;
+                }
+              }
+            }
+          }
         }
-        me.x = sp2.x;
       }
       // world dead-reckoning at the host's speed
       if (ph === 'play') {
@@ -884,7 +982,26 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [isP2, D]);
+  }, [isP2, D, grabLetter, sfxCrash]);
+
+  // Guest → host own-bird state stream (30Hz; 'input' rides the unreliable
+  // channel — a lost packet is simply superseded by the next one).
+  useEffect(() => {
+    if (!isP2 || !guestJoined || !gotFirstSnap) return;
+    const iv = setInterval(() => {
+      const me = game.current.players[1];
+      if (!me || !channelRef.current) return;
+      const now = performance.now();
+      const gs: GuestState = {
+        y: me.y, vy: me.vy, alive: me.alive, stars: me.stars,
+        word: me.word, seqPos: me.seqPos,
+        failAge: Math.min(2000, now - me.failAt), starAge: Math.min(2000, now - me.starAt),
+        flapAge: Math.min(1000, now - me.flapAt),
+      };
+      channelRef.current.send({ type: 'broadcast', event: 'input', payload: gs });
+    }, SNAPSHOT_MS);
+    return () => clearInterval(iv);
+  }, [isP2, guestJoined, gotFirstSnap]);
 
   // cleanup timers/audio on unmount
   useEffect(() => () => {

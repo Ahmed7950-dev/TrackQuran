@@ -567,6 +567,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
   // true while game traffic flows over the direct WebRTC path (vs Supabase relay)
   const [directPath, setDirectPath] = useState(false);
   const p2RemoteKeysRef    = useRef<{ up: boolean; down: boolean; left: boolean; right: boolean }>({ up: false, down: false, left: false, right: false });
+  // Online: P2 OWNS its plane (simulated on P2's screen, zero network in the
+  // control loop). Its 30Hz reported position lands here; the host mirrors it
+  // instead of simulating from relayed keys. null → legacy key-driven path.
+  const p2RemotePosRef     = useRef<{ x: number; y: number; tilt: number } | null>(null);
   // Analog joystick state. active=false → that plane uses the legacy keyboard model.
   const p1StickRef         = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local P1
   const p2StickRef         = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local-2P P2
@@ -1049,6 +1053,14 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
       // ── P2 physics (WASD local / remote keys online) ──────────────────────
       if (is2pNow && !p2CrashedRef.current && !p2IsShocked) {
         const p2 = p2Pos.current, v2 = p2Vel.current;
+        const rp = isOnlineNow ? p2RemotePosRef.current : null;
+        if (rp) {
+          // P2 owns its plane online — mirror its reported position (smoothed);
+          // collisions/fuel/score below keep using this same mirrored p2Pos.
+          p2.x += (rp.x - p2.x) * 0.35;
+          p2.y += (rp.y - p2.y) * 0.35;
+          p2Tilt.current += (rp.tilt - p2Tilt.current) * 0.35;
+        } else {
         const stick2 = isOnlineNow ? p2RemoteStickRef.current : p2StickRef.current;
         if (stick2.active) {
           steerPlane(v2, stick2.ax, stick2.ay);
@@ -1064,6 +1076,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         p2.y = Math.max(7, Math.min(88, p2.y + v2.y));
         const tilt2 = Math.max(-28, Math.min(28, v2.y * 20));
         p2Tilt.current += (tilt2 - p2Tilt.current) * 0.13;
+        }
         if (p2PlaneRef.current) {
           p2PlaneRef.current.style.left      = `${p2.x}%`;
           p2PlaneRef.current.style.top       = `${p2.y}%`;
@@ -1230,9 +1243,10 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p2.y = clamp(p2.y + v2.y, 7, 88);
           const tilt2 = clamp(v2.y * 20, -28, 28);
           p2Tilt.current += (tilt2 - p2Tilt.current) * 0.13;
+          // Own-plane authority: NO reconcile pull (that was the rubber-band).
+          // Only adopt outright host teleports (respawn repositioning).
           const dx = snap.p2.x - p2.x, dy = snap.p2.y - p2.y;
-          const a = Math.hypot(dx, dy) > 6 ? 0.3 : 0.04;
-          p2.x += dx * a; p2.y += dy * a;
+          if (Math.hypot(dx, dy) > 25) { p2.x = snap.p2.x; p2.y = snap.p2.y; }
         } else {
           p2.x += (snap.p2.x - p2.x) * 0.4;
           p2.y += (snap.p2.y - p2.y) * 0.4;
@@ -1324,10 +1338,15 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     });
     ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: {
       up: boolean; down: boolean; left: boolean; right: boolean; ax?: number; ay?: number; active?: boolean;
+      px?: number; py?: number; ptilt?: number;
     } }) => {
       p2RemoteKeysRef.current = { up: payload.up, down: payload.down, left: payload.left, right: payload.right };
       // OLD joiner omits analog fields → active defaults false → host uses legacy keyboard branch (binary feel).
       p2RemoteStickRef.current = { ax: payload.ax ?? 0, ay: payload.ay ?? 0, active: payload.active ?? false };
+      // NEW joiner also reports its own-plane position (it owns its plane).
+      if (payload.px !== undefined && payload.py !== undefined) {
+        p2RemotePosRef.current = { x: payload.px, y: payload.py, tilt: payload.ptilt ?? 0 };
+      }
     });
     ch.on('broadcast', { event: 'fire' }, () => { fireP2Ref.current(); });
     ch.on('broadcast', { event: 'restart' }, () => { startGameRef.current(); });
@@ -1514,14 +1533,16 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [isP2, status]);
 
-  // P2 input heartbeat — re-broadcast current key state ~10x/sec so dropped
-  // realtime packets self-heal (broadcast is fire-and-forget / lossy on mobile).
+  // P2 own-plane state stream — 30Hz keys + authoritative position (P2 owns
+  // its plane; the host mirrors this instead of simulating). Lossy-safe: each
+  // packet supersedes the last, and it doubles as the input heartbeat.
   useEffect(() => {
     if (!isP2 || status !== 'playing') return;
     const id = setInterval(() => {
       channelRef.current?.send({ type: 'broadcast', event: 'input',
-        payload: { ...p2RemoteKeysRef.current, ...p2RemoteStickRef.current } });
-    }, 100);
+        payload: { ...p2RemoteKeysRef.current, ...p2RemoteStickRef.current,
+          px: p2Pos.current.x, py: p2Pos.current.y, ptilt: p2Tilt.current } });
+    }, 33);
     return () => clearInterval(id);
   }, [isP2, status]);
 
