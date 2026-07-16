@@ -24,7 +24,7 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
-import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession, setSessionFamily } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession, setSessionFamily, autoSyncGCalLinks } from '../services/lessonSessionService';
 import { ensurePortalPair } from '../services/portalPairService';
 import { ensureFamilyLink, FamilyStudentRef } from '../services/familyLinkService';
 import { netEarning } from '../utils/timezones';
@@ -437,6 +437,12 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           .filter(e => e.start.dateTime && e.end.dateTime)
           .map(e => ({ startAt: e.start.dateTime!, endAt: e.end.dateTime! }));
         await syncTutorBusy(teacherId, start.toISOString(), end.toISOString(), slots);
+        // Auto-relink: new/renewed/rescheduled occurrences of previously-linked
+        // event titles get their session rows recreated without manual relinking.
+        const changed = await autoSyncGCalLinks(teacherId, evs);
+        if (!cancelled && changed > 0) {
+          setLinkedSessions(await getSessionsListByGcalId(teacherId));
+        }
       } catch { /* offline / token expired — ignore */ }
     };
     sync();

@@ -158,6 +158,103 @@ export async function linkAllEventsByTitle(
 }
 
 /**
+ * Auto-relink: keep session rows in step with the live Google Calendar.
+ *
+ * Linking is per-event-id, but Google issues NEW ids when a recurring series
+ * renews, an event is re-created, or new occurrences roll into view — so a
+ * student the tutor linked before silently shows as unlinked again. This takes
+ * the freshly-fetched events and, for any event whose TITLE was previously
+ * linked to student(s), creates the missing session rows automatically
+ * (carrying the family stamp). It also refreshes start/end times on existing
+ * rows when the event was rescheduled under the same id.
+ *
+ * A title the tutor deliberately unlinked has NO remaining rows (unlink deletes
+ * by title), so it never resurrects. Rows that exist with any status (incl.
+ * cancelled) are left alone.
+ *
+ * Returns the number of rows created or time-refreshed (0 = nothing to do).
+ */
+type AutoSyncRow = Pick<SessionRow,
+  'id' | 'student_id' | 'gcal_event_id' | 'title' | 'start_at' | 'end_at' | 'status' | 'family_name' | 'family_link_id'>;
+
+/** Pure planner for autoSyncGCalLinks — exported for testing. */
+export function planAutoSyncLinks(
+  teacherId: string,
+  rows: AutoSyncRow[],
+  events: import('./googleCalendarService').GCalEvent[],
+): { inserts: Record<string, unknown>[]; timeFixes: Array<{ id: string; start_at: string; end_at: string | null }> } {
+  // Which students (and family stamp) each linked title maps to.
+  const byTitle = new Map<string, { studentIds: Set<string>; familyName: string | null; familyLinkId: string | null }>();
+  // Every (event, student) pair that already has a row — any status — is left alone.
+  const existing = new Map<string, AutoSyncRow>();
+  for (const r of rows) {
+    if (r.gcal_event_id) existing.set(`${r.gcal_event_id}|${r.student_id}`, r);
+    if (r.status === 'cancelled' || !r.title) continue;
+    const t = byTitle.get(r.title) ?? { studentIds: new Set<string>(), familyName: null, familyLinkId: null };
+    t.studentIds.add(r.student_id);
+    t.familyName   = t.familyName   ?? r.family_name    ?? null;
+    t.familyLinkId = t.familyLinkId ?? r.family_link_id ?? null;
+    byTitle.set(r.title, t);
+  }
+
+  const inserts: Record<string, unknown>[] = [];
+  const timeFixes: Array<{ id: string; start_at: string; end_at: string | null }> = [];
+  for (const ev of events) {
+    const info = ev.summary ? byTitle.get(ev.summary) : undefined;
+    if (!info) continue;
+    const startAt = ev.start.dateTime ?? ev.start.date ?? '';
+    const endAt   = ev.end.dateTime   ?? ev.end.date   ?? null;
+    if (!startAt) continue;
+    for (const studentId of info.studentIds) {
+      const row = existing.get(`${ev.id}|${studentId}`);
+      if (!row) {
+        inserts.push({
+          teacher_id: teacherId, student_id: studentId, gcal_event_id: ev.id,
+          title: ev.summary, start_at: startAt, end_at: endAt, status: 'confirmed',
+          family_name: info.familyName, family_link_id: info.familyLinkId,
+        });
+      } else if (row.status !== 'cancelled') {
+        // Same event id, moved time (rescheduled occurrence) → refresh.
+        const drifted =
+          new Date(row.start_at).getTime() !== new Date(startAt).getTime() ||
+          (row.end_at ? new Date(row.end_at).getTime() : null) !== (endAt ? new Date(endAt).getTime() : null);
+        if (drifted) timeFixes.push({ id: row.id, start_at: startAt, end_at: endAt });
+      }
+    }
+  }
+  return { inserts, timeFixes };
+}
+
+export async function autoSyncGCalLinks(
+  teacherId: string,
+  events: import('./googleCalendarService').GCalEvent[],
+): Promise<number> {
+  if (!events.length) return 0;
+  try {
+    const { data, error } = await supabase
+      .from('arabic_lesson_sessions')
+      .select('id, student_id, gcal_event_id, title, start_at, end_at, status, family_name, family_link_id')
+      .eq('teacher_id', teacherId);
+    if (error) throw error;
+    const { inserts, timeFixes } = planAutoSyncLinks(teacherId, (data ?? []) as AutoSyncRow[], events);
+
+    if (inserts.length) {
+      const { error: insErr } = await supabase
+        .from('arabic_lesson_sessions')
+        .upsert(inserts, { onConflict: 'teacher_id,gcal_event_id,student_id' });
+      if (insErr) throw insErr;
+    }
+    await Promise.all(timeFixes.map(fx =>
+      supabase.from('arabic_lesson_sessions').update({ start_at: fx.start_at, end_at: fx.end_at }).eq('id', fx.id),
+    ));
+    return inserts.length + timeFixes.length;
+  } catch (e) {
+    console.warn('[autoSyncGCalLinks] skipped:', e);
+    return 0;
+  }
+}
+
+/**
  * Load all sessions for a teacher keyed by gcal_event_id.
  * Used by CalendarPage to show which events are already linked.
  */

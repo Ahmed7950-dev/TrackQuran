@@ -5,7 +5,7 @@ import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdate
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
 import StudentProfileIcon from './StudentProfileIcon';
-import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent } from '../services/lessonSessionService';
+import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent, autoSyncGCalLinks } from '../services/lessonSessionService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink, fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
@@ -501,10 +501,16 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       try {
         const now = new Date();
         const max = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // next 60 days
-        const [events, sessionMap] = await Promise.all([
+        let [events, sessionMap] = await Promise.all([
           fetchGCalEvents(token, now, max),
           getSessionsListByGcalId(teacherId),
         ]);
+        if (cancelled) return;
+        // Auto-relink renewed/rescheduled occurrences of previously-linked
+        // titles so the next-lesson banner finds them without a manual relink.
+        if (await autoSyncGCalLinks(teacherId, events) > 0) {
+          sessionMap = await getSessionsListByGcalId(teacherId);
+        }
         if (cancelled) return;
         let best: NextLesson | null = null;
         for (const ev of events) {
