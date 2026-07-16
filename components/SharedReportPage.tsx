@@ -3,6 +3,7 @@ import { getSharedReport, SharedReportData, recordVersePlay, getReportPlays, get
 import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
 import { QURAN_METADATA } from '../constants';
+import { tanweenOnSeatAlif } from '../utils/quranicMarks';
 import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
 import AboutUsPage from './AboutUsPage';
@@ -42,6 +43,7 @@ const isArabicLetter = (char: string | undefined): boolean => {
 const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
   const letters: Array<{ letter: string; index: number }> = [];
   let li = 0;
+  word = tanweenOnSeatAlif(word); // display: fathatan on its seat alif (رَسُولاً)
   for (let i = 0; i < word.length; i++) {
     const ch = word[i];
     if (isArabicLetter(ch)) {

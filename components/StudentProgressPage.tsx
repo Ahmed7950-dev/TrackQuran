@@ -10,7 +10,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -166,6 +166,7 @@ const isArabicLetter = (char: string | undefined): boolean => {
 const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
     const letters: Array<{ letter: string; index: number }> = [];
     if (!word || typeof word !== 'string') return letters;
+    word = tanweenOnSeatAlif(word); // display: fathatan on its seat alif (رَسُولاً)
     let letterIndex = 0;
     for (let i = 0; i < word.length; i++) {
         const char = word[i];

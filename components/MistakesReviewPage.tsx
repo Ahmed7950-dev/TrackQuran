@@ -7,7 +7,7 @@ import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -29,6 +29,7 @@ const isArabicLetter = (char: string | undefined): boolean => {
 const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
     const letters: Array<{ letter: string; index: number }> = [];
     if (!word || typeof word !== 'string') return letters;
+    word = tanweenOnSeatAlif(word); // display: fathatan on its seat alif (رَسُولاً)
     let letterIndex = 0;
     for (let i = 0; i < word.length; i++) {
         const char = word[i];

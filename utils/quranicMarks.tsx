@@ -132,6 +132,19 @@ const toUnits = (word: string): string[] => {
   return out;
 };
 
+// ── Tanween-on-seat display convention ───────────────────────────────────────
+// The Quran.com uthmani text writes fathatan on the letter BEFORE its silent
+// seat alif (رَسُولًا: U+064B attached to the ل). The tutor prefers the tanween
+// drawn on the alif itself (رَسُولاً), so swap the adjacency at DISPLAY time
+// only — the stored verse text, tajweed segmentation and mistake letter
+// indices all keep the original order (the swap never changes base-letter
+// count or order). Iqlab words (a small meem ۢ/ۭ sits between the tanween and
+// the alif, so the pair isn't adjacent) are naturally left untouched — the
+// meem must stay with its tanween and the meem-overlay clearance tables are
+// calibrated for those exact units.
+export const tanweenOnSeatAlif = (word: string): string =>
+  word.replace(/ًا/g, 'اً');
+
 /**
  * Render a word as React nodes. Returns the plain string unless it carries an
  * imāla / ishmām mark (whole word in a corrective font) or an iqlab LOW meem
@@ -140,6 +153,7 @@ const toUnits = (word: string): string[] => {
  * `lineHeight` = the unitless leading of the surrounding Quran text block.
  */
 export const renderWordWithMarks = (word: string, _keyPrefix = '', lineHeight = 2.6): React.ReactNode => {
+  word = tanweenOnSeatAlif(word);
   const font = correctiveWordFont(word);
   if (font) return <span style={{ fontFamily: font }}>{word}</span>;
   if (!hasLowMeem(word)) return word;
