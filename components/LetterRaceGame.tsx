@@ -59,14 +59,21 @@ interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boole
 // front/back sprite strips (public/sprites/race-runner-*.png). Both players run
 // the SAME character; Player 2 wears a CSS hue-rotate tint so the two racers
 // are instantly tellable apart.
-const RUNNER_AR = 0.737; // frame aspect ratio (w/h) of the strip frames
+const RUNNER_AR = 0.754; // frame aspect ratio (w/h) of the strip frames
 const RUN_FRAMES = 8;
 const P2_TINT = 'hue-rotate(165deg)';
 const tintFor = (who: 1 | 2) => (who === 2 ? P2_TINT : 'none');
 // dir 'up' = running toward the letters → the runner's back;
 // dir 'down' = running home / portraits → the face.
-const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png?v=2`;
-const stripFor  = (dir: 'up' | 'down') => `/sprites/race-runner-${dir}-run.png?v=2`;
+// Each direction has FIVE pre-rendered yaw views (hard-left … hard-right, by
+// SCREEN direction) so the character visibly turns in 3D while steering —
+// the Brawl-Stars look — instead of a flat picture that only rotates.
+const YAWS = ['l2', 'l1', 'c', 'r1', 'r2'] as const;
+type Yaw = typeof YAWS[number];
+const yawFor = (heading: number): Yaw =>
+  heading <= -30 ? 'l2' : heading <= -10 ? 'l1' : heading < 10 ? 'c' : heading < 30 ? 'r1' : 'r2';
+const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png?v=3`;
+const stripFor  = (dir: 'up' | 'down', yaw: Yaw = 'c') => `/sprites/race-runner-${dir}-${yaw}-run.png?v=3`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
@@ -196,9 +203,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     });
   }, [pool, playLetterAudio, sfxCount, sfxGo]);
 
-  // Preload the run strips so frame-stepping never pops.
+  // Preload all run strips (2 directions × 5 yaw views) so swaps never pop.
   useEffect(() => {
-    (['up', 'down'] as const).forEach(d => { const im = new Image(); im.src = stripFor(d); });
+    (['up', 'down'] as const).forEach(d => YAWS.forEach(y => { const im = new Image(); im.src = stripFor(d, y); }));
   }, []);
 
   // The match begins on the character-select "Start" button (a user gesture,
@@ -384,9 +391,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     // running → faster frame rate. Idle holds frame 0 (grounded pose).
     const frameMs = running ? Math.max(55, 130 - (p.speed / MAX_SPEED) * 80) : 999999;
     const frame = running ? Math.floor(now / frameMs) % RUN_FRAMES : 0;
-    // The head visibly turns with the heading — a subtle lean, half the steering
-    // angle so it reads as a turn, not tipping over.
-    const tilt = p.heading * 0.5;
+    // The real turn comes from the yaw-view strips; a small residual lean adds
+    // life between the 20° view steps.
+    const tilt = p.heading * 0.2;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
@@ -415,7 +422,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
             : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
         }}>
           <div style={{ height: 70, aspectRatio: `${ar}`, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
-            <img src={stripFor(p.facing)} alt="" draggable={false}
+            <img src={stripFor(p.facing, yawFor(p.heading))} alt="" draggable={false}
               style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)`, filter: tintFor(who) }} />
           </div>
         </div>
