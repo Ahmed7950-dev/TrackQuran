@@ -988,6 +988,8 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
             m.active = false; playMineExplode(); triggerGlow(1, 'mine');
             const expId1 = `mexp-${Date.now()}-${Math.random()}`;
             const mx1 = m.x, my1 = m.y;
+            // P2's screen shows the boom too — it only knows the mine vanished.
+            if (isOnlineNow) channelRef.current?.send({ type: 'broadcast', event: 'boom', payload: { x: mx1, y: my1, victim: 1 } });
             setMineExplosions(prev => [...prev, { id: expId1, x: mx1, y: my1 }]);
             setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId1)), 2500);
             setMines(prev => prev.map(mm => mm.id === m.id ? { ...mm, active: false } : mm));
@@ -1158,6 +1160,18 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     channelRef.current = ch;
   }, [gameMode, isP2, onlineRoomId]);
 
+  // The snapshot stream below stops the moment status leaves 'playing', so the
+  // final result must travel separately — re-sent for redundancy on the lossy
+  // fallback path (idempotent on P2).
+  useEffect(() => {
+    if (isP2 || gameMode !== '2p-online' || (status !== 'won' && status !== 'lost')) return;
+    const send = () => channelRef.current?.send({ type: 'broadcast', event: 'game-over', payload: { status } });
+    send();
+    const t1 = setTimeout(send, 400);
+    const t2 = setTimeout(send, 1200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [status, gameMode, isP2]);
+
   // ── Broadcast interval (P1 → P2) ─────────────────────────────────────────
   useEffect(() => {
     if (status !== 'playing' || gameMode !== '2p-online' || isP2) return;
@@ -1243,6 +1257,22 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
       else if (ev.kind === 'collectible') { if (ev.colType) PICKUP_SOUNDS[ev.colType](); setP2Glow('collectible'); setTimeout(() => setP2Glow(g => g === 'collectible' ? null : g), 700); }
       else if (ev.kind === 'mine') { playMineExplode(); setP2Glow('mine'); setTimeout(() => setP2Glow(g => g === 'mine' ? null : g), 900); }
     });
+    ch.on('broadcast', { event: 'boom' }, ({ payload }: { payload: { x: number; y: number; victim: 1 | 2 } }) => {
+      const expId = `mexp-${Date.now()}-${Math.random()}`;
+      setMineExplosions(prev => [...prev, { id: expId, x: payload.x, y: payload.y }]);
+      setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId)), 2500);
+      setFlash('bad'); setTimeout(() => setFlash(null), 400);
+      if (payload.victim === 1) {
+        playMineExplode();
+        setP1Glow('mine'); setTimeout(() => setP1Glow(g => g === 'mine' ? null : g), 900);
+      }
+    });
+
+    ch.on('broadcast', { event: 'game-over' }, ({ payload }: { payload: { status: GameStatus } }) => {
+      if (latestSnapRef.current) latestSnapRef.current = { ...latestSnapRef.current, status: payload.status };
+      setStatus(payload.status);
+    });
+
     ch.on('broadcast', { event: 'restart' }, () => {
       // Host restarted: reset our prediction so both planes re-align to the
       // host's fresh positions, and clear local state via startGame.

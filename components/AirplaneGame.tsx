@@ -1195,6 +1195,11 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
               setFuel(f => Math.max(0, f - MINE_DAMAGE));
               triggerGlow(1, 'mine');
             }
+            // P2's screen shows the boom too (visual for both victims; P2's own
+            // hit keeps its sound via the 'p2-event' above).
+            if (gameModeRef.current === '2p-online') {
+              channelRef.current?.send({ type: 'broadcast', event: 'boom', payload: { x: mx, y: my, victim: m.owner === 1 ? 2 : 1 } });
+            }
             playMineExplode();
             setFlash('bad'); setTimeout(() => setFlash(null), 400);
           }
@@ -1355,6 +1360,18 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     return () => { ch.unsubscribe(); channelRef.current = null; };
   }, [gameMode, onlineRoomId, isP2]);
 
+  // The snapshot stream below stops the moment status leaves 'playing', so the
+  // final result must travel separately — re-sent for redundancy on the lossy
+  // fallback path (idempotent on P2).
+  useEffect(() => {
+    if (isP2 || gameMode !== '2p-online' || (status !== 'won' && status !== 'lost')) return;
+    const send = () => channelRef.current?.send({ type: 'broadcast', event: 'game-over', payload: { status } });
+    send();
+    const t1 = setTimeout(send, 400);
+    const t2 = setTimeout(send, 1200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [status, gameMode, isP2]);
+
   // Broadcast full state at ~30fps (P1 online)
   useEffect(() => {
     if (status !== 'playing' || gameMode !== '2p-online' || !channelRef.current || isP2) return;
@@ -1490,6 +1507,23 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
         playMineExplode();
         setP2Glow('mine'); setTimeout(() => setP2Glow(g => g === 'mine' ? null : g), 900);
       }
+    });
+
+    ch.on('broadcast', { event: 'boom' }, ({ payload }: { payload: { x: number; y: number; victim: 1 | 2 } }) => {
+      const expId = `mexp-${Date.now()}-${Math.random()}`;
+      setMineExplosions(prev => [...prev, { id: expId, x: payload.x, y: payload.y }]);
+      setTimeout(() => setMineExplosions(prev => prev.filter(e => e.id !== expId)), 2500);
+      setFlash('bad'); setTimeout(() => setFlash(null), 400);
+      if (payload.victim === 1) {
+        // P1 hit a mine — sound + glow (the victim-2 case gets both via 'p2-event')
+        playMineExplode();
+        setP1Glow('mine'); setTimeout(() => setP1Glow(g => g === 'mine' ? null : g), 900);
+      }
+    });
+
+    ch.on('broadcast', { event: 'game-over' }, ({ payload }: { payload: { status: GameStatus } }) => {
+      if (latestSnapRef.current) latestSnapRef.current = { ...latestSnapRef.current, status: payload.status };
+      setStatus(payload.status);
     });
 
     ch.on('broadcast', { event: 'restart' }, () => {
