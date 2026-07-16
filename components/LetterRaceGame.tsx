@@ -55,27 +55,18 @@ interface RacePlayer {
 }
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
-// Selectable racers — 3D animals pre-rendered to top-view PNGs (public/sprites/race-*.png).
-// `ar` = frame aspect ratio (w/h) of the run sprite-sheet frames, used to size the
-// stepping window so exactly one frame shows.
-const ANIMALS = [
-  { key: 'fox',     name: 'Fox',     ar: 0.317 },
-  { key: 'bunny',   name: 'Bunny',   ar: 0.453 },
-  { key: 'cat',     name: 'Cat',     ar: 0.305 },
-  { key: 'dog',     name: 'Dog',     ar: 0.413 },
-  { key: 'lion',    name: 'Lion',    ar: 0.345 },
-  { key: 'bear',    name: 'Bear',    ar: 0.414 },
-  { key: 'wolf',    name: 'Wolf',    ar: 0.280 },
-  { key: 'cow',     name: 'Cow',     ar: 0.352 },
-  { key: 'horse',   name: 'Horse',   ar: 0.300 },
-  { key: 'giraffe', name: 'Giraffe', ar: 0.335 },
-];
+// The racer — a Mixamo "Fast Run" character pre-rendered in Blender to 8-frame
+// front/back sprite strips (public/sprites/race-runner-*.png). Both players run
+// the SAME character; Player 2 wears a CSS hue-rotate tint so the two racers
+// are instantly tellable apart.
+const RUNNER_AR = 0.683; // frame aspect ratio (w/h) of the strip frames
 const RUN_FRAMES = 8;
-const arFor = (key: string) => ANIMALS.find(a => a.key === key)?.ar ?? 0.35;
-// dir 'up' = running toward the letters → show the animal's back;
-// dir 'down' = running home / portraits → show its face.
-const spriteFor = (key: string, dir: 'up' | 'down' = 'down') => `/sprites/race-${key}-${dir}.png`;
-const stripFor  = (key: string, dir: 'up' | 'down') => `/sprites/race-${key}-${dir}-run.png`;
+const P2_TINT = 'hue-rotate(165deg)';
+const tintFor = (who: 1 | 2) => (who === 2 ? P2_TINT : 'none');
+// dir 'up' = running toward the letters → the runner's back;
+// dir 'down' = running home / portraits → the face.
+const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png`;
+const stripFor  = (dir: 'up' | 'down') => `/sprites/race-runner-${dir}-run.png`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
@@ -97,8 +88,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const [scores, setScores] = useState<[number, number]>([0, 0]);
   const [roundWinner, setRoundWinner] = useState<1 | 2>(1);
   const [countNum, setCountNum] = useState<string>('3');
-  const [p1Char, setP1Char] = useState('fox');
-  const [p2Char, setP2Char] = useState('lion');
 
   const phaseRef = useRef<Phase>('select');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -207,12 +196,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     });
   }, [pool, playLetterAudio, sfxCount, sfxGo]);
 
-  // Preload the chosen racers' run strips so frame-stepping never pops.
+  // Preload the run strips so frame-stepping never pops.
   useEffect(() => {
-    [p1Char, p2Char].forEach(c => (['up', 'down'] as const).forEach(d => {
-      const im = new Image(); im.src = stripFor(c, d);
-    }));
-  }, [p1Char, p2Char]);
+    (['up', 'down'] as const).forEach(d => { const im = new Image(); im.src = stripFor(d); });
+  }, []);
 
   // The match begins on the character-select "Start" button (a user gesture,
   // which also unlocks audio autoplay). Just clean up on unmount.
@@ -390,10 +377,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const char = who === 1 ? p1Char : p2Char;
     const running = p.speed > 0.02;
     const dusty = p.speed > 0.11;
-    const ar = arFor(char);
+    const ar = RUNNER_AR;
     // Play the baked hop cycle by stepping the sprite-sheet frame. Faster
     // running → faster frame rate. Idle holds frame 0 (grounded pose).
     const frameMs = running ? Math.max(55, 130 - (p.speed / MAX_SPEED) * 80) : 999999;
@@ -429,8 +415,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
             : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
         }}>
           <div style={{ height: 70, aspectRatio: `${ar}`, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
-            <img src={stripFor(char, p.facing)} alt="" draggable={false}
-              style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)` }} />
+            <img src={stripFor(p.facing)} alt="" draggable={false}
+              style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)`, filter: tintFor(who) }} />
           </div>
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
@@ -497,13 +483,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       {/* ── Controls legend ── */}
       <div style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
-          <img src={spriteFor(p1Char)} alt="" style={{ height: 24 }} /> Left player
+          <img src={spriteFor()} alt="" style={{ height: 24 }} /> Left player
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>LEFT SHIFT</b> (or <b>W</b>) to run · <b>A</b>/<b>D</b> to steer</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
-          Right player <img src={spriteFor(p2Char)} alt="" style={{ height: 24 }} />
+          Right player <img src={spriteFor()} alt="" style={{ height: 24, filter: P2_TINT }} />
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>RIGHT SHIFT</b> (or <b>↑</b>) to run · <b>←</b>/<b>→</b> to steer</div>
       </div>
@@ -513,9 +499,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '24px 34px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 6 }}>
-              <img src={spriteFor(p1Char)} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
+              <img src={spriteFor()} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
               <span style={{ fontWeight: 900, fontSize: 18, color: '#94a3b8' }}>VS</span>
-              <img src={spriteFor(p2Char)} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: '0.7s' }} />
+              <img src={spriteFor()} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: '0.7s', filter: P2_TINT }} />
             </div>
             <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>👂 Listen to the letter!</h3>
             <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>Then race to find it and bring it home!</p>
@@ -537,7 +523,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       {phase === 'roundWon' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '26px 36px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
-            <img src={spriteFor(roundWinner === 1 ? p1Char : p2Char)} alt="" style={{ height: 78, animation: 'lrIdle 0.6s ease-in-out infinite' }} />
+            <img src={spriteFor()} alt="" style={{ height: 78, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintFor(roundWinner) }} />
             <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the round! 🎉</h3>
             <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores[0]} — {scores[1]} · next letter coming…</p>
           </div>
@@ -554,69 +540,41 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
           <div style={{ background: '#fff', borderRadius: 24, padding: '30px 40px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
               <span style={{ fontSize: 48 }}>🏆</span>
-              <img src={spriteFor(roundWinner === 1 ? p1Char : p2Char)} alt="" style={{ height: 92, animation: 'lrIdle 0.6s ease-in-out infinite' }} />
+              <img src={spriteFor()} alt="" style={{ height: 92, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintFor(roundWinner) }} />
               <span style={{ fontSize: 48 }}>🏆</span>
             </div>
             <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the race!</h3>
             <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores[0]} — {scores[1]} · Amazing running! 🏃💨</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={() => { scoresRef.current = [0, 0]; setScores([0, 0]); setupRound(); }} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔄 Play again</button>
-              <button onClick={() => { clearTimers(); scoresRef.current = [0, 0]; setScores([0, 0]); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🐾 New racers</button>
+              <button onClick={() => { clearTimers(); scoresRef.current = [0, 0]; setScores([0, 0]); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
               <button onClick={onExit} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>Done</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Character select (before the match) ── */}
-      {phase === 'select' && (() => {
-        const Panel = ({ who, chosen, setChosen }: { who: 1 | 2; chosen: string; setChosen: (k: string) => void }) => {
-          const color = who === 1 ? '#3b82f6' : '#f97316';
-          const bg = who === 1 ? 'linear-gradient(160deg,#eff6ff,#dbeafe)' : 'linear-gradient(160deg,#fff7ed,#ffedd5)';
-          return (
-            <div style={{ flex: 1, minWidth: 0, background: bg, borderRadius: 20, padding: '14px 14px 10px', border: `3px solid ${color}`, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
-                <img src={spriteFor(chosen)} alt="" style={{ height: 46, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontWeight: 900, color, fontSize: 15 }}>Player {who}</div>
-                  <div style={{ fontWeight: 800, color: '#334155', fontSize: 13 }}>{ANIMALS.find(a => a.key === chosen)?.name}</div>
-                </div>
+      {/* ── Start screen (before the match) ── */}
+      {phase === 'select' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 26, padding: '24px 28px', maxWidth: 460, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+            <h3 style={{ margin: '0 0 3px', fontWeight: 900, fontSize: 24, color: '#0f172a' }}>🏁 Ready to race?</h3>
+            <p style={{ margin: '0 0 14px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>Listen for the letter, run to grab it, and bring it home first!</p>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 26, marginBottom: 6 }}>
+              <div>
+                <img src={spriteFor()} alt="" style={{ height: 86, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
+                <div style={{ fontWeight: 900, color: '#1d4ed8', fontSize: 14, marginTop: 4 }}>Player 1</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                {ANIMALS.map(a => {
-                  const sel = a.key === chosen;
-                  return (
-                    <button key={a.key} onClick={() => setChosen(a.key)}
-                      style={{ background: sel ? color : '#fff', border: `2px solid ${sel ? color : '#e2e8f0'}`, borderRadius: 12, padding: 4, cursor: 'pointer', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s', transform: sel ? 'scale(1.05)' : 'scale(1)' }}
-                      title={a.name}>
-                      <img src={spriteFor(a.key)} alt={a.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
-                    </button>
-                  );
-                })}
+              <span style={{ fontWeight: 900, fontSize: 20, color: '#94a3b8', paddingBottom: 30 }}>VS</span>
+              <div>
+                <img src={spriteFor()} alt="" style={{ height: 86, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: '0.7s', filter: P2_TINT }} />
+                <div style={{ fontWeight: 900, color: '#c2410c', fontSize: 14, marginTop: 4 }}>Player 2</div>
               </div>
             </div>
-          );
-        };
-        return (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
-            <div style={{ background: '#fff', borderRadius: 26, padding: '20px 22px', maxWidth: 640, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
-              <h3 style={{ margin: '0 0 3px', fontWeight: 900, fontSize: 24, color: '#0f172a' }}>🏁 Pick your racer!</h3>
-              <p style={{ margin: '0 0 14px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>Each player taps an animal, then start the race.</p>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-                <Panel who={1} chosen={p1Char} setChosen={setP1Char} />
-                <Panel who={2} chosen={p2Char} setChosen={setP2Char} />
-              </div>
-              <button onClick={() => setupRound()} style={{ marginTop: 16, background: 'linear-gradient(135deg,#16a34a,#15803d)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 40px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: '0 6px 18px rgba(22,163,74,0.45)' }}>Start the Race! 🏃💨</button>
-            </div>
+            <button onClick={() => setupRound()} style={{ marginTop: 12, background: 'linear-gradient(135deg,#16a34a,#15803d)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 40px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: '0 6px 18px rgba(22,163,74,0.45)' }}>Start the Race! 🏃💨</button>
           </div>
-        );
-      })()}
-
-      {/* ── Attribution (CC BY 4.0) ── */}
-      <a href="https://www.patreon.com/Zsky" target="_blank" rel="noopener noreferrer"
-        style={{ position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)', zIndex: 16, fontSize: 9, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', pointerEvents: 'auto', fontWeight: 600 }}>
-        Animal characters by @Zsky (CC BY 4.0)
-      </a>
+        </div>
+      )}
 
       <style>{`
         @keyframes lrRun      { 0%,100% { transform: scale(1) rotate(-4deg) translateY(0); } 50% { transform: scale(1.06) rotate(4deg) translateY(-3px); } }
