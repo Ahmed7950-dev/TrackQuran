@@ -28,7 +28,6 @@ interface CharRig {
   current: RunnerAnim | '';
   scene: any;              // per-character scene (independent lighting-safe)
   camera: any;
-  camT: number;            // 0 = normal three-quarter view … 1 = overhead (trip)
 }
 
 export class RunnerStage {
@@ -191,7 +190,7 @@ export class RunnerStage {
         }
         actions[clip.name] = a;
       }
-      this.chars.push({ root, mixer, actions, current: '', scene, camera, camT: 0 });
+      this.chars.push({ root, mixer, actions, current: '', scene, camera });
     }
 
     this.lastT = performance.now();
@@ -256,16 +255,10 @@ export class RunnerStage {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
       this.setAnim(c, p.anim, Math.min(1, p.speed / 0.13)); // 0.13 = game MAX_SPEED
       c.mixer.update(dt);
-      // model yaw: heading 0 = up-screen (away from the camera → back visible)
+      // model yaw: heading 0 = up-screen (away from the camera → back visible).
+      // ONE fixed camera angle for every animation — running, tackling and
+      // falling all render from the same three-quarter view.
       c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI;
-      // Camera per character: while TRIPPED it glides to a near-overhead
-      // angle so the fall and the body on the ground are seen from the TOP,
-      // then glides back to the Brawl-Stars three-quarter view.
-      const target = p.anim === 'trip' ? 1 : 0;
-      c.camT += (target - c.camT) * Math.min(1, dt * 7);
-      const t = c.camT;
-      c.camera.position.set(0, 3.0 + (4.4 - 3.0) * t, 3.9 + (0.9 - 3.9) * t);
-      c.camera.lookAt(0, 0.45 * (1 - t) + 0.05 * t, 0);
       const px = (p.x / 100) * W;
       const py = (p.y / 100) * H;
       // viewport centered horizontally, character feet ~62% down the square
