@@ -210,10 +210,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       after(2400, () => {
         setCountNum('GO!'); sfxGo();
         goUntilRef.current = performance.now() + 800;
-        // A run key already held down at GO still counts as the opening press.
-        const held = keys.current, gg = game.current;
-        if (held.has('ShiftLeft') || held.has('KeyW'))     gg.p1.speed = Math.min(MAX_SPEED, gg.p1.speed + BURST);
-        if (held.has('ShiftRight') || held.has('ArrowUp')) gg.p2.speed = Math.min(MAX_SPEED, gg.p2.speed + BURST);
+        // A run key already held down at GO just works: the race loop reads
+        // the held-keys set from its very first frame.
         setPhase('race');
       });
     });
