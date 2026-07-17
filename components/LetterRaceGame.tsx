@@ -81,8 +81,8 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-down.png?v=3' },
-  { key: 'minion', name: 'Minion', model: '/models/minion.glb', scale: 0.68, portrait: '/sprites/race-minion-down.png?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-front.png?v=1' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
