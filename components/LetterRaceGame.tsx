@@ -84,6 +84,7 @@ const CHARACTERS = [
   { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-front.png?v=1' },
   { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=2', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=1' },
   { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=2',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=1' },
+  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -638,7 +639,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
                 <button onClick={() => cycle(-1)} style={arrowStyle}>‹</button>
                 <div key={c.key} style={{ width: 210, animation: 'lrPop 0.35s ease-out' }}>
                   <img src={c.portrait} alt={c.name}
-                    style={{ height: 200, maxWidth: '100%', objectFit: 'contain', filter: tinted ? P2_TINT : 'none' }} />
+                    style={{ height: 200, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto', filter: tinted ? P2_TINT : 'none' }} />
                   <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 6 }}>{c.name}</div>
                   {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
                 </div>
