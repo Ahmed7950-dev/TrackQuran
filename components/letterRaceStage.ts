@@ -39,10 +39,12 @@ export class RunnerStage {
   private getPoses: () => [RunnerPose, RunnerPose] | null;
   private disposed = false;
   private THREE: any = null;
+  private models: [string, string];
 
-  constructor(canvas: HTMLCanvasElement, getPoses: () => [RunnerPose, RunnerPose] | null) {
+  constructor(canvas: HTMLCanvasElement, getPoses: () => [RunnerPose, RunnerPose] | null, models: [string, string] = ['/models/runner.glb', '/models/runner.glb']) {
     this.canvas = canvas;
     this.getPoses = getPoses;
+    this.models = models;
   }
 
   async init(): Promise<void> {
@@ -58,8 +60,13 @@ export class RunnerStage {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
 
-    const gltf = await new GLTFLoader().loadAsync('/models/runner.glb');
+    const loader = new GLTFLoader();
+    const unique = [...new Set(this.models)];
+    const loaded = new Map<string, any>();
+    for (const url of unique) loaded.set(url, await loader.loadAsync(url));
     if (this.disposed) return;
+    // P2 wears the teal tint ONLY when both players picked the same character.
+    const sameModel = this.models[0] === this.models[1];
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
     // model runs forward inside its render window and snaps back every loop.
@@ -68,7 +75,9 @@ export class RunnerStage {
     // hips' constant parent matrix, hold the horizontal world components at
     // their first-frame values, keep true world height (run bounce, the
     // tackle dive and the trip's fall to the ground all survive), map back.
-    {
+    // (Retargeted characters like the robot are baked in-place already and
+    // their root bone name doesn't match — the loop simply skips them.)
+    for (const gltf of loaded.values()) {
       const hips = gltf.scene.getObjectByName('mixamorig:Hips') ?? gltf.scene.getObjectByProperty('isBone', true);
       const parent = hips?.parent;
       if (parent) {
@@ -115,6 +124,7 @@ export class RunnerStage {
     };
 
     for (let who = 0; who < 2; who++) {
+      const gltf = loaded.get(this.models[who]);
       const root = skClone(gltf.scene);
       // Skinned meshes animate far outside their bind-pose bounds — never let
       // the frustum test cull them (this is also what made characters
@@ -144,7 +154,7 @@ export class RunnerStage {
       root.position.z -= (bb.mn.z + bb.mx.z) / 2;
       root.position.y -= bb.mn.y;
 
-      if (who === 1) {
+      if (who === 1 && sameModel) {
         const seen = new Map<any, any>();
         root.traverse((o: any) => {
           if (o.isMesh && o.material) {
