@@ -255,8 +255,12 @@ export class RunnerStage {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
       this.setAnim(c, p.anim, Math.min(1, p.speed / 0.13)); // 0.13 = game MAX_SPEED
       c.mixer.update(dt);
-      // model yaw: heading 0 = up-screen (away from the camera → back visible)
-      c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI;
+      // model yaw: heading 0 = up-screen (away from the camera → back visible).
+      // A TRIPPED character turns to face the viewer instead — from the
+      // elevated top view the fall/lying pose reads clearly, rather than a
+      // mostly-hidden back-first tumble away from the camera.
+      const yaw = p.anim === 'trip' ? 180 : p.heading;
+      c.root.rotation.y = -yaw * Math.PI / 180 + Math.PI;
       const px = (p.x / 100) * W;
       const py = (p.y / 100) * H;
       // viewport centered horizontally, character feet ~62% down the square

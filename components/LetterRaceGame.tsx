@@ -6,7 +6,7 @@ import { RunnerStage, type RunnerPose } from './letterRaceStage';
 // Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
 //
 // Both players hear a letter, then race from the bottom line to the letter row
-// at the top. HOLDING Q (left player) / M (right player) makes you run;
+// at the top. HOLDING W (left player) / ↑ (right player) makes you run;
 // HOLDING A/D vs ←/→ steers through a full 360°. Z / N throws a tackle: a
 // fast forward lunge that knocks the opponent down for 2 seconds on contact
 // (and takes their letter via the steal rules). Reaching the correct letter
@@ -233,7 +233,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   // ── Keyboard: mash Q/M to run, HOLD A/D or ←/→ to turn (360°), Z/N tackle ──
   useEffect(() => {
-    const HANDLED = ['KeyQ', 'KeyM', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN'];
+    const HANDLED = ['KeyW', 'ArrowUp', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN'];
     const down = (e: KeyboardEvent) => {
       if (!HANDLED.includes(e.code)) return;
       e.preventDefault();
@@ -356,8 +356,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       // HOLD-to-run: accelerate while the run key is down (fights friction to
       // an equilibrium ≈ MAX_SPEED). A knocked-down player can't run.
       const held = keys.current;
-      if (held.has('KeyQ') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL);
-      if (held.has('KeyM') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL);
+      if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL);
+      if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL);
       // HOLD-to-steer: rotate freely through 360° while the key is down.
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME + 360) % 360; };
       if (held.has('KeyA'))       rot(g.p1, -1);
@@ -517,13 +517,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
           <img src={spriteFor()} alt="" style={{ height: 24 }} /> Left player
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>Q</b> to run · <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b> to run · <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
           Right player <img src={spriteFor()} alt="" style={{ height: 24, filter: P2_TINT }} />
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>M</b> to run · <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>↑</b> to run · <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
       </div>
 
       {/* ── Listen overlay ── */}
