@@ -31,8 +31,8 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 // Field coordinate space: x and y in 0..100 (percent of the play field).
 const LETTER_Y  = 14;   // y of the letter row (players stop here)
 const START_Y   = 86;   // y of the bottom start/finish line
-const RUN_ACCEL = 0.025; // per-frame acceleration while the run key is HELD
-const MAX_SPEED = 0.19;  // cap (%/frame) — deliberately slow, high pressure
+const RUN_ACCEL = 0.016; // per-frame acceleration while the run key is HELD
+const MAX_SPEED = 0.13;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
 // Steering turns the HEADING (which way "forward" points), not a sideways jump.
 // Steering: HOLD the turn key to rotate freely through a full 360°.

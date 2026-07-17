@@ -62,15 +62,33 @@ export class RunnerStage {
     if (this.disposed) return;
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
-    // model would slide away from its field anchor while a clip plays. Pin the
-    // horizontal components to their first-frame values (keep the vertical
-    // bounce): the GAME moves the character, the clip only animates in place.
-    for (const clip of gltf.animations) {
-      for (const tr of clip.tracks as any[]) {
-        if (tr.name.endsWith('.position') && /hips/i.test(tr.name)) {
-          const v = tr.values as Float32Array;
-          const x0 = v[0], z0 = v[2];
-          for (let i = 0; i < v.length; i += 3) { v[i] = x0; v[i + 2] = z0; }
+    // model runs forward inside its render window and snaps back every loop.
+    // The hips' LOCAL axes are not world-aligned (the travel largely lives in
+    // local Y!), so pin in WORLD space: convert each keyframe through the
+    // hips' constant parent matrix, hold the horizontal world components at
+    // their first-frame values, keep true world height (run bounce, the
+    // tackle dive and the trip's fall to the ground all survive), map back.
+    {
+      const hips = gltf.scene.getObjectByName('mixamorig:Hips') ?? gltf.scene.getObjectByProperty('isBone', true);
+      const parent = hips?.parent;
+      if (parent) {
+        parent.updateWorldMatrix(true, false);
+        const P = parent.matrixWorld.clone();
+        const Pinv = P.clone().invert();
+        const w = new THREE.Vector3();
+        for (const clip of gltf.animations) {
+          for (const tr of clip.tracks as any[]) {
+            if (!tr.name.endsWith('.position') || !/hips/i.test(tr.name)) continue;
+            const v = tr.values as Float32Array;
+            let wx0 = 0, wz0 = 0;
+            for (let i = 0; i < v.length; i += 3) {
+              w.set(v[i], v[i + 1], v[i + 2]).applyMatrix4(P);
+              if (i === 0) { wx0 = w.x; wz0 = w.z; }
+              w.x = wx0; w.z = wz0;
+              w.applyMatrix4(Pinv);
+              v[i] = w.x; v[i + 1] = w.y; v[i + 2] = w.z;
+            }
+          }
         }
       }
     }
@@ -235,7 +253,7 @@ export class RunnerStage {
       const c = this.chars[i];
       if (!p || !c) continue;
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
-      this.setAnim(c, p.anim, Math.min(1, p.speed / 0.19)); // 0.19 = game MAX_SPEED
+      this.setAnim(c, p.anim, Math.min(1, p.speed / 0.13)); // 0.13 = game MAX_SPEED
       c.mixer.update(dt);
       // model yaw: heading 0 = up-screen (away from the camera → back visible)
       c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI;
