@@ -81,10 +81,10 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-front.png?v=1' },
-  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=2', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=2',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=1' },
-  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=2', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=2' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=2',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2' },
+  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
