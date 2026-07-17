@@ -39,9 +39,15 @@ export class RunnerStage {
   private getPoses: () => [RunnerPose, RunnerPose] | null;
   private disposed = false;
   private THREE: any = null;
-  private models: [string, string];
+  private models: [{ url: string; scale: number }, { url: string; scale: number }];
 
-  constructor(canvas: HTMLCanvasElement, getPoses: () => [RunnerPose, RunnerPose] | null, models: [string, string] = ['/models/runner.glb', '/models/runner.glb']) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    getPoses: () => [RunnerPose, RunnerPose] | null,
+    models: [{ url: string; scale: number }, { url: string; scale: number }] = [
+      { url: '/models/runner.glb', scale: 1 }, { url: '/models/runner.glb', scale: 1 },
+    ],
+  ) {
     this.canvas = canvas;
     this.getPoses = getPoses;
     this.models = models;
@@ -61,12 +67,12 @@ export class RunnerStage {
     this.renderer.setClearColor(0x000000, 0);
 
     const loader = new GLTFLoader();
-    const unique = [...new Set(this.models)];
+    const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
     for (const url of unique) loaded.set(url, await loader.loadAsync(url));
     if (this.disposed) return;
     // P2 wears the teal tint ONLY when both players picked the same character.
-    const sameModel = this.models[0] === this.models[1];
+    const sameModel = this.models[0].url === this.models[1].url;
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
     // model runs forward inside its render window and snaps back every loop.
@@ -124,8 +130,18 @@ export class RunnerStage {
     };
 
     for (let who = 0; who < 2; who++) {
-      const gltf = loaded.get(this.models[who]);
+      const gltf = loaded.get(this.models[who].url);
       const root = skClone(gltf.scene);
+      // Tripo exports ship METALLIC PBR materials — metal is near-black in a
+      // scene without an environment map. Clamp to a matte cartoon response.
+      root.traverse((o: any) => {
+        if (o.isMesh && o.material) {
+          for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+            if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05);
+            if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7);
+          }
+        }
+      });
       // Skinned meshes animate far outside their bind-pose bounds — never let
       // the frustum test cull them (this is also what made characters
       // sporadically disappear with edge-of-view poses).
@@ -147,7 +163,8 @@ export class RunnerStage {
       };
       let bb = boneBounds();
       const h = Math.max(0.001, bb.mx.y - bb.mn.y);
-      root.scale.setScalar(0.9 / h); // bones stop at the head joint — leave headroom → ~1 unit overall
+      // per-character scale knob (stout rigs read oversized from bone bounds)
+      root.scale.setScalar((0.9 * this.models[who].scale) / h);
       root.updateMatrixWorld(true);
       bb = boneBounds();
       root.position.x -= (bb.mn.x + bb.mx.x) / 2;
@@ -174,13 +191,13 @@ export class RunnerStage {
 
       const scene = new THREE.Scene();
       scene.add(root);
-      const key = new THREE.DirectionalLight(0xffffff, 2.6);
+      const key = new THREE.DirectionalLight(0xffffff, 2.9);
       key.position.set(-1.5, 3, 2.5);
       scene.add(key);
-      const fill = new THREE.DirectionalLight(0xbfd8ff, 1.1);
+      const fill = new THREE.DirectionalLight(0xbfd8ff, 1.3);
       fill.position.set(2, 2, -1);
       scene.add(fill);
-      scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+      scene.add(new THREE.AmbientLight(0xffffff, 1.5));
 
       // camera: Brawl-Stars three-quarter — elevated, looking down at the
       // model, zoomed OUT so the character fills only ~half the viewport

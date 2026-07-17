@@ -81,8 +81,8 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', portrait: '/sprites/race-runner-down.png?v=3' },
-  { key: 'minion', name: 'Minion', model: '/models/minion.glb', portrait: '/sprites/race-minion-down.png?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-down.png?v=3' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb', scale: 0.68, portrait: '/sprites/race-minion-down.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -140,7 +140,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.speed > 0.02 ? 'run' : 'idle',
       });
       return [pose(gg.p1), pose(gg.p2)];
-    }, [charOf(p1Char).model, charOf(p2Char).model]);
+    }, [
+      { url: charOf(p1Char).model, scale: charOf(p1Char).scale },
+      { url: charOf(p2Char).model, scale: charOf(p2Char).scale },
+    ]);
     stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
     if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; (window as any).__lrKeys = keys; }
     return () => stage.dispose();
