@@ -6,7 +6,7 @@ import { RunnerStage, type RunnerPose } from './letterRaceStage';
 // Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
 //
 // Both players hear a letter, then race from the bottom line to the letter row
-// at the top. Mashing Q (left player) / M (right player) makes you run;
+// at the top. HOLDING Q (left player) / M (right player) makes you run;
 // HOLDING A/D vs ←/→ steers through a full 360°. Z / N throws a tackle: a
 // fast forward lunge that knocks the opponent down for 2 seconds on contact
 // (and takes their letter via the steal rules). Reaching the correct letter
@@ -31,8 +31,7 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 // Field coordinate space: x and y in 0..100 (percent of the play field).
 const LETTER_Y  = 14;   // y of the letter row (players stop here)
 const START_Y   = 86;   // y of the bottom start/finish line
-const BURST     = 0.055; // speed added per run-key press — tiny (~0.45% of the
-                         // field), so winning takes lots of sustained fast mashing
+const RUN_ACCEL = 0.025; // per-frame acceleration while the run key is HELD
 const MAX_SPEED = 0.19;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
 // Steering turns the HEADING (which way "forward" points), not a sideways jump.
@@ -40,7 +39,7 @@ const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickl
 const ROT_PER_FRAME = 3.6;   // degrees per frame ≈ 216°/s
 // Tackle: a fast forward lunge; touching the opponent knocks them down.
 const TACKLE_MS       = 550;   // dash duration
-const TACKLE_SPEED    = 0.34;  // dash speed (≈1.8× MAX_SPEED)
+const TACKLE_SPEED    = 0.17;  // dash speed (~half the lunge distance of the first cut)
 const TACKLE_COOLDOWN = 3000;
 const TACKLE_REACH    = 7;     // contact distance that fells the opponent
 const FALL_MS         = 2000;  // how long the tackled player stays down
@@ -123,7 +122,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       return [pose(gg.p1), pose(gg.p2)];
     });
     stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
-    if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; }
+    if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; (window as any).__lrKeys = keys; }
     return () => stage.dispose();
   }, []);
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
@@ -246,10 +245,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       if (phaseRef.current !== 'race') return;
       const g = game.current;
       const now = performance.now();
-      // Each *distinct press* of a run key is a burst of speed — holding does
-      // nothing. A knocked-down player can't run.
-      if (e.code === 'KeyQ' && !e.repeat && now >= g.p1.fallenUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + BURST);
-      if (e.code === 'KeyM' && !e.repeat && now >= g.p2.fallenUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + BURST);
+      // Running is HOLD-based — handled in the race loop from the held-keys
+      // set. Only the tackle needs a discrete press here.
       // Tackle: a forward lunge (cooldown; not while down).
       const tackle = (pl: RacePlayer) => {
         if (now < pl.tackleCd || now < pl.fallenUntil) return;
@@ -358,8 +355,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       const g = game.current;
       const now = performance.now();
 
-      // HOLD-to-steer: rotate freely through 360° while the key is down.
+      // HOLD-to-run: accelerate while the run key is down (fights friction to
+      // an equilibrium ≈ MAX_SPEED). A knocked-down player can't run.
       const held = keys.current;
+      if (held.has('KeyQ') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL);
+      if (held.has('KeyM') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL);
+      // HOLD-to-steer: rotate freely through 360° while the key is down.
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME + 360) % 360; };
       if (held.has('KeyA'))       rot(g.p1, -1);
       if (held.has('KeyD'))       rot(g.p1, +1);
@@ -440,8 +441,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
             <div style={{ position: 'absolute', right: '12%', [p.carrying ? 'top' : 'bottom']: -8, width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.55)', animation: 'lrDust 0.5s ease-out infinite', animationDelay: '0.22s' } as React.CSSProperties} />
           </>
         )}
-        {/* Soft ground shadow */}
-        <div style={{ position: 'absolute', left: '50%', bottom: -5, transform: 'translateX(-50%)', width: 46, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.30)', filter: 'blur(2.5px)' }} />
         {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
             anchored to this same field position — this spacer only reserves the
             layout slot for the label below, plus the carrier-grace glow ring. */}
@@ -520,13 +519,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
           <img src={spriteFor()} alt="" style={{ height: 24 }} /> Left player
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>Q</b> to run · hold <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>Q</b> to run · <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
           Right player <img src={spriteFor()} alt="" style={{ height: 24, filter: P2_TINT }} />
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>M</b> to run · hold <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>M</b> to run · <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
       </div>
 
       {/* ── Listen overlay ── */}

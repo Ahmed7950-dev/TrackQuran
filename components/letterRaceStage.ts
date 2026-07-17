@@ -154,9 +154,12 @@ export class RunnerStage {
       scene.add(fill);
       scene.add(new THREE.AmbientLight(0xffffff, 1.15));
 
-      // camera: Brawl-Stars three-quarter — elevated, looking down at the model
+      // camera: Brawl-Stars three-quarter — elevated, looking down at the
+      // model, zoomed OUT so the character fills only ~half the viewport
+      // square: limbs and the tackle lunge never crop at the viewport edge,
+      // whatever direction the player faces.
       const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
-      camera.position.set(0, 2.1, 2.6);
+      camera.position.set(0, 3.0, 3.9);
       camera.lookAt(0, 0.45, 0);
 
       const mixer = new THREE.AnimationMixer(root);
@@ -190,11 +193,9 @@ export class RunnerStage {
         c.mixer.stopAllAction();
         runA?.reset().play();
       }
-      // idle = run cycle frozen on a grounded pose; run rate follows speed
-      if (runA) {
-        runA.timeScale = anim === 'idle' ? 0 : 0.7 + speedNorm * 1.1;
-        if (anim === 'idle') runA.time = 0;
-      }
+      // idle = run cycle paused in place (no snap back to frame 0 — that
+      // made the stride invisible between speed dips); rate follows speed
+      if (runA) runA.timeScale = anim === 'idle' ? 0 : 0.9 + speedNorm * 1.4;
       c.current = anim;
     } else {
       if (c.current !== anim) {
@@ -234,7 +235,7 @@ export class RunnerStage {
       const c = this.chars[i];
       if (!p || !c) continue;
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
-      this.setAnim(c, p.anim, Math.min(1, p.speed / 0.5));
+      this.setAnim(c, p.anim, Math.min(1, p.speed / 0.19)); // 0.19 = game MAX_SPEED
       c.mixer.update(dt);
       // model yaw: heading 0 = up-screen (away from the camera → back visible)
       c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI;
