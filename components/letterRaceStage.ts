@@ -11,7 +11,7 @@
 // three.js is imported dynamically so the main bundle stays lean.
 // -----------------------------------------------------------------------------
 
-export type RunnerAnim = 'idle' | 'run' | 'tackle' | 'trip';
+export type RunnerAnim = 'idle' | 'run' | 'tackle' | 'trip' | 'jump';
 
 export interface RunnerPose {
   x: number;        // field % (0..100)
@@ -184,7 +184,7 @@ export class RunnerStage {
       const actions: Record<string, any> = {};
       for (const clip of gltf.animations) {
         const a = mixer.clipAction(clip);
-        if (clip.name === 'tackle' || clip.name === 'trip') {
+        if (clip.name === 'tackle' || clip.name === 'trip' || clip.name === 'jump') {
           a.setLoop(THREE.LoopOnce, 1);
           a.clampWhenFinished = true;
         }

@@ -43,6 +43,13 @@ const TACKLE_SPEED    = 0.17;  // dash speed (~half the lunge distance of the fi
 const TACKLE_COOLDOWN = 3000;
 const TACKLE_REACH    = 7;     // contact distance that fells the opponent
 const FALL_MS         = 2000;  // how long the tackled player stays down
+// Jump: dodge a tackle by being AIRBORNE when it connects. The clip is ~1.9s
+// (crouch → leap → land); only the middle leap section grants immunity, so
+// the dodge takes real timing.
+const JUMP_ANIM_MS = 1900;
+const JUMP_AIR_FROM = 400;   // airborne (immune) window inside the jump…
+const JUMP_AIR_TO   = 1300;  // …relative to the jump start
+const JUMP_CD_MS    = 2200;  // next jump allowed this long after the last one
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
 const STEAL_GRACE = 900; // ms after a grab/steal during which no steal can happen
@@ -61,6 +68,7 @@ interface RacePlayer {
   tackleCd: number;       // next tackle allowed after this time
   fallenUntil: number;    // knocked down until this time (no input, no movement)
   tackleHit: boolean;     // this dash already felled someone
+  jumpAt: number;         // when the current/last jump started (-∞ = never)
 }
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
@@ -101,8 +109,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const game = useRef({
     target: pool[0],
     boxes: [] as LetterBox[],
-    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false } as RacePlayer,
-    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false } as RacePlayer,
+    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 } as RacePlayer,
+    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 } as RacePlayer,
     graceUntil: 0,           // no steals until this time (after grab / steal)
     checkP1First: true,      // alternate simultaneous-grab priority for fairness
   });
@@ -117,7 +125,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       const t = performance.now();
       const pose = (pl: RacePlayer): RunnerPose => ({
         x: pl.x, y: pl.y, heading: pl.heading, speed: pl.speed,
-        anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : pl.speed > 0.02 ? 'run' : 'idle',
+        anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.speed > 0.02 ? 'run' : 'idle',
       });
       return [pose(gg.p1), pose(gg.p2)];
     });
@@ -192,8 +200,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       color: colors[i % colors.length],
     }));
     game.current.target = target;
-    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false };
-    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false };
+    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
+    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
     game.current.graceUntil = 0;
 
     setPhase('listen');
@@ -233,7 +241,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   // ── Keyboard: mash Q/M to run, HOLD A/D or ←/→ to turn (360°), Z/N tackle ──
   useEffect(() => {
-    const HANDLED = ['KeyW', 'ArrowUp', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN'];
+    const HANDLED = ['KeyW', 'ArrowUp', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN', 'KeyX', 'KeyM'];
     const down = (e: KeyboardEvent) => {
       if (!HANDLED.includes(e.code)) return;
       e.preventDefault();
@@ -246,8 +254,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       // Running is HOLD-based — handled in the race loop from the held-keys
       // set. Only the tackle needs a discrete press here.
       // Tackle: a forward lunge (cooldown; not while down).
+      // Jump: playable anytime on your feet (cooldown-gated); dodges tackles
+      // while airborne and protects a carried letter.
+      const jump = (pl: RacePlayer) => {
+        if (now - pl.jumpAt < JUMP_CD_MS || now < pl.fallenUntil || now < pl.tackleUntil) return;
+        pl.jumpAt = now;
+        sfxGrab();
+      };
+      if (e.code === 'KeyX' && !e.repeat) jump(g.p1);
+      if (e.code === 'KeyM' && !e.repeat) jump(g.p2);
       const tackle = (pl: RacePlayer) => {
-        if (now < pl.tackleCd || now < pl.fallenUntil) return;
+        if (now < pl.tackleCd || now < pl.fallenUntil || now - pl.jumpAt < JUMP_ANIM_MS) return;
         pl.tackleUntil = now + TACKLE_MS;
         pl.tackleCd = now + TACKLE_COOLDOWN;
         pl.tackleHit = false;
@@ -368,9 +385,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       // Tackle contact: a mid-dash player knocks the other one down for 2s
       // (the letter transfer, if they were carrying, happens in the steal
       // block below — the dash speed satisfies its running requirement).
+      const airborne = (pl: RacePlayer) => now - pl.jumpAt > JUMP_AIR_FROM && now - pl.jumpAt < JUMP_AIR_TO;
       for (const [t, v] of [[g.p1, g.p2], [g.p2, g.p1]] as Array<[RacePlayer, RacePlayer]>) {
         if (now < t.tackleUntil && !t.tackleHit && now >= v.fallenUntil) {
           if (Math.hypot(t.x - v.x, t.y - v.y) < TACKLE_REACH) {
+            if (airborne(v)) continue; // leapt clean over the tackle!
             t.tackleHit = true;
             v.fallenUntil = now + FALL_MS;
             v.speed = 0;
@@ -393,7 +412,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       // up-field so a steal at the finish line never wins on the spot. The
       // robbed player can counter-steal once the (short) grace expires.
       const carrier = g.p1.carrying ? g.p1 : g.p2.carrying ? g.p2 : null;
-      if (carrier && now > g.graceUntil) {
+      if (carrier && now > g.graceUntil && !airborne(carrier)) {
         const robber = carrier === g.p1 ? g.p2 : g.p1;
         const d = Math.hypot(g.p1.x - g.p2.x, g.p1.y - g.p2.y);
         if (d < STEAL_D && robber.speed >= 0.3) {
@@ -505,13 +524,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
           <img src={spriteFor()} alt="" style={{ height: 24 }} /> Left player
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b> to run · <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b> to run · <b>A</b>/<b>D</b> turn · <b>Z</b> tackle · <b>X</b> jump!</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
           Right player <img src={spriteFor()} alt="" style={{ height: 24, filter: P2_TINT }} />
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>↑</b> to run · <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>↑</b> to run · <b>←</b>/<b>→</b> turn · <b>N</b> tackle · <b>M</b> jump!</div>
       </div>
 
       {/* ── Listen overlay ── */}
