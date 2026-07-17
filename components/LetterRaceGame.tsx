@@ -85,6 +85,11 @@ const CHARACTERS = [
   { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=3', scale: 0.52, portrait: '/sprites/race-minion-front.png?v=2', face: '/sprites/race-minion-face.png?v=1' },
   { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
   { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb?v=2',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2', face: '/sprites/race-buzz-face.png?v=1' },
+  { key: 'goku',   name: 'Goku',   model: '/models/goku.glb',            scale: 0.95, portrait: '/sprites/race-goku-front.png?v=1', face: '/sprites/race-goku-face.png?v=1' },
+  { key: 'armor',  name: 'Knight', model: '/models/armor.glb',           scale: 0.95, portrait: '/sprites/race-armor-front.png?v=1', face: '/sprites/race-armor-face.png?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb',           scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
+  { key: 'stitch', name: 'Stitch', model: '/models/stitch.glb',          scale: 0.7,  portrait: '/sprites/race-stitch-front.png?v=1', face: '/sprites/race-stitch-face.png?v=1' },
+  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb',            scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
