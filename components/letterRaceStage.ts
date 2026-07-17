@@ -132,13 +132,19 @@ export class RunnerStage {
     for (let who = 0; who < 2; who++) {
       const gltf = loaded.get(this.models[who].url);
       const root = skClone(gltf.scene);
-      // Tripo exports ship METALLIC PBR materials — metal is near-black in a
-      // scene without an environment map. Clamp to a matte cartoon response.
+      // Tripo exports ship METALLIC PBR materials (near-black without an
+      // environment map) marked alphaMode BLEND — a whole character rendered
+      // transparent means no depth writes, so back layers of the costume paint
+      // over front ones depending on the view angle. Clamp to a matte, fully
+      // OPAQUE response.
       root.traverse((o: any) => {
         if (o.isMesh && o.material) {
           for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
             if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05);
             if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7);
+            m.transparent = false;
+            m.depthWrite = true;
+            m.needsUpdate = true;
           }
         }
       });
