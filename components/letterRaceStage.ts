@@ -240,12 +240,23 @@ export class RunnerStage {
   private setAnim(c: CharRig, anim: RunnerAnim, speedNorm: number) {
     const runA = c.actions['run'];
     if (anim === 'run' || anim === 'idle') {
+      const idleA = c.actions['idle'];
+      if (anim === 'idle' && idleA) {
+        if (c.current !== 'idle') {
+          c.mixer.stopAllAction();
+          idleA.reset().play();
+          c.current = 'idle';
+        }
+        return;
+      }
       if (c.current !== 'run' && c.current !== 'idle') {
         c.mixer.stopAllAction();
         runA?.reset().play();
+      } else if (c.current === 'idle' && anim === 'run') {
+        c.mixer.stopAllAction();
+        runA?.reset().play();
       }
-      // idle = run cycle paused in place (no snap back to frame 0 — that
-      // made the stride invisible between speed dips); rate follows speed
+      // no idle clip → run cycle paused in place; rate follows speed
       if (runA) runA.timeScale = anim === 'idle' ? 0 : 0.9 + speedNorm * 1.4;
       c.current = anim;
     } else {
@@ -310,5 +321,146 @@ export class RunnerStage {
     cancelAnimationFrame(this.raf);
     this.renderer?.dispose?.();
     this.chars = [];
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PortraitStage — a small live 3D preview for the character selector: one
+// character, true front view at eye level, playing its 'idle' clip in a loop.
+// Self-contained (own renderer/scene); dispose() when the slider moves on.
+// ─────────────────────────────────────────────────────────────────────────────
+export class PortraitStage {
+  private renderer: any = null;
+  private raf = 0;
+  private lastT = 0;
+  private disposed = false;
+  private canvas: HTMLCanvasElement;
+  private modelUrl: string;
+  private tinted: boolean;
+  private charScale: number;
+  private mixer: any = null;
+  private scene: any = null;
+  private camera: any = null;
+
+  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1) {
+    this.canvas = canvas;
+    this.modelUrl = modelUrl;
+    this.tinted = tinted;
+    this.charScale = charScale;
+  }
+
+  async init(): Promise<void> {
+    const [THREE, { GLTFLoader }] = await Promise.all([
+      import('three'),
+      import('three/examples/jsm/loaders/GLTFLoader.js'),
+    ]);
+    if (this.disposed) return;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x000000, 0);
+
+    const gltf = await new GLTFLoader().loadAsync(this.modelUrl);
+    if (this.disposed) return;
+    const root = gltf.scene;
+
+    // same clamps as the field: matte, fully opaque; optional P2 teal tint
+    root.traverse((o: any) => {
+      if (o.isMesh) {
+        o.frustumCulled = false;
+        if (o.material) {
+          for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+            if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05);
+            if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7);
+            m.transparent = false;
+            m.depthWrite = true;
+            if (this.tinted && m.map) {
+              try {
+                const img = m.map.image as any;
+                const c = document.createElement('canvas');
+                c.width = img.width; c.height = img.height;
+                const ctx = c.getContext('2d')!;
+                ctx.filter = 'hue-rotate(165deg)';
+                ctx.drawImage(img, 0, 0);
+                const t = new THREE.Texture(c);
+                t.colorSpace = m.map.colorSpace; t.flipY = m.map.flipY;
+                t.wrapS = m.map.wrapS; t.wrapT = m.map.wrapT;
+                t.needsUpdate = true;
+                m.map = t;
+              } catch { /* keep original */ }
+            }
+            m.needsUpdate = true;
+          }
+        }
+      }
+    });
+
+    // normalize from skeleton bounds (geometry bounds lie on FBX-derived rigs)
+    const skinned: any[] = [];
+    root.traverse((o: any) => { if (o.isSkinnedMesh) skinned.push(o); });
+    root.updateMatrixWorld(true);
+    const boneBounds = () => {
+      const mn = new THREE.Vector3(1e9, 1e9, 1e9), mx = new THREE.Vector3(-1e9, -1e9, -1e9);
+      const v = new THREE.Vector3();
+      for (const m of skinned) for (const b of m.skeleton.bones) { b.getWorldPosition(v); mn.min(v); mx.max(v); }
+      return { mn, mx };
+    };
+    let bb = boneBounds();
+    const h = Math.max(0.001, bb.mx.y - bb.mn.y);
+    root.scale.setScalar((0.9 * this.charScale) / h); // same knob as the field
+    root.updateMatrixWorld(true);
+    bb = boneBounds();
+    root.position.x -= (bb.mn.x + bb.mx.x) / 2;
+    root.position.z -= (bb.mn.z + bb.mx.z) / 2;
+    root.position.y -= bb.mn.y;
+
+    const scene = new THREE.Scene();
+    scene.add(root);
+    const key = new THREE.DirectionalLight(0xffffff, 3.0);
+    key.position.set(-1.2, 2.5, 3);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xbfd8ff, 1.5);
+    fill.position.set(2, 1.5, 1);
+    scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+
+    // true front view, eye level
+    const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 20);
+    camera.position.set(0, 0.52, 2.75);
+    camera.lookAt(0, 0.5, 0);
+
+    const mixer = new THREE.AnimationMixer(root);
+    const idle = gltf.animations.find((a: any) => a.name === 'idle') ?? gltf.animations.find((a: any) => a.name === 'run');
+    if (idle) {
+      const action = mixer.clipAction(idle);
+      if (idle.name === 'run') action.timeScale = 0.55;
+      action.play();
+    }
+    this.mixer = mixer; this.scene = scene; this.camera = camera;
+
+    this.lastT = performance.now();
+    const loop = (now: number) => {
+      if (this.disposed) return;
+      this.raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.05, (now - this.lastT) / 1000);
+      this.lastT = now;
+      const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
+      if (W === 0 || H === 0) return;
+      const r = this.renderer;
+      if (this.canvas.width !== Math.floor(W * r.getPixelRatio())) {
+        r.setSize(W, H, false);
+        this.camera.aspect = W / H;
+        this.camera.updateProjectionMatrix();
+      }
+      this.mixer.update(dt);
+      r.render(this.scene, this.camera);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+
+  dispose() {
+    this.disposed = true;
+    cancelAnimationFrame(this.raf);
+    this.renderer?.dispose?.();
   }
 }

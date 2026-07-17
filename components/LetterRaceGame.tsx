@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
-import { RunnerStage, type RunnerPose } from './letterRaceStage';
+import { RunnerStage, PortraitStage, type RunnerPose } from './letterRaceStage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
@@ -81,15 +81,29 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2' },
-  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=2', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=2' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=2',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2' },
-  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=2', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=3', scale: 0.68, portrait: '/sprites/race-minion-front.png?v=2' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2' },
+  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb?v=2',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
+
+// Live 3D preview in the selector: the character stands facing the player,
+// playing its idle look-around clip — not a static picture.
+const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number }> = ({ model, tinted, scale }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const stage = new PortraitStage(canvas, model, tinted, scale);
+    stage.init().catch(err => console.error('[LetterRace] portrait stage:', err));
+    return () => stage.dispose();
+  }, [model, tinted, scale]);
+  return <canvas ref={ref} style={{ width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -638,8 +652,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
                 <button onClick={() => cycle(-1)} style={arrowStyle}>‹</button>
                 <div key={c.key} style={{ width: 210, animation: 'lrPop 0.35s ease-out' }}>
-                  <img src={c.portrait} alt={c.name}
-                    style={{ height: 200, maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto', filter: tinted ? P2_TINT : 'none' }} />
+                  <PortraitView model={c.model} tinted={tinted} scale={c.scale} />
                   <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 6 }}>{c.name}</div>
                   {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
                 </div>
