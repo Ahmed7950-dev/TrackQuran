@@ -82,7 +82,7 @@ const P2_TINT = 'hue-rotate(165deg)';
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
   { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb', portrait: '/sprites/race-runner-down.png?v=3' },
-  { key: 'robot',  name: 'Robo',   model: '/models/robot.glb',  portrait: '/sprites/race-robot-down.png?v=1' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb', portrait: '/sprites/race-minion-down.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -104,7 +104,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const [phase, setPhase] = useState<Phase>('select');
   const [p1Char, setP1Char] = useState<CharKey>('fennec');
-  const [p2Char, setP2Char] = useState<CharKey>('robot');
+  const [p2Char, setP2Char] = useState<CharKey>('minion');
+  const [p1Name, setP1Name] = useState('');
+  const [p2Name, setP2Name] = useState('');
+  const [selStep, setSelStep] = useState<1 | 2>(1); // P1 picks first, then P2
+  const nameOf = (who: 1 | 2) => ((who === 1 ? p1Name : p2Name).trim() || `Player ${who}`);
   const [, setTick] = useState(0);
   const [scores, setScores] = useState<[number, number]>([0, 0]);
   const [roundWinner, setRoundWinner] = useState<1 | 2>(1);
@@ -251,6 +255,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   useEffect(() => {
     const HANDLED = ['KeyW', 'ArrowUp', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN', 'KeyX', 'KeyM'];
     const down = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return; // typing a name
       if (!HANDLED.includes(e.code)) return;
       e.preventDefault();
       // Track held keys regardless of phase so steering works the instant the
@@ -479,7 +484,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
           {fallen && <div style={{ fontSize: 16, lineHeight: 1, marginBottom: 2 }}>💫</div>}
-          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>P{who}</span>
+          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>{nameOf(who)}</span>
         </div>
       </div>
     );
@@ -574,7 +579,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '26px 36px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
             <img src={portraitFor(roundWinner)} alt="" style={{ height: 78, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
-            <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the round! 🎉</h3>
+            <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>{nameOf(roundWinner)} wins the round! 🎉</h3>
             <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores[0]} — {scores[1]} · next letter coming…</p>
           </div>
         </div>
@@ -593,53 +598,64 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
               <img src={portraitFor(roundWinner)} alt="" style={{ height: 92, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
               <span style={{ fontSize: 48 }}>🏆</span>
             </div>
-            <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>Player {roundWinner} wins the race!</h3>
+            <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>{nameOf(roundWinner)} wins the race!</h3>
             <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores[0]} — {scores[1]} · Amazing running! 🏃💨</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={() => { scoresRef.current = [0, 0]; setScores([0, 0]); setupRound(); }} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔄 Play again</button>
-              <button onClick={() => { clearTimers(); scoresRef.current = [0, 0]; setScores([0, 0]); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
+              <button onClick={() => { clearTimers(); scoresRef.current = [0, 0]; setScores([0, 0]); setSelStep(1); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
               <button onClick={onExit} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>Done</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Character select (before the match) ── */}
+      {/* ── Character select: P1 picks + names himself, then P2 ── */}
       {phase === 'select' && (() => {
-        const Panel = ({ who }: { who: 1 | 2 }) => {
-          const color = who === 1 ? '#3b82f6' : '#f97316';
-          const bg = who === 1 ? 'linear-gradient(160deg,#eff6ff,#dbeafe)' : 'linear-gradient(160deg,#fff7ed,#ffedd5)';
-          const chosen = who === 1 ? p1Char : p2Char;
-          const setChosen = who === 1 ? setP1Char : setP2Char;
-          return (
-            <div style={{ flex: 1, minWidth: 0, background: bg, borderRadius: 20, padding: '14px 14px 12px', border: `3px solid ${color}` }}>
-              <div style={{ fontWeight: 900, color, fontSize: 15, marginBottom: 8 }}>Player {who} — {charOf(chosen).name}</div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                {CHARACTERS.map(c => {
-                  const sel = c.key === chosen;
-                  return (
-                    <button key={c.key} onClick={() => setChosen(c.key)} title={c.name}
-                      style={{ background: sel ? color : '#fff', border: `3px solid ${sel ? color : '#e2e8f0'}`, borderRadius: 14, padding: '8px 10px', cursor: 'pointer', transition: 'all 0.12s', transform: sel ? 'scale(1.06)' : 'scale(1)', width: 96 }}>
-                      <img src={c.portrait} alt={c.name}
-                        style={{ height: 74, maxWidth: '100%', objectFit: 'contain', filter: who === 2 && samePick && sel ? P2_TINT : 'none' }} />
-                      <div style={{ fontWeight: 800, fontSize: 12, color: sel ? '#fff' : '#334155', marginTop: 4 }}>{c.name}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        };
+        const who: 1 | 2 = selStep;
+        const color = who === 1 ? '#3b82f6' : '#f97316';
+        const chosen = who === 1 ? p1Char : p2Char;
+        const setChosen = who === 1 ? setP1Char : setP2Char;
+        const name = who === 1 ? p1Name : p2Name;
+        const setName = who === 1 ? setP1Name : setP2Name;
+        const idx = Math.max(0, CHARACTERS.findIndex(c => c.key === chosen));
+        const cycle = (d: number) => setChosen(CHARACTERS[(idx + d + CHARACTERS.length) % CHARACTERS.length].key);
+        const c = CHARACTERS[idx];
+        const tinted = who === 2 && p1Char === chosen;
+        const arrowStyle: React.CSSProperties = { background: '#fff', border: `3px solid ${color}`, color, borderRadius: '50%', width: 52, height: 52, fontSize: 24, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.18)', flexShrink: 0 };
         return (
           <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
-            <div style={{ background: '#fff', borderRadius: 26, padding: '20px 22px', maxWidth: 620, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
-              <h3 style={{ margin: '0 0 3px', fontWeight: 900, fontSize: 24, color: '#0f172a' }}>🏁 Pick your racer!</h3>
-              <p style={{ margin: '0 0 14px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>Each player picks a character, then start the race.</p>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-                <Panel who={1} />
-                <Panel who={2} />
+            <div style={{ background: '#fff', borderRadius: 26, padding: '22px 26px 24px', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: `4px solid ${color}` }}>
+              <h3 style={{ margin: '0 0 2px', fontWeight: 900, fontSize: 24, color }}>Player {who} — pick your racer!</h3>
+              <p style={{ margin: '0 0 12px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>
+                {who === 1 ? 'Choose your character and write your name.' : 'Now the second player picks!'}
+              </p>
+              {/* slider: big front-view portrait with prev/next arrows */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+                <button onClick={() => cycle(-1)} style={arrowStyle}>‹</button>
+                <div key={c.key} style={{ width: 210, animation: 'lrPop 0.35s ease-out' }}>
+                  <img src={c.portrait} alt={c.name}
+                    style={{ height: 200, maxWidth: '100%', objectFit: 'contain', filter: tinted ? P2_TINT : 'none' }} />
+                  <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 6 }}>{c.name}</div>
+                  {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
+                </div>
+                <button onClick={() => cycle(1)} style={arrowStyle}>›</button>
               </div>
-              <button onClick={() => setupRound()} style={{ marginTop: 16, background: 'linear-gradient(135deg,#16a34a,#15803d)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 40px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: '0 6px 18px rgba(22,163,74,0.45)' }}>Start the Race! 🏃💨</button>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value.slice(0, 14))}
+                placeholder={`Player ${who} name…`}
+                style={{ marginTop: 14, width: '80%', padding: '11px 16px', borderRadius: 999, border: `2.5px solid ${color}55`, outline: 'none', fontSize: 16, fontWeight: 800, textAlign: 'center', color: '#0f172a', background: '#f8fafc' }}
+              />
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+                {who === 2 && (
+                  <button onClick={() => setSelStep(1)} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>‹ Back</button>
+                )}
+                {who === 1 ? (
+                  <button onClick={() => setSelStep(2)} style={{ background: `linear-gradient(135deg,${color},#1d4ed8)`, color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: `0 6px 18px ${color}66` }}>Next — Player 2 ›</button>
+                ) : (
+                  <button onClick={() => setupRound()} style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: '0 6px 18px rgba(22,163,74,0.45)' }}>Start the Race! 🏃💨</button>
+                )}
+              </div>
             </div>
           </div>
         );
