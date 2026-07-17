@@ -43,13 +43,13 @@ const TACKLE_SPEED    = 0.17;  // dash speed (~half the lunge distance of the fi
 const TACKLE_COOLDOWN = 3000;
 const TACKLE_REACH    = 7;     // contact distance that fells the opponent
 const FALL_MS         = 2000;  // how long the tackled player stays down
-// Jump: dodge a tackle by being AIRBORNE when it connects. The clip is ~1.9s
-// (crouch → leap → land); only the middle leap section grants immunity, so
-// the dodge takes real timing.
-const JUMP_ANIM_MS = 1900;
-const JUMP_AIR_FROM = 400;   // airborne (immune) window inside the jump…
-const JUMP_AIR_TO   = 1300;  // …relative to the jump start
-const JUMP_CD_MS    = 2200;  // next jump allowed this long after the last one
+// Jump: dodge a tackle by being AIRBORNE when it connects. The clip is ~1.0s
+// (31f Mixamo "Jump"); only the middle leap section grants immunity, so the
+// dodge takes real timing.
+const JUMP_ANIM_MS = 1030;
+const JUMP_AIR_FROM = 200;   // airborne (immune) window inside the jump…
+const JUMP_AIR_TO   = 800;   // …relative to the jump start
+const JUMP_CD_MS    = 1500;  // next jump allowed this long after the last one
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
 const STEAL_GRACE = 900; // ms after a grab/steal during which no steal can happen
@@ -389,7 +389,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       for (const [t, v] of [[g.p1, g.p2], [g.p2, g.p1]] as Array<[RacePlayer, RacePlayer]>) {
         if (now < t.tackleUntil && !t.tackleHit && now >= v.fallenUntil) {
           if (Math.hypot(t.x - v.x, t.y - v.y) < TACKLE_REACH) {
-            if (airborne(v)) continue; // leapt clean over the tackle!
+            if (airborne(v)) { t.tackleHit = true; continue; } // leapt clean over — that tackle is spent
             t.tackleHit = true;
             v.fallenUntil = now + FALL_MS;
             v.speed = 0;
