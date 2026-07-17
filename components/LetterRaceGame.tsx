@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
+import { RunnerStage, type RunnerPose } from './letterRaceStage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
 //
 // Both players hear a letter, then race from the bottom line to the letter row
-// at the top. Mashing SHIFT makes you run (left player = Left Shift, right
-// player = Right Shift); steering is left/right only (A/D vs ←/→). Reaching
-// the correct letter grabs it automatically and turns you around; first to
-// carry it back across the bottom line wins the round. While one player
-// carries the letter, the other can bump into them to steal it.
+// at the top. Mashing Q (left player) / M (right player) makes you run;
+// HOLDING A/D vs ←/→ steers through a full 360°. Z / N throws a tackle: a
+// fast forward lunge that knocks the opponent down for 2 seconds on contact
+// (and takes their letter via the steal rules). Reaching the correct letter
+// grabs it automatically; first to carry it back across the bottom line wins
+// the round. Characters are live 3D models — see letterRaceStage.ts.
 //
 // Uses the same audio files as Letter Flight (letterAudioUrl + TTS fallback).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,9 +36,14 @@ const BURST     = 0.055; // speed added per run-key press — tiny (~0.45% of th
 const MAX_SPEED = 0.19;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
 // Steering turns the HEADING (which way "forward" points), not a sideways jump.
-// Each key PRESS ratchets the heading one notch and it stays there (no recenter).
-const STEER_STEP = 9;    // degrees the head turns per key press
-const TURN_MAX   = 54;   // max turn from straight-ahead (keeps it a curve, not a slide)
+// Steering: HOLD the turn key to rotate freely through a full 360°.
+const ROT_PER_FRAME = 3.6;   // degrees per frame ≈ 216°/s
+// Tackle: a fast forward lunge; touching the opponent knocks them down.
+const TACKLE_MS       = 550;   // dash duration
+const TACKLE_SPEED    = 0.34;  // dash speed (≈1.8× MAX_SPEED)
+const TACKLE_COOLDOWN = 3000;
+const TACKLE_REACH    = 7;     // contact distance that fells the opponent
+const FALL_MS         = 2000;  // how long the tackled player stays down
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
 const STEAL_D   = 7;    // bump distance that steals the letter
 const STEAL_GRACE = 900; // ms after a grab/steal during which no steal can happen
@@ -50,30 +57,22 @@ interface RacePlayer {
   carrying: boolean;
   carrySince: number;     // when they picked up / stole the letter (min-carry before a win)
   wrongBuzzAt: number;    // throttle for wrong-letter feedback
-  facing: 'up' | 'down';  // which way the sprite faces (up = toward the letters)
-  heading: number;        // steering angle in degrees (0 = straight; +right / -left)
+  heading: number;        // absolute direction in degrees (0 = up-screen, +clockwise, full 360°)
+  tackleUntil: number;    // mid-tackle-dash until this time
+  tackleCd: number;       // next tackle allowed after this time
+  fallenUntil: number;    // knocked down until this time (no input, no movement)
+  tackleHit: boolean;     // this dash already felled someone
 }
 interface LetterBox { letter: string; x: number; isTarget: boolean; taken: boolean; wiggleAt: number; color: string }
 
-// The racer — a Mixamo "Fast Run" character pre-rendered in Blender to 8-frame
-// front/back sprite strips (public/sprites/race-runner-*.png). Both players run
-// the SAME character; Player 2 wears a CSS hue-rotate tint so the two racers
-// are instantly tellable apart.
-const RUNNER_AR = 0.754; // frame aspect ratio (w/h) of the strip frames
-const RUN_FRAMES = 8;
+// The racer — a Mixamo character rendered as a REAL-TIME 3D model (three.js,
+// public/models/runner.glb: run / tackle / trip clips) in letterRaceStage.ts,
+// so it rotates through a true 360° as players steer. Both players run the
+// SAME character; Player 2 wears a teal tint (hue-rotate on sprites/texture).
 const P2_TINT = 'hue-rotate(165deg)';
 const tintFor = (who: 1 | 2) => (who === 2 ? P2_TINT : 'none');
-// dir 'up' = running toward the letters → the runner's back;
-// dir 'down' = running home / portraits → the face.
-// Each direction has FIVE pre-rendered yaw views (hard-left … hard-right, by
-// SCREEN direction) so the character visibly turns in 3D while steering —
-// the Brawl-Stars look — instead of a flat picture that only rotates.
-const YAWS = ['l2', 'l1', 'c', 'r1', 'r2'] as const;
-type Yaw = typeof YAWS[number];
-const yawFor = (heading: number): Yaw =>
-  heading <= -30 ? 'l2' : heading <= -10 ? 'l1' : heading < 10 ? 'c' : heading < 30 ? 'r1' : 'r2';
+// Static portraits for HUD / overlays (pre-rendered PNGs).
 const spriteFor = (dir: 'up' | 'down' = 'down') => `/sprites/race-runner-${dir}.png?v=3`;
-const stripFor  = (dir: 'up' | 'down', yaw: Yaw = 'c') => `/sprites/race-runner-${dir}-${yaw}-run.png?v=3`;
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
 
@@ -103,12 +102,30 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
   const game = useRef({
     target: pool[0],
     boxes: [] as LetterBox[],
-    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 } as RacePlayer,
-    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 } as RacePlayer,
+    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false } as RacePlayer,
+    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false } as RacePlayer,
     graceUntil: 0,           // no steals until this time (after grab / steal)
     checkP1First: true,      // alternate simultaneous-grab priority for fairness
   });
   const keys = useRef<Set<string>>(new Set());
+  // ── Live 3D characters (three.js overlay; see letterRaceStage.ts) ──────────
+  const stageCanvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = stageCanvasRef.current;
+    if (!canvas) return;
+    const stage = new RunnerStage(canvas, () => {
+      const gg = game.current;
+      const t = performance.now();
+      const pose = (pl: RacePlayer): RunnerPose => ({
+        x: pl.x, y: pl.y, heading: pl.heading, speed: pl.speed,
+        anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : pl.speed > 0.02 ? 'run' : 'idle',
+      });
+      return [pose(gg.p1), pose(gg.p2)];
+    });
+    stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
+    if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; }
+    return () => stage.dispose();
+  }, []);
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
   const queueRef = useRef<string[]>(shuffle(pool));
   const queuePosRef = useRef(0);
@@ -176,8 +193,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       color: colors[i % colors.length],
     }));
     game.current.target = target;
-    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 };
-    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, facing: 'up', heading: 0 };
+    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false };
+    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false };
     game.current.graceUntil = 0;
 
     setPhase('listen');
@@ -203,10 +220,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     });
   }, [pool, playLetterAudio, sfxCount, sfxGo]);
 
-  // Preload all run strips (2 directions × 5 yaw views) so swaps never pop.
-  useEffect(() => {
-    (['up', 'down'] as const).forEach(d => YAWS.forEach(y => { const im = new Image(); im.src = stripFor(d, y); }));
-  }, []);
+
 
   // The match begins on the character-select "Start" button (a user gesture,
   // which also unlocks audio autoplay). Just clean up on unmount.
@@ -220,14 +234,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Keyboard: mash Shift to run, steer with A/D and ←/→ ────────────────────
+  // ── Keyboard: mash Q/M to run, HOLD A/D or ←/→ to turn (360°), Z/N tackle ──
   useEffect(() => {
-    // Run keys: Shift as designed, plus W / ↑ as equivalents — mashing Shift 5×
-    // pops the OS Sticky-Keys dialog on Windows, so kids there can mash the
-    // alternate key instead. Steering: A/D (left player) and ←/→ (right player).
-    const HANDLED = ['ShiftLeft', 'ShiftRight', 'KeyW', 'ArrowUp', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight'];
-    const P1_RUN = ['ShiftLeft', 'KeyW'];
-    const P2_RUN = ['ShiftRight', 'ArrowUp'];
+    const HANDLED = ['KeyQ', 'KeyM', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'KeyZ', 'KeyN'];
     const down = (e: KeyboardEvent) => {
       if (!HANDLED.includes(e.code)) return;
       e.preventDefault();
@@ -236,15 +245,22 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       keys.current.add(e.code);
       if (phaseRef.current !== 'race') return;
       const g = game.current;
-      // Each *distinct press* of a run key is a burst of speed — holding does nothing.
-      if (P1_RUN.includes(e.code) && !e.repeat) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + BURST);
-      if (P2_RUN.includes(e.code) && !e.repeat) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + BURST);
-      // Steering ratchets the heading a notch per press and stays there.
-      const turn = (pl: RacePlayer, d: number) => { pl.heading = Math.max(-TURN_MAX, Math.min(TURN_MAX, pl.heading + d * STEER_STEP)); };
-      if (e.code === 'KeyA')      turn(g.p1, -1);
-      if (e.code === 'KeyD')      turn(g.p1, +1);
-      if (e.code === 'ArrowLeft') turn(g.p2, -1);
-      if (e.code === 'ArrowRight')turn(g.p2, +1);
+      const now = performance.now();
+      // Each *distinct press* of a run key is a burst of speed — holding does
+      // nothing. A knocked-down player can't run.
+      if (e.code === 'KeyQ' && !e.repeat && now >= g.p1.fallenUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + BURST);
+      if (e.code === 'KeyM' && !e.repeat && now >= g.p2.fallenUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + BURST);
+      // Tackle: a forward lunge (cooldown; not while down).
+      const tackle = (pl: RacePlayer) => {
+        if (now < pl.tackleCd || now < pl.fallenUntil) return;
+        pl.tackleUntil = now + TACKLE_MS;
+        pl.tackleCd = now + TACKLE_COOLDOWN;
+        pl.tackleHit = false;
+        pl.speed = TACKLE_SPEED;
+        sfxSteal();
+      };
+      if (e.code === 'KeyZ' && !e.repeat) tackle(g.p1);
+      if (e.code === 'KeyN' && !e.repeat) tackle(g.p2);
     };
     const up = (e: KeyboardEvent) => { keys.current.delete(e.code); };
     // Focus loss eats keyup events — clear held keys so nobody drifts into the
@@ -287,24 +303,25 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     const step = (p: RacePlayer, other: RacePlayer, who: 1 | 2) => {
       const g = game.current;
       const now = performance.now();
-      // Heading is set by key presses (see keydown handler) and STAYS put — the
-      // player keeps whatever way it's pointing until you tap the other steer key.
-      // Forward direction: carry → run home (down); opponent carries → chase
-      // them; otherwise → run to the letter row (up).
-      let dir: number;
-      if (p.carrying) dir = 1;
-      else if (other.carrying) dir = Math.sign(other.y - p.y) || 1;
-      else dir = -1;
-      p.facing = dir < 0 ? 'up' : 'down';   // face the way they're heading
-      // Move along the heading: forward component up/down (dir), side component
-      // from the turn — so they CURVE toward the letter instead of strafing.
-      const rad = p.heading * Math.PI / 180;
-      p.y += p.speed * dir * Math.cos(rad);
-      p.x += p.speed * Math.sin(rad);
+      // Full 360° control: the player faces wherever they steered (0 = toward
+      // the letters) and always moves along that heading. A knocked-down
+      // player doesn't move at all for FALL_MS.
+      if (now < p.fallenUntil) {
+        p.speed = 0;
+      } else {
+        const rad = p.heading * Math.PI / 180;
+        p.y -= p.speed * Math.cos(rad);
+        p.x += p.speed * Math.sin(rad);
+      }
       p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
       p.x = Math.max(4, Math.min(96, p.x));
-      p.speed *= FRICTION;
-      if (p.speed < 0.01) p.speed = 0;
+      // Mid-tackle the dash speed is pinned (no decay); otherwise friction.
+      if (now < p.tackleUntil) {
+        p.speed = TACKLE_SPEED;
+      } else {
+        p.speed *= FRICTION;
+        if (p.speed < 0.01) p.speed = 0;
+      }
 
       // At the letter row: grab the target / buzz on a wrong box. Pick the
       // NEAREST overlapping box so standing between two boxes resolves right.
@@ -340,6 +357,28 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
     const loop = () => {
       const g = game.current;
       const now = performance.now();
+
+      // HOLD-to-steer: rotate freely through 360° while the key is down.
+      const held = keys.current;
+      const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME + 360) % 360; };
+      if (held.has('KeyA'))       rot(g.p1, -1);
+      if (held.has('KeyD'))       rot(g.p1, +1);
+      if (held.has('ArrowLeft'))  rot(g.p2, -1);
+      if (held.has('ArrowRight')) rot(g.p2, +1);
+
+      // Tackle contact: a mid-dash player knocks the other one down for 2s
+      // (the letter transfer, if they were carrying, happens in the steal
+      // block below — the dash speed satisfies its running requirement).
+      for (const [t, v] of [[g.p1, g.p2], [g.p2, g.p1]] as Array<[RacePlayer, RacePlayer]>) {
+        if (now < t.tackleUntil && !t.tackleHit && now >= v.fallenUntil) {
+          if (Math.hypot(t.x - v.x, t.y - v.y) < TACKLE_REACH) {
+            t.tackleHit = true;
+            v.fallenUntil = now + FALL_MS;
+            v.speed = 0;
+            sfxWrong(); // heavy thud
+          }
+        }
+      }
 
       // Alternate who is processed first so simultaneous grabs are fair.
       const order: Array<[RacePlayer, RacePlayer, 1 | 2]> = g.checkP1First
@@ -384,16 +423,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const running = p.speed > 0.02;
     const dusty = p.speed > 0.11;
-    const ar = RUNNER_AR;
-    // Play the baked hop cycle by stepping the sprite-sheet frame. Faster
-    // running → faster frame rate. Idle holds frame 0 (grounded pose).
-    const frameMs = running ? Math.max(55, 130 - (p.speed / MAX_SPEED) * 80) : 999999;
-    const frame = running ? Math.floor(now / frameMs) % RUN_FRAMES : 0;
-    // The real turn comes from the yaw-view strips; a small residual lean adds
-    // life between the 20° view steps.
-    const tilt = p.heading * 0.2;
+    const fallen = now < p.fallenUntil;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
@@ -411,22 +442,16 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         )}
         {/* Soft ground shadow */}
         <div style={{ position: 'absolute', left: '50%', bottom: -5, transform: 'translateX(-50%)', width: 46, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.30)', filter: 'blur(2.5px)' }} />
-        {/* Character sprite — a run-cycle strip stepped one frame at a time.
-            The rotation wrapper turns the head with the heading; the inner box
-            is exactly one frame wide (height 70 × aspect) and slides the strip
-            by whole frames via translateX. */}
-        <div style={{
-          transform: `rotate(${tilt}deg)`, transformOrigin: 'bottom center',
-          filter: p.carrying && carrierGrace
-            ? `drop-shadow(0 0 10px ${color}) drop-shadow(0 3px 3px rgba(0,0,0,0.3))`
-            : 'drop-shadow(0 3px 3px rgba(0,0,0,0.3))',
-        }}>
-          <div style={{ height: 70, aspectRatio: `${ar}`, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
-            <img src={stripFor(p.facing, yawFor(p.heading))} alt="" draggable={false}
-              style={{ height: 70, width: 'auto', maxWidth: 'none', transform: `translateX(-${(frame / RUN_FRAMES) * 100}%)`, filter: tintFor(who) }} />
-          </div>
+        {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
+            anchored to this same field position — this spacer only reserves the
+            layout slot for the label below, plus the carrier-grace glow ring. */}
+        <div style={{ height: 70, width: 54, position: 'relative' }}>
+          {p.carrying && carrierGrace && (
+            <div style={{ position: 'absolute', left: '50%', bottom: -2, transform: 'translateX(-50%)', width: 58, height: 16, borderRadius: '50%', border: `3px solid ${color}`, opacity: 0.8, boxShadow: `0 0 12px ${color}` }} />
+          )}
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
+          {fallen && <div style={{ fontSize: 16, lineHeight: 1, marginBottom: 2 }}>💫</div>}
           <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>P{who}</span>
         </div>
       </div>
@@ -472,6 +497,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
       ))}
 
       {/* ── Players ── */}
+      {/* Live 3D characters — one transparent WebGL layer, anchored to the
+          players' field positions (see letterRaceStage.ts) */}
+      <canvas ref={stageCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 9, pointerEvents: 'none' }} />
       {renderPlayer(g.p1, 1)}
       {renderPlayer(g.p2, 2)}
 
@@ -492,13 +520,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
           <img src={spriteFor()} alt="" style={{ height: 24 }} /> Left player
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>LEFT SHIFT</b> (or <b>W</b>) to run · <b>A</b>/<b>D</b> to steer</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>Q</b> to run · hold <b>A</b>/<b>D</b> to turn · <b>Z</b> tackles!</div>
       </div>
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
           Right player <img src={spriteFor()} alt="" style={{ height: 24, filter: P2_TINT }} />
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>RIGHT SHIFT</b> (or <b>↑</b>) to run · <b>←</b>/<b>→</b> to steer</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Mash <b>M</b> to run · hold <b>←</b>/<b>→</b> to turn · <b>N</b> tackles!</div>
       </div>
 
       {/* ── Listen overlay ── */}
