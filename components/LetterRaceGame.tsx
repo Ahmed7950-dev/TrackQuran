@@ -81,10 +81,10 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=2', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2' },
-  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=3', scale: 0.52, portrait: '/sprites/race-minion-front.png?v=2' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2' },
-  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb?v=2',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=2', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
+  { key: 'minion', name: 'Minion', model: '/models/minion.glb?v=3', scale: 0.52, portrait: '/sprites/race-minion-front.png?v=2', face: '/sprites/race-minion-face.png?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',   scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
+  { key: 'buzz',   name: 'Buzz',   model: '/models/buzz.glb?v=2',        scale: 0.9,  portrait: '/sprites/race-buzz-front.png?v=2', face: '/sprites/race-buzz-face.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -637,10 +637,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
         const name = who === 1 ? p1Name : p2Name;
         const setName = who === 1 ? setP1Name : setP2Name;
         const idx = Math.max(0, CHARACTERS.findIndex(c => c.key === chosen));
-        const cycle = (d: number) => setChosen(CHARACTERS[(idx + d + CHARACTERS.length) % CHARACTERS.length].key);
         const c = CHARACTERS[idx];
         const tinted = who === 2 && p1Char === chosen;
-        const arrowStyle: React.CSSProperties = { background: '#fff', border: `3px solid ${color}`, color, borderRadius: '50%', width: 52, height: 52, fontSize: 24, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.18)', flexShrink: 0 };
         return (
           <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
             <div style={{ background: '#fff', borderRadius: 26, padding: '22px 26px 24px', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: `4px solid ${color}` }}>
@@ -648,15 +646,24 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
               <p style={{ margin: '0 0 12px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>
                 {who === 1 ? 'Choose your character and write your name.' : 'Now the second player picks!'}
               </p>
-              {/* slider: big front-view portrait with prev/next arrows */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
-                <button onClick={() => cycle(-1)} style={arrowStyle}>‹</button>
-                <div key={c.key} style={{ width: 210, animation: 'lrPop 0.35s ease-out' }}>
-                  <PortraitView model={c.model} tinted={tinted} scale={c.scale} />
-                  <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 6 }}>{c.name}</div>
-                  {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
-                </div>
-                <button onClick={() => cycle(1)} style={arrowStyle}>›</button>
+              {/* big live 3D preview of the chosen character */}
+              <div key={c.key} style={{ width: 210, margin: '0 auto', animation: 'lrPop 0.35s ease-out' }}>
+                <PortraitView model={c.model} tinted={tinted} scale={c.scale} />
+                <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 4 }}>{c.name}</div>
+                {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
+              </div>
+              {/* face row: tap a face to pick that character */}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                {CHARACTERS.map(ch => {
+                  const sel = ch.key === chosen;
+                  return (
+                    <button key={ch.key} onClick={() => setChosen(ch.key)} title={ch.name}
+                      style={{ background: sel ? color : '#fff', border: `3px solid ${sel ? color : '#e2e8f0'}`, borderRadius: 16, padding: '6px 8px 4px', cursor: 'pointer', transition: 'all 0.12s', transform: sel ? 'scale(1.08)' : 'scale(1)', width: 74 }}>
+                      <img src={ch.face} alt={ch.name} style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', margin: '0 auto', borderRadius: 10 }} />
+                      <div style={{ fontWeight: 800, fontSize: 11, color: sel ? '#fff' : '#334155', marginTop: 2 }}>{ch.name}</div>
+                    </button>
+                  );
+                })}
               </div>
               <input
                 value={name}
