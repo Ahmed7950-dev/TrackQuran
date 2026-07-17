@@ -30,7 +30,7 @@ function getLetterInForm(letter: string, form: LetterForm): string {
 
 // Field coordinate space: x and y in 0..100 (percent of the play field).
 const LETTER_Y  = 14;   // y of the letter row (players stop here)
-const START_Y   = 86;   // y of the bottom start/finish line
+const START_Y   = 89;   // y of the start/finish line — matches the checkered line DRAWN in the field image (center ≈90%)
 const RUN_ACCEL = 0.016; // per-frame acceleration while the run key is HELD
 const MAX_SPEED = 0.13;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
@@ -457,23 +457,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit }: LetterRace
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none' }}>
-      {/* ── Field (top view): mowed-lawn lanes + vignette + bushes + finish line ── */}
-      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(to right, #4fc76a 0, #4fc76a 90px, #3fb95c 90px, #3fb95c 180px)' }} />
-      {/* subtle darker edges so the field reads as a lit stadium */}
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(6,50,20,0.35) 100%)', pointerEvents: 'none' }} />
-      {/* boundary lines */}
-      <div style={{ position: 'absolute', top: 0, bottom: 0, left: '2%',  width: 4, background: 'rgba(255,255,255,0.75)', borderRadius: 2 }} />
-      <div style={{ position: 'absolute', top: 0, bottom: 0, right: '2%', width: 4, background: 'rgba(255,255,255,0.75)', borderRadius: 2 }} />
-      {/* bushes along the side margins */}
-      {[8, 24, 40, 56, 72, 88].map(y => (
-        <React.Fragment key={`bush-${y}`}>
-          <div style={{ position: 'absolute', left: '0.2%', top: `${y}%`, width: 24, height: 24, borderRadius: '50%', background: '#15803d', boxShadow: '10px 7px 0 -3px #166534, -4px 10px 0 -5px #14532d, 0 3px 6px rgba(0,0,0,0.3)' }} />
-          <div style={{ position: 'absolute', right: '0.2%', top: `${y + 7}%`, width: 22, height: 22, borderRadius: '50%', background: '#166534', boxShadow: '-9px 6px 0 -3px #15803d, 4px 9px 0 -5px #14532d, 0 3px 6px rgba(0,0,0,0.3)' }} />
-        </React.Fragment>
-      ))}
-      {/* Start / finish line */}
-      <div style={{ position: 'absolute', left: '2%', right: '2%', top: `${START_Y + 4}%`, height: 15, background: 'repeating-linear-gradient(90deg, #fff 0 14px, #1f2937 14px 28px)', borderRadius: 4, opacity: 0.95, boxShadow: '0 3px 8px rgba(0,0,0,0.25)' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, top: `${START_Y + 7}%`, textAlign: 'center', color: 'rgba(255,255,255,0.85)', fontWeight: 900, fontSize: 13, letterSpacing: 6, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>FINISH</div>
+      {/* ── Field: AI-illustrated top-view lawn with the finish line drawn in.
+          Stretched to 100%/100% (not cover) so the painted checkered line
+          stays at a FIXED field-% on every viewport — START_Y is calibrated
+          to its measured center (~90%). ── */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/sprites/race-field.jpg?v=1)', backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' }} />
 
       {/* ── Letter row ── */}
       {g.boxes.map((box, i) => !box.taken && (
