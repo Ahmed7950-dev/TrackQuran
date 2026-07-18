@@ -586,7 +586,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             if (sp.ca) { pl.carrySince = now; sfxGrab(); } else if (s.dr) sfxSteal(); // we dropped it!
           }
           if (sp.fl > 0) {
-            if (now >= pl.fallenUntil) sfxWrong(); // just got flattened
             pl.fallenUntil = Math.max(pl.fallenUntil, now + sp.fl);
             pl.speed = 0;
           }
@@ -922,7 +921,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               };
               sfxSteal(); // the letter goes flying!
             }
-            sfxWrong(); // heavy thud
             break;
           }
         }
