@@ -855,20 +855,28 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           to its measured center (~90%). ── */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/sprites/race-field.jpg?v=1)', backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' }} />
 
-      {/* ── Letter row ── */}
+      {/* ── Letter row: red pennant flags planted along the top of the field,
+          the letter written on the red banner ── */}
       {g.boxes.map((box, i) => !box.taken && (
         <div key={`${box.letter}-${i}`} style={{
           position: 'absolute', left: `${box.x}%`, top: `${LETTER_Y}%`, transform: 'translate(-50%,-50%)', zIndex: 5,
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
           <div style={{
-            width: 'clamp(44px, 7vw, 68px)', height: 'clamp(44px, 7vw, 68px)',
-            background: 'linear-gradient(#ffffff, #eef2f7)', border: `4px solid ${box.color}`, borderRadius: 16,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-            boxShadow: '0 5px 0 rgba(0,0,0,0.20), 0 9px 14px rgba(0,0,0,0.28)',
+            position: 'relative', width: 'clamp(56px, 8.5vw, 86px)', height: 'clamp(56px, 8.5vw, 86px)',
+            filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
-            <span dir="rtl" style={{ ...HAFS, fontSize: 'clamp(24px, 3.6vw, 38px)', lineHeight: 1, color: '#0f172a' }}>{getLetterInForm(box.letter, form)}</span>
+            <svg viewBox="0 0 4335 4335" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden>
+              <path d="m4081 2443-630-928 630-929h-1259v1857z" fill="#c62223" />
+              <path d="m518 206h2700v1857h-2700z" fill="#e31e24" />
+              <path d="m2827 2063h391l-391 390z" fill="#a32421" />
+              <path d="m412 83h213v4201h-213z" fill="#c5c6c6" />
+              <path d="m305 4162h426v122h-426z" fill="#b2b3b3" />
+              <path d="m305 83h426v122h-426z" fill="#b2b3b3" />
+            </svg>
+            {/* the red banner spans x 12-74%, y 5-48% of the square — center the letter there */}
+            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '62%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(22px, 3.4vw, 36px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
           </div>
         </div>
       ))}
