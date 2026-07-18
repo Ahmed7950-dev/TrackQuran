@@ -1241,6 +1241,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 28px 8px', flexShrink: 0 }}>
               <span style={{ background: color, color: '#fff', fontWeight: 900, fontSize: 14, letterSpacing: 1.5, padding: '8px 20px', borderRadius: 999, boxShadow: `0 0 20px ${color}77` }}>{`PLAYER ${who}`}</span>
               <h2 style={{ margin: 0, color: '#fff', fontWeight: 900, fontSize: 'clamp(20px, 2.6vw, 30px)', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>Pick your racer!</h2>
+              <button onClick={onExit} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(255,255,255,0.25)', color: '#e2e8f0', borderRadius: 999, padding: '9px 20px', fontWeight: 900, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
             </div>
             {/* body — live 3D preview (⅓) | roster grid (⅔) */}
             <div style={{ flex: 1, display: 'flex', gap: 18, padding: '10px 28px', minHeight: 0 }}>
