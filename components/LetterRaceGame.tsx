@@ -598,7 +598,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     let raf = 0;
     // Physics for a racer THIS device owns: movement along the heading, field
     // clamps, tackle-dash pin / friction. (Remote racers are mirrored instead.)
-    const moveOwn = (p: RacePlayer, now: number) => {
+    // dtF = elapsed time in 60fps-frame units: the constants were tuned per
+    // frame at 60Hz, so everything scales by dtF — WITHOUT this, field speed
+    // tracks the device's refresh rate, and online a 60Hz host literally
+    // out-runs a slower guest (or a 120Hz iPad runs double speed).
+    const moveOwn = (p: RacePlayer, now: number, dtF: number) => {
       // Full 360° control: the player faces wherever they steered (0 = toward
       // the letters) and always moves along that heading. A knocked-down
       // player doesn't move at all for FALL_MS.
@@ -606,8 +610,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         p.speed = 0;
       } else {
         const rad = p.heading * Math.PI / 180;
-        p.y -= p.speed * Math.cos(rad);
-        p.x += p.speed * Math.sin(rad);
+        p.y -= p.speed * Math.cos(rad) * dtF;
+        p.x += p.speed * Math.sin(rad) * dtF;
       }
       p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
       p.x = Math.max(4, Math.min(96, p.x));
@@ -615,7 +619,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       if (now < p.tackleUntil) {
         p.speed = TACKLE_SPEED;
       } else {
-        p.speed *= FRICTION;
+        p.speed *= Math.pow(FRICTION, dtF);
         if (p.speed < 0.01) p.speed = 0;
       }
     };
@@ -656,29 +660,34 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       return false;
     };
 
+    let lastT = performance.now();
     const loop = () => {
       const g = game.current;
       const now = performance.now();
+      // elapsed time in 60fps-frame units (clamped: a background-tab stall or
+      // the very first frame must not teleport anyone)
+      const dtF = Math.min(3, Math.max(0.25, (now - lastT) / (1000 / 60)));
+      lastT = now;
 
       // HOLD-to-run: accelerate while the run key is down (fights friction to
       // an equilibrium ≈ MAX_SPEED). A knocked-down player can't run.
       // Online, EITHER key set drives the ONE racer this device owns.
       const held = keys.current;
-      const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME + 360) % 360; };
+      const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME * dtF + 360) % 360; };
       if (online) {
         const own = isGuest ? g.p2 : g.p1;
-        if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL);
+        if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL * dtF);
         if (held.has('KeyA') || held.has('ArrowLeft'))  rot(own, -1);
         if (held.has('KeyD') || held.has('ArrowRight')) rot(own, +1);
         // virtual joystick: face where it points, push past the deadzone to run
         const tj = touchJoyRef.current;
         if (tj.active && tj.mag > 0.22 && now >= own.fallenUntil) {
           own.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
-          if (now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL);
+          if (now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL * dtF);
         }
       } else {
-        if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL);
-        if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL);
+        if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL * dtF);
+        if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL * dtF);
         if (held.has('KeyA'))       rot(g.p1, -1);
         if (held.has('KeyD'))       rot(g.p1, +1);
         if (held.has('ArrowLeft'))  rot(g.p2, -1);
@@ -689,14 +698,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       // host arbitrates grabs, tackle contact, drops and wins (they arrive as
       // snapshot flags). ──
       if (online && isGuest) {
-        moveOwn(g.p2, now);
+        moveOwn(g.p2, now, dtF);
         const s = hostSnapRef.current;
         if (s) {
+          const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
           const sp = s.p1;
           const p = g.p1;
-          p.x += (sp.x - p.x) * NET_LERP;
-          p.y += (sp.y - p.y) * NET_LERP;
-          p.heading = lerpAngle(p.heading, sp.h, 0.5);
+          p.x += (sp.x - p.x) * k;
+          p.y += (sp.y - p.y) * k;
+          p.heading = lerpAngle(p.heading, sp.h, 1 - Math.pow(0.5, dtF));
           p.speed = sp.sp;
           p.carrying = sp.ca;
           p.fallenUntil = sp.fa >= 0 ? now + (FALL_MS - sp.fa) : 0;
@@ -714,8 +724,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         const gi = guestInputRef.current;
         const p = g.p2;
         if (gi && now >= p.fallenUntil) {
-          p.x += (gi.x - p.x) * NET_LERP;
-          p.y += (gi.y - p.y) * NET_LERP;
+          const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
+          p.x += (gi.x - p.x) * k;
+          p.y += (gi.y - p.y) * k;
           // SNAP once converged — the lerp alone approaches the guest's true
           // position asymptotically, so the mirror would hover at 88.99…
           // forever and P2 crossing the finish line (y >= START_Y) never fired.
@@ -723,7 +734,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           if (Math.abs(gi.y - p.y) < 0.5) p.y = gi.y;
           p.x = Math.max(4, Math.min(96, p.x));
           p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
-          p.heading = lerpAngle(p.heading, gi.h, 0.5);
+          p.heading = lerpAngle(p.heading, gi.h, 1 - Math.pow(0.5, dtF));
           p.speed = gi.sp;
           const nr = netRef.current;
           if (gi.ta >= 0 && (nr.lastGuestTa < 0 || gi.ta < nr.lastGuestTa)) {
@@ -735,8 +746,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         }
       }
 
-      moveOwn(g.p1, now);
-      if (!online) moveOwn(g.p2, now);
+      moveOwn(g.p1, now, dtF);
+      if (!online) moveOwn(g.p2, now, dtF);
 
       // Tackle contact: a mid-dash player knocks the other one down for 2s.
       // If the victim was carrying the letter, they DROP it — it tumbles a
