@@ -886,8 +886,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               <path d="m305 4162h426v122h-426z" fill="#b2b3b3" />
               <path d="m305 83h426v122h-426z" fill="#b2b3b3" />
             </svg>
-            {/* the red banner spans x 12-74%, y 5-48% of the square — center the letter there */}
-            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '62%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(22px, 3.4vw, 36px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
+            {/* the red banner spans x 12-74% (+ tail to ~86%), y 5-48% of the
+                square. Arabic glyph metrics run ~1.4× the em box, so the font
+                is ~0.65× the banner height — tall/wide letters (ط س ك ي…)
+                stay INSIDE the red area instead of poking out of the flag. */}
+            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '66%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(15px, 2.45vw, 25px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
           </div>
         </div>
       ))}
