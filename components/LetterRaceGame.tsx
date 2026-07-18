@@ -101,21 +101,21 @@ const FIELDS = [
 ];
 
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/profile-fennec.jpg?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=5',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/profile-panda.jpg?v=1' },
-  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=3',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/profile-mario.jpg?v=1' },
-  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/profile-dbz.jpg?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/profile-anime.jpg?v=1' },
-  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=3',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/profile-cat.jpg?v=1' },
-  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=3',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/profile-cartoon.jpg?v=1' },
-  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/profile-fox.jpg?v=1' },
-  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=3',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/profile-vader.jpg?v=1' },
-  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=3',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/profile-lion.jpg?v=1' },
-  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=3', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/profile-stylized.jpg?v=1' },
-  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=1', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/profile-spiderman.jpg?v=1' },
-  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=1',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
-  { key: 'tiger',     name: 'Namir',  model: '/models/tiger.glb?v=1',     scale: 0.92, portrait: '/sprites/race-tiger-front.png?v=1', face: '/sprites/profile-tiger.jpg?v=1' },
-  { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=1',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=4', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/profile-fennec.jpg?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=6',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/profile-panda.jpg?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=4',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/profile-mario.jpg?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=4',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/profile-dbz.jpg?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=4',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/profile-anime.jpg?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=4',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/profile-cat.jpg?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=4',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/profile-cartoon.jpg?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=4',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/profile-fox.jpg?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=4',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/profile-vader.jpg?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=4',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/profile-lion.jpg?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=4', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/profile-stylized.jpg?v=1' },
+  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=2', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/profile-spiderman.jpg?v=1' },
+  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=2',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
+  { key: 'tiger',     name: 'Namir',  model: '/models/tiger.glb?v=2',     scale: 0.92, portrait: '/sprites/race-tiger-front.png?v=1', face: '/sprites/profile-tiger.jpg?v=1' },
+  { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=2',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -172,16 +172,16 @@ const preloadRoster = () => {
 
 // Live 3D preview in the selector: the character stands facing the player,
 // playing its idle look-around clip — not a static picture.
-const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number; fill?: boolean }> = ({ model, tinted, scale, fill }) => {
+const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number; fill?: boolean; clip?: string }> = ({ model, tinted, scale, fill, clip }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const stage = new PortraitStage(canvas, model, tinted, scale);
+    const stage = new PortraitStage(canvas, model, tinted, scale, clip);
     stage.init().catch(err => console.error('[LetterRace] portrait stage:', err));
     const warm = window.setTimeout(preloadRoster, 1200); // after the visible model
     return () => { window.clearTimeout(warm); stage.dispose(); };
-  }, [model, tinted, scale]);
+  }, [model, tinted, scale, clip]);
   // fill → stretch to the parent box (the stage re-frames per canvas aspect)
   return <canvas ref={ref} style={fill ? { width: '100%', height: '100%', display: 'block' } : { width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
 };
@@ -1120,35 +1120,57 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </div>
       )}
 
-      {/* ── Match won ── */}
-      {phase === 'matchWon' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {/* Confetti rain */}
-          {['#f472b6','#a78bfa','#60a5fa','#34d399','#fbbf24','#fb923c','#f87171','#2dd4bf','#c084fc','#4ade80','#38bdf8','#fde047'].map((c, i) => (
-            <span key={i} style={{ position: 'absolute', left: `${6 + i * 8}%`, top: 0, width: 12, height: 12, background: c, borderRadius: i % 2 ? '50%' : 3, animation: `lrConfetti ${2.2 + (i % 4) * 0.5}s linear ${(i % 5) * 0.35}s infinite` }} />
-          ))}
-          <div style={{ background: '#fff', borderRadius: 24, padding: '30px 40px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
-              <span style={{ fontSize: 48 }}>🏆</span>
-              <img src={portraitFor(roundWinner)} alt="" style={{ height: 92, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
-              <span style={{ fontSize: 48 }}>🏆</span>
+      {/* ── Match won: full-screen result page — the champion's 3D model
+          dances the Victory clip while the final standings rank everyone ── */}
+      {phase === 'matchWon' && (() => {
+        const ranked = players.map((pl, i) => ({ pl, i, sc: scores[i] ?? 0 })).sort((a, b) => b.sc - a.sc);
+        const win = roundWinner;
+        const btnBase: React.CSSProperties = { border: 'none', borderRadius: 999, padding: '14px 32px', fontWeight: 900, cursor: 'pointer', fontSize: 16, color: '#fff' };
+        return (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 40, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'linear-gradient(155deg, #04140a 0%, #0a2913 55%, #0f3a1a 100%)' }}>
+            {/* confetti rain */}
+            {['#f472b6','#a78bfa','#60a5fa','#34d399','#fbbf24','#fb923c','#f87171','#2dd4bf','#c084fc','#4ade80','#38bdf8','#fde047','#f9a8d4','#93c5fd'].map((c, i) => (
+              <span key={i} style={{ position: 'absolute', left: `${3 + i * 7}%`, top: 0, width: 12, height: 12, background: c, borderRadius: i % 2 ? '50%' : 3, animation: `lrConfetti ${2.2 + (i % 4) * 0.5}s linear ${(i % 5) * 0.35}s infinite`, zIndex: 1, pointerEvents: 'none' }} />
+            ))}
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, padding: '20px 28px 6px', gap: 20, position: 'relative', zIndex: 2 }}>
+              {/* the champion dances */}
+              <div style={{ flex: '1 1 46%', minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: `radial-gradient(ellipse at 50% 62%, ${colorAt(win)}30, rgba(255,255,255,0.02) 70%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0 }}>
+                  <PortraitView key={`victory-${charKeyAt(win)}`} model={charOf(charKeyAt(win)).model} tinted={tintStyleFor(win) !== 'none'} scale={1} fill clip="victory" />
+                </div>
+                <div style={{ position: 'relative', textAlign: 'center', paddingBottom: 16, pointerEvents: 'none' }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: 5, color: '#fde047', textShadow: '0 2px 10px rgba(0,0,0,0.7)' }}>🏆 WINNER 🏆</div>
+                  <div style={{ fontSize: 'clamp(30px, 4.5vw, 54px)', fontWeight: 900, color: colorAt(win), textShadow: '0 3px 16px rgba(0,0,0,0.8)', lineHeight: 1.1 }}>{nameAt(win)}</div>
+                </div>
+              </div>
+              {/* final standings */}
+              <div style={{ flex: '1 1 42%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+                <div style={{ color: '#e2e8f0', fontWeight: 900, fontSize: 16, letterSpacing: 3 }}>FINAL STANDINGS</div>
+                {ranked.slice(0, 8).map((r, rank) => (
+                  <div key={`${r.pl.gid}-${rank}`} style={{ display: 'flex', alignItems: 'center', gap: 12, background: rank === 0 ? 'rgba(253,224,71,0.14)' : 'rgba(255,255,255,0.06)', border: rank === 0 ? '2px solid rgba(253,224,71,0.55)' : '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '9px 14px' }}>
+                    <span style={{ fontSize: 22, width: 34, textAlign: 'center' }}>{['🥇', '🥈', '🥉'][rank] ?? `#${rank + 1}`}</span>
+                    <img src={charOf(r.pl.charKey).face} alt="" style={{ width: 42, height: 42, borderRadius: 12, objectFit: 'cover' }} />
+                    <span style={{ flex: 1, fontWeight: 900, fontSize: 17, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameAt(r.i)}</span>
+                    <span style={{ fontWeight: 900, fontSize: 21, color: colorAt(r.i) }}>{r.sc}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: colorAt(roundWinner) }}>{nameAt(roundWinner)} wins the race!</h3>
-            <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores.join(' — ')} · Amazing running! 🏃💨</p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* actions */}
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '10px 28px 22px', flexWrap: 'wrap', position: 'relative', zIndex: 2 }}>
               {isGuest ? (
-                <span style={{ color: '#64748b', fontWeight: 800, fontSize: 13 }}>⏳ Waiting for the host to start a new race…</span>
+                <span style={{ color: '#94a3b8', fontWeight: 800, fontSize: 14 }}>⏳ Waiting for the host to start a new race…</span>
               ) : (
                 <>
-                  <button onClick={() => { scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setupRound(); }} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔄 Play again</button>
-                  <button onClick={() => { clearTimers(); scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setSelStep(online ? 'share' : 1); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
+                  <button onClick={() => { scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setupRound(); }} style={{ ...btnBase, background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 8px 22px rgba(22,163,74,0.5)' }}>🔄 Play again</button>
+                  <button onClick={() => { clearTimers(); scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setSelStep(online ? 'share' : 1); setPhase('select'); }} style={{ ...btnBase, background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(255,255,255,0.25)', color: '#e2e8f0' }}>🏁 Back to start</button>
                 </>
               )}
-              <button onClick={onExit} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>Done</button>
+              <button onClick={onExit} style={{ ...btnBase, background: 'rgba(255,255,255,0.16)', color: '#f1f5f9' }}>Done</button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Online host: share-link panel (after picking character + name) ── */}
       {phase === 'select' && !isGuest && selStep === 'share' && (
