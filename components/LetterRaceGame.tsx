@@ -99,20 +99,19 @@ const FIELDS = [
 ];
 
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=5',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
-  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=3',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
-  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb?v=3',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
-  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
-  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=3',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
-  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=3',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
-  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
-  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=3',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
-  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=3',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
-  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=3', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
-  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=1', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/race-spiderman-face.png?v=1' },
-  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=1',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/race-chibi-face.png?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/profile-fennec.jpg?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=5',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/profile-panda.jpg?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=3',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/profile-mario.jpg?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/profile-dbz.jpg?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/profile-anime.jpg?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=3',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/profile-cat.jpg?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=3',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/profile-cartoon.jpg?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/profile-fox.jpg?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=3',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/profile-vader.jpg?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=3',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/profile-lion.jpg?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=3', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/profile-stylized.jpg?v=1' },
+  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=1', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/profile-spiderman.jpg?v=1' },
+  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=1',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -158,7 +157,7 @@ const preloadRoster = () => {
 
 // Live 3D preview in the selector: the character stands facing the player,
 // playing its idle look-around clip — not a static picture.
-const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number }> = ({ model, tinted, scale }) => {
+const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number; fill?: boolean }> = ({ model, tinted, scale, fill }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -168,7 +167,8 @@ const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number }> 
     const warm = window.setTimeout(preloadRoster, 1200); // after the visible model
     return () => { window.clearTimeout(warm); stage.dispose(); };
   }, [model, tinted, scale]);
-  return <canvas ref={ref} style={{ width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
+  // fill → stretch to the parent box (the stage re-frames per canvas aspect)
+  return <canvas ref={ref} style={fill ? { width: '100%', height: '100%', display: 'block' } : { width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -1086,62 +1086,73 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         const setChosen = who === 1 ? setP1Char : setP2Char;
         const name = who === 1 ? p1Name : p2Name;
         const setName = who === 1 ? setP1Name : setP2Name;
-        const idx = Math.max(0, CHARACTERS.findIndex(c => c.key === chosen));
-        const c = CHARACTERS[idx];
+        const c = charOf(chosen);
         const tinted = who === 2 && p1Char === chosen;
+        const btnBase: React.CSSProperties = { border: 'none', borderRadius: 999, padding: '15px 34px', fontWeight: 900, cursor: 'pointer', fontSize: 17, color: '#fff', transition: 'transform 0.12s' };
         return (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
-            <div style={{ background: '#fff', borderRadius: 26, padding: '22px 26px 24px', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: `4px solid ${color}` }}>
-              <h3 style={{ margin: '0 0 2px', fontWeight: 900, fontSize: 24, color }}>{isGuest ? 'Pick your racer!' : `Player ${who} — pick your racer!`}</h3>
-              <p style={{ margin: '0 0 12px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>
-                {isGuest ? "You're joining an online race — choose your character and name." : who === 1 ? 'Choose your character and write your name.' : 'Now the second player picks!'}
-              </p>
-              {/* big live 3D preview of the chosen character */}
-              <div key={c.key} style={{ width: 210, margin: '0 auto', animation: 'lrPop 0.35s ease-out' }}>
-                <PortraitView model={c.model} tinted={tinted} scale={c.scale} />
-                <div style={{ fontWeight: 900, fontSize: 19, color: '#0f172a', marginTop: 4 }}>{c.name}</div>
-                {tinted && <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488' }}>team colors — Player 1 has {c.name} too</div>}
+          <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'linear-gradient(155deg, #04140a 0%, #0a2913 55%, #0f3a1a 100%)' }}>
+            {/* header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 28px 8px', flexShrink: 0 }}>
+              <span style={{ background: color, color: '#fff', fontWeight: 900, fontSize: 14, letterSpacing: 1.5, padding: '8px 20px', borderRadius: 999, boxShadow: `0 0 20px ${color}77` }}>{`PLAYER ${who}`}</span>
+              <h2 style={{ margin: 0, color: '#fff', fontWeight: 900, fontSize: 'clamp(20px, 2.6vw, 30px)', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>Pick your racer!</h2>
+            </div>
+            {/* body — live 3D preview (⅓) | roster grid (⅔) */}
+            <div style={{ flex: 1, display: 'flex', gap: 18, padding: '10px 28px', minHeight: 0 }}>
+              <div style={{ flex: '0 0 32%', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(ellipse at 50% 62%, ${color}22, rgba(255,255,255,0.03) 68%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
+                <div key={c.key} style={{ width: '100%', flex: 1, minHeight: 0, animation: 'lrPop 0.35s ease-out' }}>
+                  <PortraitView model={c.model} tinted={tinted} scale={c.scale} fill />
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 'clamp(22px, 2.4vw, 30px)', color: '#fff', textShadow: '0 2px 10px rgba(0,0,0,0.7)', padding: '2px 0 4px' }}>{c.name}</div>
+                {tinted && <div style={{ fontSize: 12, fontWeight: 700, color: '#5eead4', paddingBottom: 8 }}>team colors — Player 1 is {c.name} too</div>}
+                {!tinted && <div style={{ height: 12 }} />}
               </div>
-              {/* face row: tap a face to pick that character */}
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-                {CHARACTERS.map(ch => {
-                  const sel = ch.key === chosen;
-                  return (
-                    <button key={ch.key} onClick={() => setChosen(ch.key)} title={ch.name}
-                      style={{ background: sel ? color : '#fff', border: `3px solid ${sel ? color : '#e2e8f0'}`, borderRadius: 16, padding: '6px 8px 4px', cursor: 'pointer', transition: 'all 0.12s', transform: sel ? 'scale(1.08)' : 'scale(1)', width: 74 }}>
-                      <img src={ch.face} alt={ch.name} style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', margin: '0 auto', borderRadius: 10 }} />
-                      <div style={{ fontWeight: 800, fontSize: 11, color: sel ? '#fff' : '#334155', marginTop: 2 }}>{ch.name}</div>
-                    </button>
-                  );
-                })}
+              <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(92px, 10vw, 138px), 1fr))', gap: 14, paddingBottom: 8 }}>
+                  {CHARACTERS.map(ch => {
+                    const sel = ch.key === chosen;
+                    return (
+                      <button key={ch.key} onClick={() => setChosen(ch.key)} title={ch.name} style={{
+                        position: 'relative', padding: 0, border: 'none', cursor: 'pointer', borderRadius: 20, overflow: 'hidden', aspectRatio: '1',
+                        outline: sel ? `3.5px solid ${color}` : '2px solid rgba(255,255,255,0.15)', outlineOffset: -2,
+                        boxShadow: sel ? `0 0 26px ${color}bb` : '0 5px 12px rgba(0,0,0,0.4)',
+                        transform: sel ? 'scale(1.045)' : 'scale(1)', transition: 'all 0.15s',
+                        background: '#0a2010', opacity: sel ? 1 : 0.87,
+                      }}>
+                        <img src={ch.face} alt={ch.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '16px 4px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.8))', color: '#fff', fontWeight: 800, fontSize: 13, textAlign: 'center' }}>{ch.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            </div>
+            {/* footer — name + actions */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 28px 22px', flexWrap: 'wrap', flexShrink: 0 }}>
               <input
                 value={name}
                 onChange={e => setName(e.target.value.slice(0, 14))}
-                placeholder={`Player ${who} name…`}
-                style={{ marginTop: 14, width: '80%', padding: '11px 16px', borderRadius: 999, border: `2.5px solid ${color}55`, outline: 'none', fontSize: 16, fontWeight: 800, textAlign: 'center', color: '#0f172a', background: '#f8fafc' }}
+                placeholder="Your name…"
+                style={{ width: 'min(250px, 38vw)', padding: '14px 20px', borderRadius: 999, border: `2.5px solid ${color}99`, outline: 'none', fontSize: 16, fontWeight: 800, textAlign: 'center', color: '#fff', background: 'rgba(255,255,255,0.08)' }}
               />
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-                {isGuest ? (
-                  <button onClick={() => setGuestJoined(true)} disabled={guestJoined} style={{ background: guestJoined ? '#94a3b8' : 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: guestJoined ? 'default' : 'pointer', fontSize: 17, boxShadow: guestJoined ? 'none' : '0 6px 18px rgba(249,115,22,0.45)' }}>
-                    {guestJoined ? (gotFirstSnap ? '✅ Connected — waiting for the host…' : '⏳ Joining…') : '🔗 Join the race!'}
-                  </button>
-                ) : (
-                  <>
-                    {who === 2 && (
-                      <button onClick={() => setSelStep(1)} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>‹ Back</button>
-                    )}
-                    {who === 1 ? (
-                      <>
-                        <button onClick={() => setSelStep(2)} style={{ background: `linear-gradient(135deg,${color},#1d4ed8)`, color: '#fff', border: 'none', borderRadius: 999, padding: '13px 30px', fontWeight: 900, cursor: 'pointer', fontSize: 16, boxShadow: `0 6px 18px ${color}66` }}>Play here — Player 2 ›</button>
-                        <button onClick={() => { setNetMode('online'); setSelStep('share'); }} style={{ background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 30px', fontWeight: 900, cursor: 'pointer', fontSize: 16, boxShadow: '0 6px 18px rgba(14,165,233,0.45)' }}>🌐 Online — share a link</button>
-                      </>
-                    ) : (
-                      <button onClick={() => setupRound()} style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: 'pointer', fontSize: 17, boxShadow: '0 6px 18px rgba(22,163,74,0.45)' }}>Start the Race! 🏃💨</button>
-                    )}
-                  </>
-                )}
-              </div>
+              {isGuest ? (
+                <button onClick={() => setGuestJoined(true)} disabled={guestJoined} style={{ ...btnBase, background: guestJoined ? '#47556988' : 'linear-gradient(135deg,#f97316,#ea580c)', cursor: guestJoined ? 'default' : 'pointer', boxShadow: guestJoined ? 'none' : '0 8px 22px rgba(249,115,22,0.5)' }}>
+                  {guestJoined ? (gotFirstSnap ? '✅ Connected — waiting for the host…' : '⏳ Joining…') : '🔗 Join the race!'}
+                </button>
+              ) : (
+                <>
+                  {who === 2 && (
+                    <button onClick={() => setSelStep(1)} style={{ ...btnBase, background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(255,255,255,0.25)', color: '#e2e8f0', padding: '13px 26px' }}>‹ Back</button>
+                  )}
+                  {who === 1 ? (
+                    <>
+                      <button onClick={() => setSelStep(2)} style={{ ...btnBase, background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', boxShadow: '0 8px 22px rgba(59,130,246,0.5)' }}>Play here — Player 2 ›</button>
+                      <button onClick={() => { setNetMode('online'); setSelStep('share'); }} style={{ ...btnBase, background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', boxShadow: '0 8px 22px rgba(14,165,233,0.5)' }}>🌐 Online</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setupRound()} style={{ ...btnBase, background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 8px 22px rgba(22,163,74,0.5)' }}>Start the Race! 🏃💨</button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         );
@@ -1157,6 +1168,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         @keyframes lrConfetti { 0% { transform: translateY(-10vh) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; } }
         @keyframes lrDropIn   { 0% { transform: translate(-50%,-160%) scale(0.5) rotate(-160deg); } 70% { transform: translate(-50%,-46%) scale(1.1) rotate(8deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(0); } }
         @keyframes lrDropPulse{ 0%,100% { box-shadow: 0 0 18px rgba(245,158,11,0.8), 0 5px 10px rgba(0,0,0,0.3); } 50% { box-shadow: 0 0 30px rgba(245,158,11,1), 0 5px 10px rgba(0,0,0,0.3); } }
+        input::placeholder { color: #94a3b8; }
       `}</style>
     </div>
   );
