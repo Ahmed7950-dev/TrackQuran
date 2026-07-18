@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
-import { RunnerStage, PortraitStage, type RunnerPose } from './letterRaceStage';
+import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose } from './letterRaceStage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
@@ -81,23 +81,32 @@ const P2_TINT = 'hue-rotate(165deg)';
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=2', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
-  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
-  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
-  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
-  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
-  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
-  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
-  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
-  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
-  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=4',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=2',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
+  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb?v=2',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=2',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=2',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=2',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=2',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=2',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=2',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=2',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=2', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
 
 type Phase = 'select' | 'listen' | 'count' | 'race' | 'roundWon' | 'matchWon';
+
+// Warm the shared GLB cache for the whole roster while the player reads the
+// selector — by the time they click a face tile its model is usually parsed.
+let rosterPreloaded = false;
+const preloadRoster = () => {
+  if (rosterPreloaded) return;
+  rosterPreloaded = true;
+  preloadRaceModels(CHARACTERS.map(c => c.model));
+};
 
 // Live 3D preview in the selector: the character stands facing the player,
 // playing its idle look-around clip — not a static picture.
@@ -108,7 +117,8 @@ const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number }> 
     if (!canvas) return;
     const stage = new PortraitStage(canvas, model, tinted, scale);
     stage.init().catch(err => console.error('[LetterRace] portrait stage:', err));
-    return () => stage.dispose();
+    const warm = window.setTimeout(preloadRoster, 1200); // after the visible model
+    return () => { window.clearTimeout(warm); stage.dispose(); };
   }, [model, tinted, scale]);
   return <canvas ref={ref} style={{ width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
 };

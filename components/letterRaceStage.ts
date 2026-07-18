@@ -13,6 +13,36 @@
 
 export type RunnerAnim = 'idle' | 'run' | 'tackle' | 'trip' | 'jump';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared model cache. Every stage (field + selector previews) loads through
+// here, so a GLB is fetched and parsed ONCE per session — clicking through the
+// selector re-uses the cached parse instead of re-downloading multi-MB files.
+// Stages must clone (SkeletonUtils) before mutating scene graph or transforms.
+// ─────────────────────────────────────────────────────────────────────────────
+let modsPromise: Promise<any> | null = null;
+const loadMods = () => modsPromise ??= Promise.all([
+  import('three'),
+  import('three/examples/jsm/loaders/GLTFLoader.js'),
+  import('three/examples/jsm/utils/SkeletonUtils.js'),
+]).then(([THREE, gl, sk]) => ({ THREE, GLTFLoader: gl.GLTFLoader, skClone: sk.clone }));
+
+const gltfCache = new Map<string, Promise<any>>();
+const loadGLTF = (url: string): Promise<any> => {
+  let p = gltfCache.get(url);
+  if (!p) {
+    p = loadMods().then(({ GLTFLoader }) => new GLTFLoader().loadAsync(url));
+    gltfCache.set(url, p);
+    p.catch(() => gltfCache.delete(url)); // failed fetch → allow retry
+  }
+  return p;
+};
+
+// Warm the cache for the whole roster (sequential — never starves the fetch of
+// the model the user actually clicked, which resolves instantly once cached).
+export const preloadRaceModels = async (urls: string[]): Promise<void> => {
+  for (const url of urls) { try { await loadGLTF(url); } catch { /* ignore */ } }
+};
+
 export interface RunnerPose {
   x: number;        // field % (0..100)
   y: number;        // field % (0..100)
@@ -54,11 +84,7 @@ export class RunnerStage {
   }
 
   async init(): Promise<void> {
-    const [THREE, { GLTFLoader }, { clone: skClone }] = await Promise.all([
-      import('three'),
-      import('three/examples/jsm/loaders/GLTFLoader.js'),
-      import('three/examples/jsm/utils/SkeletonUtils.js'),
-    ]);
+    const { THREE, skClone } = await loadMods();
     if (this.disposed) return;
     this.THREE = THREE;
 
@@ -66,10 +92,9 @@ export class RunnerStage {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
 
-    const loader = new GLTFLoader();
     const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
-    for (const url of unique) loaded.set(url, await loader.loadAsync(url));
+    for (const url of unique) loaded.set(url, await loadGLTF(url));
     if (this.disposed) return;
     // P2 wears the teal tint ONLY when both players picked the same character.
     const sameModel = this.models[0].url === this.models[1].url;
@@ -84,6 +109,8 @@ export class RunnerStage {
     // (Retargeted characters like the robot are baked in-place already and
     // their root bone name doesn't match — the loop simply skips them.)
     for (const gltf of loaded.values()) {
+      if (gltf.__hipsPinned) continue; // cached GLBs are patched exactly once
+      gltf.__hipsPinned = true;
       const hips = gltf.scene.getObjectByName('mixamorig:Hips') ?? gltf.scene.getObjectByProperty('isBone', true);
       const parent = hips?.parent;
       if (parent) {
@@ -342,60 +369,74 @@ export class PortraitStage {
   private mixer: any = null;
   private scene: any = null;
   private camera: any = null;
+  // auto-framing targets: world half-height/half-width the frustum must cover
+  private fitH = 0.62;
+  private fitW = 0.42;
+  private centerY = 0.55;
 
   constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1) {
     this.canvas = canvas;
     this.modelUrl = modelUrl;
     this.tinted = tinted;
-    this.charScale = charScale;
+    this.charScale = charScale; // kept for API compat — portraits self-frame now
   }
 
   async init(): Promise<void> {
-    const [THREE, { GLTFLoader }] = await Promise.all([
-      import('three'),
-      import('three/examples/jsm/loaders/GLTFLoader.js'),
-    ]);
+    const { THREE, skClone } = await loadMods();
     if (this.disposed) return;
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
 
-    const gltf = await new GLTFLoader().loadAsync(this.modelUrl);
+    const gltf = await loadGLTF(this.modelUrl);
     if (this.disposed) return;
-    const root = gltf.scene;
+    // clone — the cached scene is shared with the field stage and other previews
+    const root = skClone(gltf.scene);
 
-    // same clamps as the field: matte, fully opaque; optional P2 teal tint
+    // same clamps as the field: matte, fully opaque; optional P2 teal tint.
+    // Tinting must clone the material first — the original is cache-shared.
+    const tintSeen = new Map<any, any>();
     root.traverse((o: any) => {
       if (o.isMesh) {
         o.frustumCulled = false;
         if (o.material) {
-          for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          const out = mats.map((m: any) => {
+            if (this.tinted && m.map) {
+              if (!tintSeen.has(m)) {
+                const nm = m.clone();
+                try {
+                  const img = nm.map.image as any;
+                  const c = document.createElement('canvas');
+                  c.width = img.width; c.height = img.height;
+                  const ctx = c.getContext('2d')!;
+                  ctx.filter = 'hue-rotate(165deg)';
+                  ctx.drawImage(img, 0, 0);
+                  const t = new THREE.Texture(c);
+                  t.colorSpace = nm.map.colorSpace; t.flipY = nm.map.flipY;
+                  t.wrapS = nm.map.wrapS; t.wrapT = nm.map.wrapT;
+                  t.needsUpdate = true;
+                  nm.map = t;
+                } catch { /* keep original */ }
+                tintSeen.set(m, nm);
+              }
+              m = tintSeen.get(m);
+            }
             if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05);
             if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7);
             m.transparent = false;
             m.depthWrite = true;
-            if (this.tinted && m.map) {
-              try {
-                const img = m.map.image as any;
-                const c = document.createElement('canvas');
-                c.width = img.width; c.height = img.height;
-                const ctx = c.getContext('2d')!;
-                ctx.filter = 'hue-rotate(165deg)';
-                ctx.drawImage(img, 0, 0);
-                const t = new THREE.Texture(c);
-                t.colorSpace = m.map.colorSpace; t.flipY = m.map.flipY;
-                t.wrapS = m.map.wrapS; t.wrapT = m.map.wrapT;
-                t.needsUpdate = true;
-                m.map = t;
-              } catch { /* keep original */ }
-            }
             m.needsUpdate = true;
-          }
+            return m;
+          });
+          o.material = Array.isArray(o.material) ? out : out[0];
         }
       }
     });
 
-    // normalize from skeleton bounds (geometry bounds lie on FBX-derived rigs)
+    // normalize from skeleton bounds (geometry bounds lie on FBX-derived rigs).
+    // Every portrait normalizes to the SAME height — the per-character field
+    // scale knob is ignored here, it only made big characters overflow the frame.
     const skinned: any[] = [];
     root.traverse((o: any) => { if (o.isSkinnedMesh) skinned.push(o); });
     root.updateMatrixWorld(true);
@@ -407,12 +448,30 @@ export class PortraitStage {
     };
     let bb = boneBounds();
     const h = Math.max(0.001, bb.mx.y - bb.mn.y);
-    root.scale.setScalar((0.9 * this.charScale) / h); // same knob as the field
+    root.scale.setScalar(0.98 / h);
     root.updateMatrixWorld(true);
     bb = boneBounds();
     root.position.x -= (bb.mn.x + bb.mx.x) / 2;
     root.position.z -= (bb.mn.z + bb.mx.z) / 2;
     root.position.y -= bb.mn.y;
+    root.updateMatrixWorld(true);
+
+    // frame from MESH extents — hair, capes and manes reach past the last bone.
+    // Bones say height ≈ 0.98; if the geometry box is wildly off (FBX-scale
+    // lies are ~100×) fall back to bone bounds plus generous headroom.
+    const height = bb.mx.y - bb.mn.y;
+    let top = height * 1.24, bottom = -0.04 * height;
+    let halfW = Math.max(Math.abs(bb.mn.x - (bb.mn.x + bb.mx.x) / 2), (bb.mx.x - bb.mn.x) / 2) * 1.45;
+    const meshBox = new THREE.Box3().setFromObject(root);
+    const mh = meshBox.max.y - meshBox.min.y;
+    if (mh > 0.5 && mh < 2.5) {
+      top = meshBox.max.y + 0.05;
+      bottom = Math.min(0, meshBox.min.y) - 0.02;
+      halfW = Math.max(Math.abs(meshBox.min.x), Math.abs(meshBox.max.x)) * 1.08;
+    }
+    this.centerY = (top + bottom) / 2;
+    this.fitH = ((top - bottom) / 2) * 1.04;
+    this.fitW = Math.max(halfW, 0.3);
 
     const scene = new THREE.Scene();
     scene.add(root);
@@ -424,10 +483,12 @@ export class PortraitStage {
     scene.add(fill);
     scene.add(new THREE.AmbientLight(0xffffff, 1.6));
 
-    // true front view, eye level
+    // true front view; distance computed per-aspect so the whole character
+    // (hair to feet, cape tip to cape tip) always fits — see updateCamera()
     const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 20);
-    camera.position.set(0, 0.52, 2.75);
-    camera.lookAt(0, 0.5, 0);
+    this.camera = camera;
+    this.updateCamera(this.canvas.clientWidth && this.canvas.clientHeight
+      ? this.canvas.clientWidth / this.canvas.clientHeight : 1);
 
     const mixer = new THREE.AnimationMixer(root);
     const idle = gltf.animations.find((a: any) => a.name === 'idle') ?? gltf.animations.find((a: any) => a.name === 'run');
@@ -436,7 +497,7 @@ export class PortraitStage {
       if (idle.name === 'run') action.timeScale = 0.55;
       action.play();
     }
-    this.mixer = mixer; this.scene = scene; this.camera = camera;
+    this.mixer = mixer; this.scene = scene;
 
     this.lastT = performance.now();
     const loop = (now: number) => {
@@ -449,13 +510,25 @@ export class PortraitStage {
       const r = this.renderer;
       if (this.canvas.width !== Math.floor(W * r.getPixelRatio())) {
         r.setSize(W, H, false);
-        this.camera.aspect = W / H;
-        this.camera.updateProjectionMatrix();
+        this.updateCamera(W / H);
       }
       this.mixer.update(dt);
       r.render(this.scene, this.camera);
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  // position the camera so the frustum covers fitH vertically AND fitW
+  // horizontally at the character's plane, whatever the canvas aspect
+  private updateCamera(aspect: number) {
+    const cam = this.camera;
+    if (!cam) return;
+    cam.aspect = aspect;
+    const t = Math.tan((cam.fov / 2) * Math.PI / 180);
+    const d = Math.max(this.fitH / t, this.fitW / (t * aspect)) + 0.3; // +z body depth
+    cam.position.set(0, this.centerY, d);
+    cam.lookAt(0, this.centerY, 0);
+    cam.updateProjectionMatrix();
   }
 
   dispose() {
