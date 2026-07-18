@@ -10,7 +10,7 @@ import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose } from '
 // Both players hear a letter, then race from the bottom line to the letter row
 // at the top. HOLDING W (left player) / ↑ (right player) makes you run;
 // HOLDING A/D vs ←/→ steers through a full 360°. Z / N throws a tackle: a
-// fast forward lunge that knocks the opponent down for 2 seconds on contact —
+// fast forward lunge that knocks the opponent down for 3 seconds on contact —
 // and if they were carrying the letter, they DROP it: it tumbles onto the
 // grass ahead of them and either player can scoop it up. A well-timed jump
 // (X / M) leaps clean over the tackle and keeps the letter safe. Reaching the
@@ -38,15 +38,16 @@ const START_Y   = 89;   // y of the start/finish line — matches the checkered 
 const RUN_ACCEL = 0.016; // per-frame acceleration while the run key is HELD
 const MAX_SPEED = 0.13;  // cap (%/frame) — deliberately slow, high pressure
 const FRICTION  = 0.88;  // per-frame decay — stop mashing and you stop quickly
+const CARRY_SLOW = 0.78; // carrying the letter caps run speed at 78% — chasers can catch up
 // Steering turns the HEADING (which way "forward" points), not a sideways jump.
 // Steering: HOLD the turn key to rotate freely through a full 360°.
 const ROT_PER_FRAME = 3.6;   // degrees per frame ≈ 216°/s
 // Tackle: a fast forward lunge; touching the opponent knocks them down.
-const TACKLE_MS       = 550;   // dash duration
+const TACKLE_MS       = 400;   // dash duration — a short, close-range lunge
 const TACKLE_SPEED    = 0.17;  // dash speed (~half the lunge distance of the first cut)
 const TACKLE_COOLDOWN = 3000;
-const TACKLE_REACH    = 7;     // contact distance that fells the opponent
-const FALL_MS         = 2000;  // how long the tackled player stays down
+const TACKLE_REACH    = 5.5;   // contact distance that fells the opponent
+const FALL_MS         = 3000;  // how long the tackled player stays down
 // Jump: dodge a tackle by being AIRBORNE when it connects. The clip is ~1.0s
 // (31f Mixamo "Jump"); only the middle leap section grants immunity, so the
 // dodge takes real timing.
@@ -94,7 +95,7 @@ const CHARACTERS = [
   { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=3',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
   { key: 'bear',   name: 'Bear',   model: '/models/bear.glb?v=3',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
   { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
   { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=3',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
   { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=3',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
   { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
@@ -675,20 +676,21 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       // Online, EITHER key set drives the ONE racer this device owns.
       const held = keys.current;
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME * dtF + 360) % 360; };
+      const maxFor = (pl: RacePlayer) => pl.carrying ? MAX_SPEED * CARRY_SLOW : MAX_SPEED;
       if (online) {
         const own = isGuest ? g.p2 : g.p1;
-        if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL * dtF);
+        if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
         if (held.has('KeyA') || held.has('ArrowLeft'))  rot(own, -1);
         if (held.has('KeyD') || held.has('ArrowRight')) rot(own, +1);
         // virtual joystick: face where it points, push past the deadzone to run
         const tj = touchJoyRef.current;
         if (tj.active && tj.mag > 0.22 && now >= own.fallenUntil) {
           own.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
-          if (now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL * dtF);
+          if (now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
         }
       } else {
-        if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL * dtF);
-        if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL * dtF);
+        if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(maxFor(g.p1), g.p1.speed + RUN_ACCEL * dtF);
+        if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(maxFor(g.p2), g.p2.speed + RUN_ACCEL * dtF);
         if (held.has('KeyA'))       rot(g.p1, -1);
         if (held.has('KeyD'))       rot(g.p1, +1);
         if (held.has('ArrowLeft'))  rot(g.p2, -1);
