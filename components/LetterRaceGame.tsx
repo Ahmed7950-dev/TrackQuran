@@ -199,6 +199,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const [guestJoined, setGuestJoined] = useState(false);  // guest: pressed Join
   const [gotFirstSnap, setGotFirstSnap] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [netForm, setNetForm] = useState<LetterForm | null>(null); // guest renders the HOST's letter form
   const channelRef = useRef<P2PGameChannel | null>(null);
   const guestInputRef = useRef<(GuestInput & { at: number }) | null>(null);
@@ -215,6 +216,35 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     setLinkCopied(true);
     window.setTimeout(() => setLinkCopied(false), 1600);
   };
+
+  // ── Touch controls (online play from a phone / iPad): a virtual joystick
+  // drives heading + run (point where you want to go, push to sprint), plus
+  // two action buttons that reuse the keyboard handlers via synthetic keys. ──
+  const isTouch = typeof window !== 'undefined' &&
+    (window.matchMedia?.('(pointer: coarse)')?.matches === true ||
+     (((import.meta as any).env?.DEV) && (window as any).__lrForceTouch === true));
+  const touchJoyRef = useRef({ active: false, dx: 0, dy: 0, mag: 0 });
+  const joyBaseRef = useRef<HTMLDivElement>(null);
+  const joyKnobRef = useRef<HTMLDivElement>(null);
+  const joyMove = (e: React.TouchEvent) => {
+    const base = joyBaseRef.current;
+    const t = e.touches[0];
+    if (!base || !t) return;
+    const r = base.getBoundingClientRect();
+    let dx = (t.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    let dy = (t.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    const mag = Math.hypot(dx, dy);
+    if (mag > 1) { dx /= mag; dy /= mag; }
+    touchJoyRef.current = { active: true, dx, dy, mag: Math.min(1, mag) };
+    const k = joyKnobRef.current;
+    if (k) k.style.transform = `translate(calc(-50% + ${dx * 34}px), calc(-50% + ${dy * 34}px))`;
+  };
+  const joyEnd = () => {
+    touchJoyRef.current = { active: false, dx: 0, dy: 0, mag: 0 };
+    const k = joyKnobRef.current;
+    if (k) k.style.transform = 'translate(-50%,-50%)';
+  };
+  const fireKey = (code: string) => window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
 
   // ── Mutable game model (read inside the rAF loop) ──────────────────────────
   const game = useRef({
@@ -640,6 +670,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL);
         if (held.has('KeyA') || held.has('ArrowLeft'))  rot(own, -1);
         if (held.has('KeyD') || held.has('ArrowRight')) rot(own, +1);
+        // virtual joystick: face where it points, push past the deadzone to run
+        const tj = touchJoyRef.current;
+        if (tj.active && tj.mag > 0.22 && now >= own.fallenUntil) {
+          own.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
+          if (now >= own.tackleUntil) own.speed = Math.min(MAX_SPEED, own.speed + RUN_ACCEL);
+        }
       } else {
         if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(MAX_SPEED, g.p1.speed + RUN_ACCEL);
         if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(MAX_SPEED, g.p2.speed + RUN_ACCEL);
@@ -680,6 +716,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         if (gi && now >= p.fallenUntil) {
           p.x += (gi.x - p.x) * NET_LERP;
           p.y += (gi.y - p.y) * NET_LERP;
+          // SNAP once converged — the lerp alone approaches the guest's true
+          // position asymptotically, so the mirror would hover at 88.99…
+          // forever and P2 crossing the finish line (y >= START_Y) never fired.
+          if (Math.abs(gi.x - p.x) < 0.5) p.x = gi.x;
+          if (Math.abs(gi.y - p.y) < 0.5) p.y = gi.y;
           p.x = Math.max(4, Math.min(96, p.x));
           p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
           p.heading = lerpAngle(p.heading, gi.h, 0.5);
@@ -846,15 +887,16 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
       </div>
 
-      {/* ── Controls legend (online: one legend — YOUR racer, either key set) ── */}
-      {online ? (
+      {/* ── Controls legend (online: one legend — YOUR racer, either key set;
+          touch devices get the joystick + buttons instead) ── */}
+      {online ? (isTouch ? null : (
         <div style={{ position: 'absolute', bottom: 8, left: isGuest ? undefined : 12, right: isGuest ? 12 : undefined, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: isGuest ? 'right' : 'left', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: isGuest ? 'flex-end' : 'flex-start', gap: 6, fontSize: 12, fontWeight: 900, color: isGuest ? '#c2410c' : '#1d4ed8' }}>
             <img src={portraitFor(isGuest ? 2 : 1)} alt="" style={{ height: 24, filter: tintStyleFor(isGuest ? 2 : 1) }} /> You
           </div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b>/<b>↑</b> to run · <b>A D</b> or <b>← →</b> turn · <b>Z</b>/<b>N</b> tackle · <b>X</b>/<b>M</b> jump!</div>
         </div>
-      ) : (
+      )) : (
         <>
           <div style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
@@ -867,6 +909,32 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               Right player <img src={portraitFor(2)} alt="" style={{ height: 24, filter: tintStyleFor(2) }} />
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>↑</b> to run · <b>←</b>/<b>→</b> turn · <b>N</b> tackle · <b>M</b> jump!</div>
+          </div>
+        </>
+      )}
+
+      {/* ── Touch controls: virtual joystick + tackle/jump buttons (online on
+          a phone / iPad — each device drives its own racer) ── */}
+      {online && isTouch && phase !== 'select' && (
+        <>
+          <div
+            ref={joyBaseRef}
+            onTouchStart={joyMove} onTouchMove={joyMove} onTouchEnd={joyEnd} onTouchCancel={joyEnd}
+            style={{ position: 'absolute', bottom: 30, left: 22, width: 134, height: 134, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', border: '2.5px solid rgba(255,255,255,0.6)', zIndex: 25, touchAction: 'none' }}>
+            <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>MOVE</div>
+          </div>
+          <div style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 16, zIndex: 25 }}>
+            <button
+              onTouchStart={() => fireKey('KeyZ')} onMouseDown={() => fireKey('KeyZ')}
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', background: 'rgba(239,68,68,0.88)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              💥<br />TACKLE
+            </button>
+            <button
+              onTouchStart={() => fireKey('KeyX')} onMouseDown={() => fireKey('KeyX')}
+              style={{ width: 76, height: 76, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', background: 'rgba(245,158,11,0.9)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              🦘<br />JUMP
+            </button>
           </div>
         </>
       )}
@@ -949,10 +1017,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             </div>
             {shareLink && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 12 }}>
-                <div style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: 8 }}>
+                <button onClick={() => setQrOpen(true)} title="Tap to enlarge" style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: 8, cursor: 'pointer' }}>
                   <QRCodeSVG value={shareLink} size={130} level="M" />
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>or scan to join 📱</span>
+                </button>
+                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>tap the QR to enlarge · scan to join 📱</span>
               </div>
             )}
             {p2Joined
@@ -962,6 +1030,16 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               <button onClick={() => { setNetMode('local'); setSelStep(1); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>‹ Back</button>
               <button onClick={() => setupRound()} disabled={!p2Joined} style={{ background: p2Joined ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: p2Joined ? 'pointer' : 'default', fontSize: 17, boxShadow: p2Joined ? '0 6px 18px rgba(22,163,74,0.45)' : 'none' }}>Start the Race! 🏃💨</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Enlarged QR modal (tap anywhere to close) ── */}
+      {qrOpen && shareLink && (
+        <div onClick={() => setQrOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <div style={{ background: '#fff', borderRadius: 22, padding: 20, textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <QRCodeSVG value={shareLink} size={Math.min((typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 420) - 120, 420)} level="M" />
+            <div style={{ marginTop: 10, fontWeight: 800, fontSize: 13, color: '#64748b' }}>Scan to join · tap anywhere to close</div>
           </div>
         </div>
       )}
