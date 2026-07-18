@@ -59,6 +59,34 @@ const CheckIcon: React.FC<{ dark?: boolean }> = ({ dark }) => (
   </svg>
 );
 
+// ── Kids game preview card: a muted gameplay loop that only plays while on
+// screen (IntersectionObserver), with the game name chipped over the video ────
+const KidsGameCard: React.FC<{
+  span: number; src: string; poster: string; name: string; tag: string; accent: string;
+  cardBg: string; borderColor: string; textMuted: string;
+}> = ({ span, src, poster, name, tag, accent, cardBg, borderColor, textMuted }) => {
+  const ref = React.useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) v.play().catch(() => { /* autoplay blocked — poster stays */ });
+      else v.pause();
+    }, { threshold: 0.25 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div className="kids-card" style={{ gridColumn: `span ${span}`, background: cardBg, borderRadius: 20, overflow: 'hidden', border: `1px solid ${borderColor}`, boxShadow: '0 6px 22px rgba(10,40,20,0.10)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative' }}>
+        <video ref={ref} src={src} poster={poster} muted loop playsInline preload="metadata" style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', display: 'block', background: '#0a1a10' }} />
+        <span style={{ position: 'absolute', top: 10, insetInlineStart: 10, background: accent, color: '#fff', borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 800, letterSpacing: 0.4, boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>▶ {name}</span>
+      </div>
+      <p style={{ margin: 0, padding: '12px 16px 14px', fontSize: 13, color: textMuted, lineHeight: 1.55 }}>{tag}</p>
+    </div>
+  );
+};
+
 interface LandingPageProps {
   onOpenAuth: () => void;
 }
@@ -115,6 +143,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
   const navLinks = [
     { label: t('landing.navPrograms'),    href: '#programs' },
+    { label: t('landing.kidsNav'),        href: '#kids' },
     { label: t('landing.navHowItWorks'), href: '#how' },
     { label: t('landing.navForTutors'),  href: '#for-tutors' },
     { label: t('landing.navPricing'),    href: '#pricing' },
@@ -370,6 +399,49 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
                 <p style={{ fontSize: 14, color: textMuted, lineHeight: 1.65 }}>{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 5b. For the kids: learning-games showcase ───────────────────────── */}
+      <section id="kids" style={{ background: isDark ? '#0c2416' : 'linear-gradient(180deg, #E9F4EC 0%, #FAF6EC 100%)', padding: '80px 24px', overflow: 'hidden' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <span style={{ background: isDark ? 'rgba(201,162,74,0.14)' : '#DFF0E2', color: isDark ? C.goldSoft : C.green, borderRadius: 999, padding: '6px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+              🎮 {t('landing.kidsBadge')}
+            </span>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontFamily: F.display, fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 600, color: isDark ? C.goldSoft : C.green, marginBottom: 12 }}>
+              {t('landing.kidsTitle')}
+            </h2>
+            <p style={{ color: textMuted, fontSize: 16, maxWidth: 560, margin: '0 auto' }}>{t('landing.kidsSubtitle')}</p>
+          </div>
+          {/* racer avatars strip */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: 10, margin: '26px 0 40px' }}>
+            <div style={{ display: 'flex' }}>
+              {['fennec', 'panda', 'mario', 'spiderman', 'chibi', 'tiger', 'alien', 'goku', 'jaafar'].map((k, i) => (
+                <img key={k} src={`/sprites/profile-${k}.jpg`} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${isDark ? '#0c2416' : '#fff'}`, marginInlineStart: i ? -10 : 0, boxShadow: '0 3px 8px rgba(0,0,0,0.18)' }} />
+              ))}
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: textMuted }}>{t('landing.kidsChars')}</span>
+          </div>
+          {/* gameplay previews */}
+          <div className="kids-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 18 }}>
+            {[
+              { key: 'race',      span: 3, name: t('landing.kidsRaceName'),   tag: t('landing.kidsRaceTag'),   accent: '#10b981' },
+              { key: 'flappy',    span: 3, name: t('landing.kidsFlappyName'), tag: t('landing.kidsFlappyTag'), accent: '#f59e0b' },
+              { key: 'airplane',  span: 2, name: t('landing.kidsFlightName'), tag: t('landing.kidsFlightTag'), accent: '#06b6d4' },
+              { key: 'tower',     span: 2, name: t('landing.kidsTowerName'),  tag: t('landing.kidsTowerTag'),  accent: '#6366f1' },
+              { key: 'oddletter', span: 2, name: t('landing.kidsOddName'),    tag: t('landing.kidsOddTag'),    accent: '#0d9488' },
+            ].map(g => (
+              <KidsGameCard key={g.key} span={g.span} src={`/videos/game-${g.key}.mp4`} poster={`/videos/game-${g.key}-poster.jpg`} name={g.name} tag={g.tag} accent={g.accent} cardBg={cardBg} borderColor={borderColor} textMuted={textMuted} />
+            ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 40 }}>
+            <button onClick={onOpenAuth} style={{ background: isDark ? C.gold : C.green, color: isDark ? '#08321E' : '#fff', border: 'none', borderRadius: 999, padding: '14px 34px', fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: F.body, boxShadow: '0 10px 26px rgba(14,74,43,0.25)' }}>
+              {t('landing.kidsCta')}
+            </button>
           </div>
         </div>
       </section>
@@ -644,6 +716,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           .hero-float-card { display: none !important; }
         }
 
+        /* ── Kids grid: stack on small screens ── */
+        @media (max-width: 900px) {
+          .kids-grid { grid-template-columns: 1fr !important; }
+          .kids-grid > .kids-card { grid-column: span 1 !important; }
+        }
         /* ── Section padding ── */
         @media (max-width: 640px) {
           section { padding-top: 52px !important; padding-bottom: 52px !important; }
