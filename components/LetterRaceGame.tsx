@@ -66,6 +66,16 @@ const DROP_PICKUP_D  = 5;    // reach to scoop a dropped letter
 const DROP_SETTLE_MS = 350;  // the letter can't be scooped while still tumbling
 const ROUNDS_TO_WIN = 5;
 
+// Recorded sound effects (public/sounds). The countdown file's beeps sit at
+// 0 / 0.84 / 1.64 / 2.44s — the same 800ms cadence as the 3-2-1-GO ticks, so
+// one play at count start lines up with the visuals.
+const SFX_FILES = {
+  countdown: '/sounds/race-countdown.m4a?v=1',
+  running:   '/sounds/race-running.m4a?v=1',
+  jump:      '/sounds/race-jump.m4a?v=1',
+  tackle:    '/sounds/race-tackle.m4a?v=1',
+} as const;
+
 const BOX_COLORS = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24', '#fb923c', '#f87171', '#2dd4bf', '#c084fc', '#4ade80', '#38bdf8'];
 
 interface RacePlayer {
@@ -352,8 +362,30 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       });
     } catch { /* audio unavailable */ }
   }, []);
-  const sfxCount = useCallback(() => tone([440], 0.12, 'square', 0.14), [tone]);
-  const sfxGo    = useCallback(() => tone([880], 0.25, 'square', 0.18), [tone]);
+  // ── Recorded SFX (files) ────────────────────────────────────────────────────
+  const sfxFilesRef = useRef<Partial<Record<keyof typeof SFX_FILES, HTMLAudioElement>>>({});
+  const playFx = useCallback((key: keyof typeof SFX_FILES, vol = 0.9) => {
+    try {
+      const m = sfxFilesRef.current;
+      let el = m[key];
+      if (!el) { el = m[key] = new Audio(SFX_FILES[key]); el.preload = 'auto'; }
+      el.volume = vol;
+      el.currentTime = 0;
+      el.play().catch(() => { /* pre-gesture autoplay block */ });
+    } catch { /* audio unavailable */ }
+  }, []);
+  // footsteps loop — plays while a racer this device drives is running
+  const runLoopRef = useRef<HTMLAudioElement | null>(null);
+  const setRunningSfx = useCallback((on: boolean) => {
+    let el = runLoopRef.current;
+    if (!el) {
+      el = runLoopRef.current = new Audio(SFX_FILES.running);
+      el.loop = true;
+      el.volume = 0.32;
+    }
+    if (on) { if (el.paused) el.play().catch(() => {}); }
+    else if (!el.paused) el.pause();
+  }, []);
   const sfxGrab  = useCallback(() => tone([523, 659, 784], 0.09, 'sine', 0.2), [tone]);
   const sfxSteal = useCallback(() => tone([600, 400, 250], 0.08, 'sawtooth', 0.16), [tone]);
   const sfxWrong = useCallback(() => tone([180, 120], 0.16, 'sawtooth', 0.14), [tone]);
@@ -411,21 +443,21 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     after(400, () => playLetterAudio(target));
     // listen → 3 → 2 → 1 → GO → race
     after(2200, () => {
-      setPhase('count'); setCountNum('3'); sfxCount();
-      after(800,  () => { setCountNum('2'); sfxCount(); });
-      after(1600, () => { setCountNum('1'); sfxCount(); });
+      setPhase('count'); setCountNum('3'); playFx('countdown', 0.9);
+      after(800,  () => setCountNum('2'));
+      after(1600, () => setCountNum('1'));
       // The race goes live the INSTANT "GO!" appears — no dead-input window
       // where kids' opening mashes are discarded. The GO flash stays on screen
       // briefly (goUntilRef) while the race is already running.
       after(2400, () => {
-        setCountNum('GO!'); sfxGo();
+        setCountNum('GO!');
         goUntilRef.current = performance.now() + 800;
         // A run key already held down at GO just works: the race loop reads
         // the held-keys set from its very first frame.
         setPhase('race');
       });
     });
-  }, [pool, playLetterAudio, sfxCount, sfxGo, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels]);
+  }, [pool, playLetterAudio, playFx, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels]);
 
 
 
@@ -435,6 +467,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     return () => {
       clearTimers();
       audioRef.current?.pause();
+      runLoopRef.current?.pause();
+      Object.values(sfxFilesRef.current).forEach(el => el?.pause());
       window.speechSynthesis?.cancel();
       acRef.current?.close().catch(() => {});
     };
@@ -568,8 +602,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       if (s.cn !== nr.prevCn) {
         nr.prevCn = s.cn;
         setCountNum(s.cn);
-        if (s.cn === 'GO!') { goUntilRef.current = now + 800; sfxGo(); }
-        else if (s.ph === 'count') sfxCount();
+        if (s.cn === 'GO!') goUntilRef.current = now + 800;
+        else if (s.ph === 'count' && s.cn === '3') playFx('countdown', 0.9);
       }
       if (s.ph === 'listen' && s.tg !== nr.prevTg) { nr.prevTg = s.tg; playLetterAudio(s.tg); }
       if (s.sc.length !== scoresRef.current.length || s.sc.some((v, i) => v !== scoresRef.current[i])) {
@@ -645,7 +679,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const jump = (pl: RacePlayer) => {
         if (now - pl.jumpAt < JUMP_CD_MS || now < pl.fallenUntil || now < pl.tackleUntil) return;
         pl.jumpAt = now;
-        sfxGrab();
+        playFx('jump', 0.8);
       };
       // Online, EITHER key set drives YOUR OWN racer (each device has one player).
       const own = online ? g.players[Math.max(0, ownIdxRef.current)] : null;
@@ -659,7 +693,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         pl.tackleCd = now + TACKLE_COOLDOWN;
         pl.tackleHit = false;
         pl.speed = TACKLE_SPEED;
-        sfxSteal();
+        playFx('tackle', 0.9);
       };
       if (!e.repeat && (e.code === 'KeyZ' || e.code === 'KeyN')) {
         const target = own ?? (e.code === 'KeyZ' ? g.players[0] : g.players[1]);
@@ -681,7 +715,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       document.removeEventListener('visibilitychange', clearHeld);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online, isGuest]);
+  }, [online, isGuest, playFx]);
 
   // ── Race loop ───────────────────────────────────────────────────────────────
   // Scores also live in a ref so endRound stays a pure event handler — no side
@@ -828,6 +862,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             p.speed = sp.sp;
           });
         }
+        const meP = g.players[Math.max(0, myIdx)];
+        setRunningSfx(!!meP && meP.speed > 0.05 && now >= meP.fallenUntil);
         setTick(t => (t + 1) % 1000000);
         raf = requestAnimationFrame(loop);
         return;
@@ -919,12 +955,18 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         }
       }
 
+      // footsteps while a racer THIS device drives is on the move
+      const ownRunning = online
+        ? (() => { const own = g.players[Math.max(0, ownIdxRef.current)]; return !!own && own.speed > 0.05 && now >= own.fallenUntil; })()
+        : g.players.some((pl, i) => i < 2 && pl.speed > 0.05 && now >= pl.fallenUntil);
+      setRunningSfx(ownRunning);
+
       setTick(t => (t + 1) % 1000000);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [phase, online, isGuest, endRound, sfxGrab, sfxWrong, sfxSteal]);
+    return () => { cancelAnimationFrame(raf); setRunningSfx(false); };
+  }, [phase, online, isGuest, endRound, sfxGrab, sfxWrong, sfxSteal, setRunningSfx]);
 
   const g = game.current;
   const now = performance.now();
