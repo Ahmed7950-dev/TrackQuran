@@ -1253,8 +1253,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                 {tinted && <div style={{ fontSize: 12, fontWeight: 700, color: '#5eead4', paddingBottom: 8 }}>team colors — Player 1 is {c.name} too</div>}
                 {!tinted && <div style={{ height: 12 }} />}
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(92px, 10vw, 138px), 1fr))', gap: 14, paddingBottom: 8 }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(68px, 7vw, 104px), 1fr))', gap: 12 }}>
                   {CHARACTERS.map(ch => {
                     const sel = ch.key === chosen;
                     return (
