@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
-import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose } from './letterRaceStage';
+import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose, type RunnerModel } from './letterRaceStage';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Letter Race — a 2-player top-view keyboard race for the Arabic alphabet.
+// Letter Race — a top-view keyboard race for the Arabic alphabet: 2 players
+// on one keyboard, or an ONLINE ROOM of up to 8 — everyone joins with the
+// same share link / QR code, picks a racer and plays together.
 //
 // Both players hear a letter, then race from the bottom line to the letter row
 // at the top. HOLDING W (left player) / ↑ (right player) makes you run;
@@ -128,16 +130,27 @@ const ONLINE_SITE_URL = 'https://www.lisanquran.com';
 const SNAPSHOT_MS = 33;   // both directions (~30Hz)
 const NET_LERP    = 0.35; // remote-racer interpolation per frame
 
-interface NetPose { x: number; y: number; h: number; sp: number; ca: boolean; fa: number; ta: number; ja: number } // ages in ms, -1 = not active
-interface GuestInput { x: number; y: number; h: number; sp: number; ta: number; ja: number }
+const MAX_PLAYERS = 8;
+const SLOT_COLORS = ['#3b82f6', '#f97316', '#a855f7', '#22c55e', '#ec4899', '#14b8a6', '#eab308', '#ef4444'];
+
+// A racer = physics body + identity. gid: 'host' for slot 0, else the guest's
+// self-generated uuid (how snapshots and input streams find each other).
+interface Racer extends RacePlayer { name: string; charKey: CharKey; gid: string }
+const startX = (i: number, n: number) => 50 + (i - (n - 1) / 2) * Math.min(30, 88 / Math.max(n, 2));
+const newRacer = (x: number, name = '', charKey: CharKey = 'fennec', gid = 'host'): Racer => ({
+  x, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0,
+  tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999,
+  name, charKey, gid,
+});
+
+interface NetPlayer { gid: string; nm: string; ck: CharKey; x: number; y: number; h: number; sp: number; ca: boolean; ta: number; ja: number; fl: number } // ta/ja = ages ms (-1 off), fl = fallen ms left
+interface GuestInput { gid: string; x: number; y: number; h: number; sp: number; ta: number; ja: number }
 interface NetSnapshot {
-  ph: Phase; cn: string; sc: [number, number]; rw: 1 | 2;
+  ph: Phase; cn: string; sc: number[]; rw: number;
   tg: string; fm: LetterForm;
   bx: Array<{ l: string; x: number; c: string; t: boolean; g: boolean }>;
-  p1: NetPose;
-  me: { ca: boolean; fl: number };                    // guest flags: carrying, fallen-ms-left
+  players: NetPlayer[];
   dr: { x: number; y: number; a: number } | null;     // dropped letter (a = age ms)
-  hn: string; hc: CharKey;                            // host display name + character
 }
 
 // shortest-arc heading interpolation (359°→1° must not spin the long way)
@@ -196,10 +209,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const [p1Name, setP1Name] = useState('');
   const [p2Name, setP2Name] = useState('');
   const [selStep, setSelStep] = useState<1 | 2 | 'share'>(1); // P1 picks, then P2 — or the online share panel
-  const nameOf = (who: 1 | 2) => ((who === 1 ? p1Name : p2Name).trim() || `Player ${who}`);
   const [, setTick] = useState(0);
-  const [scores, setScores] = useState<[number, number]>([0, 0]);
-  const [roundWinner, setRoundWinner] = useState<1 | 2>(1);
+  const [, setRosterTick] = useState(0); // re-render the lobby when players join
+  const [scores, setScores] = useState<number[]>([0, 0]);
+  const [roundWinner, setRoundWinner] = useState<number>(0);
   const [countNum, setCountNum] = useState<string>('3');
 
   const phaseRef = useRef<Phase>('select');
@@ -208,16 +221,18 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── Online state ────────────────────────────────────────────────────────────
   const [netMode, setNetMode] = useState<'local' | 'online'>(isGuest ? 'online' : 'local');
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(roomId ?? null);
-  const [p2Joined, setP2Joined] = useState(false);        // host: guest said ready
   const [guestJoined, setGuestJoined] = useState(false);  // guest: pressed Join
   const [gotFirstSnap, setGotFirstSnap] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [netForm, setNetForm] = useState<LetterForm | null>(null); // guest renders the HOST's letter form
   const channelRef = useRef<P2PGameChannel | null>(null);
-  const guestInputRef = useRef<(GuestInput & { at: number }) | null>(null);
+  // per-guest 30Hz pose stream, keyed by gid (freshTackle set on a new dash)
+  const guestInputsRef = useRef<Map<string, GuestInput & { at: number; freshTackle: boolean }>>(new Map());
   const hostSnapRef = useRef<NetSnapshot | null>(null);
-  const netRef = useRef({ lastGuestTa: -1, prevCn: '', prevTg: '', prevHn: '', prevHc: '' });
+  const gidRef = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `g${Math.random()}`);
+  const ownIdxRef = useRef<number>(isGuest ? -1 : 0); // my slot in players[]
+  const netRef = useRef({ prevCn: '', prevTg: '' });
   // render-state mirror so the 30Hz send interval reads fresh values
   const uiRef = useRef({ countNum, roundWinner, p1Name, p1Char, p2Name, p2Char });
   useEffect(() => { uiRef.current = { countNum, roundWinner, p1Name, p1Char, p2Name, p2Char }; });
@@ -263,34 +278,43 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const game = useRef({
     target: pool[0],
     boxes: [] as LetterBox[],
-    p1: { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 } as RacePlayer,
-    p2: { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 } as RacePlayer,
+    players: [newRacer(startX(0, 2)), newRacer(startX(1, 2), '', 'panda', 'local2')] as Racer[],
     graceUntil: 0,           // a fresh carrier can't be made to drop until this time
     dropped: null as { x: number; y: number; at: number } | null, // letter loose on the field
-    checkP1First: true,      // alternate simultaneous-grab priority for fairness
+    checkOrder: 0,           // rotate world-check priority so simultaneous grabs are fair
   });
   const keys = useRef<Set<string>>(new Set());
+  // 3D stage model list — remounted whenever the ROSTER (who/which character)
+  // changes; tint any repeat of an already-used model so twins are tellable.
+  const [stageModels, setStageModels] = useState<RunnerModel[]>([]);
+  const syncStageModels = useCallback(() => {
+    const seen = new Set<string>();
+    const models: RunnerModel[] = game.current.players.map(pl => {
+      const c = charOf(pl.charKey);
+      const tint = seen.has(c.model);
+      seen.add(c.model);
+      return { url: c.model, scale: c.scale, tint };
+    });
+    setStageModels(prev => JSON.stringify(prev) === JSON.stringify(models) ? prev : models);
+  }, []);
   // ── Live 3D characters (three.js overlay; see letterRaceStage.ts) ──────────
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = stageCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !stageModels.length) return;
+    const n = stageModels.length;
     const stage = new RunnerStage(canvas, () => {
-      const gg = game.current;
       const t = performance.now();
-      const pose = (pl: RacePlayer): RunnerPose => ({
+      return game.current.players.slice(0, n).map((pl): RunnerPose => ({
         x: pl.x, y: pl.y, heading: pl.heading, speed: pl.speed,
         anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.speed > 0.02 ? 'run' : 'idle',
-      });
-      return [pose(gg.p1), pose(gg.p2)];
-    }, [
-      { url: charOf(p1Char).model, scale: charOf(p1Char).scale },
-      { url: charOf(p2Char).model, scale: charOf(p2Char).scale },
-    ]);
+      }));
+    }, stageModels);
     stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
     if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; (window as any).__lrKeys = keys; }
     return () => stage.dispose();
-  }, [p1Char, p2Char]);
+  }, [stageModels]);
+  useEffect(() => { syncStageModels(); }, [syncStageModels]); // default pair before the first round
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
   const queueRef = useRef<string[]>(shuffle(pool));
   const queuePosRef = useRef(0);
@@ -358,10 +382,25 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       color: colors[i % colors.length],
     }));
     game.current.target = target;
-    game.current.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
-    game.current.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
-    game.current.graceUntil = 0;
-    game.current.dropped = null;
+    const g = game.current;
+    if (netMode === 'local') {
+      g.players = [
+        newRacer(startX(0, 2), p1Name.trim() || 'Player 1', p1Char, 'host'),
+        newRacer(startX(1, 2), p2Name.trim() || 'Player 2', p2Char, 'local2'),
+      ];
+    } else {
+      // online host: keep the joined roster, reset every body to the line
+      g.players[0].name = p1Name.trim() || 'Player 1';
+      g.players[0].charKey = p1Char;
+      g.players = g.players.map((pl, i) => newRacer(startX(i, g.players.length), pl.name, pl.charKey, pl.gid));
+    }
+    if (scoresRef.current.length !== g.players.length) {
+      scoresRef.current = g.players.map((_, i) => scoresRef.current[i] ?? 0);
+      setScores([...scoresRef.current]);
+    }
+    syncStageModels();
+    g.graceUntil = 0;
+    g.dropped = null;
 
     setPhase('listen');
     setTick(t => t + 1);
@@ -382,7 +421,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         setPhase('race');
       });
     });
-  }, [pool, playLetterAudio, sfxCount, sfxGo]);
+  }, [pool, playLetterAudio, sfxCount, sfxGo, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels]);
 
 
 
@@ -403,19 +442,37 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     if (isGuest || netMode !== 'online') return;
     const id = onlineRoomId ?? crypto.randomUUID();
     if (!onlineRoomId) { setOnlineRoomId(id); return; } // re-run with the id set
-    const ch = createGameChannel(`letter-race:${id}`, 'host');
-    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { name: string; charKey: string } }) => {
-      setP2Name((payload.name || 'Player 2').slice(0, 14));
-      if (CHARACTERS.some(c => c.key === payload.charKey)) setP2Char(payload.charKey as CharKey);
-      setP2Joined(true);
+    const ch = createGameChannel(`letter-race:${id}`, 'host', { p2p: false }); // room = 1:N, Supabase broadcast only
+    // the room opens with just the host — guests join via ready below
+    game.current.players = [newRacer(50, uiRef.current.p1Name.trim() || 'Player 1', uiRef.current.p1Char, 'host')];
+    syncStageModels();
+    setRosterTick(t => t + 1);
+    ch.on('broadcast', { event: 'ready' }, ({ payload }: { payload: { gid: string; name: string; charKey: string } }) => {
+      const g = game.current;
+      const gid = String(payload.gid || '');
+      if (!gid) return;
+      const nm = (payload.name || 'Player').slice(0, 14);
+      const ck = CHARACTERS.some(c => c.key === payload.charKey) ? payload.charKey as CharKey : 'fennec';
+      let pl = g.players.find(q => q.gid === gid);
+      if (!pl && g.players.length < MAX_PLAYERS) {
+        pl = newRacer(50, nm, ck, gid); // joins at the start line (mid-round too)
+        g.players.push(pl);
+      }
+      if (pl) { pl.name = nm; pl.charKey = ck; }
+      syncStageModels();
+      setRosterTick(t => t + 1);
     });
     ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: GuestInput }) => {
-      guestInputRef.current = { ...payload, at: performance.now() };
+      if (!payload?.gid) return;
+      const m = guestInputsRef.current;
+      const prev = m.get(payload.gid);
+      const freshTackle = payload.ta >= 0 && (!prev || prev.ta < 0 || payload.ta < prev.ta);
+      m.set(payload.gid, { ...payload, at: performance.now(), freshTackle: freshTackle || (prev?.freshTackle ?? false) });
     });
     ch.subscribe();
     channelRef.current = ch;
-    return () => { ch.unsubscribe(); channelRef.current = null; setP2Joined(false); };
-  }, [isGuest, netMode, onlineRoomId]);
+    return () => { ch.unsubscribe(); channelRef.current = null; guestInputsRef.current.clear(); };
+  }, [isGuest, netMode, onlineRoomId, syncStageModels]);
 
   // ── HOST: 30Hz world snapshots (self-contained — the channel may drop some) ─
   useEffect(() => {
@@ -426,21 +483,21 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const g = game.current;
       const now = performance.now();
       const ui = uiRef.current;
-      const p = g.p1;
+      g.players[0].name = ui.p1Name.trim() || 'Player 1';
+      g.players[0].charKey = ui.p1Char;
       ch.send({ type: 'broadcast', event: 'state', payload: {
         ph: phaseRef.current, cn: ui.countNum, sc: scoresRef.current, rw: ui.roundWinner,
         tg: g.target, fm: letterForm,
         bx: g.boxes.map(b => ({ l: b.letter, x: Math.round(b.x * 10) / 10, c: b.color, t: b.taken, g: b.isTarget })),
-        p1: {
-          x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100,
-          h: Math.round(p.heading), sp: Math.round(p.speed * 1000) / 1000, ca: p.carrying,
-          fa: now < p.fallenUntil ? Math.round(FALL_MS - (p.fallenUntil - now)) : -1,
-          ta: now < p.tackleUntil ? Math.round(TACKLE_MS - (p.tackleUntil - now)) : -1,
-          ja: now - p.jumpAt < JUMP_ANIM_MS ? Math.round(now - p.jumpAt) : -1,
-        },
-        me: { ca: g.p2.carrying, fl: Math.max(0, Math.round(g.p2.fallenUntil - now)) },
+        players: g.players.map(pl => ({
+          gid: pl.gid, nm: pl.name, ck: pl.charKey,
+          x: Math.round(pl.x * 100) / 100, y: Math.round(pl.y * 100) / 100,
+          h: Math.round(pl.heading), sp: Math.round(pl.speed * 1000) / 1000, ca: pl.carrying,
+          ta: now < pl.tackleUntil ? Math.round(TACKLE_MS - (pl.tackleUntil - now)) : -1,
+          ja: now - pl.jumpAt < JUMP_ANIM_MS ? Math.round(now - pl.jumpAt) : -1,
+          fl: Math.max(0, Math.round(pl.fallenUntil - now)),
+        })),
         dr: g.dropped ? { x: g.dropped.x, y: g.dropped.y, a: Math.round(now - g.dropped.at) } : null,
-        hn: ui.p1Name.trim() || 'Player 1', hc: ui.p1Char,
       } satisfies NetSnapshot });
     }, SNAPSHOT_MS);
     return () => window.clearInterval(iv);
@@ -449,32 +506,60 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── GUEST: join the room, apply host snapshots, announce until heard ────────
   useEffect(() => {
     if (!isGuest || !roomId || !guestJoined) return;
-    const ch = createGameChannel(`letter-race:${roomId}`, 'guest');
+    const ch = createGameChannel(`letter-race:${roomId}`, 'guest', { p2p: false });
     ch.on('broadcast', { event: 'state' }, ({ payload: s }: { payload: NetSnapshot }) => {
       const now = performance.now();
       hostSnapRef.current = s;
       setGotFirstSnap(true);
       const g = game.current;
       const nr = netRef.current;
+      const myGid = gidRef.current;
       // world (host-authoritative)
       g.target = s.tg;
       g.boxes = s.bx.map(b => ({ letter: b.l, x: b.x, color: b.c, taken: b.t, isTarget: b.g, wiggleAt: 0 }));
       g.dropped = s.dr ? { x: s.dr.x, y: s.dr.y, at: now - s.dr.a } : null;
       setNetForm(f => (f === s.fm ? f : s.fm));
-      // OUR racer's world flags — the host arbitrates grabs, tackles and drops
-      const me = g.p2;
-      if (s.me.ca !== me.carrying) {
-        me.carrying = s.me.ca;
-        if (s.me.ca) { me.carrySince = now; sfxGrab(); } else if (s.dr) sfxSteal(); // we dropped it!
+      // roster merge: rebuild players[] to match the host's order, keeping our
+      // own simulated body across rebuilds (matched by gid)
+      const rosterChanged = s.players.length !== g.players.length ||
+        s.players.some((sp, i) => g.players[i]?.gid !== sp.gid || g.players[i]?.charKey !== sp.ck);
+      if (rosterChanged) {
+        const old = new Map<string, Racer>(g.players.map(q => [q.gid, q]));
+        g.players = s.players.map(sp => {
+          const q = old.get(sp.gid) ?? newRacer(sp.x, sp.nm, sp.ck, sp.gid);
+          if (old.get(sp.gid) === undefined) { q.y = sp.y; }
+          q.name = sp.nm; q.charKey = sp.ck;
+          return q;
+        });
+        ownIdxRef.current = g.players.findIndex(q => q.gid === myGid);
+        syncStageModels();
+        setRosterTick(t => t + 1);
+      } else {
+        s.players.forEach((sp, i) => { g.players[i].name = sp.nm; });
       }
-      if (s.me.fl > 0) {
-        if (now >= me.fallenUntil) sfxWrong(); // just got flattened
-        me.fallenUntil = Math.max(me.fallenUntil, now + s.me.fl);
-        me.speed = 0;
-      }
-      // host identity for HUD / selector tint
-      if (s.hn !== nr.prevHn) { nr.prevHn = s.hn; setP1Name(s.hn); }
-      if (s.hc !== nr.prevHc && CHARACTERS.some(c => c.key === s.hc)) { nr.prevHc = s.hc; setP1Char(s.hc); }
+      const myIdx = ownIdxRef.current;
+      s.players.forEach((sp, i) => {
+        const pl = g.players[i];
+        if (!pl) return;
+        if (i === myIdx) {
+          // OUR racer: flags only — the host arbitrates grabs, tackles, drops
+          if (sp.ca !== pl.carrying) {
+            pl.carrying = sp.ca;
+            if (sp.ca) { pl.carrySince = now; sfxGrab(); } else if (s.dr) sfxSteal(); // we dropped it!
+          }
+          if (sp.fl > 0) {
+            if (now >= pl.fallenUntil) sfxWrong(); // just got flattened
+            pl.fallenUntil = Math.max(pl.fallenUntil, now + sp.fl);
+            pl.speed = 0;
+          }
+        } else {
+          // mirrors: flags now, pose lerped in the race loop
+          pl.carrying = sp.ca;
+          pl.fallenUntil = sp.fl > 0 ? now + sp.fl : 0;
+          pl.tackleUntil = sp.ta >= 0 ? now + (TACKLE_MS - sp.ta) : 0;
+          if (sp.ja >= 0) pl.jumpAt = now - sp.ja;
+        }
+      });
       // countdown + phase machinery (host timers drive everything)
       if (s.cn !== nr.prevCn) {
         nr.prevCn = s.cn;
@@ -483,17 +568,19 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         else if (s.ph === 'count') sfxCount();
       }
       if (s.ph === 'listen' && s.tg !== nr.prevTg) { nr.prevTg = s.tg; playLetterAudio(s.tg); }
-      if (s.sc[0] !== scoresRef.current[0] || s.sc[1] !== scoresRef.current[1]) {
-        scoresRef.current = s.sc;
-        setScores([s.sc[0], s.sc[1]]);
+      if (s.sc.length !== scoresRef.current.length || s.sc.some((v, i) => v !== scoresRef.current[i])) {
+        scoresRef.current = [...s.sc];
+        setScores([...s.sc]);
       }
       if (s.rw !== uiRef.current.roundWinner) setRoundWinner(s.rw);
       if (s.ph !== phaseRef.current) {
         if (s.ph === 'roundWon' || s.ph === 'matchWon') sfxWin();
         if (s.ph === 'listen') {
-          // new round — reset both racers to their start marks
-          g.p1 = { x: 35, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
-          g.p2 = { x: 65, y: START_Y, speed: 0, carrying: false, carrySince: 0, wrongBuzzAt: 0, heading: 0, tackleUntil: 0, tackleCd: 0, fallenUntil: 0, tackleHit: false, jumpAt: -99999 };
+          // new round — everyone back to their start marks (host decides x)
+          g.players.forEach((pl, i) => {
+            const sp = s.players[i];
+            Object.assign(pl, newRacer(sp ? sp.x : startX(i, g.players.length), pl.name, pl.charKey, pl.gid));
+          });
         }
         setPhase(s.ph);
       }
@@ -501,7 +588,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     });
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
-        const send = () => ch.send({ type: 'broadcast', event: 'ready', payload: { name: uiRef.current.p2Name.trim() || 'Player 2', charKey: uiRef.current.p2Char } });
+        const send = () => ch.send({ type: 'broadcast', event: 'ready', payload: { gid: gidRef.current, name: uiRef.current.p2Name.trim() || 'Player', charKey: uiRef.current.p2Char } });
         send();
         const iv = window.setInterval(() => { if (hostSnapRef.current) window.clearInterval(iv); else send(); }, 2500);
         timersRef.current.push(iv as unknown as number);
@@ -518,9 +605,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const iv = window.setInterval(() => {
       const ch = channelRef.current;
       if (!ch) return;
-      const p = game.current.p2;
+      const idx = ownIdxRef.current;
+      const p = idx >= 0 ? game.current.players[idx] : null;
+      if (!p) return; // not in the roster yet
       const now = performance.now();
       ch.send({ type: 'broadcast', event: 'input', payload: {
+        gid: gidRef.current,
         x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100,
         h: Math.round(p.heading), sp: Math.round(p.speed * 1000) / 1000,
         ta: now < p.tackleUntil ? Math.round(TACKLE_MS - (p.tackleUntil - now)) : -1,
@@ -554,9 +644,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         sfxGrab();
       };
       // Online, EITHER key set drives YOUR OWN racer (each device has one player).
-      const own = online ? (isGuest ? g.p2 : g.p1) : null;
+      const own = online ? g.players[Math.max(0, ownIdxRef.current)] : null;
       if (!e.repeat && (e.code === 'KeyX' || e.code === 'KeyM')) {
-        jump(own ?? (e.code === 'KeyX' ? g.p1 : g.p2));
+        const target = own ?? (e.code === 'KeyX' ? g.players[0] : g.players[1]);
+        if (target) jump(target);
       }
       const tackle = (pl: RacePlayer) => {
         if (now < pl.tackleCd || now < pl.fallenUntil || now - pl.jumpAt < JUMP_ANIM_MS) return;
@@ -567,7 +658,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         sfxSteal();
       };
       if (!e.repeat && (e.code === 'KeyZ' || e.code === 'KeyN')) {
-        tackle(own ?? (e.code === 'KeyZ' ? g.p1 : g.p2));
+        const target = own ?? (e.code === 'KeyZ' ? g.players[0] : g.players[1]);
+        if (target) tackle(target);
       }
     };
     const up = (e: KeyboardEvent) => { keys.current.delete(e.code); };
@@ -590,15 +682,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── Race loop ───────────────────────────────────────────────────────────────
   // Scores also live in a ref so endRound stays a pure event handler — no side
   // effects inside a setState updater (React may invoke updaters twice).
-  const scoresRef = useRef<[number, number]>([0, 0]);
-  const endRound = useCallback((winner: 1 | 2) => {
-    const prev = scoresRef.current;
-    const next: [number, number] = winner === 1 ? [prev[0] + 1, prev[1]] : [prev[0], prev[1] + 1];
+  const scoresRef = useRef<number[]>([0, 0]);
+  const endRound = useCallback((winner: number) => {
+    const n = game.current.players.length;
+    const next = Array.from({ length: n }, (_, i) => (scoresRef.current[i] ?? 0) + (i === winner ? 1 : 0));
     scoresRef.current = next;
     setScores(next);
     setRoundWinner(winner);
     sfxWin();
-    if (next[0] >= ROUNDS_TO_WIN || next[1] >= ROUNDS_TO_WIN) {
+    if (next[winner] >= ROUNDS_TO_WIN) {
       setPhase('matchWon');
     } else {
       setPhase('roundWon');
@@ -638,13 +730,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     };
     // World interactions (grabs, wrong-box buzz, round win) — run by the HOST
     // online, or locally in same-keyboard mode.
-    const step = (p: RacePlayer, other: RacePlayer, who: 1 | 2) => {
+    const step = (p: Racer, anyCarrying: boolean, who: number) => {
       const g = game.current;
       const now = performance.now();
 
       // At the letter row: grab the target / buzz on a wrong box. Pick the
       // NEAREST overlapping box so standing between two boxes resolves right.
-      if (!p.carrying && !other.carrying && p.y <= LETTER_Y + 4) {
+      if (!p.carrying && !anyCarrying && p.y <= LETTER_Y + 4) {
         let nearest: LetterBox | null = null; let nd = GRAB_X;
         for (const box of g.boxes) {
           const d = Math.abs(box.x - p.x);
@@ -689,89 +781,95 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME * dtF + 360) % 360; };
       const maxFor = (pl: RacePlayer) => pl.carrying ? MAX_SPEED * CARRY_SLOW : MAX_SPEED;
       if (online) {
-        const own = isGuest ? g.p2 : g.p1;
-        if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
-        if (held.has('KeyA') || held.has('ArrowLeft'))  rot(own, -1);
-        if (held.has('KeyD') || held.has('ArrowRight')) rot(own, +1);
-        // virtual joystick: face where it points, push past the deadzone to run
-        const tj = touchJoyRef.current;
-        if (tj.active && tj.mag > 0.22 && now >= own.fallenUntil) {
-          own.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
-          if (now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
+        const own = g.players[Math.max(0, ownIdxRef.current)];
+        if (own) {
+          if ((held.has('KeyW') || held.has('ArrowUp')) && now >= own.fallenUntil && now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
+          if (held.has('KeyA') || held.has('ArrowLeft'))  rot(own, -1);
+          if (held.has('KeyD') || held.has('ArrowRight')) rot(own, +1);
+          // virtual joystick: face where it points, push past the deadzone to run
+          const tj = touchJoyRef.current;
+          if (tj.active && tj.mag > 0.22 && now >= own.fallenUntil) {
+            own.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
+            if (now >= own.tackleUntil) own.speed = Math.min(maxFor(own), own.speed + RUN_ACCEL * dtF);
+          }
         }
       } else {
-        if (held.has('KeyW') && now >= g.p1.fallenUntil && now >= g.p1.tackleUntil) g.p1.speed = Math.min(maxFor(g.p1), g.p1.speed + RUN_ACCEL * dtF);
-        if (held.has('ArrowUp') && now >= g.p2.fallenUntil && now >= g.p2.tackleUntil) g.p2.speed = Math.min(maxFor(g.p2), g.p2.speed + RUN_ACCEL * dtF);
-        if (held.has('KeyA'))       rot(g.p1, -1);
-        if (held.has('KeyD'))       rot(g.p1, +1);
-        if (held.has('ArrowLeft'))  rot(g.p2, -1);
-        if (held.has('ArrowRight')) rot(g.p2, +1);
+        const [a, b] = g.players;
+        if (a && held.has('KeyW') && now >= a.fallenUntil && now >= a.tackleUntil) a.speed = Math.min(maxFor(a), a.speed + RUN_ACCEL * dtF);
+        if (b && held.has('ArrowUp') && now >= b.fallenUntil && now >= b.tackleUntil) b.speed = Math.min(maxFor(b), b.speed + RUN_ACCEL * dtF);
+        if (a && held.has('KeyA'))       rot(a, -1);
+        if (a && held.has('KeyD'))       rot(a, +1);
+        if (b && held.has('ArrowLeft'))  rot(b, -1);
+        if (b && held.has('ArrowRight')) rot(b, +1);
       }
 
-      // ── GUEST: simulate OUR racer, mirror the host's, and stop there — the
-      // host arbitrates grabs, tackle contact, drops and wins (they arrive as
-      // snapshot flags). ──
+      const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
+      const hk = 1 - Math.pow(0.5, dtF);
+
+      // ── GUEST: simulate OUR racer, mirror everyone else, and stop there —
+      // the host arbitrates grabs, tackle contact, drops and wins (they
+      // arrive as snapshot flags). ──
       if (online && isGuest) {
-        moveOwn(g.p2, now, dtF);
+        const myIdx = ownIdxRef.current;
+        if (myIdx >= 0 && g.players[myIdx]) moveOwn(g.players[myIdx], now, dtF);
         const s = hostSnapRef.current;
         if (s) {
-          const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
-          const sp = s.p1;
-          const p = g.p1;
-          p.x += (sp.x - p.x) * k;
-          p.y += (sp.y - p.y) * k;
-          p.heading = lerpAngle(p.heading, sp.h, 1 - Math.pow(0.5, dtF));
-          p.speed = sp.sp;
-          p.carrying = sp.ca;
-          p.fallenUntil = sp.fa >= 0 ? now + (FALL_MS - sp.fa) : 0;
-          p.tackleUntil = sp.ta >= 0 ? now + (TACKLE_MS - sp.ta) : 0;
-          if (sp.ja >= 0) p.jumpAt = now - sp.ja;
+          s.players.forEach((sp, i) => {
+            if (i === myIdx) return;
+            const p = g.players[i];
+            if (!p) return;
+            p.x += (sp.x - p.x) * k;
+            p.y += (sp.y - p.y) * k;
+            p.heading = lerpAngle(p.heading, sp.h, hk);
+            p.speed = sp.sp;
+          });
         }
         setTick(t => (t + 1) % 1000000);
         raf = requestAnimationFrame(loop);
         return;
       }
 
-      // ── HOST online: mirror the guest's racer from its 30Hz stream (frozen
-      // while WE knocked it down — the guest may not know yet). ──
+      // ── HOST online: mirror every guest's racer from its 30Hz stream
+      // (frozen while WE knocked it down — that guest may not know yet). ──
       if (online) {
-        const gi = guestInputRef.current;
-        const p = g.p2;
-        if (gi && now >= p.fallenUntil) {
-          const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
+        for (const p of g.players) {
+          if (p.gid === 'host') continue;
+          const gi = guestInputsRef.current.get(p.gid);
+          if (!gi || now < p.fallenUntil) continue;
           p.x += (gi.x - p.x) * k;
           p.y += (gi.y - p.y) * k;
           // SNAP once converged — the lerp alone approaches the guest's true
           // position asymptotically, so the mirror would hover at 88.99…
-          // forever and P2 crossing the finish line (y >= START_Y) never fired.
+          // forever and a guest crossing the finish line could never fire.
           if (Math.abs(gi.x - p.x) < 0.5) p.x = gi.x;
           if (Math.abs(gi.y - p.y) < 0.5) p.y = gi.y;
           p.x = Math.max(4, Math.min(96, p.x));
           p.y = Math.max(LETTER_Y, Math.min(START_Y, p.y));
-          p.heading = lerpAngle(p.heading, gi.h, 1 - Math.pow(0.5, dtF));
+          p.heading = lerpAngle(p.heading, gi.h, hk);
           p.speed = gi.sp;
-          const nr = netRef.current;
-          if (gi.ta >= 0 && (nr.lastGuestTa < 0 || gi.ta < nr.lastGuestTa)) {
-            p.tackleUntil = now + Math.max(0, TACKLE_MS - gi.ta); // fresh tackle
+          if (gi.freshTackle) {
+            p.tackleUntil = now + Math.max(0, TACKLE_MS - Math.max(0, gi.ta));
             p.tackleHit = false;
+            gi.freshTackle = false;
           }
-          nr.lastGuestTa = gi.ta;
           if (gi.ja >= 0) p.jumpAt = now - gi.ja;
         }
       }
 
-      moveOwn(g.p1, now, dtF);
-      if (!online) moveOwn(g.p2, now, dtF);
+      moveOwn(g.players[0], now, dtF);
+      if (!online && g.players[1]) moveOwn(g.players[1], now, dtF);
 
       // Tackle contact: a mid-dash player knocks the other one down for 2s.
       // If the victim was carrying the letter, they DROP it — it tumbles a
       // short way up-field and sits on the grass as a loose pickup. A fresh
       // carrier (inside the grab grace) still falls but keeps the letter.
       const airborne = (pl: RacePlayer) => now - pl.jumpAt > JUMP_AIR_FROM && now - pl.jumpAt < JUMP_AIR_TO;
-      for (const [t, v] of [[g.p1, g.p2], [g.p2, g.p1]] as Array<[RacePlayer, RacePlayer]>) {
-        if (now < t.tackleUntil && !t.tackleHit && now >= v.fallenUntil) {
+      for (const t of g.players) {
+        if (!(now < t.tackleUntil) || t.tackleHit) continue;
+        for (const v of g.players) {
+          if (v === t || now < v.fallenUntil) continue;
           if (Math.hypot(t.x - v.x, t.y - v.y) < TACKLE_REACH) {
-            if (airborne(v)) { t.tackleHit = true; continue; } // leapt clean over — that tackle is spent
+            if (airborne(v)) { t.tackleHit = true; break; } // leapt clean over — that tackle is spent
             t.tackleHit = true;
             v.fallenUntil = now + FALL_MS;
             v.speed = 0;
@@ -785,25 +883,26 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               sfxSteal(); // the letter goes flying!
             }
             sfxWrong(); // heavy thud
+            break;
           }
         }
       }
 
-      // Alternate who is processed first so simultaneous grabs are fair.
-      const order: Array<[RacePlayer, RacePlayer, 1 | 2]> = g.checkP1First
-        ? [[g.p1, g.p2, 1], [g.p2, g.p1, 2]]
-        : [[g.p2, g.p1, 2], [g.p1, g.p2, 1]];
-      g.checkP1First = !g.checkP1First;
-      for (const [p, other, who] of order) {
-        if (step(p, other, who)) return; // round ended — stop the loop
+      // Rotate who is processed first so simultaneous grabs stay fair.
+      const n = g.players.length;
+      const first = g.checkOrder++ % Math.max(1, n);
+      const anyCarrying = g.players.some(pl => pl.carrying);
+      for (let o = 0; o < n; o++) {
+        const i = (first + o) % n;
+        if (step(g.players[i], anyCarrying && !g.players[i].carrying, i)) return; // round ended — stop the loop
       }
 
       // Scoop a dropped letter: once it settles, the first player to reach it
       // (on their feet) carries it — usually the tackler, but the victim can
-      // get up and win the scramble too. Order alternates for fairness.
+      // get up and win the scramble too. Order rotates for fairness.
       if (g.dropped && now - g.dropped.at > DROP_SETTLE_MS) {
-        const claimants: Array<RacePlayer> = g.checkP1First ? [g.p1, g.p2] : [g.p2, g.p1];
-        for (const pl of claimants) {
+        for (let o = 0; o < n; o++) {
+          const pl = g.players[(first + o) % n];
           if (now < pl.fallenUntil) continue;
           if (Math.hypot(pl.x - g.dropped.x, pl.y - g.dropped.y) < DROP_PICKUP_D) {
             pl.carrying = true;
@@ -825,17 +924,21 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
 
   const g = game.current;
   const now = performance.now();
-  const samePick = p1Char === p2Char;
-  const portraitFor = (who: 1 | 2) => charOf(who === 1 ? p1Char : p2Char).portrait;
-  const tintStyleFor = (who: 1 | 2) => (who === 2 && samePick ? P2_TINT : 'none');
+  const players = g.players;
+  const ownIdx = Math.max(0, ownIdxRef.current);
+  const charKeyAt = (i: number): CharKey => players[i]?.charKey ?? (i === 0 ? p1Char : p2Char);
+  const portraitFor = (i: number) => charOf(charKeyAt(i)).portrait;
+  const tintStyleFor = (i: number) => (players.slice(0, Math.max(0, i)).some(pl => pl.charKey === charKeyAt(i)) ? P2_TINT : 'none');
+  const nameAt = (i: number) => (players[i]?.name || '').trim() || `Player ${i + 1}`;
+  const colorAt = (i: number) => SLOT_COLORS[i % SLOT_COLORS.length];
   const displayTarget = getLetterInForm(g.target, form);
   const carrierGrace = now < g.graceUntil;
 
-  const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
-    const color = who === 1 ? '#3b82f6' : '#f97316';
+  const renderPlayer = (p: Racer, i: number) => {
+    const color = colorAt(i);
     const fallen = now < p.fallenUntil;
     return (
-      <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
+      <div key={`${p.gid}-${i}`} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* Carried letter floats above the head */}
         {p.carrying && (
           <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(#ffffff,#fef9c3)', border: `3px solid ${color}`, borderRadius: 12, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 14px ${color}88, 0 4px 10px rgba(0,0,0,0.25)`, animation: 'lrCarry 0.7s ease-in-out infinite' }}>
@@ -852,7 +955,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </div>
         <div style={{ textAlign: 'center', marginTop: 3 }}>
           {fallen && <div style={{ fontSize: 16, lineHeight: 1, marginBottom: 2 }}>💫</div>}
-          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>{nameOf(who)}</span>
+          <span style={{ background: color, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}>{nameAt(i)}</span>
         </div>
       </div>
     );
@@ -908,17 +1011,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* Live 3D characters — one transparent WebGL layer, anchored to the
           players' field positions (see letterRaceStage.ts) */}
       <canvas ref={stageCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 9, pointerEvents: 'none' }} />
-      {renderPlayer(g.p1, 1)}
-      {renderPlayer(g.p2, 2)}
+      {players.map((p, i) => renderPlayer(p, i))}
 
       {/* ── Top HUD ── */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
         <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
         <div style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900 }}>
-          <span style={{ background: '#3b82f6', borderRadius: 999, padding: '4px 12px', fontSize: 14 }}>P1 {scores[0]}</span>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>first to {ROUNDS_TO_WIN}</span>
-          <span style={{ background: '#f97316', borderRadius: 999, padding: '4px 12px', fontSize: 14 }}>{scores[1]} P2</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
+          {players.map((pl, i) => (
+            <span key={`${pl.gid}-${i}`} style={{ background: colorAt(i), borderRadius: 999, padding: '4px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>{nameAt(i).slice(0, 10)} {scores[i] ?? 0}</span>
+          ))}
+          <span style={{ fontSize: 11, opacity: 0.8 }}>first to {ROUNDS_TO_WIN}</span>
         </div>
         <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
       </div>
@@ -928,7 +1031,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {online ? (isTouch ? null : (
         <div style={{ position: 'absolute', bottom: 8, left: isGuest ? undefined : 12, right: isGuest ? 12 : undefined, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: isGuest ? 'right' : 'left', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: isGuest ? 'flex-end' : 'flex-start', gap: 6, fontSize: 12, fontWeight: 900, color: isGuest ? '#c2410c' : '#1d4ed8' }}>
-            <img src={portraitFor(isGuest ? 2 : 1)} alt="" style={{ height: 24, filter: tintStyleFor(isGuest ? 2 : 1) }} /> You
+            <img src={portraitFor(ownIdx)} alt="" style={{ height: 24, filter: tintStyleFor(ownIdx) }} /> You
           </div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b>/<b>↑</b> to run · <b>A D</b> or <b>← →</b> turn · <b>Z</b>/<b>N</b> tackle · <b>X</b>/<b>M</b> jump!</div>
         </div>
@@ -936,13 +1039,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         <>
           <div style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
-              <img src={portraitFor(1)} alt="" style={{ height: 24 }} /> Left player
+              <img src={portraitFor(0)} alt="" style={{ height: 24 }} /> Left player
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b> to run · <b>A</b>/<b>D</b> turn · <b>Z</b> tackle · <b>X</b> jump!</div>
           </div>
           <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
-              Right player <img src={portraitFor(2)} alt="" style={{ height: 24, filter: tintStyleFor(2) }} />
+              Right player <img src={portraitFor(1)} alt="" style={{ height: 24, filter: tintStyleFor(1) }} />
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>↑</b> to run · <b>←</b>/<b>→</b> turn · <b>N</b> tackle · <b>M</b> jump!</div>
           </div>
@@ -979,10 +1082,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {phase === 'listen' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '24px 34px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 6 }}>
-              <img src={portraitFor(1)} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite' }} />
-              <span style={{ fontWeight: 900, fontSize: 18, color: '#94a3b8' }}>VS</span>
-              <img src={portraitFor(2)} alt="" style={{ height: 60, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: '0.7s', filter: tintStyleFor(2) }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap', maxWidth: 480 }}>
+              {players.slice(0, 6).map((pl, i) => (
+                <React.Fragment key={`${pl.gid}-${i}`}>
+                  {i > 0 && <span style={{ fontWeight: 900, fontSize: 15, color: '#94a3b8' }}>VS</span>}
+                  <img src={portraitFor(i)} alt="" style={{ height: 54, animation: 'lrIdle 1.4s ease-in-out infinite', animationDelay: `${i * 0.35}s`, filter: tintStyleFor(i) }} />
+                </React.Fragment>
+              ))}
+              {players.length > 6 && <span style={{ fontWeight: 900, color: '#64748b' }}>+{players.length - 6}</span>}
             </div>
             <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>👂 Listen to the letter!</h3>
             <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>Then race to find it and bring it home!</p>
@@ -1005,8 +1112,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 24, padding: '26px 36px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
             <img src={portraitFor(roundWinner)} alt="" style={{ height: 78, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
-            <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>{nameOf(roundWinner)} wins the round! 🎉</h3>
-            <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores[0]} — {scores[1]} · next letter coming…</p>
+            <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: colorAt(roundWinner) }}>{nameAt(roundWinner)} wins the round! 🎉</h3>
+            <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores.join(' — ')} · next letter coming…</p>
           </div>
         </div>
       )}
@@ -1024,15 +1131,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               <img src={portraitFor(roundWinner)} alt="" style={{ height: 92, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
               <span style={{ fontSize: 48 }}>🏆</span>
             </div>
-            <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: roundWinner === 1 ? '#1d4ed8' : '#c2410c' }}>{nameOf(roundWinner)} wins the race!</h3>
-            <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores[0]} — {scores[1]} · Amazing running! 🏃💨</p>
+            <h3 style={{ margin: '8px 0 4px', fontWeight: 900, fontSize: 26, color: colorAt(roundWinner) }}>{nameAt(roundWinner)} wins the race!</h3>
+            <p style={{ margin: '0 0 18px', color: '#475569', fontWeight: 700, fontSize: 16 }}>{scores.join(' — ')} · Amazing running! 🏃💨</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
               {isGuest ? (
                 <span style={{ color: '#64748b', fontWeight: 800, fontSize: 13 }}>⏳ Waiting for the host to start a new race…</span>
               ) : (
                 <>
-                  <button onClick={() => { scoresRef.current = [0, 0]; setScores([0, 0]); setupRound(); }} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔄 Play again</button>
-                  <button onClick={() => { clearTimers(); scoresRef.current = [0, 0]; setScores([0, 0]); setSelStep(online ? 'share' : 1); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
+                  <button onClick={() => { scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setupRound(); }} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔄 Play again</button>
+                  <button onClick={() => { clearTimers(); scoresRef.current = game.current.players.map(() => 0); setScores([...scoresRef.current]); setSelStep(online ? 'share' : 1); setPhase('select'); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 18px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🏁 Back to start</button>
                 </>
               )}
               <button onClick={onExit} style={{ background: '#e2e8f0', color: '#0f172a', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>Done</button>
@@ -1046,7 +1153,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
           <div style={{ background: '#fff', borderRadius: 26, padding: '22px 26px 24px', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '4px solid #0ea5e9' }}>
             <h3 style={{ margin: '0 0 2px', fontWeight: 900, fontSize: 24, color: '#0ea5e9' }}>🌐 Online race!</h3>
-            <p style={{ margin: '0 0 12px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>Share this link with the other player — they pick their own racer on their device.</p>
+            <p style={{ margin: '0 0 12px', color: '#64748b', fontWeight: 600, fontSize: 13 }}>Share this link (or the QR) — up to {MAX_PLAYERS - 1} friends can join, each picking their own racer!</p>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', maxWidth: 420, margin: '0 auto' }}>
               <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 10, padding: '8px 10px', fontSize: 11, color: '#334155', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{shareLink}</div>
               <button onClick={copyLink} style={{ background: linkCopied ? '#22c55e' : '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontWeight: 900, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
@@ -1059,12 +1166,22 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>tap the QR to enlarge · scan to join 📱</span>
               </div>
             )}
-            {p2Joined
-              ? <div style={{ color: '#16a34a', fontWeight: 900, fontSize: 14, marginTop: 12 }}>✅ {p2Name.trim() || 'Player 2'} joined — ready to race!</div>
-              : <div style={{ color: '#64748b', fontWeight: 700, fontSize: 13, marginTop: 12 }}>⏳ Waiting for the other player…</div>}
+            {players.length > 1 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 12, alignItems: 'center' }}>
+                {players.slice(1).map((pl, i) => (
+                  <span key={`${pl.gid}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0fdf4', border: '2px solid #bbf7d0', borderRadius: 999, padding: '4px 12px 4px 5px', fontWeight: 800, fontSize: 13, color: '#166534' }}>
+                    <img src={charOf(pl.charKey).face} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                    {(pl.name || '').trim() || `Player ${i + 2}`}
+                  </span>
+                ))}
+                <span style={{ fontWeight: 700, fontSize: 12, color: '#64748b' }}>{players.length}/{MAX_PLAYERS} racers</span>
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', fontWeight: 700, fontSize: 13, marginTop: 12 }}>⏳ Waiting for players to join…</div>
+            )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
               <button onClick={() => { setNetMode('local'); setSelStep(1); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>‹ Back</button>
-              <button onClick={() => setupRound()} disabled={!p2Joined} style={{ background: p2Joined ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: p2Joined ? 'pointer' : 'default', fontSize: 17, boxShadow: p2Joined ? '0 6px 18px rgba(22,163,74,0.45)' : 'none' }}>Start the Race! 🏃💨</button>
+              <button onClick={() => setupRound()} disabled={players.length < 2} style={{ background: players.length > 1 ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: players.length > 1 ? 'pointer' : 'default', fontSize: 17, boxShadow: players.length > 1 ? '0 6px 18px rgba(22,163,74,0.45)' : 'none' }}>Start the Race! 🏃💨</button>
             </div>
           </div>
         </div>

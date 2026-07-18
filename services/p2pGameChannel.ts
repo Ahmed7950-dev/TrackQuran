@@ -71,7 +71,13 @@ export interface P2PGameChannel {
   onPathChange(cb: (direct: boolean) => void): void;
 }
 
-export function createGameChannel(name: string, role: Role): P2PGameChannel {
+// opts.p2p: false → stay on the Supabase broadcast path for EVERYTHING.
+// The WebRTC fast path is strictly 1:1 (one RTCPeerConnection): in a
+// multi-guest ROOM the host's 'state' stream would ride the single open
+// datachannel and every other guest would go deaf. Rooms (Letter Race
+// multiplayer) therefore opt out; 2-player games keep the fast path.
+export function createGameChannel(name: string, role: Role, opts?: { p2p?: boolean }): P2PGameChannel {
+  const p2pEnabled = opts?.p2p !== false;
   const ch = supabase.channel(name, { config: { broadcast: { self: false } } });
   const handlers = new Map<string, (msg: { payload: any }) => void>();
 
@@ -142,6 +148,7 @@ export function createGameChannel(name: string, role: Role): P2PGameChannel {
   const handleSig = async (msg: SigMsg) => {
     if (destroyed || msg.from === role) return;
     try {
+      if (!p2pEnabled) return; // rooms: signaling ignored on both sides
       if (msg.kind === 'hello' && role === 'host' && !direct) {
         // Fresh (re)connect attempt initiated by the guest.
         setupPc();
@@ -168,6 +175,7 @@ export function createGameChannel(name: string, role: Role): P2PGameChannel {
   const startHello = () => {
     if (role !== 'guest' || destroyed) return;
     stopHello();
+    if (!p2pEnabled) return;
     sendSig({ kind: 'hello', from: role });
     helloTimer = window.setInterval(() => {
       if (direct || destroyed) { stopHello(); return; }

@@ -85,21 +85,23 @@ interface CharRig {
   camera: any;
 }
 
+export interface RunnerModel { url: string; scale: number; tint?: boolean }
+
 export class RunnerStage {
   private renderer: any = null;
   private chars: CharRig[] = [];
   private raf = 0;
   private lastT = 0;
   private canvas: HTMLCanvasElement;
-  private getPoses: () => [RunnerPose, RunnerPose] | null;
+  private getPoses: () => (RunnerPose | null)[] | null;
   private disposed = false;
   private THREE: any = null;
-  private models: [{ url: string; scale: number }, { url: string; scale: number }];
+  private models: RunnerModel[];
 
   constructor(
     canvas: HTMLCanvasElement,
-    getPoses: () => [RunnerPose, RunnerPose] | null,
-    models: [{ url: string; scale: number }, { url: string; scale: number }] = [
+    getPoses: () => (RunnerPose | null)[] | null,
+    models: RunnerModel[] = [
       { url: '/models/runner.glb', scale: 1 }, { url: '/models/runner.glb', scale: 1 },
     ],
   ) {
@@ -121,8 +123,6 @@ export class RunnerStage {
     const loaded = new Map<string, any>();
     for (const url of unique) loaded.set(url, await loadGLTF(url));
     if (this.disposed) return;
-    // P2 wears the teal tint ONLY when both players picked the same character.
-    const sameModel = this.models[0].url === this.models[1].url;
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
     // model runs forward inside its render window and snaps back every loop.
@@ -181,7 +181,7 @@ export class RunnerStage {
       } catch { return tex; }
     };
 
-    for (let who = 0; who < 2; who++) {
+    for (let who = 0; who < this.models.length; who++) {
       const gltf = loaded.get(this.models[who].url);
       const root = skClone(gltf.scene);
       // Tripo exports ship METALLIC PBR materials (near-black without an
@@ -229,7 +229,7 @@ export class RunnerStage {
       root.position.z -= (bb.mn.z + bb.mx.z) / 2;
       root.position.y -= bb.mn.y;
 
-      if (who === 1 && sameModel) {
+      if (this.models[who].tint) {
         const seen = new Map<any, any>();
         root.traverse((o: any) => {
           if (o.isMesh && o.material) {
@@ -342,9 +342,11 @@ export class RunnerStage {
     r.setScissorTest(true);
     // character viewport square, sized relative to the field (like the 70px sprite)
     const S = ((import.meta as any).env?.DEV && (window as any).__lrSizeOverride) || Math.max(110, Math.round(H * 0.17));
-    // draw the player further up the field first, so the nearer one (lower on
-    // screen = closer to the top-down camera) overlaps them naturally
-    const order = poses[0] && poses[1] && poses[0].y > poses[1].y ? [1, 0] : [0, 1];
+    // draw players further up the field first, so nearer ones (lower on
+    // screen = closer to the top-down camera) overlap them naturally
+    const order = this.chars.map((_, i) => i)
+      .filter(i => i < poses.length)
+      .sort((a, b) => (poses[a]?.y ?? 0) - (poses[b]?.y ?? 0));
     for (const i of order) {
       const p = poses[i];
       const c = this.chars[i];
