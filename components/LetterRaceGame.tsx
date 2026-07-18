@@ -85,6 +85,14 @@ const CHARACTERS = [
   { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=3',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
   { key: 'mario',  name: 'Mario',  model: '/models/mario.glb',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
   { key: 'bear',   name: 'Bear',   model: '/models/bear.glb',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
