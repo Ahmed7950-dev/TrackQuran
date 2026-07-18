@@ -89,6 +89,15 @@ const P2_TINT = 'hue-rotate(165deg)';
 // Selectable racers — each is a GLB with the same four clips (run / tackle /
 // trip / jump). The fennec is native Mixamo; the robot is a Tripo rig with
 // the clips retargeted onto it in Blender.
+// Field backgrounds — one is picked at random each time the game opens. All
+// three have the checkered finish line painted at the same field-% (~89), so
+// START_Y works unchanged on every variant.
+const FIELDS = [
+  '/sprites/race-field-1.jpg?v=1',
+  '/sprites/race-field-2.jpg?v=1',
+  '/sprites/race-field-3.jpg?v=1',
+];
+
 const CHARACTERS = [
   { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
   { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=5',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
@@ -180,6 +189,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const isGuest = playerRole === '2';
 
   const [phase, setPhase] = useState<Phase>('select');
+  const [fieldBg] = useState(() => FIELDS[Math.floor(Math.random() * FIELDS.length)]);
   const [p1Char, setP1Char] = useState<CharKey>('fennec');
   const [p2Char, setP2Char] = useState<CharKey>('panda');
   const [p1Name, setP1Name] = useState('');
@@ -853,7 +863,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           Stretched to 100%/100% (not cover) so the painted checkered line
           stays at a FIXED field-% on every viewport — START_Y is calibrated
           to its measured center (~90%). ── */}
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/sprites/race-field.jpg?v=1)', backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' }} />
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${fieldBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' }} />
 
       {/* ── Letter row: red pennant flags planted along the top of the field,
           the letter written on the red banner ── */}
