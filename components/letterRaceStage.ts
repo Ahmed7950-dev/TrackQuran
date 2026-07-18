@@ -43,6 +43,31 @@ export const preloadRaceModels = async (urls: string[]): Promise<void> => {
   for (const url of urls) { try { await loadGLTF(url); } catch { /* ignore */ } }
 };
 
+// Soft blob shadow that grounds a character: a radial-fade disc lying on the
+// ground plane. The elevated game camera foreshortens it into a natural
+// ellipse; depthTest hides it behind the body, so it reads as a contact shadow.
+const makeBlobShadow = (THREE: any, size: number, opacity = 0.5) => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const grad = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
+  grad.addColorStop(0, `rgba(0,0,0,${opacity})`);
+  grad.addColorStop(0.55, `rgba(0,0,0,${opacity * 0.7})`);
+  grad.addColorStop(0.85, `rgba(0,0,0,${opacity * 0.18})`);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.Texture(c);
+  tex.needsUpdate = true;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.012; // just off the ground — no z-fighting
+  return mesh;
+};
+
 export interface RunnerPose {
   x: number;        // field % (0..100)
   y: number;        // field % (0..100)
@@ -224,6 +249,7 @@ export class RunnerStage {
 
       const scene = new THREE.Scene();
       scene.add(root);
+      scene.add(makeBlobShadow(THREE, 0.9 * this.models[who].scale));
       const key = new THREE.DirectionalLight(0xffffff, 2.9);
       key.position.set(-1.5, 3, 2.5);
       scene.add(key);
@@ -315,7 +341,7 @@ export class RunnerStage {
     r.clear();
     r.setScissorTest(true);
     // character viewport square, sized relative to the field (like the 70px sprite)
-    const S = Math.max(110, Math.round(H * 0.17));
+    const S = ((import.meta as any).env?.DEV && (window as any).__lrSizeOverride) || Math.max(110, Math.round(H * 0.17));
     // draw the player further up the field first, so the nearer one (lower on
     // screen = closer to the top-down camera) overlaps them naturally
     const order = poses[0] && poses[1] && poses[0].y > poses[1].y ? [1, 0] : [0, 1];

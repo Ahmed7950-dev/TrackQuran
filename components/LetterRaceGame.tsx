@@ -90,17 +90,17 @@ const P2_TINT = 'hue-rotate(165deg)';
 // the clips retargeted onto it in Blender.
 const CHARACTERS = [
   { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=3', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/race-runner-face.png?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=4',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
-  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=2',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
-  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb?v=2',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
-  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=2',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=2',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
-  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=2',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
-  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=2',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
-  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=2',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
-  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=2',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
-  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=2',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
-  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=2', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=5',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/race-panda-face.png?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=3',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/race-mario-face.png?v=1' },
+  { key: 'bear',   name: 'Bear',   model: '/models/bear.glb?v=3',       scale: 0.8,  portrait: '/sprites/race-bear-front.png?v=1', face: '/sprites/race-bear-face.png?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/race-dbz-face.png?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=3',    scale: 0.85, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/race-anime-face.png?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=3',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/race-cat-face.png?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=3',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/race-cartoon-face.png?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=3',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/race-fox-face.png?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=3',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/race-vader-face.png?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=3',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/race-lion-face.png?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=3', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/race-stylized-face.png?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -767,7 +767,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
 
   const renderPlayer = (p: RacePlayer, who: 1 | 2) => {
     const color = who === 1 ? '#3b82f6' : '#f97316';
-    const dusty = p.speed > 0.11;
     const fallen = now < p.fallenUntil;
     return (
       <div style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
@@ -776,13 +775,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(#ffffff,#fef9c3)', border: `3px solid ${color}`, borderRadius: 12, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 14px ${color}88, 0 4px 10px rgba(0,0,0,0.25)`, animation: 'lrCarry 0.7s ease-in-out infinite' }}>
             <span dir="rtl" style={{ ...HAFS, fontSize: 27, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
           </div>
-        )}
-        {/* Dust puffs kicked up behind while sprinting */}
-        {dusty && (
-          <>
-            <div style={{ position: 'absolute', left: '12%', [p.carrying ? 'top' : 'bottom']: -10, width: 11, height: 11, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', animation: 'lrDust 0.5s ease-out infinite' } as React.CSSProperties} />
-            <div style={{ position: 'absolute', right: '12%', [p.carrying ? 'top' : 'bottom']: -8, width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.55)', animation: 'lrDust 0.5s ease-out infinite', animationDelay: '0.22s' } as React.CSSProperties} />
-          </>
         )}
         {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
             anchored to this same field position — this spacer only reserves the
@@ -1049,7 +1041,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         @keyframes lrIdle     { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.015); } }
         @keyframes lrCarry    { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
         @keyframes lrShakeBox { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
-        @keyframes lrDust     { 0% { transform: scale(0.4); opacity: 0.8; } 100% { transform: scale(1.7) translateY(6px); opacity: 0; } }
         @keyframes lrPopIn    { 0% { transform: translate(-50%,-50%) scale(0); } 65% { transform: translate(-50%,-50%) scale(1.12); } 100% { transform: translate(-50%,-50%) scale(1); } }
         @keyframes lrPop      { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         @keyframes lrConfetti { 0% { transform: translateY(-10vh) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; } }
