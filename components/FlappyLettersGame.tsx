@@ -708,7 +708,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       g.players.forEach((p, i) => {
         if (modeRef.current === 'online' && i === 1) {
           const gs = guestStateRef.current;
-          if (gs) { p.y += (gs.y - p.y) * P1_LERP; }
+          if (gs) { p.y += (gs.y - p.y) * (1 - Math.pow(1 - P1_LERP, dt * 60)); }
           return;
         }
         p.vy = Math.min(D.maxFallVy, p.vy + D.gravity * dt);
@@ -927,7 +927,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
       if (ph !== 'play' && ph !== 'count') { setTick(t => t + 1); return; }
       const sp1 = snap.s.ps[0];
       // host bird: smooth interpolation toward the latest snapshot
-      if (sp1) { g.players[0].x = sp1.x; g.players[0].y += (sp1.y - g.players[0].y) * P1_LERP; }
+      if (sp1) { g.players[0].x = sp1.x; g.players[0].y += (sp1.y - g.players[0].y) * (1 - Math.pow(1 - P1_LERP, dt * 60)); }
       // own bird: the guest is the authority — same rules as the host loop
       const me = g.players[1];
       if (me) {

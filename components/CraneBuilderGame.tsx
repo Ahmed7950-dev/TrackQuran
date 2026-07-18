@@ -424,15 +424,20 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   useEffect(() => {
     if (isSpectator) return;   // no local simulation when mirroring the student
     let raf = 0;
+    let lastT = performance.now();
     const loop = () => {
       const g = game.current;
+      // frame-rate independence: constants are tuned per-frame at 60fps
+      const nowP = performance.now();
+      const dtF = Math.min(3, Math.max(0.25, (nowP - lastT) / (1000 / 60)));
+      lastT = nowP;
       const moving = phase === 'playing' && (keys.current.has('ArrowLeft') || keys.current.has('ArrowRight') || keys.current.has('ArrowUp') || keys.current.has('ArrowDown'));
       setMotor(moving);
       if (phase === 'playing') {
-        if (keys.current.has('ArrowLeft'))  g.trolleyX = Math.max(TROLLEY_MIN, g.trolleyX - TROLLEY_SPEED);
-        if (keys.current.has('ArrowRight')) g.trolleyX = Math.min(TROLLEY_MAX, g.trolleyX + TROLLEY_SPEED);
-        if (keys.current.has('ArrowDown'))  g.hookY = Math.min(HOOK_MAX, g.hookY + HOOK_SPEED);
-        if (keys.current.has('ArrowUp'))    g.hookY = Math.max(HOOK_MIN, g.hookY - HOOK_SPEED);
+        if (keys.current.has('ArrowLeft'))  g.trolleyX = Math.max(TROLLEY_MIN, g.trolleyX - TROLLEY_SPEED * dtF);
+        if (keys.current.has('ArrowRight')) g.trolleyX = Math.min(TROLLEY_MAX, g.trolleyX + TROLLEY_SPEED * dtF);
+        if (keys.current.has('ArrowDown'))  g.hookY = Math.min(HOOK_MAX, g.hookY + HOOK_SPEED * dtF);
+        if (keys.current.has('ArrowUp'))    g.hookY = Math.max(HOOK_MIN, g.hookY - HOOK_SPEED * dtF);
         // Carry the held cube under the magnet.
         if (g.held !== null) {
           const c = g.cubes.find(x => x.id === g.held);
@@ -442,10 +447,10 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         const groundY = layoutRef.current.groundY;
         for (const c of g.cubes) {
           if (c.state !== 'ground') continue;
-          c.vy += GRAVITY;
-          c.y += c.vy;
+          c.vy += GRAVITY * dtF;
+          c.y += c.vy * dtF;
           if (c.y >= groundY) { c.y = groundY; c.vy = c.vy > 2.5 ? -c.vy * 0.32 : 0; }
-          c.x += (c.homeX - c.x) * 0.18;
+          c.x += (c.homeX - c.x) * (1 - Math.pow(0.82, dtF));
         }
       }
       setTick(t => (t + 1) % 1000000);

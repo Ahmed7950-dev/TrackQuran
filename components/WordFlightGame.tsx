@@ -85,20 +85,22 @@ const STICK_EASE            = 0.22;   // analog: velocity-chase rate toward the 
 
 // ARCADE (touch): ease velocity toward the stick-defined target. NO gravity,
 // NO drag (the easing IS the damping). Mutates v in place. ax/ay in [-1,1], ay+ = down.
-const steerPlane = (v: { x: number; y: number }, ax: number, ay: number) => {
+const steerPlane = (v: { x: number; y: number }, ax: number, ay: number, dtF = 1) => {
   const tx = ax * PLANE_MAX_VEL_H, ty = ay * PLANE_MAX_VEL;
-  v.x += (tx - v.x) * STICK_EASE;
-  v.y += (ty - v.y) * STICK_EASE;
+  const k = 1 - Math.pow(1 - STICK_EASE, dtF);
+  v.x += (tx - v.x) * k;
+  v.y += (ty - v.y) * k;
 };
 
 // LEGACY keyboard model — byte-identical to the original per-frame physics.
-const applyKeyboardPlane = (v: { x: number; y: number }, up: boolean, down: boolean, left: boolean, right: boolean) => {
-  v.y += PLANE_GRAVITY;
-  if (up)    v.y -= PLANE_ACCEL;
-  if (down)  v.y += PLANE_ACCEL;
-  if (left)  v.x -= PLANE_ACCEL_H;
-  if (right) v.x += PLANE_ACCEL_H;
-  v.x *= PLANE_DRAG; v.y *= PLANE_DRAG;
+const applyKeyboardPlane = (v: { x: number; y: number }, up: boolean, down: boolean, left: boolean, right: boolean, dtF = 1) => {
+  v.y += PLANE_GRAVITY * dtF;
+  if (up)    v.y -= PLANE_ACCEL * dtF;
+  if (down)  v.y += PLANE_ACCEL * dtF;
+  if (left)  v.x -= PLANE_ACCEL_H * dtF;
+  if (right) v.x += PLANE_ACCEL_H * dtF;
+  const drag = Math.pow(PLANE_DRAG, dtF);
+  v.x *= drag; v.y *= drag;
 };
 const BG_SCROLL_SPEED       = 120;
 const BACKGROUNDS = [
@@ -843,7 +845,12 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   // ── Main game loop ────────────────────────────────────────────────────────
   useEffect(() => {
     if (status !== 'playing' || isP2) return;
+    let lastT = performance.now();
     const tick = () => {
+      // frame-rate independence: constants are tuned per-frame at 60fps
+      const nowP = performance.now();
+      const dtF = Math.min(3, Math.max(0.25, (nowP - lastT) / (1000 / 60)));
+      lastT = nowP;
       const k = keysDown.current;
       const p = planePos.current, v = velRef.current;
       const is2pNow    = gameModeRef.current === '2p' || gameModeRef.current === '2p-online';
@@ -860,14 +867,14 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
       if (!p1CrashedRef.current && !p1IsShocked) {
         const s1 = p1StickRef.current;
-        if (s1.active) steerPlane(v, s1.ax, s1.ay);
-        else applyKeyboardPlane(v, k.ArrowUp, k.ArrowDown, k.ArrowLeft, k.ArrowRight);
+        if (s1.active) steerPlane(v, s1.ax, s1.ay, dtF);
+        else applyKeyboardPlane(v, k.ArrowUp, k.ArrowDown, k.ArrowLeft, k.ArrowRight, dtF);
         v.x = Math.max(-PLANE_MAX_VEL_H, Math.min(PLANE_MAX_VEL_H, v.x));
         v.y = Math.max(-PLANE_MAX_VEL,   Math.min(PLANE_MAX_VEL,   v.y));
-        p.x = Math.max(4, Math.min(96, p.x + v.x));
-        p.y = Math.max(7, Math.min(88, p.y + v.y));
+        p.x = Math.max(4, Math.min(96, p.x + v.x * dtF));
+        p.y = Math.max(7, Math.min(88, p.y + v.y * dtF));
         const tilt = Math.max(-28, Math.min(28, v.y * 20));
-        tiltRef.current += (tilt - tiltRef.current) * 0.13;
+        tiltRef.current += (tilt - tiltRef.current) * (1 - Math.pow(0.87, dtF));
         if (planeRef.current) {
           planeRef.current.style.left      = `${p.x}%`;
           planeRef.current.style.top       = `${p.y}%`;
@@ -881,25 +888,26 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
         if (rp) {
           // P2 owns its plane online — mirror its reported position (smoothed);
           // collisions/fuel/score below keep using this same mirrored p2Pos.
-          p2.x += (rp.x - p2.x) * 0.35;
-          p2.y += (rp.y - p2.y) * 0.35;
-          p2Tilt.current += (rp.tilt - p2Tilt.current) * 0.35;
+          const k35 = 1 - Math.pow(0.65, dtF);
+          p2.x += (rp.x - p2.x) * k35;
+          p2.y += (rp.y - p2.y) * k35;
+          p2Tilt.current += (rp.tilt - p2Tilt.current) * k35;
         } else {
         const stick2 = isOnlineNow ? p2RemoteStickRef.current : p2StickRef.current;
         if (stick2.active) {
-          steerPlane(v2, stick2.ax, stick2.ay);
+          steerPlane(v2, stick2.ax, stick2.ay, dtF);
         } else if (isOnlineNow) {
           const rk = p2RemoteKeysRef.current;
-          applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right);
+          applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right, dtF);
         } else {
-          applyKeyboardPlane(v2, k.KeyW, k.KeyS, k.KeyA, k.KeyD);
+          applyKeyboardPlane(v2, k.KeyW, k.KeyS, k.KeyA, k.KeyD, dtF);
         }
         v2.x = Math.max(-PLANE_MAX_VEL_H, Math.min(PLANE_MAX_VEL_H, v2.x));
         v2.y = Math.max(-PLANE_MAX_VEL,   Math.min(PLANE_MAX_VEL,   v2.y));
-        p2.x = Math.max(4, Math.min(96, p2.x + v2.x));
-        p2.y = Math.max(7, Math.min(88, p2.y + v2.y));
+        p2.x = Math.max(4, Math.min(96, p2.x + v2.x * dtF));
+        p2.y = Math.max(7, Math.min(88, p2.y + v2.y * dtF));
         const tilt2 = Math.max(-28, Math.min(28, v2.y * 20));
-        p2Tilt.current += (tilt2 - p2Tilt.current) * 0.13;
+        p2Tilt.current += (tilt2 - p2Tilt.current) * (1 - Math.pow(0.87, dtF));
         }
         if (p2PlaneRef.current) {
           p2PlaneRef.current.style.left      = `${p2.x}%`;
@@ -910,7 +918,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
       for (const b of bubblesRef.current) {
         if (b.popped) continue;
-        b.x += b.vx;
+        b.x += b.vx * dtF;
         if (b.x < -16) b.x = 108 + Math.random() * 25;
         const el = bubbleDomRefs.current.get(b.id);
         if (el) el.style.left = `${b.x}%`;
@@ -958,7 +966,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
       for (const b of bulletsRef.current) {
         if (!b.active) continue;
-        b.x += b.vx; b.y += b.vy;
+        b.x += b.vx * dtF; b.y += b.vy * dtF;
         if (b.x < 0 || b.x > 100 || b.y < 0 || b.y > 100) { b.active = false; continue; }
         const bEl = bulletDomRefs.current.get(b.id);
         if (bEl) { bEl.style.left = `${b.x}%`; bEl.style.top = `${b.y}%`; }
@@ -1028,7 +1036,11 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
     if (!isP2 || status !== 'playing') return;
     let raf = 0;
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    let lastT = performance.now();
     const tick = () => {
+      const nowP = performance.now();
+      const dtF = Math.min(3, Math.max(0.25, (nowP - lastT) / (1000 / 60)));
+      lastT = nowP;
       const snap = latestSnapRef.current;
       if (snap) {
         // First snapshot: align predicted state so there's no initial glide.
@@ -1046,26 +1058,27 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
         if (!frozen) {
           const stick2 = p2RemoteStickRef.current;
           if (stick2.active) {
-            steerPlane(v2, stick2.ax, stick2.ay);
+            steerPlane(v2, stick2.ax, stick2.ay, dtF);
           } else {
             const rk = p2RemoteKeysRef.current;
-            applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right);
+            applyKeyboardPlane(v2, rk.up, rk.down, rk.left, rk.right, dtF);
           }
           v2.x = clamp(v2.x, -PLANE_MAX_VEL_H, PLANE_MAX_VEL_H);
           v2.y = clamp(v2.y, -PLANE_MAX_VEL,   PLANE_MAX_VEL);
-          p2.x = clamp(p2.x + v2.x, 4, 96);
-          p2.y = clamp(p2.y + v2.y, 7, 88);
+          p2.x = clamp(p2.x + v2.x * dtF, 4, 96);
+          p2.y = clamp(p2.y + v2.y * dtF, 7, 88);
           const tilt2 = clamp(v2.y * 20, -28, 28);
-          p2Tilt.current += (tilt2 - p2Tilt.current) * 0.13;
+          p2Tilt.current += (tilt2 - p2Tilt.current) * (1 - Math.pow(0.87, dtF));
           // Own-plane authority: NO reconcile pull (that was the rubber-band).
           // Only adopt outright host teleports (respawn repositioning).
           const dx = snap.p2.x - p2.x, dy = snap.p2.y - p2.y;
           if (Math.hypot(dx, dy) > 25) { p2.x = snap.p2.x; p2.y = snap.p2.y; }
         } else {
           // Host-authoritative event (crash / shock knockback): follow the host.
-          p2.x += (snap.p2.x - p2.x) * 0.4;
-          p2.y += (snap.p2.y - p2.y) * 0.4;
-          p2Tilt.current += (snap.p2.tilt - p2Tilt.current) * 0.4;
+          const k40 = 1 - Math.pow(0.6, dtF);
+          p2.x += (snap.p2.x - p2.x) * k40;
+          p2.y += (snap.p2.y - p2.y) * k40;
+          p2Tilt.current += (snap.p2.tilt - p2Tilt.current) * k40;
           v2.x = 0; v2.y = 0;
         }
         if (p2ViewP2PlaneRef.current) {
@@ -1076,9 +1089,10 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
         // ── P1's plane: smooth interpolation toward the latest snapshot ──
         const r = p2RenderP1Ref.current;
-        r.x += (snap.p1.x - r.x) * 0.25;
-        r.y += (snap.p1.y - r.y) * 0.25;
-        r.tilt += (snap.p1.tilt - r.tilt) * 0.25;
+        const k25 = 1 - Math.pow(0.75, dtF);
+        r.x += (snap.p1.x - r.x) * k25;
+        r.y += (snap.p1.y - r.y) * k25;
+        r.tilt += (snap.p1.tilt - r.tilt) * k25;
         if (p2ViewP1PlaneRef.current) {
           p2ViewP1PlaneRef.current.style.left      = `${r.x}%`;
           p2ViewP1PlaneRef.current.style.top       = `${r.y}%`;
@@ -1093,7 +1107,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           liveIds.add(b.id);
           let rx = bmap.get(b.id);
           if (rx === undefined || Math.abs(b.x - rx) > 40) rx = b.x; // new bubble or edge wrap → snap
-          else { rx += b.vx; rx += (b.x - rx) * 0.12; }              // extrapolate + correction
+          else { rx += b.vx * dtF; rx += (b.x - rx) * (1 - Math.pow(0.88, dtF)); }              // extrapolate + correction
           bmap.set(b.id, rx);
           const el = bubbleDomRefs.current.get(b.id);
           if (el) el.style.left = `${rx}%`;
