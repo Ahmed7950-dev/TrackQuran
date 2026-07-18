@@ -43,6 +43,7 @@ import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
+import LetterRaceGame from './components/LetterRaceGame';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import BillPage from './components/BillPage';
@@ -449,6 +450,20 @@ const App: React.FC = () => {
     <FlappyLettersGame
       letters={[]}
       roomId={flappyRoomId}
+      playerRole="2"
+      onExit={() => { window.location.href = '/'; }}
+    />
+  );
+
+  // ── Letter Race online 2P — no auth required ───────────────────────────────
+  const letterRaceRoomId = (() => {
+    const m = window.location.pathname.match(/^\/letter-race\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterRaceRoomId) return (
+    <LetterRaceGame
+      letters={[]}
+      roomId={letterRaceRoomId}
       playerRole="2"
       onExit={() => { window.location.href = '/'; }}
     />
