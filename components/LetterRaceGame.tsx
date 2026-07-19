@@ -128,6 +128,7 @@ const CHARACTERS = [
   { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=2',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
   { key: 'goku',      name: 'Goku',   model: '/models/goku.glb?v=1',      scale: 0.85, portrait: '/sprites/race-goku-front.png?v=1', face: '/sprites/profile-goku.jpg?v=1' },
   { key: 'jaafar',    name: 'Jaafar', model: '/models/jaafar.glb?v=1',    scale: 0.95, portrait: '/sprites/race-jaafar-front.png?v=1', face: '/sprites/profile-jaafar.jpg?v=1' },
+  { key: 'luffy',     name: 'Luffy',  model: '/models/luffy.glb?v=1',     scale: 0.88, portrait: '/sprites/race-luffy-front.png?v=1', face: '/sprites/profile-luffy.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
