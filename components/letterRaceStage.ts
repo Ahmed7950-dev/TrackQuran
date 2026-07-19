@@ -222,8 +222,19 @@ export class RunnerStage {
       let bb = boneBounds();
       const h = Math.max(0.001, bb.mx.y - bb.mn.y);
       // per-character scale knob (stout rigs read oversized from bone bounds)
-      root.scale.setScalar((0.9 * this.models[who].scale) / h);
+      const targetH = 0.9 * this.models[who].scale;
+      root.scale.setScalar(targetH / h);
       root.updateMatrixWorld(true);
+      // Big-prop rigs (a huge helmet on a tiny chibi skeleton) dwarf their
+      // bones — bone-normalizing then inflates the MESH to giant size. If the
+      // real mesh towers over the target height, clamp by mesh bounds (upper
+      // sanity bound guards against the FBX 100x-lie case).
+      const meshBox = new THREE.Box3().setFromObject(root);
+      const meshH = meshBox.max.y - meshBox.min.y;
+      if (meshH > targetH * 1.45 && meshH < 50) {
+        root.scale.multiplyScalar((targetH * 1.15) / meshH);
+        root.updateMatrixWorld(true);
+      }
       bb = boneBounds();
       root.position.x -= (bb.mn.x + bb.mx.x) / 2;
       root.position.z -= (bb.mn.z + bb.mx.z) / 2;
