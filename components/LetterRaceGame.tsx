@@ -1383,6 +1383,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-hud button { padding: 6px 10px !important; font-size: 12px !important; white-space: nowrap; }
           .lr-hide-sm { display: none !important; }
           .lr-legend { display: none !important; }
+          .lr-flag > div { width: clamp(24px, 4.5vw, 44px) !important; height: clamp(24px, 4.5vw, 44px) !important; }
+          .lr-flag span { font-size: clamp(7px, 1.35vw, 12px) !important; }
           .lr-hud span { font-size: 11px !important; padding: 3px 8px !important; }
           .lr-sel-head { padding: 10px 12px 4px !important; gap: 8px !important; }
           .lr-sel-head span { font-size: 11px !important; padding: 6px 12px !important; letter-spacing: 1px !important; }
@@ -1429,7 +1431,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-actions { bottom: 16px !important; right: 10px !important; gap: 8px !important; }
           .lr-actions button { width: 54px !important; height: 54px !important; font-size: 8px !important; }
           /* visual only — the grab row stays at LETTER_Y in game logic */
-          .lr-flag { top: calc(14% + 18px) !important; }
+          .lr-flag { top: calc(14% + 14px) !important; }
+          .lr-flag > div { width: clamp(24px, 4.25vw, 44px) !important; height: clamp(24px, 4.25vw, 44px) !important; }
+          .lr-flag span { font-size: clamp(7px, 1.35vw, 12px) !important; }
         }
       `}</style>
     </div>
