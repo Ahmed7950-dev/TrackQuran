@@ -235,6 +235,20 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const phaseRef = useRef<Phase>('select');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  // ── Fullscreen (supported on iPhone since iOS 16.4; button hidden elsewhere)
+  const rootRef = useRef<HTMLDivElement>(null);
+  const canFullscreen = typeof document !== 'undefined' &&
+    !!((document.documentElement as any).requestFullscreen || (document.documentElement as any).webkitRequestFullscreen);
+  const toggleFullscreen = () => {
+    const doc: any = document;
+    const el: any = rootRef.current ?? document.documentElement;
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen)?.call(doc);
+    } else {
+      (el.requestFullscreen ?? el.webkitRequestFullscreen)?.call(el);
+    }
+  };
+
   // ── Online state ────────────────────────────────────────────────────────────
   const [netMode, setNetMode] = useState<'local' | 'online'>(isGuest ? 'online' : 'local');
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(roomId ?? null);
@@ -1009,7 +1023,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none' }}>
+    <div ref={rootRef} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none' }}>
       {/* ── Field: AI-illustrated top-view lawn with the finish line drawn in.
           Stretched to 100%/100% (not cover) so the painted checkered line
           stays at a FIXED field-% on every viewport — START_Y is calibrated
@@ -1019,7 +1033,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Letter row: red pennant flags planted along the top of the field,
           the letter written on the red banner ── */}
       {g.boxes.map((box, i) => !box.taken && (
-        <div key={`${box.letter}-${i}`} style={{
+        <div key={`${box.letter}-${i}`} className="lr-flag" style={{
           position: 'absolute', left: `${box.x}%`, top: `${LETTER_Y}%`, transform: 'translate(-50%,-50%)', zIndex: 5,
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
@@ -1062,15 +1076,18 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
 
       {/* ── Top HUD ── */}
       <div className="lr-hud" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
-        <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
+        <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>✕<span className="lr-hide-sm"> Exit</span></button>
+        {canFullscreen && (
+          <button onClick={toggleFullscreen} title="Full screen" style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>⛶</button>
+        )}
         <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
+        <div className="lr-scores" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
           {players.map((pl, i) => (
             <span key={`${pl.gid}-${i}`} style={{ background: colorAt(i), borderRadius: 999, padding: '4px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>{nameAt(i).slice(0, 10)} {scores[i] ?? 0}</span>
           ))}
           <span style={{ fontSize: 11, opacity: 0.8 }}>first to {ROUNDS_TO_WIN}</span>
         </div>
-        <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊 Listen</button>
+        <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊<span className="lr-hide-sm"> Listen</span></button>
       </div>
 
       {/* ── Controls legend (online: one legend — YOUR racer, either key set;
@@ -1106,19 +1123,19 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           <div
             ref={joyBaseRef}
             onTouchStart={joyMove} onTouchMove={joyMove} onTouchEnd={joyEnd} onTouchCancel={joyEnd}
-            className="lr-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 134, height: 134, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', border: '2.5px solid rgba(255,255,255,0.6)', zIndex: 25, touchAction: 'none' }}>
-            <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+            className="lr-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 118, height: 118, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.4)', zIndex: 25, touchAction: 'none' }}>
+            <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.65)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>MOVE</div>
           </div>
           <div className="lr-actions" style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 16, zIndex: 25 }}>
             <button
               onTouchStart={() => fireKey('KeyZ')} onMouseDown={() => fireKey('KeyZ')}
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', background: 'rgba(239,68,68,0.88)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              style={{ width: 62, height: 62, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(239,68,68,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
               💥<br />TACKLE
             </button>
             <button
               onTouchStart={() => fireKey('KeyX')} onMouseDown={() => fireKey('KeyX')}
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', background: 'rgba(245,158,11,0.9)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              style={{ width: 62, height: 62, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(245,158,11,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
               🦘<br />JUMP
             </button>
           </div>
@@ -1364,6 +1381,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-hud { padding: 6px 8px !important; gap: 6px !important; }
           .lr-hud-title { display: none !important; }
           .lr-hud button { padding: 6px 10px !important; font-size: 12px !important; white-space: nowrap; }
+          .lr-hide-sm { display: none !important; }
           .lr-legend { display: none !important; }
           .lr-hud span { font-size: 11px !important; padding: 3px 8px !important; }
           .lr-sel-head { padding: 10px 12px 4px !important; gap: 8px !important; }
@@ -1400,6 +1418,18 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-sel-footer input { padding: 9px 12px !important; font-size: 13px !important; width: 180px !important; }
           .lr-result-dance { flex: 1 1 40% !important; }
           .lr-legend { display: none !important; }
+          .lr-hud { padding: 4px 8px !important; gap: 5px !important; background: none !important; }
+          .lr-hud-title { display: none !important; }
+          .lr-hide-sm { display: none !important; }
+          .lr-hud button { padding: 6px 9px !important; font-size: 12px !important; background: rgba(0,0,0,0.28) !important; }
+          .lr-scores { position: absolute !important; top: calc(14vh + 60px) !important; right: 6px !important; flex-direction: column !important; align-items: flex-end !important; gap: 3px !important; max-width: none !important; }
+          .lr-scores span { font-size: 10px !important; padding: 2px 7px !important; opacity: 0.9; }
+          .lr-joy { width: 92px !important; height: 92px !important; bottom: 14px !important; left: 10px !important; }
+          .lr-joy > div:first-child { width: 38px !important; height: 38px !important; }
+          .lr-actions { bottom: 16px !important; right: 10px !important; gap: 8px !important; }
+          .lr-actions button { width: 54px !important; height: 54px !important; font-size: 8px !important; }
+          /* visual only — the grab row stays at LETTER_Y in game logic */
+          .lr-flag { top: calc(14% + 18px) !important; }
         }
       `}</style>
     </div>
