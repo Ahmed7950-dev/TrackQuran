@@ -420,7 +420,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           {/* racer avatars strip */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: 10, margin: '26px 0 40px' }}>
             <div style={{ display: 'flex' }}>
-              {['fennec', 'panda', 'mario', 'spiderman', 'chibi', 'tiger', 'alien', 'goku', 'jaafar'].map((k, i) => (
+              {['fennec', 'panda', 'cat', 'fox', 'chibi', 'tiger', 'alien', 'lion', 'jaafar'].map((k, i) => (
                 <img key={k} src={`/sprites/profile-${k}.jpg`} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${isDark ? '#0c2416' : '#fff'}`, marginInlineStart: i ? -10 : 0, boxShadow: '0 3px 8px rgba(0,0,0,0.18)' }} />
               ))}
             </div>
