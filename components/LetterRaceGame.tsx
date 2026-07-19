@@ -1023,7 +1023,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
           <div style={{
-            position: 'relative', width: 'clamp(56px, 8.5vw, 86px)', height: 'clamp(56px, 8.5vw, 86px)',
+            position: 'relative', width: 'clamp(34px, 8.5vw, 86px)', height: 'clamp(34px, 8.5vw, 86px)',
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
@@ -1039,7 +1039,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                 square. Arabic glyph metrics run ~1.4× the em box, so the font
                 is ~0.65× the banner height — tall/wide letters (ط س ك ي…)
                 stay INSIDE the red area instead of poking out of the flag. */}
-            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '66%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(15px, 2.45vw, 25px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
+            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '66%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(10px, 2.45vw, 25px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
           </div>
         </div>
       ))}
@@ -1060,9 +1060,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {players.map((p, i) => renderPlayer(p, i))}
 
       {/* ── Top HUD ── */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
+      <div className="lr-hud" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
         <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
-        <div style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
+        <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
           {players.map((pl, i) => (
             <span key={`${pl.gid}-${i}`} style={{ background: colorAt(i), borderRadius: 999, padding: '4px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>{nameAt(i).slice(0, 10)} {scores[i] ?? 0}</span>
@@ -1083,13 +1083,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </div>
       )) : (
         <>
-          <div style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
+          <div className="lr-legend" style={{ position: 'absolute', bottom: 8, left: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, color: '#1d4ed8' }}>
               <img src={portraitFor(0)} alt="" style={{ height: 24 }} /> Left player
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Hold <b>W</b> to run · <b>A</b>/<b>D</b> turn · <b>Z</b> tackle · <b>X</b> jump!</div>
           </div>
-          <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
+          <div className="lr-legend" style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 15, background: 'rgba(255,255,255,0.92)', borderRadius: 14, padding: '8px 12px', boxShadow: '0 3px 10px rgba(0,0,0,0.25)', textAlign: 'right', opacity: phase === 'race' ? 0.45 : 1, transition: 'opacity 0.3s' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, fontSize: 12, fontWeight: 900, color: '#c2410c' }}>
               Right player <img src={portraitFor(1)} alt="" style={{ height: 24, filter: tintStyleFor(1) }} />
             </div>
@@ -1105,11 +1105,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           <div
             ref={joyBaseRef}
             onTouchStart={joyMove} onTouchMove={joyMove} onTouchEnd={joyEnd} onTouchCancel={joyEnd}
-            style={{ position: 'absolute', bottom: 30, left: 22, width: 134, height: 134, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', border: '2.5px solid rgba(255,255,255,0.6)', zIndex: 25, touchAction: 'none' }}>
+            className="lr-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 134, height: 134, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', border: '2.5px solid rgba(255,255,255,0.6)', zIndex: 25, touchAction: 'none' }}>
             <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>MOVE</div>
           </div>
-          <div style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 16, zIndex: 25 }}>
+          <div className="lr-actions" style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 16, zIndex: 25 }}>
             <button
               onTouchStart={() => fireKey('KeyZ')} onMouseDown={() => fireKey('KeyZ')}
               style={{ width: 76, height: 76, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', background: 'rgba(239,68,68,0.88)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
@@ -1127,7 +1127,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Listen overlay ── */}
       {phase === 'listen' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 24, padding: '24px 34px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
+          <div style={{ background: '#fff', borderRadius: 24, padding: 'clamp(16px, 3vw, 24px) clamp(18px, 4vw, 34px)', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)', maxWidth: '94vw' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap', maxWidth: 480 }}>
               {players.slice(0, 6).map((pl, i) => (
                 <React.Fragment key={`${pl.gid}-${i}`}>
@@ -1147,7 +1147,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Countdown (the GO! flash lingers into the live race) ── */}
       {(phase === 'count' || (phase === 'race' && now < goUntilRef.current)) && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <div key={countNum} style={{ fontSize: countNum === 'GO!' ? 110 : 140, fontWeight: 900, color: countNum === 'GO!' ? '#fde047' : '#fff', textShadow: '0 6px 24px rgba(0,0,0,0.5)', animation: 'lrPop 0.75s ease-out' }}>
+          <div key={countNum} style={{ fontSize: countNum === 'GO!' ? 'clamp(64px, 17vw, 110px)' : 'clamp(80px, 22vw, 140px)', fontWeight: 900, color: countNum === 'GO!' ? '#fde047' : '#fff', textShadow: '0 6px 24px rgba(0,0,0,0.5)', animation: 'lrPop 0.75s ease-out' }}>
             {countNum}
           </div>
         </div>
@@ -1156,7 +1156,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Round won ── */}
       {phase === 'roundWon' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(6,30,12,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 24, padding: '26px 36px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)' }}>
+          <div style={{ background: '#fff', borderRadius: 24, padding: 'clamp(16px, 3vw, 26px) clamp(18px, 4vw, 36px)', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.45)', maxWidth: '94vw' }}>
             <img src={portraitFor(roundWinner)} alt="" style={{ height: 78, animation: 'lrIdle 0.6s ease-in-out infinite', filter: tintStyleFor(roundWinner) }} />
             <h3 style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 24, color: colorAt(roundWinner) }}>{nameAt(roundWinner)} wins the round! 🎉</h3>
             <p style={{ margin: '4px 0 0', color: '#475569', fontWeight: 700 }}>{scores.join(' — ')} · next letter coming…</p>
@@ -1176,9 +1176,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             {['#f472b6','#a78bfa','#60a5fa','#34d399','#fbbf24','#fb923c','#f87171','#2dd4bf','#c084fc','#4ade80','#38bdf8','#fde047','#f9a8d4','#93c5fd'].map((c, i) => (
               <span key={i} style={{ position: 'absolute', left: `${3 + i * 7}%`, top: 0, width: 12, height: 12, background: c, borderRadius: i % 2 ? '50%' : 3, animation: `lrConfetti ${2.2 + (i % 4) * 0.5}s linear ${(i % 5) * 0.35}s infinite`, zIndex: 1, pointerEvents: 'none' }} />
             ))}
-            <div style={{ display: 'flex', flex: 1, minHeight: 0, padding: '20px 28px 6px', gap: 20, position: 'relative', zIndex: 2 }}>
+            <div className="lr-result-body" style={{ display: 'flex', flex: 1, minHeight: 0, padding: '20px 28px 6px', gap: 20, position: 'relative', zIndex: 2 }}>
               {/* the champion dances */}
-              <div style={{ flex: '1 1 46%', minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: `radial-gradient(ellipse at 50% 62%, ${colorAt(win)}30, rgba(255,255,255,0.02) 70%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
+              <div className="lr-result-dance" style={{ flex: '1 1 46%', minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: `radial-gradient(ellipse at 50% 62%, ${colorAt(win)}30, rgba(255,255,255,0.02) 70%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <PortraitView key={`victory-${charKeyAt(win)}`} model={charOf(charKeyAt(win)).model} tinted={tintStyleFor(win) !== 'none'} scale={1} fill clip="victory" />
                 </div>
@@ -1188,7 +1188,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                 </div>
               </div>
               {/* final standings */}
-              <div style={{ flex: '1 1 42%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+              <div className="lr-result-standings" style={{ flex: '1 1 42%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
                 <div style={{ color: '#e2e8f0', fontWeight: 900, fontSize: 16, letterSpacing: 3 }}>FINAL STANDINGS</div>
                 {ranked.slice(0, 8).map((r, rank) => (
                   <div key={`${r.pl.gid}-${rank}`} style={{ display: 'flex', alignItems: 'center', gap: 12, background: rank === 0 ? 'rgba(253,224,71,0.14)' : 'rgba(255,255,255,0.06)', border: rank === 0 ? '2px solid rgba(253,224,71,0.55)' : '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '9px 14px' }}>
@@ -1280,14 +1280,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         return (
           <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'linear-gradient(155deg, #04140a 0%, #0a2913 55%, #0f3a1a 100%)' }}>
             {/* header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 28px 8px', flexShrink: 0 }}>
-              <span style={{ background: color, color: '#fff', fontWeight: 900, fontSize: 14, letterSpacing: 1.5, padding: '8px 20px', borderRadius: 999, boxShadow: `0 0 20px ${color}77` }}>{`PLAYER ${who}`}</span>
+            <div className="lr-sel-head" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 28px 8px', flexShrink: 0 }}>
+              <span style={{ background: color, color: '#fff', fontWeight: 900, fontSize: 14, letterSpacing: 1.5, padding: '8px 20px', borderRadius: 999, boxShadow: `0 0 20px ${color}77`, whiteSpace: 'nowrap' }}>{`PLAYER ${who}`}</span>
               <h2 style={{ margin: 0, color: '#fff', fontWeight: 900, fontSize: 'clamp(20px, 2.6vw, 30px)', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>Pick your racer!</h2>
               <button onClick={onExit} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(255,255,255,0.25)', color: '#e2e8f0', borderRadius: 999, padding: '9px 20px', fontWeight: 900, cursor: 'pointer', fontSize: 14 }}>✕ Exit</button>
             </div>
-            {/* body — live 3D preview (⅓) | roster grid (⅔) */}
-            <div style={{ flex: 1, display: 'flex', gap: 18, padding: '10px 28px', minHeight: 0 }}>
-              <div style={{ flex: '0 0 32%', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(ellipse at 50% 62%, ${color}22, rgba(255,255,255,0.03) 68%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
+            {/* body — live 3D preview (⅓) | roster grid (⅔); stacks on phones */}
+            <div className="lr-sel-body" style={{ flex: 1, display: 'flex', gap: 18, padding: '10px 28px', minHeight: 0 }}>
+              <div className="lr-sel-preview" style={{ flex: '0 0 32%', minWidth: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(ellipse at 50% 62%, ${color}22, rgba(255,255,255,0.03) 68%)`, border: '1px solid rgba(255,255,255,0.14)', borderRadius: 26, overflow: 'hidden' }}>
                 <div key={c.key} style={{ width: '100%', flex: 1, minHeight: 0, animation: 'lrPop 0.35s ease-out' }}>
                   <PortraitView model={c.model} tinted={tinted} scale={c.scale} fill />
                 </div>
@@ -1295,8 +1295,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                 {tinted && <div style={{ fontSize: 12, fontWeight: 700, color: '#5eead4', paddingBottom: 8 }}>team colors — Player 1 is {c.name} too</div>}
                 {!tinted && <div style={{ height: 12 }} />}
               </div>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(68px, 7vw, 104px), 1fr))', gap: 12 }}>
+              <div className="lr-sel-gridwrap" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(64px, 7vw, 104px), 1fr))', gap: 12 }}>
                   {CHARACTERS.map(ch => {
                     const sel = ch.key === chosen;
                     return (
@@ -1316,7 +1316,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               </div>
             </div>
             {/* footer — name + actions */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 28px 22px', flexWrap: 'wrap', flexShrink: 0 }}>
+            <div className="lr-sel-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 28px 22px', flexWrap: 'wrap', flexShrink: 0 }}>
               <input
                 value={name}
                 onChange={e => setName(e.target.value.slice(0, 14))}
@@ -1358,6 +1358,48 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         @keyframes lrDropIn   { 0% { transform: translate(-50%,-160%) scale(0.5) rotate(-160deg); } 70% { transform: translate(-50%,-46%) scale(1.1) rotate(8deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(0); } }
         @keyframes lrDropPulse{ 0%,100% { box-shadow: 0 0 18px rgba(245,158,11,0.8), 0 5px 10px rgba(0,0,0,0.3); } 50% { box-shadow: 0 0 30px rgba(245,158,11,1), 0 5px 10px rgba(0,0,0,0.3); } }
         input::placeholder { color: #94a3b8; }
+        /* ── responsive: phones & small tablets ── */
+        @media (max-width: 740px) {
+          .lr-hud { padding: 6px 8px !important; gap: 6px !important; }
+          .lr-hud-title { display: none !important; }
+          .lr-hud button { padding: 6px 10px !important; font-size: 12px !important; white-space: nowrap; }
+          .lr-legend { display: none !important; }
+          .lr-hud span { font-size: 11px !important; padding: 3px 8px !important; }
+          .lr-sel-head { padding: 10px 12px 4px !important; gap: 8px !important; }
+          .lr-sel-head span { font-size: 11px !important; padding: 6px 12px !important; letter-spacing: 1px !important; }
+          .lr-sel-head h2 { font-size: 18px !important; }
+          .lr-sel-head button { padding: 7px 14px !important; font-size: 12px !important; }
+          .lr-sel-body { flex-direction: column !important; padding: 6px 12px !important; gap: 10px !important; overflow-y: auto !important; }
+          .lr-sel-preview { flex: 0 0 30vh !important; min-width: 0 !important; width: 100% !important; }
+          .lr-sel-gridwrap { flex: none !important; }
+          .lr-sel-footer { padding: 8px 12px 14px !important; gap: 8px !important; }
+          .lr-sel-footer button { padding: 11px 18px !important; font-size: 14px !important; }
+          .lr-sel-footer input { padding: 11px 14px !important; font-size: 14px !important; width: min(220px, 60vw) !important; }
+          .lr-result-body { flex-direction: column !important; padding: 10px 12px 4px !important; gap: 10px !important; overflow-y: auto !important; }
+          .lr-result-dance { flex: 0 0 38vh !important; }
+          .lr-result-standings { flex: none !important; }
+          .lr-joy { width: 108px !important; height: 108px !important; bottom: 20px !important; left: 14px !important; }
+          .lr-joy > div:first-child { width: 46px !important; height: 46px !important; }
+          .lr-actions { bottom: 26px !important; right: 14px !important; gap: 10px !important; }
+          .lr-actions button { width: 62px !important; height: 62px !important; font-size: 9px !important; }
+        }
+        /* ── responsive: short screens (landscape phones) ── */
+        @media (max-height: 480px) {
+          .lr-sel-head { padding: 8px 14px 2px !important; }
+          .lr-sel-head h2 { font-size: 16px !important; }
+          .lr-sel-head span { font-size: 11px !important; padding: 5px 12px !important; }
+          .lr-sel-head button { padding: 6px 12px !important; font-size: 12px !important; }
+          .lr-sel-body { overflow: hidden !important; padding: 4px 14px !important; gap: 10px !important; }
+          .lr-sel-preview { flex: 0 0 26% !important; min-width: 150px !important; }
+          .lr-sel-gridwrap { align-items: flex-start !important; overflow-y: auto !important; }
+          .lr-sel-gridwrap > div { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)) !important; gap: 8px !important; }
+          .lr-sel-gridwrap span { font-size: 10px !important; padding: 10px 2px 3px !important; }
+          .lr-sel-footer { padding: 6px 12px 10px !important; gap: 8px !important; }
+          .lr-sel-footer button { padding: 9px 16px !important; font-size: 13px !important; }
+          .lr-sel-footer input { padding: 9px 12px !important; font-size: 13px !important; width: 180px !important; }
+          .lr-result-dance { flex: 1 1 40% !important; }
+          .lr-legend { display: none !important; }
+        }
       `}</style>
     </div>
   );
