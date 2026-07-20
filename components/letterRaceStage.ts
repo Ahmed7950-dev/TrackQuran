@@ -43,7 +43,7 @@ const loadGLTF = (url: string): Promise<any> => {
 // window.__lrCrate = { bone, s, x, y, z, rx, ry, rz }.
 const CRATE_URL = '/models/crate.glb?v=1';
 const CRATE_BONES = ['Spine02', 'mixamorig:Spine2', 'Spine2']; // Tripo / Mixamo chest bone
-const CRATE_DEFAULT = { s: 34, x: 0, y: -3, z: 3, rx: 0, ry: 0, rz: 0 };
+const CRATE_DEFAULT = { s: 34, x: 0, y: 5, z: 7, rx: 0, ry: 0, rz: 0 };
 let cratePromise: Promise<any> | null = null;
 const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null));
 
@@ -359,8 +359,11 @@ export class RunnerStage {
         c.current = clip as RunnerAnim;
       }
       const a = c.actions[clip];
-      // idle plays at its own rate; run/carry follow the runner's speed
-      if (a && clip !== 'idle') a.timeScale = 0.9 + speedNorm * 1.4;
+      // idle plays at its own rate; run/carry follow the runner's speed. When a
+      // carrier stops, freeze the carry-run on its current frame (timeScale 0)
+      // instead of jogging in place.
+      if (a && clip === 'carry') a.timeScale = speedNorm < 0.06 ? 0 : 0.9 + speedNorm * 1.4;
+      else if (a && clip === 'run') a.timeScale = 0.9 + speedNorm * 1.4;
       return;
     }
     if (c.current !== anim) {

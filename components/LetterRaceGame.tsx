@@ -1456,7 +1456,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         @keyframes lrDropIn   { 0% { transform: translate(-50%,-160%) scale(0.5) rotate(-160deg); } 70% { transform: translate(-50%,-46%) scale(1.1) rotate(8deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(0); } }
         @keyframes lrSpin     { to { transform: rotate(360deg); } }
         .lr-spin { animation: lrSpin 0.7s linear infinite; }
-        @keyframes lrDropPulse{ 0%,100% { box-shadow: 0 0 18px rgba(245,158,11,0.8), 0 5px 10px rgba(0,0,0,0.3); } 50% { box-shadow: 0 0 30px rgba(245,158,11,1), 0 5px 10px rgba(0,0,0,0.3); } }
+        @keyframes lrDropPulse{ 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
         input::placeholder { color: #94a3b8; }
         /* ── responsive: phones & small tablets ── */
         @media (max-width: 740px) {
