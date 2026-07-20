@@ -43,7 +43,7 @@ const loadGLTF = (url: string): Promise<any> => {
 // window.__lrCrate = { bone, s, x, y, z, rx, ry, rz }.
 const CRATE_URL = '/models/crate.glb?v=1';
 const CRATE_BONES = ['Spine02', 'mixamorig:Spine2', 'Spine2']; // Tripo / Mixamo chest bone
-const CRATE_DEFAULT = { s: 32, x: 0, y: 7, z: -5, rx: 0, ry: 0, rz: 0 }; // on the upper back
+const CRATE_DEFAULT = { s: 36, x: 0.5, y: 3, z: 30, rx: 0, ry: 0, rz: 0 };
 let cratePromise: Promise<any> | null = null;
 const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null));
 
