@@ -19,6 +19,7 @@ interface PairRow {
   student_name: string | null;
   quran_report_id: string | null;
   arabic_share_token: string | null;
+  arabic_student_id?: string | null;
 }
 
 /**
@@ -84,16 +85,34 @@ export async function getPortalTokenForStudent(kind: 'quran' | 'arabic', student
 export async function getPortalPairByToken(token: string): Promise<PortalPair | null> {
   const { data, error } = await supabase
     .from('student_portal_pairs')
-    .select('token, student_name, quran_report_id, arabic_share_token')
+    .select('token, student_name, quran_report_id, arabic_share_token, arabic_student_id')
     .eq('token', token)
     .maybeSingle();
   if (error || !data) return null;
   const row = data as PairRow;
-  if (!row.quran_report_id || !row.arabic_share_token) return null;
+  if (!row.quran_report_id) return null;
+
+  // The Arabic token cached on the pair can go STALE if the student's share
+  // token was regenerated after pairing — then the Arabic portal shows
+  // "link not found" even though the pairing is valid. Re-resolve it from the
+  // stable arabic_student_id (the student row is the source of truth for which
+  // token opens the portal); fall back to the cached column if the lookup fails.
+  let arabicShareToken = row.arabic_share_token ?? null;
+  if (row.arabic_student_id) {
+    const { data: st } = await supabase
+      .from('arabic_students')
+      .select('share_token')
+      .eq('id', row.arabic_student_id)
+      .maybeSingle();
+    const live = (st as { share_token: string | null } | null)?.share_token;
+    if (live) arabicShareToken = live;
+  }
+  if (!arabicShareToken) return null;
+
   return {
     token: row.token,
     studentName: row.student_name ?? 'Student',
     quranReportId: row.quran_report_id,
-    arabicShareToken: row.arabic_share_token,
+    arabicShareToken,
   };
 }
