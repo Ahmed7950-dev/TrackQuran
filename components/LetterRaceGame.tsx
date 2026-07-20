@@ -25,6 +25,14 @@ import { GameInviteButton } from './GameInvite';
 
 const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
 
+// Letter crate: the cream front panel of race-box.png, mapped in the image's
+// own pixel space (viewBox 1137×1097). BOX_PANEL_MATRIX is the affine that
+// skews a 100-unit local square (letter centred at 50,50) onto that panel's
+// ¾-view parallelogram — corners TL(431,466) TR(1015,388) BL(441,938).
+const BOX_VB_W = 1137;
+const BOX_VB_H = 1097;
+const BOX_PANEL_MATRIX = 'matrix(5.843,-0.779,0.102,4.717,431,466)';
+
 type LetterForm = 'isolated' | 'initial' | 'medial' | 'final';
 function getLetterInForm(letter: string, form: LetterForm): string {
   switch (form) {
@@ -1089,19 +1097,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
-            <svg viewBox="0 0 4335 4335" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden>
-              <path d="m4081 2443-630-928 630-929h-1259v1857z" fill="#c62223" />
-              <path d="m518 206h2700v1857h-2700z" fill="#e31e24" />
-              <path d="m2827 2063h391l-391 390z" fill="#a32421" />
-              <path d="m412 83h213v4201h-213z" fill="#c5c6c6" />
-              <path d="m305 4162h426v122h-426z" fill="#b2b3b3" />
-              <path d="m305 83h426v122h-426z" fill="#b2b3b3" />
+            {/* Wooden crate whose cream front panel faces the camera at the
+                field's ¾ angle; the letter is skewed onto that panel with an
+                affine transform (BOX_PANEL_MATRIX) so it sits ON the face. The
+                SVG uses the image's own pixel viewBox + preserveAspectRatio
+                "none" so it stretches in lockstep with the crate at any size. */}
+            <img src="/sprites/race-box.png?v=1" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+            <svg viewBox={`0 0 ${BOX_VB_W} ${BOX_VB_H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
+              <g transform={BOX_PANEL_MATRIX}>
+                <text x="50" y="50" textAnchor="middle" dominantBaseline="central" style={{ ...HAFS }} fontWeight={700} fontSize={62} fill="#3a2410">{getLetterInForm(box.letter, form)}</text>
+              </g>
             </svg>
-            {/* the red banner spans x 12-74% (+ tail to ~86%), y 5-48% of the
-                square. Arabic glyph metrics run ~1.4× the em box, so the font
-                is ~0.65× the banner height — tall/wide letters (ط س ك ي…)
-                stay INSIDE the red area instead of poking out of the flag. */}
-            <span dir="rtl" style={{ ...HAFS, position: 'absolute', left: '12%', top: '4.5%', width: '66%', height: '43%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(10px, 2.45vw, 25px)', lineHeight: 1, color: '#fff', textShadow: '0 2px 3px rgba(0,0,0,0.4)' }}>{getLetterInForm(box.letter, form)}</span>
           </div>
         </div>
       ))}
@@ -1453,7 +1459,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-hide-sm { display: none !important; }
           .lr-legend { display: none !important; }
           .lr-flag > div { width: clamp(24px, 4.5vw, 44px) !important; height: clamp(24px, 4.5vw, 44px) !important; }
-          .lr-flag span { font-size: clamp(7px, 1.35vw, 12px) !important; }
           .lr-hud span { font-size: 11px !important; padding: 3px 8px !important; }
           .lr-sel-head { padding: 10px 12px 4px !important; gap: 8px !important; }
           .lr-sel-head span { font-size: 11px !important; padding: 6px 12px !important; letter-spacing: 1px !important; }
@@ -1502,7 +1507,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           /* visual only — the grab row stays at LETTER_Y in game logic */
           .lr-flag { top: calc(14% + 14px) !important; }
           .lr-flag > div { width: clamp(24px, 4.25vw, 44px) !important; height: clamp(24px, 4.25vw, 44px) !important; }
-          .lr-flag span { font-size: clamp(7px, 1.35vw, 12px) !important; }
         }
       `}</style>
     </div>
