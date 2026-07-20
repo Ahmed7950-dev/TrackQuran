@@ -476,7 +476,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const target = queueRef.current[queuePosRef.current];
     queuePosRef.current += 1;
 
-    const distractors = shuffle(ARABIC_LETTERS.filter(l => l !== target)).slice(0, 10);
+    const distractors = shuffle(ARABIC_LETTERS.filter(l => l !== target)).slice(0, 9);
     const rowLetters = shuffle([target, ...distractors]);
     const colors = shuffle(BOX_COLORS);
     const n = rowLetters.length;
@@ -1106,7 +1106,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
           <div style={{
-            position: 'relative', width: 'clamp(24px, 5.4vw, 50px)', height: 'clamp(24px, 5.4vw, 50px)',
+            position: 'relative', width: 'clamp(28px, 6vw, 58px)', height: 'clamp(28px, 6vw, 58px)',
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
