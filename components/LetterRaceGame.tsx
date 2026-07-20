@@ -480,7 +480,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const rowLetters = shuffle([target, ...distractors]);
     const colors = shuffle(BOX_COLORS);
     const n = rowLetters.length;
-    const left = 8, right = 92;
+    const left = 15, right = 85;   // centred row with padding to the screen edges
     game.current.boxes = rowLetters.map((letter, i) => ({
       letter,
       x: n === 1 ? 50 : left + ((right - left) * i) / (n - 1),
@@ -1050,15 +1050,28 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const displayTarget = getLetterInForm(g.target, form);
   const carrierGrace = now < g.graceUntil;
 
+  // A letter crate at an arbitrary pixel size — reused for the carried letter
+  // above a runner's head and the loose dropped letter, so both match the row.
+  const crateLetter = (letter: string, sizePx: number, style?: React.CSSProperties) => (
+    <div style={{ position: 'relative', width: sizePx, height: sizePx, filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.3))', ...style }}>
+      <img src="/sprites/race-box.png?v=1" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      <svg viewBox={`0 0 ${BOX_VB_W} ${BOX_VB_H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
+        <g transform={BOX_PANEL_MATRIX}>
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central" style={{ ...HAFS }} fontWeight={700} fontSize={62} fill="#3a2410">{getLetterInForm(letter, form)}</text>
+        </g>
+      </svg>
+    </div>
+  );
+
   const renderPlayer = (p: Racer, i: number) => {
     const color = colorAt(i);
     const fallen = now < p.fallenUntil;
     return (
       <div key={`${p.gid}-${i}`} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
-        {/* Carried letter floats above the head */}
+        {/* Carried letter — a mini crate bobbing above the head */}
         {p.carrying && (
-          <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(#ffffff,#fef9c3)', border: `3px solid ${color}`, borderRadius: 12, width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 14px ${color}88, 0 4px 10px rgba(0,0,0,0.25)`, animation: 'lrCarry 0.7s ease-in-out infinite' }}>
-            <span dir="rtl" style={{ ...HAFS, fontSize: 27, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
+          <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', animation: 'lrCarry 0.7s ease-in-out infinite' }}>
+            {crateLetter(g.target, 40)}
           </div>
         )}
         {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
@@ -1093,7 +1106,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
           <div style={{
-            position: 'relative', width: 'clamp(34px, 8.5vw, 86px)', height: 'clamp(34px, 8.5vw, 86px)',
+            position: 'relative', width: 'clamp(24px, 5.4vw, 50px)', height: 'clamp(24px, 5.4vw, 50px)',
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
@@ -1115,9 +1128,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Dropped letter, loose on the grass after a tackle ── */}
       {g.dropped && (
         <div style={{ position: 'absolute', left: `${g.dropped.x}%`, top: `${g.dropped.y}%`, transform: 'translate(-50%,-50%)', zIndex: 8, animation: 'lrDropIn 0.35s ease-out' }}>
-          <div style={{ width: 50, height: 50, background: 'linear-gradient(#ffffff,#fef9c3)', border: '4px solid #f59e0b', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 18px rgba(245,158,11,0.8), 0 5px 10px rgba(0,0,0,0.3)', animation: 'lrDropPulse 0.9s ease-in-out infinite' }}>
-            <span dir="rtl" style={{ ...HAFS, fontSize: 28, lineHeight: 1, color: '#0f172a' }}>{displayTarget}</span>
-          </div>
+          {crateLetter(g.target, 46, { animation: 'lrDropPulse 0.9s ease-in-out infinite' })}
         </div>
       )}
 
