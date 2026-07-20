@@ -42,8 +42,12 @@ const loadGLTF = (url: string): Promise<any> => {
 // carry-run's torso lean and sits "in the arms". Tunable live in DEV via
 // window.__lrCrate = { bone, s, x, y, z, rx, ry, rz }.
 const CRATE_URL = '/models/crate.glb?v=1';
-const CRATE_BONES = ['Spine02', 'mixamorig:Spine2', 'Spine2']; // Tripo / Mixamo chest bone
+// Tripo chest bone, then Mixamo (three.js strips the ':' → 'mixamorigSpine2').
+const CRATE_BONES = ['Spine02', 'mixamorigSpine2', 'mixamorig:Spine2', 'Spine2'];
 const CRATE_DEFAULT = { s: 36, x: 0.5, y: 3, z: 30, rx: 0, ry: 0, rz: 0 };
+// The fennec (Sunny) rides a Mixamo skeleton whose chest bone has different
+// local axes/scale, so it needs its own placement.
+const CRATE_DEFAULT_MIXAMO = { s: 36, x: 0.5, y: 28, z: 11, rx: 0, ry: 0, rz: 0 };
 let cratePromise: Promise<any> | null = null;
 const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null));
 
@@ -103,6 +107,7 @@ interface CharRig {
   scene: any;              // per-character scene (independent lighting-safe)
   camera: any;
   crate?: any;             // 3D wooden crate held while carrying (hidden otherwise)
+  crateMixamo?: boolean;   // crate parented to a Mixamo chest bone (fennec)
 }
 
 export interface RunnerModel { url: string; scale: number; tint?: boolean }
@@ -329,6 +334,7 @@ export class RunnerStage {
           crate.visible = false;
           bone.add(crate);
           rig.crate = crate;
+          rig.crateMixamo = /mixamorig/i.test(bone.name);
         }
       }
       this.chars.push(rig);
@@ -410,7 +416,9 @@ export class RunnerStage {
         const on = p.anim === 'carry';
         c.crate.visible = on;
         if (on) {
-          const cfg = ((window as any).__lrCrate || CRATE_DEFAULT); // set by the ?cratetune panel
+          const cfg = c.crateMixamo
+            ? ((window as any).__lrCrateM || CRATE_DEFAULT_MIXAMO)
+            : ((window as any).__lrCrate || CRATE_DEFAULT);
           c.crate.scale.setScalar(cfg.s);
           c.crate.position.set(cfg.x, cfg.y, cfg.z);
           c.crate.rotation.set(cfg.rx, cfg.ry, cfg.rz);
