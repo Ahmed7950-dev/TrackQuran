@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose, type RunnerModel } from './letterRaceStage';
+import { GameInviteButton } from './GameInvite';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Letter Race — a top-view keyboard race for the Arabic alphabet: 2 players
@@ -1289,6 +1290,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 10, padding: '8px 10px', fontSize: 11, color: '#334155', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{shareLink}</div>
               <button onClick={copyLink} style={{ background: linkCopied ? '#22c55e' : '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontWeight: 900, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
             </div>
+            <div style={{ maxWidth: 420, margin: '0 auto' }}><GameInviteButton game="Letter Race" url={shareLink} /></div>
             {shareLink && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 12 }}>
                 <button onClick={() => setQrOpen(true)} title="Tap to enlarge" style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: 8, cursor: 'pointer' }}>

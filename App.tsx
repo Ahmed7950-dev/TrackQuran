@@ -46,6 +46,7 @@ import FlappyLettersGame from './components/FlappyLettersGame';
 import LetterRaceGame from './components/LetterRaceGame';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
+import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
 import CalendarPage from './components/CalendarPage';
@@ -1518,6 +1519,11 @@ const App: React.FC = () => {
   const selectedStudent = students.find((s) => s.id === selectedStudentId) || null;
   const sessionStudent = students.find((s) => s.id === sessionStudentId) || null;
   const isDetailedView = !!selectedStudentId || !!sessionStudentId;
+  // Game invitations: active while the tutor is inside a specific student's page
+  const inviteStudent = sessionStudent ?? selectedStudent;
+  const tutorInviteIdentity = inviteStudent
+    ? { studentId: inviteStudent.id, selfName: currentUser.name, selfRole: 'tutor' as const }
+    : null;
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
@@ -1823,9 +1829,13 @@ const App: React.FC = () => {
             }
           />
         ) : activeTab === 'alphabetTrainer' ? (
-          <AlphabetTrainerPage />
+          <GameInviteContext.Provider value={tutorInviteIdentity}>
+            <AlphabetTrainerPage />
+          </GameInviteContext.Provider>
         ) : activeTab === 'qaedah' ? (
-          <QaedahPage />
+          <GameInviteContext.Provider value={tutorInviteIdentity}>
+            <QaedahPage />
+          </GameInviteContext.Provider>
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
         ) : activeTab === 'tajweed' ? (
@@ -2021,6 +2031,8 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      {tutorInviteIdentity && <GameInvitePopup identity={tutorInviteIdentity} />}
 
       <AddStudentModal
         isOpen={isAddStudentModalOpen}

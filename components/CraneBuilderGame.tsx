@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { wordAudioUrl, speakWord } from '../services/wordAudioService';
 import { supabase } from '../lib/supabase';
+import { GameInviteButton } from './GameInvite';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crane Builder — a Qaedah word-building game.
@@ -891,6 +892,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
                 <button onClick={() => { navigator.clipboard?.writeText(shareLink).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1600); }}
                   style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 16px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>{copied ? '✓ Copied' : 'Copy'}</button>
               </div>
+              <GameInviteButton game="Crane Builder" url={shareLink} />
               <div style={{ marginTop: 16, color: '#64748b', fontSize: 13, fontWeight: 600 }}>○ Waiting for the student to join…</div>
               <button onClick={onExit} style={{ marginTop: 14, background: 'transparent', color: '#94a3b8', border: 'none', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
             </div>

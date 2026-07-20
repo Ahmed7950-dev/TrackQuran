@@ -20,6 +20,7 @@ import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
 import AlphabetTrainerPage from './AlphabetTrainerPage';
 import LettersTrainerPage from './LettersTrainerPage';
+import { GameInviteContext, GameInvitePopup } from './GameInvite';
 import StudentProgressPage from './StudentProgressPage';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
@@ -331,6 +332,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const { student_name, report_data } = report;
   const { generatedAt, studentProgress } = report_data;
   const hasProgress = !!studentProgress;
+  const inviteIdentity = { studentId: report.student_id, selfName: student_name, selfRole: 'student' as const };
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir={language === 'ar' ? 'rtl' : 'ltr'}>
@@ -950,11 +952,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               <TajweedPage students={[]} preSelectedStudentId={report.student_id} readOnly />
             )}
             {activeTab === 'qaedah' && (
-              <QaedahPage isStudentView={true} />
+              <GameInviteContext.Provider value={inviteIdentity}>
+                <QaedahPage isStudentView={true} />
+              </GameInviteContext.Provider>
             )}
             {activeTab === 'alphabetTrainer' && (
-              <AlphabetTrainerPage isStudentView={true} avatarSrc={report_data.profileIcon} />
+              <GameInviteContext.Provider value={inviteIdentity}>
+                <AlphabetTrainerPage isStudentView={true} avatarSrc={report_data.profileIcon} />
+              </GameInviteContext.Provider>
             )}
+            <GameInvitePopup identity={inviteIdentity} />
             {activeTab === 'lettersTrainer' && (
               <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} readOnly />
             )}

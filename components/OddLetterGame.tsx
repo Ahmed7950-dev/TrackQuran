@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
+import { GameInviteButton } from './GameInvite';
 import { submitOddLetterScore, getOddLetterLeaderboard, OddLetterEntry, SubmitResult } from '../services/oddLetterService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -370,6 +371,7 @@ const OddLetterGame: React.FC<Props> = ({ onExit, roomId: propRoomId, playerRole
                 <div style={{ flex: 1, background: '#ffffff14', borderRadius: 10, padding: '7px 10px', fontSize: 10, color: '#cbd5e1', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareLink}</div>
                 <button onClick={copyLink} style={{ background: linkCopied ? '#22c55e' : '#14b8a6', color: '#fff', border: 'none', borderRadius: 10, padding: '7px 12px', fontWeight: 900, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
               </div>
+              <GameInviteButton game="Find the Odd Letter" url={shareLink} />
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 10 }}>
                 <button onClick={() => setQrOpen(true)} style={{ background: '#fff', border: 'none', borderRadius: 12, padding: 6, cursor: 'pointer' }} title="Tap to enlarge">
                   <QRCodeSVG value={shareLink} size={110} level="M" />

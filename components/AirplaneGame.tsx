@@ -4,6 +4,7 @@ import lottie from 'lottie-web';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { safeCopy } from '../utils';
 import { createGameChannel } from '../services/p2pGameChannel';
+import { GameInviteButton } from './GameInvite';
 
 declare global {
   namespace JSX {
@@ -2109,6 +2110,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
                 <div className="flex-1 bg-slate-100 rounded-lg px-2 py-1.5 text-[10px] text-slate-500 font-mono truncate border border-slate-200">{shareLink}</div>
                 <button onClick={copyLink} className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all active:scale-95 flex-shrink-0" style={{ background: linkCopied ? '#22c55e' : '#3b82f6', color: 'white' }}>{linkCopied ? '✓ Copied' : 'Copy'}</button>
               </div>
+              <GameInviteButton game="Letter Flight" url={shareLink} />
               <div className="mt-2 flex flex-col items-center gap-1">
                 <button type="button" onClick={() => setQrOpen(true)} title="Tap to enlarge"
                   className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer">
