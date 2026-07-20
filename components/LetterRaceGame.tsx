@@ -132,6 +132,12 @@ const CHARACTERS = [
   { key: 'luffy',     name: 'Luffy',  model: '/models/luffy.glb?v=1',     scale: 0.88, portrait: '/sprites/race-luffy-front.png?v=1', face: '/sprites/profile-luffy.jpg?v=2' },
   { key: 'roshi',     name: 'Roshi',  model: '/models/roshi.glb?v=1',     scale: 0.8,  portrait: '/sprites/race-roshi-front.png?v=1', face: '/sprites/profile-roshi.jpg?v=1' },
   { key: 'cowboy',    name: 'Tex',    model: '/models/cowboy.glb?v=1',    scale: 0.85, portrait: '/sprites/race-cowboy-front.png?v=1', face: '/sprites/profile-cowboy.jpg?v=1' },
+  { key: 'tom',       name: 'Tom',    model: '/models/tom.glb?v=1',       scale: 0.9,  portrait: '/sprites/race-tom-front.png?v=1', face: '/sprites/profile-tom.jpg?v=1' },
+  { key: 'jerry',     name: 'Jerry',  model: '/models/jerry.glb?v=1',     scale: 0.72, portrait: '/sprites/race-jerry-front.png?v=1', face: '/sprites/profile-jerry.jpg?v=1' },
+  { key: 'ironman',   name: 'Iron Man', model: '/models/ironman.glb?v=1', scale: 0.92, portrait: '/sprites/race-ironman-front.png?v=1', face: '/sprites/profile-ironman.jpg?v=1' },
+  { key: 'hulk',      name: 'Hulk',   model: '/models/hulk.glb?v=1',      scale: 0.98, portrait: '/sprites/race-hulk-front.png?v=1', face: '/sprites/profile-hulk.jpg?v=1' },
+  { key: 'deadpool',  name: 'Deadpool', model: '/models/deadpool.glb?v=1', scale: 0.9, portrait: '/sprites/race-deadpool-front.png?v=1', face: '/sprites/profile-deadpool.jpg?v=1' },
+  { key: 'batman',    name: 'Batman', model: '/models/batman.glb?v=1',    scale: 0.92, portrait: '/sprites/race-batman-front.png?v=1', face: '/sprites/profile-batman.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
