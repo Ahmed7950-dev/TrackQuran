@@ -11,7 +11,7 @@
 // three.js is imported dynamically so the main bundle stays lean.
 // -----------------------------------------------------------------------------
 
-export type RunnerAnim = 'idle' | 'run' | 'tackle' | 'trip' | 'jump';
+export type RunnerAnim = 'idle' | 'run' | 'tackle' | 'trip' | 'jump' | 'carry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared model cache. Every stage (field + selector previews) loads through
@@ -36,6 +36,16 @@ const loadGLTF = (url: string): Promise<any> => {
   }
   return p;
 };
+
+// The 3D wooden crate a runner holds while carrying a letter. Loaded once and
+// cloned per carrying character; parented to the chest bone so it rides the
+// carry-run's torso lean and sits "in the arms". Tunable live in DEV via
+// window.__lrCrate = { bone, s, x, y, z, rx, ry, rz }.
+const CRATE_URL = '/models/crate.glb?v=1';
+const CRATE_BONES = ['Spine02', 'mixamorig:Spine2', 'Spine2']; // Tripo / Mixamo chest bone
+const CRATE_DEFAULT = { s: 34, x: 0, y: -3, z: 3, rx: 0, ry: 0, rz: 0 };
+let cratePromise: Promise<any> | null = null;
+const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null));
 
 // Warm the cache for the whole roster. A small worker pool loads several at a
 // time so the tail of the list (newest characters) is ready in seconds instead
@@ -92,6 +102,7 @@ interface CharRig {
   current: RunnerAnim | '';
   scene: any;              // per-character scene (independent lighting-safe)
   camera: any;
+  crate?: any;             // 3D wooden crate held while carrying (hidden otherwise)
 }
 
 export interface RunnerModel { url: string; scale: number; tint?: boolean }
@@ -131,6 +142,8 @@ export class RunnerStage {
     const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
     for (const url of unique) loaded.set(url, await loadGLTF(url));
+    if (this.disposed) return;
+    const crateGltf = await loadCrate();
     if (this.disposed) return;
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
@@ -296,7 +309,29 @@ export class RunnerStage {
         }
         actions[clip.name] = a;
       }
-      this.chars.push({ root, mixer, actions, current: '', scene, camera });
+
+      // 3D crate held while carrying: a plain clone parented to the chest bone,
+      // hidden until the runner picks up a letter. Wood, so just opaque it and
+      // kill frustum culling (skinned neighbours animate wide).
+      const rig: CharRig = { root, mixer, actions, current: '', scene, camera };
+      if (crateGltf?.scene) {
+        let bone: any = null;
+        for (const nm of CRATE_BONES) { bone = root.getObjectByName(nm); if (bone) break; }
+        if (bone) {
+          const crate = skClone(crateGltf.scene);
+          crate.traverse((o: any) => {
+            if (o.isMesh) {
+              o.frustumCulled = false;
+              const mats = Array.isArray(o.material) ? o.material : [o.material];
+              for (const m of mats) { if (m) { m.transparent = false; m.depthWrite = true; if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05); if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7); m.needsUpdate = true; } }
+            }
+          });
+          crate.visible = false;
+          bone.add(crate);
+          rig.crate = crate;
+        }
+      }
+      this.chars.push(rig);
     }
 
     this.lastT = performance.now();
@@ -311,36 +346,30 @@ export class RunnerStage {
   }
 
   private setAnim(c: CharRig, anim: RunnerAnim, speedNorm: number) {
-    const runA = c.actions['run'];
-    if (anim === 'run' || anim === 'idle') {
-      const idleA = c.actions['idle'];
-      if (anim === 'idle' && idleA) {
-        if (c.current !== 'idle') {
-          c.mixer.stopAllAction();
-          idleA.reset().play();
-          c.current = 'idle';
-        }
-        return;
-      }
-      if (c.current !== 'run' && c.current !== 'idle') {
+    // Locomotion clips (run / idle / carry) share the speed-driven timeScale.
+    // 'carry' is a run-while-holding cycle; fall back to 'run' if a GLB hasn't
+    // been re-baked with it yet, so the crate still shows over a normal run.
+    if (anim === 'run' || anim === 'idle' || anim === 'carry') {
+      const clip = anim === 'carry' && c.actions['carry'] ? 'carry'
+        : anim === 'idle' && c.actions['idle'] ? 'idle'
+        : 'run';
+      if (c.current !== clip) {
         c.mixer.stopAllAction();
-        runA?.reset().play();
-      } else if (c.current === 'idle' && anim === 'run') {
-        c.mixer.stopAllAction();
-        runA?.reset().play();
+        c.actions[clip]?.reset().play();
+        c.current = clip as RunnerAnim;
       }
-      // no idle clip → run cycle paused in place; rate follows speed
-      if (runA) runA.timeScale = anim === 'idle' ? 0 : 0.9 + speedNorm * 1.4;
+      const a = c.actions[clip];
+      // idle plays at its own rate; run/carry follow the runner's speed
+      if (a && clip !== 'idle') a.timeScale = 0.9 + speedNorm * 1.4;
+      return;
+    }
+    if (c.current !== anim) {
+      const a = c.actions[anim];
+      if (a) {
+        c.mixer.stopAllAction();
+        a.reset().play();
+      }
       c.current = anim;
-    } else {
-      if (c.current !== anim) {
-        const a = c.actions[anim];
-        if (a) {
-          c.mixer.stopAllAction();
-          a.reset().play();
-        }
-        c.current = anim;
-      }
     }
   }
 
@@ -374,6 +403,16 @@ export class RunnerStage {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
       this.setAnim(c, p.anim, Math.min(1, p.speed / 0.13)); // 0.13 = game MAX_SPEED
       c.mixer.update(dt);
+      if (c.crate) {
+        const on = p.anim === 'carry';
+        c.crate.visible = on;
+        if (on) {
+          const cfg = (((import.meta as any).env?.DEV && (window as any).__lrCrate) || CRATE_DEFAULT);
+          c.crate.scale.setScalar(cfg.s);
+          c.crate.position.set(cfg.x, cfg.y, cfg.z);
+          c.crate.rotation.set(cfg.rx, cfg.ry, cfg.rz);
+        }
+      }
       // model yaw: heading 0 = up-screen (away from the camera → back visible).
       // ONE fixed camera angle for every animation — running, tackling and
       // falling all render from the same three-quarter view.

@@ -120,32 +120,32 @@ const FIELDS = [
 ];
 
 const CHARACTERS = [
-  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=4', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/profile-fennec.jpg?v=1' },
-  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=6',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/profile-panda.jpg?v=1' },
-  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=4',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/profile-mario.jpg?v=1' },
-  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=4',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/profile-dbz.jpg?v=1' },
-  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=4',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/profile-anime.jpg?v=1' },
-  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=4',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/profile-cat.jpg?v=1' },
-  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=4',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/profile-cartoon.jpg?v=1' },
-  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=4',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/profile-fox.jpg?v=1' },
-  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=4',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/profile-vader.jpg?v=1' },
-  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=4',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/profile-lion.jpg?v=1' },
-  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=4', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/profile-stylized.jpg?v=1' },
-  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=2', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/profile-spiderman.jpg?v=1' },
-  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=2',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
-  { key: 'tiger',     name: 'Namir',  model: '/models/tiger.glb?v=2',     scale: 0.92, portrait: '/sprites/race-tiger-front.png?v=1', face: '/sprites/profile-tiger.jpg?v=1' },
-  { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=2',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
-  { key: 'goku',      name: 'Goku',   model: '/models/goku.glb?v=1',      scale: 0.85, portrait: '/sprites/race-goku-front.png?v=1', face: '/sprites/profile-goku.jpg?v=1' },
-  { key: 'jaafar',    name: 'Jaafar', model: '/models/jaafar.glb?v=1',    scale: 0.95, portrait: '/sprites/race-jaafar-front.png?v=1', face: '/sprites/profile-jaafar.jpg?v=1' },
-  { key: 'luffy',     name: 'Luffy',  model: '/models/luffy.glb?v=1',     scale: 0.88, portrait: '/sprites/race-luffy-front.png?v=1', face: '/sprites/profile-luffy.jpg?v=2' },
-  { key: 'roshi',     name: 'Roshi',  model: '/models/roshi.glb?v=1',     scale: 0.8,  portrait: '/sprites/race-roshi-front.png?v=1', face: '/sprites/profile-roshi.jpg?v=1' },
-  { key: 'cowboy',    name: 'Tex',    model: '/models/cowboy.glb?v=1',    scale: 0.85, portrait: '/sprites/race-cowboy-front.png?v=1', face: '/sprites/profile-cowboy.jpg?v=1' },
-  { key: 'tom',       name: 'Tom',    model: '/models/tom.glb?v=1',       scale: 0.9,  portrait: '/sprites/race-tom-front.png?v=1', face: '/sprites/profile-tom.jpg?v=1' },
-  { key: 'jerry',     name: 'Jerry',  model: '/models/jerry.glb?v=1',     scale: 0.72, portrait: '/sprites/race-jerry-front.png?v=1', face: '/sprites/profile-jerry.jpg?v=1' },
-  { key: 'ironman',   name: 'Iron Man', model: '/models/ironman.glb?v=1', scale: 0.92, portrait: '/sprites/race-ironman-front.png?v=1', face: '/sprites/profile-ironman.jpg?v=1' },
-  { key: 'hulk',      name: 'Hulk',   model: '/models/hulk.glb?v=1',      scale: 0.98, portrait: '/sprites/race-hulk-front.png?v=1', face: '/sprites/profile-hulk.jpg?v=1' },
-  { key: 'deadpool',  name: 'Deadpool', model: '/models/deadpool.glb?v=1', scale: 0.9, portrait: '/sprites/race-deadpool-front.png?v=1', face: '/sprites/profile-deadpool.jpg?v=1' },
-  { key: 'batman',    name: 'Batman', model: '/models/batman.glb?v=1',    scale: 0.92, portrait: '/sprites/race-batman-front.png?v=1', face: '/sprites/profile-batman.jpg?v=1' },
+  { key: 'fennec', name: 'Sunny',  model: '/models/runner.glb?v=7', scale: 1,    portrait: '/sprites/race-runner-front.png?v=2', face: '/sprites/profile-fennec.jpg?v=1' },
+  { key: 'panda',  name: 'Panda',  model: '/models/panda.glb?v=7',  scale: 0.8,  portrait: '/sprites/race-panda-front.png?v=2', face: '/sprites/profile-panda.jpg?v=1' },
+  { key: 'mario',  name: 'Mario',  model: '/models/mario.glb?v=7',      scale: 0.85, portrait: '/sprites/race-mario-front.png?v=1', face: '/sprites/profile-mario.jpg?v=1' },
+  { key: 'dbz',      name: 'Vegeta', model: '/models/dbz.glb?v=7',      scale: 0.9,  portrait: '/sprites/race-dbz-front.png?v=1', face: '/sprites/profile-dbz.jpg?v=1' },
+  { key: 'anime',    name: 'Itachi', model: '/models/anime.glb?v=7',    scale: 0.72, portrait: '/sprites/race-anime-front.png?v=1', face: '/sprites/profile-anime.jpg?v=1' },
+  { key: 'cat',      name: 'Kitty',  model: '/models/cat.glb?v=7',      scale: 0.85, portrait: '/sprites/race-cat-front.png?v=1', face: '/sprites/profile-cat.jpg?v=1' },
+  { key: 'cartoon',  name: 'Banana', model: '/models/cartoon.glb?v=7',  scale: 0.9,  portrait: '/sprites/race-cartoon-front.png?v=1', face: '/sprites/profile-cartoon.jpg?v=1' },
+  { key: 'fox',      name: 'Foxy',   model: '/models/fox.glb?v=7',      scale: 0.9,  portrait: '/sprites/race-fox-front.png?v=1', face: '/sprites/profile-fox.jpg?v=1' },
+  { key: 'vader',    name: 'Vader',  model: '/models/vader.glb?v=7',    scale: 0.95, portrait: '/sprites/race-vader-front.png?v=1', face: '/sprites/profile-vader.jpg?v=1' },
+  { key: 'lion',     name: 'Leo',    model: '/models/lion.glb?v=7',     scale: 0.9,  portrait: '/sprites/race-lion-front.png?v=1', face: '/sprites/profile-lion.jpg?v=1' },
+  { key: 'stylized', name: 'Max',    model: '/models/stylized.glb?v=7', scale: 0.85, portrait: '/sprites/race-stylized-front.png?v=1', face: '/sprites/profile-stylized.jpg?v=1' },
+  { key: 'spiderman', name: 'Spidey', model: '/models/spiderman.glb?v=7', scale: 0.9, portrait: '/sprites/race-spiderman-front.png?v=1', face: '/sprites/profile-spiderman.jpg?v=1' },
+  { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=7',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
+  { key: 'tiger',     name: 'Namir',  model: '/models/tiger.glb?v=7',     scale: 0.92, portrait: '/sprites/race-tiger-front.png?v=1', face: '/sprites/profile-tiger.jpg?v=1' },
+  { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=7',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
+  { key: 'goku',      name: 'Goku',   model: '/models/goku.glb?v=7',      scale: 0.85, portrait: '/sprites/race-goku-front.png?v=1', face: '/sprites/profile-goku.jpg?v=1' },
+  { key: 'jaafar',    name: 'Jaafar', model: '/models/jaafar.glb?v=7',    scale: 0.95, portrait: '/sprites/race-jaafar-front.png?v=1', face: '/sprites/profile-jaafar.jpg?v=1' },
+  { key: 'luffy',     name: 'Luffy',  model: '/models/luffy.glb?v=7',     scale: 0.88, portrait: '/sprites/race-luffy-front.png?v=1', face: '/sprites/profile-luffy.jpg?v=2' },
+  { key: 'roshi',     name: 'Roshi',  model: '/models/roshi.glb?v=7',     scale: 0.8,  portrait: '/sprites/race-roshi-front.png?v=1', face: '/sprites/profile-roshi.jpg?v=1' },
+  { key: 'cowboy',    name: 'Tex',    model: '/models/cowboy.glb?v=7',    scale: 0.85, portrait: '/sprites/race-cowboy-front.png?v=1', face: '/sprites/profile-cowboy.jpg?v=1' },
+  { key: 'tom',       name: 'Tom',    model: '/models/tom.glb?v=7',       scale: 0.9,  portrait: '/sprites/race-tom-front.png?v=1', face: '/sprites/profile-tom.jpg?v=1' },
+  { key: 'jerry',     name: 'Jerry',  model: '/models/jerry.glb?v=7',     scale: 0.72, portrait: '/sprites/race-jerry-front.png?v=1', face: '/sprites/profile-jerry.jpg?v=1' },
+  { key: 'ironman',   name: 'Iron Man', model: '/models/ironman.glb?v=7', scale: 0.92, portrait: '/sprites/race-ironman-front.png?v=1', face: '/sprites/profile-ironman.jpg?v=1' },
+  { key: 'hulk',      name: 'Hulk',   model: '/models/hulk.glb?v=7',      scale: 0.98, portrait: '/sprites/race-hulk-front.png?v=1', face: '/sprites/profile-hulk.jpg?v=1' },
+  { key: 'deadpool',  name: 'Deadpool', model: '/models/deadpool.glb?v=7', scale: 0.9, portrait: '/sprites/race-deadpool-front.png?v=1', face: '/sprites/profile-deadpool.jpg?v=1' },
+  { key: 'batman',    name: 'Batman', model: '/models/batman.glb?v=7',    scale: 0.92, portrait: '/sprites/race-batman-front.png?v=1', face: '/sprites/profile-batman.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
@@ -393,7 +393,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const t = performance.now();
       return game.current.players.slice(0, n).map((pl): RunnerPose => ({
         x: pl.x, y: pl.y, heading: pl.heading, speed: pl.speed,
-        anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.speed > 0.02 ? 'run' : 'idle',
+        anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.carrying ? 'carry' : pl.speed > 0.02 ? 'run' : 'idle',
       }));
     }, stageModels);
     stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
@@ -1068,12 +1068,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const fallen = now < p.fallenUntil;
     return (
       <div key={`${p.gid}-${i}`} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
-        {/* Carried letter — a mini crate bobbing above the head */}
-        {p.carrying && (
-          <div style={{ position: 'absolute', bottom: '116%', left: '50%', transform: 'translateX(-50%)', animation: 'lrCarry 0.7s ease-in-out infinite' }}>
-            {crateLetter(g.target, 40)}
-          </div>
-        )}
+        {/* The carried letter is now the 3D crate held in the runner's arms
+            (drawn by the WebGL stage). No 2D tile above the head. */}
         {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
             anchored to this same field position — this spacer only reserves the
             layout slot for the label below, plus the carrier-grace glow ring. */}
