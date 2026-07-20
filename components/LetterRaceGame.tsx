@@ -250,6 +250,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
 
   const [phase, setPhase] = useState<Phase>('select');
   const [fieldBg] = useState(() => FIELDS[Math.floor(Math.random() * FIELDS.length)]);
+  // ── Crate placement tuner: open the game with ?cratetune=1 to get sliders.
+  const crateTune = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('cratetune');
+  const [crateCfg, setCrateCfg] = useState({ s: 32, x: 0, y: 7, z: -5, rx: 0, ry: 0, rz: 0 });
   const [p1Char, setP1Char] = useState<CharKey>('fennec');
   const [p2Char, setP2Char] = useState<CharKey>('panda');
   const [p1Name, setP1Name] = useState('');
@@ -401,6 +404,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     return () => stage.dispose();
   }, [stageModels]);
   useEffect(() => { syncStageModels(); }, [syncStageModels]); // default pair before the first round
+  // Crate tuner: feed the live values to the stage + force P1 to hold the crate.
+  useEffect(() => { if (crateTune) (window as any).__lrCrate = crateCfg; }, [crateTune, crateCfg]);
+  useEffect(() => {
+    if (!crateTune) return;
+    const iv = setInterval(() => {
+      if (phaseRef.current !== 'race') return;
+      const p = game.current.players[0];
+      if (p) { p.carrying = true; p.carrySince = performance.now(); p.y = 50; p.speed = 0; } // mid-field, frozen → no accidental win
+    }, 120);
+    return () => clearInterval(iv);
+  }, [crateTune]);
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
   const queueRef = useRef<string[]>(shuffle(pool));
   const queuePosRef = useRef(0);
@@ -1516,6 +1530,39 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-flag > div { width: clamp(24px, 4.25vw, 44px) !important; height: clamp(24px, 4.25vw, 44px) !important; }
         }
       `}</style>
+
+      {/* ── Crate placement tuner (open with ?cratetune=1) ── */}
+      {crateTune && (
+        <div style={{ position: 'fixed', top: 60, left: 10, zIndex: 100000, background: 'rgba(15,23,42,0.92)', color: '#fff', borderRadius: 12, padding: '12px 14px', width: 240, fontFamily: 'monospace', fontSize: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+          <div style={{ fontWeight: 900, marginBottom: 8, fontSize: 13 }}>🎚️ Crate tuner</div>
+          {([
+            ['s', 4, 80, 1, 'size'],
+            ['x', -30, 30, 0.5, 'left/right'],
+            ['y', -30, 30, 0.5, 'up/down'],
+            ['z', -30, 30, 0.5, 'fwd/back'],
+            ['rx', -3.2, 3.2, 0.05, 'tilt X'],
+            ['ry', -3.2, 3.2, 0.05, 'turn Y'],
+            ['rz', -3.2, 3.2, 0.05, 'roll Z'],
+          ] as const).map(([k, min, max, step, label]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span style={{ width: 20, color: '#7dd3fc' }}>{k}</span>
+              <input type="range" min={min} max={max} step={step} value={(crateCfg as any)[k]}
+                onChange={e => setCrateCfg(c => ({ ...c, [k]: parseFloat(e.target.value) }))}
+                style={{ flex: 1 }} />
+              <span style={{ width: 38, textAlign: 'right' }}>{(crateCfg as any)[k]}</span>
+              <span style={{ width: 52, color: '#94a3b8', fontSize: 9 }}>{label}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 6, margin: '8px 0' }}>
+            <button onClick={() => { const p = game.current.players[0]; if (p) p.heading = 0; }} style={{ flex: 1, background: '#334155', color: '#fff', border: 'none', borderRadius: 6, padding: '5px', cursor: 'pointer', fontSize: 11 }}>↑ back view</button>
+            <button onClick={() => { const p = game.current.players[0]; if (p) p.heading = 180; }} style={{ flex: 1, background: '#334155', color: '#fff', border: 'none', borderRadius: 6, padding: '5px', cursor: 'pointer', fontSize: 11 }}>↓ front view</button>
+          </div>
+          <div style={{ background: '#0f172a', borderRadius: 6, padding: '6px 8px', userSelect: 'all', fontSize: 11, wordBreak: 'break-all' }}>
+            {`{ s: ${crateCfg.s}, x: ${crateCfg.x}, y: ${crateCfg.y}, z: ${crateCfg.z}, rx: ${crateCfg.rx}, ry: ${crateCfg.ry}, rz: ${crateCfg.rz} }`}
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 5 }}>Copy the line above and send it to me.</div>
+        </div>
+      )}
     </div>
   );
 };

@@ -410,7 +410,7 @@ export class RunnerStage {
         const on = p.anim === 'carry';
         c.crate.visible = on;
         if (on) {
-          const cfg = (((import.meta as any).env?.DEV && (window as any).__lrCrate) || CRATE_DEFAULT);
+          const cfg = ((window as any).__lrCrate || CRATE_DEFAULT); // set by the ?cratetune panel
           c.crate.scale.setScalar(cfg.s);
           c.crate.position.set(cfg.x, cfg.y, cfg.z);
           c.crate.rotation.set(cfg.rx, cfg.ry, cfg.rz);
