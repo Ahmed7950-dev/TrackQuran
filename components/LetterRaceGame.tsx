@@ -235,11 +235,18 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const phaseRef = useRef<Phase>('select');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // ── Fullscreen (supported on iPhone since iOS 16.4; button hidden elsewhere)
+  // ── Fullscreen ──────────────────────────────────────────────────────────────
+  // Real Fullscreen API exists on desktop/Android/iPad, but iPhone Safari only
+  // allows it on <video> — there the ⛶ button opens an Add-to-Home-Screen tip
+  // (the app ships apple-mobile-web-app-capable, so the icon launches chromeless).
   const rootRef = useRef<HTMLDivElement>(null);
-  const canFullscreen = typeof document !== 'undefined' &&
+  const fsApi = typeof document !== 'undefined' &&
     !!((document.documentElement as any).requestFullscreen || (document.documentElement as any).webkitRequestFullscreen);
+  const isStandalone = typeof window !== 'undefined' &&
+    ((window.navigator as any).standalone === true || window.matchMedia?.('(display-mode: standalone)')?.matches === true);
+  const [fsTip, setFsTip] = useState(false);
   const toggleFullscreen = () => {
+    if (!fsApi) { setFsTip(v => !v); return; }
     const doc: any = document;
     const el: any = rootRef.current ?? document.documentElement;
     if (doc.fullscreenElement || doc.webkitFullscreenElement) {
@@ -304,6 +311,25 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     if (k) k.style.transform = 'translate(-50%,-50%)';
   };
   const fireKey = (code: string) => window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+
+  // iOS Safari drags/rubber-bands the page on joystick swipes (React touch
+  // handlers are passive, so preventDefault there is a no-op). Lock body scroll
+  // while the game is open and kill touch panning outside the selector screens
+  // with a native non-passive listener.
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevOB = document.documentElement.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overscrollBehavior = 'none';
+    const el = rootRef.current;
+    const stopPan = (e: TouchEvent) => { if (phaseRef.current !== 'select') e.preventDefault(); };
+    el?.addEventListener('touchmove', stopPan, { passive: false });
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overscrollBehavior = prevOB;
+      el?.removeEventListener('touchmove', stopPan);
+    };
+  }, []);
 
   // ── Mutable game model (read inside the rAF loop) ──────────────────────────
   const game = useRef({
@@ -1023,7 +1049,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   };
 
   return (
-    <div ref={rootRef} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none' }}>
+    <div ref={rootRef} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#14532d', overflow: 'hidden', userSelect: 'none', touchAction: phase === 'select' ? undefined : 'none', overscrollBehavior: 'none' }}>
       {/* ── Field: AI-illustrated top-view lawn with the finish line drawn in.
           Stretched to 100%/100% (not cover) so the painted checkered line
           stays at a FIXED field-% on every viewport — START_Y is calibrated
@@ -1077,7 +1103,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       {/* ── Top HUD ── */}
       <div className="lr-hud" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
         <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>✕<span className="lr-hide-sm"> Exit</span></button>
-        {canFullscreen && (
+        {!isStandalone && (fsApi || isTouch) && (
           <button onClick={toggleFullscreen} title="Full screen" style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>⛶</button>
         )}
         <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
@@ -1089,6 +1115,25 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </div>
         <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊<span className="lr-hide-sm"> Listen</span></button>
       </div>
+
+      {/* ── iPhone fullscreen tip (Safari on iPhone has no element-fullscreen API) ── */}
+      {fsTip && (
+        <div onClick={() => setFsTip(false)} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, padding: '20px 22px', maxWidth: 340, maxHeight: '85%', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', textAlign: 'center' }}>
+            <div style={{ fontSize: 34, marginBottom: 6 }}>📱</div>
+            <div style={{ fontWeight: 900, fontSize: 16, color: '#0f172a', marginBottom: 8 }}>Play full screen on iPhone</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', lineHeight: 1.55, textAlign: 'left' }}>
+              iPhone doesn't let websites go full screen, but there's a better way:
+              <ol style={{ margin: '8px 0 0', paddingLeft: 20, listStyle: 'decimal' }}>
+                <li>Tap the <b>Share</b> button <span style={{ whiteSpace: 'nowrap' }}>(the square with ↑)</span></li>
+                <li>Choose <b>Add to Home Screen</b></li>
+                <li>Open the game from the new icon — it fills the whole screen, no browser bars!</li>
+              </ol>
+            </div>
+            <button onClick={() => setFsTip(false)} style={{ marginTop: 14, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 12, padding: '10px 26px', fontWeight: 900, fontSize: 14, cursor: 'pointer' }}>Got it 👍</button>
+          </div>
+        </div>
+      )}
 
       {/* ── Controls legend (online: one legend — YOUR racer, either key set;
           touch devices get the joystick + buttons instead) ── */}
