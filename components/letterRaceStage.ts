@@ -37,10 +37,19 @@ const loadGLTF = (url: string): Promise<any> => {
   return p;
 };
 
-// Warm the cache for the whole roster (sequential — never starves the fetch of
-// the model the user actually clicked, which resolves instantly once cached).
-export const preloadRaceModels = async (urls: string[]): Promise<void> => {
-  for (const url of urls) { try { await loadGLTF(url); } catch { /* ignore */ } }
+// Warm the cache for the whole roster. A small worker pool loads several at a
+// time so the tail of the list (newest characters) is ready in seconds instead
+// of waiting behind every earlier model — a click still resolves instantly via
+// the shared cache (deduped if a worker is already fetching it).
+export const preloadRaceModels = async (urls: string[], concurrency = 4): Promise<void> => {
+  const queue = [...urls];
+  const worker = async () => {
+    while (queue.length) {
+      const url = queue.shift()!;
+      try { await loadGLTF(url); } catch { /* ignore */ }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
 };
 
 // Soft blob shadow that grounds a character: a radial-fade disc lying on the

@@ -196,16 +196,30 @@ const preloadRoster = () => {
 // playing its idle look-around clip — not a static picture.
 const PortraitView: React.FC<{ model: string; tinted: boolean; scale: number; fill?: boolean; clip?: string }> = ({ model, tinted, scale, fill, clip }) => {
   const ref = useRef<HTMLCanvasElement>(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
+    setLoading(true);
+    let live = true;
     const stage = new PortraitStage(canvas, model, tinted, scale, clip);
-    stage.init().catch(err => console.error('[LetterRace] portrait stage:', err));
+    stage.init()
+      .then(() => { if (live) setLoading(false); })            // resolves once the model is parsed + on screen
+      .catch(err => { console.error('[LetterRace] portrait stage:', err); if (live) setLoading(false); });
     const warm = window.setTimeout(preloadRoster, 1200); // after the visible model
-    return () => { window.clearTimeout(warm); stage.dispose(); };
+    return () => { live = false; window.clearTimeout(warm); stage.dispose(); };
   }, [model, tinted, scale, clip]);
-  // fill → stretch to the parent box (the stage re-frames per canvas aspect)
-  return <canvas ref={ref} style={fill ? { width: '100%', height: '100%', display: 'block' } : { width: 200, height: 230, display: 'block', margin: '0 auto' }} />;
+  const canvasStyle = fill ? { width: '100%', height: '100%', display: 'block' } : { width: 200, height: 230, display: 'block', margin: '0 auto' };
+  return (
+    <div style={{ position: 'relative', ...(fill ? { width: '100%', height: '100%' } : { width: 200, height: 230, margin: '0 auto' }) }}>
+      <canvas ref={ref} style={canvasStyle} />
+      {loading && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div className="lr-spin" style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.25)', borderTopColor: 'rgba(255,255,255,0.9)' }} />
+        </div>
+      )}
+    </div>
+  );
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -1427,6 +1441,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         @keyframes lrPop      { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         @keyframes lrConfetti { 0% { transform: translateY(-10vh) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0.9; } }
         @keyframes lrDropIn   { 0% { transform: translate(-50%,-160%) scale(0.5) rotate(-160deg); } 70% { transform: translate(-50%,-46%) scale(1.1) rotate(8deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(0); } }
+        @keyframes lrSpin     { to { transform: rotate(360deg); } }
+        .lr-spin { animation: lrSpin 0.7s linear infinite; }
         @keyframes lrDropPulse{ 0%,100% { box-shadow: 0 0 18px rgba(245,158,11,0.8), 0 5px 10px rgba(0,0,0,0.3); } 50% { box-shadow: 0 0 30px rgba(245,158,11,1), 0 5px 10px rgba(0,0,0,0.3); } }
         input::placeholder { color: #94a3b8; }
         /* ── responsive: phones & small tablets ── */
