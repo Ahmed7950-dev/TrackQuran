@@ -146,6 +146,9 @@ const CHARACTERS = [
   { key: 'hulk',      name: 'Hulk',   model: '/models/hulk.glb?v=7',      scale: 0.98, portrait: '/sprites/race-hulk-front.png?v=1', face: '/sprites/profile-hulk.jpg?v=1' },
   { key: 'deadpool',  name: 'Deadpool', model: '/models/deadpool.glb?v=7', scale: 0.9, portrait: '/sprites/race-deadpool-front.png?v=1', face: '/sprites/profile-deadpool.jpg?v=1' },
   { key: 'batman',    name: 'Batman', model: '/models/batman.glb?v=7',    scale: 0.92, portrait: '/sprites/race-batman-front.png?v=1', face: '/sprites/profile-batman.jpg?v=1' },
+  { key: 'sage',      name: 'Sage',   model: '/models/sage.glb?v=1',      scale: 0.92, portrait: '/sprites/race-sage-front.png?v=1', face: '/sprites/profile-sage.jpg?v=1' },
+  { key: 'robot',     name: 'Robo',   model: '/models/robot.glb?v=1',     scale: 0.9,  portrait: '/sprites/race-robot-front.png?v=1', face: '/sprites/profile-robot.jpg?v=1' },
+  { key: 'doll',      name: 'Lily',   model: '/models/doll.glb?v=1',      scale: 0.8,  portrait: '/sprites/race-doll-front.png?v=1', face: '/sprites/profile-doll.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
