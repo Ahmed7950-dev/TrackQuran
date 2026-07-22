@@ -67,6 +67,7 @@ const JUMP_AIR_FROM = 200;   // airborne (immune) window inside the jump…
 const JUMP_AIR_TO   = 800;   // …relative to the jump start
 const JUMP_CD_MS    = 1500;  // next jump allowed this long after the last one
 const GRAB_X    = 4.4;  // horizontal reach to grab a letter box
+const WORD_BOXES = 9;   // word mode: one fewer box than letters mode (bigger crates)
 const STEAL_GRACE = 900; // ms after a grab/pickup during which a tackle can't force a drop
 // Dropped letter: a landed tackle makes the carrier LOSE the letter — it
 // tumbles a short way up-field and sits on the grass until someone scoops it.
@@ -183,6 +184,8 @@ interface GuestInput { gid: string; x: number; y: number; h: number; sp: number;
 interface NetSnapshot {
   ph: Phase; cn: string; sc: number[]; rw: number;
   tg: string; fm: LetterForm;
+  pr?: string;        // word mode: English prompt for the current target
+  md?: boolean;       // word mode flag (so guests render Arabic words, not letters)
   bx: Array<{ l: string; x: number; c: string; t: boolean; g: boolean }>;
   players: NetPlayer[];
   dr: { x: number; y: number; a: number } | null;     // dropped letter (a = age ms)
@@ -242,14 +245,33 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+// Word mode (Arabic vocabulary): the round prompt is an ENGLISH word (spoken +
+// shown); the boxes hold Arabic translations and the racer runs to the right one.
+export interface RacePair { prompt: string; answer: string } // prompt=English, answer=Arabic
 interface LetterRaceProps {
   letters: string[]; letterForm?: LetterForm; onExit: () => void;
   roomId?: string;          // set when joining an online room via link
   playerRole?: '1' | '2';   // '2' = the joining guest
+  mode?: 'letters' | 'words';
+  words?: RacePair[];       // required when mode === 'words'
 }
-const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, playerRole }: LetterRaceProps) => {
-  const pool = letters.length ? letters : ARABIC_LETTERS;
+const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, playerRole, mode = 'letters', words = [] }: LetterRaceProps) => {
+  // Word mode needs at least 2 distinct answers to build a row with a distractor.
+  const wordMode = mode === 'words' && words.length >= 2;
+  const pool = wordMode ? words.map(w => w.answer) : (letters.length ? letters : ARABIC_LETTERS);
   const isGuest = playerRole === '2';
+
+  // Speak an English word (round prompt) via the browser's speech synthesis.
+  const speakEnglish = useCallback((t: string) => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = 'en-US'; u.rate = 0.9;
+      synth.speak(u);
+    } catch { /* no TTS */ }
+  }, []);
 
   const [phase, setPhase] = useState<Phase>('select');
   const [fieldBg] = useState(() => FIELDS[Math.floor(Math.random() * FIELDS.length)]);
@@ -366,6 +388,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── Mutable game model (read inside the rAF loop) ──────────────────────────
   const game = useRef({
     target: pool[0],
+    targetPrompt: '',        // word mode: the English prompt for the current target
     boxes: [] as LetterBox[],
     players: [newRacer(startX(0, 2)), newRacer(startX(1, 2), '', 'panda', 'local2')] as Racer[],
     graceUntil: 0,           // a fresh carrier can't be made to drop until this time
@@ -479,11 +502,23 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const target = queueRef.current[queuePosRef.current];
     queuePosRef.current += 1;
 
-    const distractors = shuffle(ARABIC_LETTERS.filter(l => l !== target)).slice(0, 9);
+    let distractors: string[];
+    let left = 15, right = 85;   // centred row with padding to the screen edges
+    if (wordMode) {
+      // Distractors are OTHER Arabic answers; fewer + a wider row so the bigger
+      // word-crates read clearly (one box fewer than the letters mode).
+      const others = [...new Set(words.map(w => w.answer))].filter(a => a !== target);
+      distractors = shuffle(others).slice(0, WORD_BOXES - 1);
+      left = 9; right = 91;
+      const wp = words.find(w => w.answer === target);
+      game.current.targetPrompt = wp ? wp.prompt : '';
+    } else {
+      distractors = shuffle(ARABIC_LETTERS.filter(l => l !== target)).slice(0, 9);
+      game.current.targetPrompt = '';
+    }
     const rowLetters = shuffle([target, ...distractors]);
     const colors = shuffle(BOX_COLORS);
     const n = rowLetters.length;
-    const left = 15, right = 85;   // centred row with padding to the screen edges
     game.current.boxes = rowLetters.map((letter, i) => ({
       letter,
       x: n === 1 ? 50 : left + ((right - left) * i) / (n - 1),
@@ -515,7 +550,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
 
     setPhase('listen');
     setTick(t => t + 1);
-    after(400, () => playLetterAudio(target));
+    after(400, () => { if (wordMode) speakEnglish(game.current.targetPrompt); else playLetterAudio(target); });
     // listen → 3 → 2 → 1 → GO → race
     after(2200, () => {
       setPhase('count'); setCountNum('3'); playFx('countdown', 0.9);
@@ -532,7 +567,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         setPhase('race');
       });
     });
-  }, [pool, playLetterAudio, playFx, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels]);
+  }, [pool, playLetterAudio, playFx, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels, wordMode, words, speakEnglish]);
 
 
 
@@ -600,7 +635,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       g.players[0].charKey = ui.p1Char;
       ch.send({ type: 'broadcast', event: 'state', payload: {
         ph: phaseRef.current, cn: ui.countNum, sc: scoresRef.current, rw: ui.roundWinner,
-        tg: g.target, fm: letterForm,
+        tg: g.target, fm: letterForm, pr: g.targetPrompt, md: wordMode,
         bx: g.boxes.map(b => ({ l: b.letter, x: Math.round(b.x * 10) / 10, c: b.color, t: b.taken, g: b.isTarget })),
         players: g.players.map(pl => ({
           gid: pl.gid, nm: pl.name, ck: pl.charKey,
@@ -629,6 +664,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const myGid = gidRef.current;
       // world (host-authoritative)
       g.target = s.tg;
+      g.targetPrompt = s.pr ?? '';
       g.boxes = s.bx.map(b => ({ letter: b.l, x: b.x, color: b.c, taken: b.t, isTarget: b.g, wiggleAt: 0 }));
       g.dropped = s.dr ? { x: s.dr.x, y: s.dr.y, at: now - s.dr.a } : null;
       setNetForm(f => (f === s.fm ? f : s.fm));
@@ -679,7 +715,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         if (s.cn === 'GO!') goUntilRef.current = now + 800;
         else if (s.ph === 'count' && s.cn === '3') playFx('countdown', 0.9);
       }
-      if (s.ph === 'listen' && s.tg !== nr.prevTg) { nr.prevTg = s.tg; playLetterAudio(s.tg); }
+      if (s.ph === 'listen' && s.tg !== nr.prevTg) { nr.prevTg = s.tg; if (s.md) speakEnglish(s.pr ?? ''); else playLetterAudio(s.tg); }
       if (s.sc.length !== scoresRef.current.length || s.sc.some((v, i) => v !== scoresRef.current[i])) {
         scoresRef.current = [...s.sc];
         setScores([...s.sc]);
@@ -1050,17 +1086,25 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const tintStyleFor = (i: number) => (players.slice(0, Math.max(0, i)).some(pl => pl.charKey === charKeyAt(i)) ? P2_TINT : 'none');
   const nameAt = (i: number) => (players[i]?.name || '').trim() || `Player ${i + 1}`;
   const colorAt = (i: number) => SLOT_COLORS[i % SLOT_COLORS.length];
-  const displayTarget = getLetterInForm(g.target, form);
+  // Render as word mode when we host it, or (as a guest) when the host's
+  // snapshot says so — guests receive no `words` prop.
+  const showWords = wordMode || (isGuest && !!hostSnapRef.current?.md);
+  const displayTarget = showWords ? g.target : getLetterInForm(g.target, form);
   const carrierGrace = now < g.graceUntil;
 
-  // A letter crate at an arbitrary pixel size — reused for the carried letter
-  // above a runner's head and the loose dropped letter, so both match the row.
+  // What a crate panel shows: a single positional letter, or (word mode) the
+  // whole Arabic word — with the font shrunk to fit longer words in the panel.
+  const boxText = (t: string) => showWords ? t : getLetterInForm(t, form);
+  const boxFont = (t: string) => showWords ? Math.max(18, Math.min(52, 160 / Math.max(3, t.trim().length))) : 62;
+
+  // A letter/word crate at an arbitrary pixel size — reused for the carried
+  // letter above a runner's head and the loose dropped one, matching the row.
   const crateLetter = (letter: string, sizePx: number, style?: React.CSSProperties) => (
     <div style={{ position: 'relative', width: sizePx, height: sizePx, filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.3))', ...style }}>
       <img src="/sprites/race-box.png?v=1" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <svg viewBox={`0 0 ${BOX_VB_W} ${BOX_VB_H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
         <g transform={BOX_PANEL_MATRIX}>
-          <text x="50" y="50" textAnchor="middle" dominantBaseline="central" style={{ ...HAFS }} fontWeight={700} fontSize={62} fill="#3a2410">{getLetterInForm(letter, form)}</text>
+          <text x="50" y="50" textAnchor="middle" dominantBaseline="central" direction="rtl" style={{ ...HAFS }} fontWeight={700} fontSize={boxFont(letter)} fill="#3a2410">{boxText(letter)}</text>
         </g>
       </svg>
     </div>
@@ -1105,24 +1149,41 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           animation: `lrPopIn 0.45s ${i * 0.05}s backwards`,
         }}>
           <div style={{
-            position: 'relative', width: 'clamp(28px, 6vw, 58px)', height: 'clamp(28px, 6vw, 58px)',
+            position: 'relative',
+            width: showWords ? 'clamp(44px, 9.5vw, 96px)' : 'clamp(28px, 6vw, 58px)',
+            height: showWords ? 'clamp(44px, 9.5vw, 96px)' : 'clamp(28px, 6vw, 58px)',
             filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.35))',
             animation: now - box.wiggleAt < 500 ? 'lrShakeBox 0.4s' : undefined,
           }}>
             {/* Wooden crate whose cream front panel faces the camera at the
-                field's ¾ angle; the letter is skewed onto that panel with an
-                affine transform (BOX_PANEL_MATRIX) so it sits ON the face. The
-                SVG uses the image's own pixel viewBox + preserveAspectRatio
-                "none" so it stretches in lockstep with the crate at any size. */}
+                field's ¾ angle; the letter/word is skewed onto that panel with
+                an affine transform (BOX_PANEL_MATRIX) so it sits ON the face. */}
             <img src="/sprites/race-box.png?v=1" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
             <svg viewBox={`0 0 ${BOX_VB_W} ${BOX_VB_H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
               <g transform={BOX_PANEL_MATRIX}>
-                <text x="50" y="50" textAnchor="middle" dominantBaseline="central" style={{ ...HAFS }} fontWeight={700} fontSize={62} fill="#3a2410">{getLetterInForm(box.letter, form)}</text>
+                <text x="50" y="50" textAnchor="middle" dominantBaseline="central" direction="rtl" style={{ ...HAFS }} fontWeight={700} fontSize={boxFont(box.letter)} fill="#3a2410">{boxText(box.letter)}</text>
               </g>
             </svg>
           </div>
         </div>
       ))}
+
+      {/* ── Word mode: the English prompt, spoken + shown; run to its Arabic
+          translation in the crates. Tap to hear it again. ── */}
+      {showWords && g.targetPrompt && (phase === 'listen' || phase === 'race') && (
+        <div
+          onClick={() => speakEnglish(g.targetPrompt)}
+          style={{ position: 'absolute', top: '31%', left: '50%', transform: 'translateX(-50%)', zIndex: 15, cursor: 'pointer',
+            background: 'rgba(6,30,12,0.7)', border: '2px solid rgba(255,255,255,0.35)', borderRadius: 16, padding: '8px 20px',
+            display: 'flex', alignItems: 'center', gap: 10, maxWidth: '90vw', boxShadow: '0 6px 18px rgba(0,0,0,0.35)' }}
+        >
+          <span style={{ fontSize: 20 }}>🔊</span>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#a7f3d0', textTransform: 'uppercase' }}>Find in Arabic</div>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 34px)', fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>{g.targetPrompt}</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Dropped letter, loose on the grass after a tackle ── */}
       {g.dropped && (
@@ -1143,14 +1204,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         {!isStandalone && (fsApi || isTouch) && (
           <button onClick={toggleFullscreen} title="Full screen" style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>⛶</button>
         )}
-        <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
+        <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{showWords ? '🏁 Word Race' : '🏁 Letter Race'}</div>
         <div className="lr-scores" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
           {players.map((pl, i) => (
             <span key={`${pl.gid}-${i}`} style={{ background: colorAt(i), borderRadius: 999, padding: '4px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>{nameAt(i).slice(0, 10)} {scores[i] ?? 0}</span>
           ))}
           <span style={{ fontSize: 11, opacity: 0.8 }}>first to {ROUNDS_TO_WIN}</span>
         </div>
-        <button onClick={() => playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊<span className="lr-hide-sm"> Listen</span></button>
+        <button onClick={() => showWords ? speakEnglish(g.targetPrompt) : playLetterAudio(g.target)} style={{ background: '#0ea5e9', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>🔊<span className="lr-hide-sm"> Listen</span></button>
       </div>
 
       {/* ── iPhone fullscreen tip (Safari on iPhone has no element-fullscreen API) ── */}
@@ -1237,9 +1298,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
               ))}
               {players.length > 6 && <span style={{ fontWeight: 900, color: '#64748b' }}>+{players.length - 6}</span>}
             </div>
-            <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>👂 Listen to the letter!</h3>
-            <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>Then race to find it and bring it home!</p>
-            <button onClick={() => playLetterAudio(g.target)} style={{ marginTop: 14, background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔊 Hear it again</button>
+            <h3 style={{ margin: '6px 0 4px', fontWeight: 900, color: '#0f172a', fontSize: 22 }}>{showWords ? '👂 Listen to the word!' : '👂 Listen to the letter!'}</h3>
+            {showWords && <div style={{ margin: '4px 0', fontWeight: 900, fontSize: 30, color: '#0ea5e9' }}>{g.targetPrompt}</div>}
+            <p style={{ margin: 0, color: '#475569', fontWeight: 600, fontSize: 14 }}>{showWords ? 'Race to its Arabic translation and bring it home!' : 'Then race to find it and bring it home!'}</p>
+            <button onClick={() => showWords ? speakEnglish(g.targetPrompt) : playLetterAudio(g.target)} style={{ marginTop: 14, background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 999, padding: '10px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>🔊 Hear it again</button>
           </div>
         </div>
       )}

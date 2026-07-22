@@ -3,6 +3,7 @@ import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
+import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,10 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   const [showArabicFirst, setShowArabicFirst] = useState(true);
   // ref to avoid recording the SRS attempt more than once per session win
   const practiceAttemptRecordedRef = useRef(false);
+
+  // ── word race (Letter Race in Arabic word mode) ─────────────────────────────
+  const [raceOpen, setRaceOpen] = useState(false);
+  const [racePairs, setRacePairs] = useState<RacePair[]>([]);
 
   // ── grammar modal ─────────────────────────────────────────────────────────
   const [grammarPhraseIdx, setGrammarPhraseIdx] = useState<number | null>(null);
@@ -375,6 +380,16 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
     setTab('practice');
   }, [practiceMode, words, phrases, showToast, showArabicFirst]);
 
+  // Launch the word race with the current list's translated words.
+  const openRace = useCallback(() => {
+    const pairs: RacePair[] = words
+      .filter(w => w.translation.trim() && w.text.trim())
+      .map(w => ({ prompt: w.translation.trim(), answer: w.text.trim() }));
+    if (pairs.length < 2) { showToast('Add at least 2 words with translations to race!'); return; }
+    setRacePairs(pairs);
+    setRaceOpen(true);
+  }, [words, showToast]);
+
   const handleWrong = () => {
     const source = practiceMode === 'words' ? words : phrases;
     const filtered = source.filter(i => i.translation);
@@ -499,6 +514,11 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
 
   return (
     <div className="vocab-reading-mode max-w-4xl mx-auto space-y-3">
+
+      {/* Word race — full-screen overlay (Letter Race in Arabic word mode) */}
+      {raceOpen && (
+        <LetterRaceGame mode="words" words={racePairs} letters={[]} letterForm="isolated" onExit={() => setRaceOpen(false)} />
+      )}
 
       {/* ═══════════════ OVERLAYS ═══════════════ */}
 
@@ -780,6 +800,13 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
             )}
           </button>
         ))}
+        {/* Word Race — launches Letter Race in Arabic word mode */}
+        <button
+          onClick={openRace}
+          className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all border-l border-slate-100 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700 hover:text-slate-700 dark:hover:text-slate-200"
+        >
+          <span>🏃</span><span>Race</span>
+        </button>
       </div>
 
       {/* ═══════════════ WORDS TAB ═══════════════ */}
