@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
 import WordFlightGame from './WordFlightGame';
+import LetterRaceGame, { RacePair } from './LetterRaceGame';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
   updateHomeworkQuestion as updateHWQ,
@@ -2192,6 +2193,11 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   // Word Flight game
   const [showWordFlight, setShowWordFlight] = useState(false);
+  // Word Race game (Letter Race in Arabic word mode) — English prompt → Arabic crate
+  const [showWordRace, setShowWordRace] = useState(false);
+  const racePairs: RacePair[] = words
+    .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
+    .map(w => ({ prompt: w.english.trim(), answer: w.arabic.trim() }));
 
   // Challenge state — "I know / Not sure" button flow
   const [phase, setPhase]           = useState<ChallengePhase>('idle');
@@ -2640,6 +2646,18 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                   </span>
                 </button>
 
+                {/* Word Race game — say the English word, run to its Arabic crate */}
+                {racePairs.length >= 2 && (
+                  <button onClick={() => setShowWordRace(true)}
+                    className="group flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-900/10 px-4 py-3 text-left hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-sm transition-all">
+                    <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-teal-100 dark:bg-teal-900/30 ring-1 ring-teal-200/60 dark:ring-teal-800/40 flex items-center justify-center text-2xl">🏃</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-teal-800 dark:text-teal-200 truncate">Word Race Game</span>
+                      <span className="block text-xs text-teal-600/70 dark:text-teal-300/60">Run to the Arabic word</span>
+                    </span>
+                  </button>
+                )}
+
                 {/* Revise saved words — only when the learner has saved some */}
                 {savedWords.length > 0 && (
                   <button onClick={startRevisionChallenge}
@@ -2659,6 +2677,16 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             <WordFlightGame
               words={words.map(w => ({ arabic: w.arabic, meaning: w.english }))}
               onExit={() => setShowWordFlight(false)}
+            />
+          )}
+
+          {showWordRace && (
+            <LetterRaceGame
+              mode="words"
+              words={racePairs}
+              letters={[]}
+              letterForm="isolated"
+              onExit={() => setShowWordRace(false)}
             />
           )}
         </>
