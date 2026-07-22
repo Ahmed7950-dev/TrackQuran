@@ -51,6 +51,13 @@ const CRATE_DEFAULT_MIXAMO = { s: 36, x: 0.5, y: 28, z: 11, rx: 0, ry: 0, rz: 0 
 let cratePromise: Promise<any> | null = null;
 const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null));
 
+// Phones/tablets can't render several skinned 3D characters at 2× pixel ratio
+// with antialias, and can't afford to warm the whole model roster upfront.
+// Detect them once and dial the stage down (see init + preloadRoster gate).
+export const isLowPowerDevice = typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent) ||
+   (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
+
 // Warm the cache for the whole roster. A small worker pool loads several at a
 // time so the tail of the list (newest characters) is ready in seconds instead
 // of waiting behind every earlier model — a click still resolves instantly via
@@ -140,8 +147,13 @@ export class RunnerStage {
     if (this.disposed) return;
     this.THREE = THREE;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Render load scales with player count × pixels × antialias. On phones,
+    // drop antialias and cap the pixel ratio hard (harder still with 3+ racers)
+    // so guest devices keep a smooth frame rate instead of janking.
+    const nModels = this.models.length;
+    const prCap = isLowPowerDevice ? (nModels >= 3 ? 1 : 1.5) : 2;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: !isLowPowerDevice });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, prCap));
     this.renderer.setClearColor(0x000000, 0);
 
     const unique = [...new Set(this.models.map(m => m.url))];
@@ -340,10 +352,15 @@ export class RunnerStage {
       this.chars.push(rig);
     }
 
+    // On a crowded phone (3+ racers) cap the render to ~38fps: a steady 38 looks
+    // smoother than an erratic 45-55 the GPU can't hold, and halves the load.
+    // Animations stay real-time — dt is measured from the last DRAWN frame.
+    const frameMin = isLowPowerDevice && nModels >= 3 ? 26 : 0;
     this.lastT = performance.now();
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
+      if (now - this.lastT < frameMin) return; // skip this frame under the cap
       const dt = Math.min(0.05, (now - this.lastT) / 1000);
       this.lastT = now;
       this.draw(dt);
@@ -484,8 +501,8 @@ export class PortraitStage {
   async init(): Promise<void> {
     const { THREE, skClone } = await loadMods();
     if (this.disposed) return;
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: !isLowPowerDevice });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isLowPowerDevice ? 1.5 : 2));
     this.renderer.setClearColor(0x000000, 0);
 
     const gltf = await loadGLTF(this.modelUrl);

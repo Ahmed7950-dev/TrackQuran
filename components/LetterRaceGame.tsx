@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
-import { RunnerStage, PortraitStage, preloadRaceModels, type RunnerPose, type RunnerModel } from './letterRaceStage';
+import { RunnerStage, PortraitStage, preloadRaceModels, isLowPowerDevice, type RunnerPose, type RunnerModel } from './letterRaceStage';
 import { GameInviteButton } from './GameInvite';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,9 +199,12 @@ const lerpAngle = (a: number, b: number, t: number) => {
 
 // Warm the shared GLB cache for the whole roster while the player reads the
 // selector — by the time they click a face tile its model is usually parsed.
+// Skipped on phones/tablets: parsing all ~29 models (~70MB) up front is a big
+// memory/CPU spike that made guest devices jank; there, models load on demand
+// (the selected preview + the race's own models).
 let rosterPreloaded = false;
 const preloadRoster = () => {
-  if (rosterPreloaded) return;
+  if (rosterPreloaded || isLowPowerDevice) return;
   rosterPreloaded = true;
   preloadRaceModels(CHARACTERS.map(c => c.model));
 };
@@ -428,6 +431,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   }, [stageModels]);
   useEffect(() => { syncStageModels(); }, [syncStageModels]); // default pair before the first round
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
+  // Throttle the per-frame React repaint on phones — physics/3D stay full rate,
+  // only the DOM overlay (labels, boxes) repaints ~33fps to save reconciliation.
+  const lastPaintRef = useRef(0);
+  const paintTick = (now: number) => {
+    if (isLowPowerDevice && now - lastPaintRef.current < 30) return;
+    lastPaintRef.current = now;
+    setTick(t => (t + 1) % 1000000);
+  };
   const queueRef = useRef<string[]>(shuffle(pool));
   const queuePosRef = useRef(0);
   const timersRef = useRef<number[]>([]);
@@ -974,7 +985,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         }
         const meP = g.players[Math.max(0, myIdx)];
         setRunningSfx(!!meP && meP.speed > 0.05 && now >= meP.fallenUntil);
-        setTick(t => (t + 1) % 1000000);
+        paintTick(now);
         raf = requestAnimationFrame(loop);
         return;
       }
@@ -1070,7 +1081,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         : g.players.some((pl, i) => i < 2 && pl.speed > 0.05 && now >= pl.fallenUntil);
       setRunningSfx(ownRunning);
 
-      setTick(t => (t + 1) % 1000000);
+      paintTick(now);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
