@@ -1095,7 +1095,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // What a crate panel shows: a single positional letter, or (word mode) the
   // whole Arabic word — with the font shrunk to fit longer words in the panel.
   const boxText = (t: string) => showWords ? t : getLetterInForm(t, form);
-  const boxFont = (t: string) => showWords ? Math.max(18, Math.min(52, 160 / Math.max(3, t.trim().length))) : 62;
+  const boxFont = (t: string) => showWords ? Math.max(24, Math.min(60, 230 / Math.max(3, t.trim().length))) : 62;
 
   // A letter/word crate at an arbitrary pixel size — reused for the carried
   // letter above a runner's head and the loose dropped one, matching the row.
@@ -1168,23 +1168,6 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </div>
       ))}
 
-      {/* ── Word mode: the English prompt, spoken + shown; run to its Arabic
-          translation in the crates. Tap to hear it again. ── */}
-      {showWords && g.targetPrompt && (phase === 'listen' || phase === 'race') && (
-        <div
-          onClick={() => speakEnglish(g.targetPrompt)}
-          style={{ position: 'absolute', top: '31%', left: '50%', transform: 'translateX(-50%)', zIndex: 15, cursor: 'pointer',
-            background: 'rgba(6,30,12,0.7)', border: '2px solid rgba(255,255,255,0.35)', borderRadius: 16, padding: '8px 20px',
-            display: 'flex', alignItems: 'center', gap: 10, maxWidth: '90vw', boxShadow: '0 6px 18px rgba(0,0,0,0.35)' }}
-        >
-          <span style={{ fontSize: 20 }}>🔊</span>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#a7f3d0', textTransform: 'uppercase' }}>Find in Arabic</div>
-            <div style={{ fontSize: 'clamp(20px, 5vw, 34px)', fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>{g.targetPrompt}</div>
-          </div>
-        </div>
-      )}
-
       {/* ── Dropped letter, loose on the grass after a tackle ── */}
       {g.dropped && (
         <div style={{ position: 'absolute', left: `${g.dropped.x}%`, top: `${g.dropped.y}%`, transform: 'translate(-50%,-50%)', zIndex: 8, animation: 'lrDropIn 0.35s ease-out' }}>
@@ -1204,7 +1187,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         {!isStandalone && (fsApi || isTouch) && (
           <button onClick={toggleFullscreen} title="Full screen" style={{ background: 'rgba(0,0,0,0.35)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 12px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>⛶</button>
         )}
-        <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{showWords ? '🏁 Word Race' : '🏁 Letter Race'}</div>
+        {showWords ? (
+          // Word mode: the English prompt lives here in the top bar (not the
+          // middle of the field). Always visible + tappable to hear it again.
+          <div onClick={() => speakEnglish(g.targetPrompt)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>🔊</span>
+            <span className="lr-hide-sm" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#a7f3d0', textTransform: 'uppercase', flexShrink: 0 }}>Find in Arabic</span>
+            <span style={{ fontSize: 'clamp(17px, 3.6vw, 26px)', fontWeight: 900, color: '#fff', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{g.targetPrompt}</span>
+          </div>
+        ) : (
+          <div className="lr-hud-title" style={{ flex: 1, fontWeight: 900, fontSize: 16, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>🏁 Letter Race</div>
+        )}
         <div className="lr-scores" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 900, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '62vw' }}>
           {players.map((pl, i) => (
             <span key={`${pl.gid}-${i}`} style={{ background: colorAt(i), borderRadius: 999, padding: '4px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>{nameAt(i).slice(0, 10)} {scores[i] ?? 0}</span>
