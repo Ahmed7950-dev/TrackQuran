@@ -20,6 +20,7 @@ import {
   getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
 } from '../services/examService';
 import { getVocabularyLists, VocabList } from '../services/vocabularyService';
+import LetterRaceGame, { RacePair } from './LetterRaceGame';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ExamMarkingPage from './ExamMarkingPage';
@@ -292,6 +293,9 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   const [mistakes, setMistakes] = useState<VocabMistakeDetail[]>([]);
   const [vocabLists, setVocabLists] = useState<VocabList[]>([]);
   const [loading, setLoading] = useState(true);
+  // Word race (Letter Race in Arabic word mode) launched from a vocab list
+  const [raceOpen, setRaceOpen] = useState(false);
+  const [racePairs, setRacePairs] = useState<RacePair[]>([]);
 
   // Mini challenge state
   const [challengeWords, setChallengeWords] = useState<VocabMistakeDetail[] | null>(null);
@@ -353,6 +357,14 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   const listsWithAttempts = vocabLists.filter(list =>
     (list.srs_attempts ?? []).length > 0
   );
+
+  // ── Word Race: any list with ≥2 fully-translated words can be raced ────────
+  const racePairsFor = (list: VocabList): RacePair[] =>
+    (list.words ?? [])
+      .filter(w => w.translation.trim() && w.text.trim())
+      .map(w => ({ prompt: w.translation.trim(), answer: w.text.trim() }));
+  const raceableLists = vocabLists.filter(l => racePairsFor(l).length >= 2);
+  const startRace = (list: VocabList) => { setRacePairs(racePairsFor(list)); setRaceOpen(true); };
 
   // Build a LessonTimeline from a vocab list's srs_attempts array
   function getListTimeline(list: VocabList): LessonTimeline | null {
@@ -500,6 +512,10 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
 
   return (
     <div className="space-y-8">
+      {/* Word race — full-screen overlay (Letter Race in Arabic word mode) */}
+      {raceOpen && (
+        <LetterRaceGame mode="words" words={racePairs} letters={[]} letterForm="isolated" onExit={() => setRaceOpen(false)} />
+      )}
 
       {/* ── Lesson History Calendar ───────────────────────────────────────── */}
       <ArabicLessonCalendar
@@ -534,6 +550,24 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                 ].join(' · ')}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ── Word Race launcher — play any of the student's lists live ── */}
+        {raceableLists.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 px-4 py-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-xl">
+            <span className="text-xl flex-shrink-0">🏃</span>
+            <span className="text-sm font-bold text-teal-800 dark:text-teal-300 mr-1">Word Race:</span>
+            {raceableLists.map(list => (
+              <button
+                key={list.id}
+                onClick={() => startRace(list)}
+                className="px-3 py-1.5 rounded-full text-xs font-semibold bg-white dark:bg-gray-800 border border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300 hover:bg-teal-600 hover:text-white dark:hover:bg-teal-600 transition-colors"
+                title={`Race "${list.name}" — say the English word, run to its Arabic translation`}
+              >
+                {list.name}
+              </button>
+            ))}
           </div>
         )}
 
