@@ -395,15 +395,38 @@ export class RunnerStage {
     // On a crowded phone (3+ racers) cap the render to ~38fps: a steady 38 looks
     // smoother than an erratic 45-55 the GPU can't hold, and halves the load.
     // Animations stay real-time — dt is measured from the last DRAWN frame.
-    const frameMin = isLowPowerDevice && nModels >= 3 ? 26 : 0;
+    let frameMin = isLowPowerDevice && nModels >= 3 ? 26 : 0;
+
+    // Adaptive rate lock (mobile only): for the first ~0.8s draw EVERY frame and
+    // measure the real rAF cadence — which stretches when the GPU can't finish a
+    // frame in time, the one dependable capability signal a browser exposes (GPU
+    // timer queries aren't reliable on mobile). Then lock the cap to a rate this
+    // exact device can actually hold: a rock-steady 24 beats a stuttering 40.
+    // One-shot, so it never oscillates mid-race; desktop skips it entirely.
+    const probe = { on: isLowPowerDevice, until: 0, sum: 0, n: 0, prev: 0 };
     this.lastT = performance.now();
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
-      if (now - this.lastT < frameMin) return; // skip this frame under the cap
+      // While probing, bypass the cap so rAF cadence reflects true draw cost.
+      if (!probe.on && now - this.lastT < frameMin) return; // skip under the cap
       const dt = Math.min(0.05, (now - this.lastT) / 1000);
       this.lastT = now;
       this.draw(dt);
+      if (probe.on) {
+        if (probe.until === 0) { probe.until = now + 800; probe.prev = now; }
+        else {
+          const d = now - probe.prev; probe.prev = now;
+          if (d > 4 && d < 500) { probe.sum += d; probe.n++; } // ignore stalls/hitches
+          if (now >= probe.until && probe.n > 8) {
+            const avg = probe.sum / probe.n; // measured ms per drawn frame
+            // Lock just above measured cost (headroom for the DOM overlay repaint
+            // + netcode on the same thread), clamped to 60fps..20fps.
+            frameMin = Math.max(frameMin, Math.min(50, Math.max(16.6, avg * 1.15)));
+            probe.on = false;
+          }
+        }
+      }
     };
     this.raf = requestAnimationFrame(loop);
   }
