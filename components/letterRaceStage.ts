@@ -54,9 +54,15 @@ const loadCrate = () => (cratePromise ??= loadGLTF(CRATE_URL).catch(() => null))
 // Phones/tablets can't render several skinned 3D characters at 2× pixel ratio
 // with antialias, and can't afford to warm the whole model roster upfront.
 // Detect them once and dial the stage down (see init + preloadRoster gate).
-export const isLowPowerDevice = typeof navigator !== 'undefined' &&
+const detectedLowPower = typeof navigator !== 'undefined' &&
   (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent) ||
    (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
+
+// Mutable so the app can force the light path on (e.g. after measuring low FPS —
+// the auto quality ladder) and so tests can exercise the mobile branch. Consumers
+// import the live binding, so reassigning here updates them too.
+export let isLowPowerDevice = detectedLowPower;
+export function setLowPowerMode(on: boolean): void { isLowPowerDevice = on; }
 
 // Warm the cache for the whole roster. A small worker pool loads several at a
 // time so the tail of the list (newest characters) is ready in seconds instead
@@ -230,13 +236,31 @@ export class RunnerStage {
       // OPAQUE response.
       root.traverse((o: any) => {
         if (o.isMesh && o.material) {
-          for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          const fixed = mats.map((m: any) => {
+            if (isLowPowerDevice) {
+              // Mobile: the Tripo exports are MeshPhysicalMaterial (KHR_materials_specular)
+              // carrying normal + metallic + roughness + specular maps — the heaviest
+              // shader three.js builds, and ~4 textures of VRAM per character. On a
+              // 4-racer field that's the main cause of guest-phone jank. Swap for a
+              // cheap Lambert that samples ONLY the basecolor: ~5-10× lighter fragment
+              // cost, and the extra maps are never uploaded (≈4× less texture memory).
+              // Cost is slightly flatter shading — invisible at race size. Skinning is
+              // auto-detected from the SkinnedMesh, so the rig still animates.
+              const lm = new THREE.MeshLambertMaterial({ map: m.map ?? null });
+              if (m.color) lm.color.copy(m.color);
+              lm.transparent = false;
+              lm.depthWrite = true;
+              return lm;
+            }
             if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.05);
             if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.7);
             m.transparent = false;
             m.depthWrite = true;
             m.needsUpdate = true;
-          }
+            return m;
+          });
+          o.material = Array.isArray(o.material) ? fixed : fixed[0];
         }
       });
       // Skinned meshes animate far outside their bind-pose bounds — never let
@@ -300,13 +324,17 @@ export class RunnerStage {
       const scene = new THREE.Scene();
       scene.add(root);
       scene.add(makeBlobShadow(THREE, 0.9 * this.models[who].scale));
-      const key = new THREE.DirectionalLight(0xffffff, 2.9);
+      // Mobile: one directional + ambient (each extra light adds a shading pass);
+      // bump key + ambient to make up for the dropped fill so brightness holds.
+      const key = new THREE.DirectionalLight(0xffffff, isLowPowerDevice ? 3.3 : 2.9);
       key.position.set(-1.5, 3, 2.5);
       scene.add(key);
-      const fill = new THREE.DirectionalLight(0xbfd8ff, 1.3);
-      fill.position.set(2, 2, -1);
-      scene.add(fill);
-      scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+      if (!isLowPowerDevice) {
+        const fill = new THREE.DirectionalLight(0xbfd8ff, 1.3);
+        fill.position.set(2, 2, -1);
+        scene.add(fill);
+      }
+      scene.add(new THREE.AmbientLight(0xffffff, isLowPowerDevice ? 1.9 : 1.5));
 
       // camera: Brawl-Stars three-quarter — elevated, looking down at the
       // model, zoomed OUT so the character fills only ~half the viewport
