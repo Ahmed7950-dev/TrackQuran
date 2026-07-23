@@ -91,7 +91,7 @@ export interface Student {
   currency?: 'USD' | 'TRY';                // billing currency for the rate (default USD)
   studentType?: 'preply' | 'platform';     // preply = commission taken; platform = none
   preplyPercentage?: number;               // Preply commission %, default 18 (preply only)
-  subscriptionRenewalDate?: string;        // Preply only — monthly renewal date (YYYY-MM-DD); reminder fires 1 day before
+  subscriptionRenewalDate?: string;        // Preply only — first renewal date (YYYY-MM-DD); recurs every 28 days, reminder fires 1 day before
   // ── Bill / invoice (tutor-only; platform students) ──
   billStudentName?: string;                // editable name shown on the invoice (defaults to name)
   billPayerName?: string;                  // "bill to" — guardian / payer name

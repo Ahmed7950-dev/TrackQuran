@@ -1,6 +1,18 @@
 import React from 'react';
 import { netEarning } from '../utils/timezones';
+import { nextRenewalDate, RENEWAL_CYCLE_DAYS } from '../utils/renewal';
 import SearchableTimezone from './SearchableTimezone';
+
+/** "22 Jul 2026" from a YYYY-MM-DD string. */
+function fmtRenewal(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+/** The reminder day: one day before the given YYYY-MM-DD renewal. */
+function reminderDayOf(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  return fmtRenewal(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+}
 
 export type Currency = 'USD' | 'TRY';
 export const CURRENCY_SYMBOL: Record<Currency, string> = { USD: '$', TRY: '₺' };
@@ -11,7 +23,7 @@ export interface StudentBilling {
   currency?: Currency;
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
-  /** Preply only — monthly subscription renewal date (recurs on this day each month). */
+  /** Preply only — the first subscription renewal date; renewals recur every 28 days after it. */
   subscriptionRenewalDate?: string;
 }
 
@@ -121,21 +133,31 @@ const StudentBillingFields: React.FC<{ value: StudentBilling; onChange: (next: S
         )}
       </div>
 
-      {/* Preply monthly subscription renewal date */}
-      {studentType === 'preply' && (
-        <div className="p-2.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
-          <label className={labelCls}>Monthly subscription renewal date</label>
-          <input
-            type="date"
-            value={value.subscriptionRenewalDate ?? ''}
-            onChange={e => onChange({ ...value, subscriptionRenewalDate: e.target.value || undefined })}
-            className={inputCls}
-          />
-          <p className="text-[11px] text-violet-600/80 dark:text-violet-400/80 mt-1">
-            You'll get a reminder the day before each monthly renewal.
-          </p>
-        </div>
-      )}
+      {/* Preply subscription renewal — recurs every 28 days from the date set */}
+      {studentType === 'preply' && (() => {
+        const next = value.subscriptionRenewalDate ? nextRenewalDate(value.subscriptionRenewalDate) : null;
+        return (
+          <div className="p-2.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+            <label className={labelCls}>Subscription renewal date</label>
+            <input
+              type="date"
+              value={value.subscriptionRenewalDate ?? ''}
+              onChange={e => onChange({ ...value, subscriptionRenewalDate: e.target.value || undefined })}
+              className={inputCls}
+            />
+            {next ? (
+              <div className="mt-1.5 text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">
+                <p>Renews every {RENEWAL_CYCLE_DAYS} days. <span className="font-semibold">Next: {fmtRenewal(next)}</span></p>
+                <p className="text-violet-600/80 dark:text-violet-400/80">You'll be reminded on {reminderDayOf(next)} (the day before).</p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-violet-600/80 dark:text-violet-400/80 mt-1">
+                Recurs every {RENEWAL_CYCLE_DAYS} days from this date — you'll get a reminder the day before each renewal.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Computed net */}
       {rate > 0 && (
