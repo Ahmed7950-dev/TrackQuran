@@ -37,6 +37,13 @@ const loadGLTF = (url: string): Promise<any> => {
   return p;
 };
 
+// The "-lite" variant of a character GLB: ~12k triangles (down from ~90k),
+// basecolor-only textures resized to 512, KHR_materials_specular stripped —
+// built by the offline pipeline for the FIELD on phones. The full model is
+// still used for the large character selector / victory previews. Preserves
+// any ?v= cache-bust suffix: /models/mario.glb?v=7 → /models/mario-lite.glb?v=7.
+export const liteModelUrl = (url: string): string => url.replace(/(\.glb)(\?|$)/i, '-lite$1$2');
+
 // The 3D wooden crate a runner holds while carrying a letter. Loaded once and
 // cloned per carrying character; parented to the chest bone so it rides the
 // carry-run's torso lean and sits "in the arms". Tunable live in DEV via
@@ -152,6 +159,11 @@ export class RunnerStage {
     const { THREE, skClone } = await loadMods();
     if (this.disposed) return;
     this.THREE = THREE;
+
+    // On phones, race the LITE character models (~12k tris + basecolor-only,
+    // vs ~90k tris + 4 PBR maps). The field only ever renders them small, so
+    // the reduction is invisible; the selector still loads the full models.
+    if (isLowPowerDevice) this.models = this.models.map(m => ({ ...m, url: liteModelUrl(m.url) }));
 
     // Render load scales with player count × pixels × antialias. On phones,
     // drop antialias and cap the pixel ratio hard (harder still with 3+ racers)
