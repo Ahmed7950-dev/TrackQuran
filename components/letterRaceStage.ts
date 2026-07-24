@@ -525,6 +525,12 @@ export class RunnerStage {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.renderer?.dispose?.();
+    // dispose() alone does NOT free the WebGL context — the browser keeps it
+    // until the canvas is GC'd. iOS Safari allows only a handful of live
+    // contexts per page and force-evicts the oldest ("too many active WebGL
+    // contexts") — which can be the LIVE race stage after the selector has
+    // churned through a few previews. Release the context explicitly.
+    this.renderer?.forceContextLoss?.();
     this.chars = [];
   }
 }
@@ -718,5 +724,9 @@ export class PortraitStage {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.renderer?.dispose?.();
+    // Every character tap in the selector mounts a fresh PortraitStage with its
+    // own WebGL context; without an explicit release iOS Safari piles them up
+    // and starts force-evicting live contexts (see RunnerStage.dispose).
+    this.renderer?.forceContextLoss?.();
   }
 }

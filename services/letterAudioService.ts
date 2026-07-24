@@ -67,15 +67,49 @@ export async function deleteLetterAudio(letter: string): Promise<boolean> {
   return true;
 }
 
+// ── TTS hygiene ───────────────────────────────────────────────────────────────
+// WebKit (Safari/iOS) runs speechSynthesis.getVoices() SYNCHRONOUSLY on the
+// main thread — enumerating the system voice list can stall 100-400ms. Calling
+// it per utterance mid-game froze Letter Race on iPhones (measured in the
+// WebKit perf lab: 13-18fps with per-round 170-400ms stalls; steady with audio
+// hygiene). Resolve the voice ONCE at module scope and reuse it.
+let cachedArVoice: SpeechSynthesisVoice | null | undefined; // undefined = not looked up yet
+function arabicVoice(): SpeechSynthesisVoice | null {
+  if (cachedArVoice !== undefined) return cachedArVoice;
+  const pick = () => {
+    cachedArVoice = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('ar')) ?? null;
+  };
+  pick(); // one-time cost, accepted here
+  if (!cachedArVoice) {
+    // voice list often arrives async — refine once when it does
+    window.speechSynthesis.addEventListener?.('voiceschanged', pick, { once: true });
+  }
+  return cachedArVoice ?? null;
+}
+
+/** Warm the TTS engine from a user gesture (e.g. a game's Start button): the
+ *  FIRST speak() initializes the platform engine — hundreds of ms on WebKit —
+ *  so pay that cost on a menu tap instead of mid-game. Safe to call anytime. */
+export function warmSpeech(): void {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    arabicVoice(); // resolve + cache the voice list now
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  } catch { /* no TTS */ }
+}
+
 /** Speak a letter using the browser's Arabic TTS voice. Used as the automatic
  *  fallback when no audio file has been uploaded for the letter. */
 export function speakLetter(letter: string): void {
   if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
+  const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) synth.cancel(); // don't churn the engine when idle
   const u = new SpeechSynthesisUtterance(letter);
   u.lang = 'ar-SA';
   u.rate = 0.7;
-  const arVoice = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('ar'));
-  if (arVoice) u.voice = arVoice;
-  window.speechSynthesis.speak(u);
+  const v = arabicVoice();
+  if (v) u.voice = v;
+  synth.speak(u);
 }

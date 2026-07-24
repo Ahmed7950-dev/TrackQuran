@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
+import { ARABIC_LETTERS, letterAudioUrl, speakLetter, warmSpeech } from '../services/letterAudioService';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 import { RunnerStage, PortraitStage, preloadRaceModels, isLowPowerDevice, type RunnerPose, type RunnerModel } from './letterRaceStage';
 import { GameInviteButton } from './GameInvite';
@@ -269,7 +269,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     try {
       const synth = window.speechSynthesis;
       if (!synth) return;
-      synth.cancel();
+      // Only cancel when something is actually queued — WebKit stalls the main
+      // thread on gratuitous cancel() calls (see letterAudioService TTS notes).
+      if (synth.speaking || synth.pending) synth.cancel();
       const u = new SpeechSynthesisUtterance(t);
       u.lang = 'en-US'; u.rate = 0.9;
       synth.speak(u);
@@ -417,6 +419,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   useEffect(() => {
     const canvas = stageCanvasRef.current;
     if (!canvas || !stageModels.length) return;
+    if ((import.meta as any).env?.DEV && (window as any).__lrNoStage) return; // perf-lab kill switch
     const n = stageModels.length;
     const stage = new RunnerStage(canvas, () => {
       const t = performance.now();
@@ -435,6 +438,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // only the DOM overlay (labels, boxes) repaints ~33fps to save reconciliation.
   const lastPaintRef = useRef(0);
   const paintTick = (now: number) => {
+    if ((import.meta as any).env?.DEV && (window as any).__lrNoPaint) return; // perf-lab kill switch
     if (isLowPowerDevice && now - lastPaintRef.current < 30) return;
     lastPaintRef.current = now;
     setTick(t => (t + 1) % 1000000);
@@ -443,22 +447,86 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const queuePosRef = useRef(0);
   const timersRef = useRef<number[]>([]);
 
+  // ── DEV perf HUD (vite dev server only — never in production builds): main-
+  // thread fps, worst frame, long-frame count and WebGL context losses, written
+  // imperatively into a ref'd div so the HUD itself never triggers re-renders.
+  // Used to chase the iOS Safari jank in the Simulator. ──
+  const perfHudRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!(import.meta as any).env?.DEV) return;
+    let raf = 0, last = performance.now(), winStart = last, frames = 0, longFrames = 0, worst = 0, ctxLost = 0;
+    const onLost = () => { ctxLost++; };
+    window.addEventListener('webglcontextlost', onLost, true);
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const d = now - last; last = now; frames++;
+      if (d > 34) longFrames++;
+      if (d > worst) worst = d;
+      if (now - winStart >= 1000) {
+        const el = perfHudRef.current;
+        if (el) el.textContent = `${Math.round((frames * 1000) / (now - winStart))}fps worst ${Math.round(worst)}ms long ${longFrames} ctxlost ${ctxLost}`;
+        winStart = now; frames = 0; longFrames = 0; worst = 0;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('webglcontextlost', onLost, true); };
+  }, []);
+
+  // ── Web Audio context (shared by letter playback + tone SFX) ────────────────
+  const acRef = useRef<AudioContext | null>(null);
+  const ensureAc = useCallback((): AudioContext => (
+    acRef.current ?? (acRef.current = new (window.AudioContext || (window as any).webkitAudioContext)())
+  ), []);
+
   // ── Letter audio (same files as Letter Flight) ──────────────────────────────
+  // Pre-fetched and pre-DECODED once per race into AudioBuffers. The old path
+  // set a fresh <audio> src per round (a Storage fetch + decode mid-race) and
+  // fell back to speechSynthesis — on WebKit that stalled the main thread
+  // 170-400ms EVERY round (the "iPhone lag": measured 13-18fps in the perf lab,
+  // steady 30 with audio fixed). Buffer playback costs ~0 on the main thread.
+  const audioBufRef = useRef<Map<string, AudioBuffer | null>>(new Map()); // null = no file → TTS
+  useEffect(() => {
+    if (wordMode) return; // word mode speaks English prompts (TTS, warmed below)
+    let live = true;
+    const ac = ensureAc(); // decodeAudioData works while suspended (pre-gesture)
+    for (const letter of new Set(pool)) {
+      fetch(letterAudioUrl(letter))
+        .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
+        .then(buf => ac.decodeAudioData(buf))
+        .then(b => { if (live) audioBufRef.current.set(letter, b); })
+        .catch(() => { if (live) audioBufRef.current.set(letter, null); });
+    }
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playLetterAudio = useCallback((letter: string) => {
+    const b = audioBufRef.current.get(letter);
+    if (b) {
+      try {
+        const ac = ensureAc();
+        ac.resume?.();
+        const src = ac.createBufferSource();
+        src.buffer = b;
+        src.connect(ac.destination);
+        src.start();
+        return;
+      } catch { /* fall through to the legacy path */ }
+    }
+    if (b === null) { speakLetter(letter); return; } // known missing — hygienic TTS
+    // not decoded yet (very first round can race the prefetch) — legacy path
     let fell = false;
     const fallback = () => { if (!fell) { fell = true; speakLetter(letter); } };
     const el = audioRef.current ?? (audioRef.current = new Audio());
     el.onerror = fallback;
     el.src = letterAudioUrl(letter);
     el.play().catch(fallback);
-  }, []);
+  }, [ensureAc]);
 
   // ── Sound effects (Web Audio) ───────────────────────────────────────────────
-  const acRef = useRef<AudioContext | null>(null);
   const tone = useCallback((freqs: number[], dur = 0.14, type: OscillatorType = 'sine', vol = 0.18) => {
     try {
-      const ac = acRef.current ?? (acRef.current = new (window.AudioContext || (window as any).webkitAudioContext)());
+      const ac = ensureAc();
       freqs.forEach((f, i) => {
         const o = ac.createOscillator(); const g = ac.createGain();
         o.type = type; o.frequency.value = f;
@@ -470,7 +538,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         o.start(t0); o.stop(t0 + dur);
       });
     } catch { /* audio unavailable */ }
-  }, []);
+  }, [ensureAc]);
   // ── Recorded SFX (files) ────────────────────────────────────────────────────
   const sfxFilesRef = useRef<Partial<Record<keyof typeof SFX_FILES, HTMLAudioElement>>>({});
   const playFx = useCallback((key: keyof typeof SFX_FILES, vol = 0.9) => {
@@ -506,6 +574,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── Round setup: new target letter + rebuilt letter row ────────────────────
   const setupRound = useCallback(() => {
     clearTimers();
+    // First call arrives from the Start button — a user gesture. Pay WebKit's
+    // audio-engine init costs HERE, not mid-race: warm the TTS engine (first
+    // speak() can stall hundreds of ms) and unlock/resume the AudioContext so
+    // pre-decoded letter buffers can play instantly on iOS.
+    warmSpeech();
+    try { ensureAc().resume?.(); } catch { /* audio unavailable */ }
     if (queuePosRef.current >= queueRef.current.length) {
       queueRef.current = shuffle(pool);
       queuePosRef.current = 0;
@@ -578,7 +652,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         setPhase('race');
       });
     });
-  }, [pool, playLetterAudio, playFx, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels, wordMode, words, speakEnglish]);
+  }, [pool, playLetterAudio, playFx, netMode, p1Char, p1Name, p2Char, p2Name, syncStageModels, wordMode, words, speakEnglish, ensureAc]);
 
 
 
@@ -743,7 +817,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         }
         setPhase(s.ph);
       }
-      setTick(t => (t + 1) % 1000000); // repaint even outside the race loop
+      // Repaint even outside the race loop — but through the phone throttle:
+      // this fires per received snapshot (30Hz) and used to bypass paintTick,
+      // stacking ~30 extra React commits/s on top of the loop's repaints.
+      paintTick(now);
     });
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
@@ -1191,6 +1268,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           players' field positions (see letterRaceStage.ts) */}
       <canvas ref={stageCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 9, pointerEvents: 'none' }} />
       {players.map((p, i) => renderPlayer(p, i))}
+
+      {/* DEV perf HUD — dev server only, imperative updates (see effect above) */}
+      {(import.meta as any).env?.DEV && (
+        <div ref={perfHudRef} style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.75)', color: '#4ade80', fontFamily: 'monospace', fontSize: 15, fontWeight: 700, padding: '4px 10px', borderRadius: 8, pointerEvents: 'none', whiteSpace: 'nowrap' }} />
+      )}
 
       {/* ── Top HUD ── */}
       <div className="lr-hud" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'linear-gradient(rgba(6,30,12,0.55), rgba(6,30,12,0))', color: '#fff' }}>
