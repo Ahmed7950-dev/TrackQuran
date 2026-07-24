@@ -302,10 +302,11 @@ const LetterWithError: React.FC<{
     }, [isEditing]);
     React.useEffect(() => { if (addingSuggestion) addInputRef.current?.focus(); }, [addingSuggestion]);
 
+    // One tap = logged. Anything already typed is kept and the chip appended,
+    // so "Fatha" typed + tap "No Hold" still saves the whole note.
     const applySuggestion = (s: string) => {
         const cur = errorText.trim();
-        onTextChange(cur ? `${cur} ${s}` : s);
-        inputRef.current?.focus();
+        onTextSubmit(letterKey, cur ? `${cur} ${s}` : s);
     };
     const commitNewSuggestion = () => {
         const v = newSuggestion.trim();
@@ -324,7 +325,7 @@ const LetterWithError: React.FC<{
         saveCustomNoteSuggestions(next);
         inputRef.current?.focus();
     };
-    const chipCls = 'px-1.5 py-0.5 rounded-full text-[10px] font-semibold leading-none transition-colors bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-teal-500 hover:text-white dark:hover:bg-orange-500';
+    const chipCls = 'px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold leading-none transition-colors bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-teal-500 hover:text-white dark:hover:bg-orange-500 active:scale-95';
 
     const cancelLongPress = () => {
         if (longPressTimer.current !== null) {
@@ -395,59 +396,63 @@ const LetterWithError: React.FC<{
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
                     <div
                         onPointerDown={() => { keepOpenRef.current = true; }}
-                        className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden w-[236px] sm:w-[272px] max-w-[86vw]"
+                        className="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden w-[248px] sm:w-[292px] max-w-[86vw]"
                     >
-                        {/* Quick suggestions — tap to append to the note */}
+                        {/* "+" tucked into the corner so it never costs a row */}
+                        <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setAddingSuggestion(true)}
+                            title="Add a suggestion"
+                            className="absolute top-1 right-1 z-10 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 text-sm font-bold leading-none hover:bg-slate-100 dark:hover:bg-gray-700 hover:text-teal-600 dark:hover:text-orange-400"
+                        >+</button>
+
+                        {/* Quick suggestions — one tap logs the note */}
                         <div
                             dir="ltr" /* the popup sits inside the RTL Quran block, which would reverse the chip order */
                             onMouseDown={(e) => e.preventDefault()} /* desktop: never blur the note field */
-                            className="px-2 pt-1.5 pb-1 space-y-1 border-b border-slate-100 dark:border-gray-800"
+                            className="px-2 pt-2 pb-1.5 space-y-1.5 border-b border-slate-100 dark:border-gray-800"
                         >
                             {NOTE_SUGGESTION_GROUPS.map((group, gi) => (
-                                <div key={gi} className="flex flex-wrap gap-1">
+                                <div key={gi} className="flex flex-wrap justify-center gap-1.5">
                                     {group.map(s => (
                                         <button key={s} type="button" onClick={() => applySuggestion(s)} className={chipCls}>{s}</button>
                                     ))}
                                 </div>
                             ))}
-                            <div className="flex flex-wrap items-center gap-1">
-                                {customSuggestions.map(s => (
-                                    <span key={s} className="inline-flex items-center rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
-                                        <button type="button" onClick={() => applySuggestion(s)} className={`${chipCls} rounded-none bg-transparent dark:bg-transparent`}>{s}</button>
-                                        <button
-                                            type="button"
-                                            onClick={() => removeSuggestion(s)}
-                                            title={`Remove "${s}"`}
-                                            className="pr-1.5 pl-0.5 text-[10px] leading-none text-slate-400 hover:text-red-500"
-                                        >×</button>
-                                    </span>
-                                ))}
-                                {addingSuggestion ? (
-                                    <span className="inline-flex items-center gap-1">
-                                        <input
-                                            ref={addInputRef}
-                                            type="text"
-                                            value={newSuggestion}
-                                            onChange={(e) => setNewSuggestion(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                e.stopPropagation();
-                                                if (e.key === 'Enter') { e.preventDefault(); commitNewSuggestion(); }
-                                                else if (e.key === 'Escape') { e.preventDefault(); setAddingSuggestion(false); setNewSuggestion(''); inputRef.current?.focus(); }
-                                            }}
-                                            placeholder="New…"
-                                            className="w-[74px] px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 border border-teal-400 dark:border-orange-400 focus:outline-none"
-                                        />
-                                        <button type="button" onClick={commitNewSuggestion} title="Save suggestion" className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500 dark:bg-orange-500 text-white">✓</button>
-                                    </span>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => setAddingSuggestion(true)}
-                                        title="Add a suggestion"
-                                        className="w-5 h-5 flex items-center justify-center rounded-full border border-dashed border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400 text-xs font-bold leading-none hover:border-teal-500 hover:text-teal-600 dark:hover:border-orange-500 dark:hover:text-orange-400"
-                                    >+</button>
-                                )}
-                            </div>
+                            {(customSuggestions.length > 0 || addingSuggestion) && (
+                                <div className="flex flex-wrap justify-center items-center gap-1.5">
+                                    {customSuggestions.map(s => (
+                                        <span key={s} className="inline-flex items-center rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+                                            <button type="button" onClick={() => applySuggestion(s)} className={`${chipCls} rounded-none bg-transparent dark:bg-transparent pr-1`}>{s}</button>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeSuggestion(s)}
+                                                title={`Remove "${s}"`}
+                                                className="pr-2 pl-0.5 text-[11px] leading-none text-slate-400 hover:text-red-500"
+                                            >×</button>
+                                        </span>
+                                    ))}
+                                    {addingSuggestion && (
+                                        <span className="inline-flex items-center gap-1">
+                                            <input
+                                                ref={addInputRef}
+                                                type="text"
+                                                value={newSuggestion}
+                                                onChange={(e) => setNewSuggestion(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    e.stopPropagation();
+                                                    if (e.key === 'Enter') { e.preventDefault(); commitNewSuggestion(); }
+                                                    else if (e.key === 'Escape') { e.preventDefault(); setAddingSuggestion(false); setNewSuggestion(''); inputRef.current?.focus(); }
+                                                }}
+                                                placeholder="New…"
+                                                className="w-[86px] px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 border border-teal-400 dark:border-orange-400 focus:outline-none"
+                                            />
+                                            <button type="button" onClick={commitNewSuggestion} title="Save suggestion" className="px-2 py-1 rounded-full text-[11px] font-bold bg-teal-500 dark:bg-orange-500 text-white">✓</button>
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div className="flex items-center gap-1 px-2 py-1">
                             <input
