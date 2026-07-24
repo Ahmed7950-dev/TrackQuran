@@ -521,16 +521,16 @@ export class RunnerStage {
     r.setScissorTest(false);
   }
 
+  // NOTE: never forceContextLoss() here — the game reuses ONE canvas across
+  // stage rebuilds (roster/character changes re-run the effect), and a
+  // force-lost context stays dead on that canvas: every later WebGLRenderer
+  // gets the lost context and crashes in getShaderPrecisionFormat (null),
+  // leaving an opaque-white dead canvas over the whole field. (Tried once to
+  // pre-empt iOS context eviction — broke all platforms instead.)
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.renderer?.dispose?.();
-    // dispose() alone does NOT free the WebGL context — the browser keeps it
-    // until the canvas is GC'd. iOS Safari allows only a handful of live
-    // contexts per page and force-evicts the oldest ("too many active WebGL
-    // contexts") — which can be the LIVE race stage after the selector has
-    // churned through a few previews. Release the context explicitly.
-    this.renderer?.forceContextLoss?.();
     this.chars = [];
   }
 }
@@ -720,13 +720,12 @@ export class PortraitStage {
     cam.updateProjectionMatrix();
   }
 
+  // Same rule as RunnerStage.dispose: NO forceContextLoss — PortraitView keeps
+  // its canvas across model-prop changes, so the next PortraitStage must be
+  // able to reuse the live context.
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.renderer?.dispose?.();
-    // Every character tap in the selector mounts a fresh PortraitStage with its
-    // own WebGL context; without an explicit release iOS Safari piles them up
-    // and starts force-evicting live contexts (see RunnerStage.dispose).
-    this.renderer?.forceContextLoss?.();
   }
 }

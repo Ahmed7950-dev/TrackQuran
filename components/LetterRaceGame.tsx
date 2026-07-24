@@ -416,10 +416,16 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   }, []);
   // ── Live 3D characters (three.js overlay; see letterRaceStage.ts) ──────────
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Loading gate: the Start button waits until the current roster's character
+  // models are parsed and on the stage (plus the field image below), so slower
+  // devices never begin a race against a half-loaded scene.
+  const [stageReady, setStageReady] = useState(false);
   useEffect(() => {
     const canvas = stageCanvasRef.current;
     if (!canvas || !stageModels.length) return;
-    if ((import.meta as any).env?.DEV && (window as any).__lrNoStage) return; // perf-lab kill switch
+    if ((import.meta as any).env?.DEV && (window as any).__lrNoStage) { setStageReady(true); return; } // perf-lab kill switch
+    setStageReady(false);
+    let live = true;
     const n = stageModels.length;
     const stage = new RunnerStage(canvas, () => {
       const t = performance.now();
@@ -428,11 +434,35 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         anim: t < pl.fallenUntil ? 'trip' : t < pl.tackleUntil ? 'tackle' : t - pl.jumpAt < JUMP_ANIM_MS ? 'jump' : pl.carrying ? 'carry' : pl.speed > 0.02 ? 'run' : 'idle',
       }));
     }, stageModels);
-    stage.init().catch(err => console.error('[LetterRace] 3D stage failed:', err));
+    stage.init()
+      .then(() => { if (live) setStageReady(true); })
+      .catch(err => {
+        console.error('[LetterRace] 3D stage failed:', err);
+        if (live) setStageReady(true); // never deadlock the Start button on a 3D failure
+      });
     if ((import.meta as any).env?.DEV) { (window as any).__lrStage = stage; (window as any).__lrGame = game; (window as any).__lrKeys = keys; }
-    return () => stage.dispose();
+    return () => { live = false; stage.dispose(); };
   }, [stageModels]);
-  useEffect(() => { syncStageModels(); }, [syncStageModels]); // default pair before the first round
+  // Keep the stage roster in sync WHILE characters are being picked (not only
+  // at setupRound): the newly chosen model starts fetching during selection,
+  // so the Start button's loading gate waits for the real lineup, and the race
+  // never begins with characters still downloading.
+  useEffect(() => {
+    if (phase !== 'select') return;
+    const g = game.current;
+    if (!isGuest && g.players[0]) g.players[0].charKey = p1Char;
+    if (netMode === 'local' && g.players[1]) g.players[1].charKey = p2Char;
+    syncStageModels();
+  }, [phase, p1Char, p2Char, netMode, isGuest, syncStageModels]);
+  // Field background: preload so the race never starts over a blank lawn.
+  const [bgReady, setBgReady] = useState(false);
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setBgReady(true);
+    img.onerror = () => setBgReady(true); // missing art shouldn't block play
+    img.src = fieldBg;
+  }, [fieldBg]);
+  const assetsReady = stageReady && bgReady;
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
   // Throttle the per-frame React repaint on phones — physics/3D stay full rate,
   // only the DOM overlay (labels, boxes) repaints ~33fps to save reconciliation.
@@ -1498,7 +1528,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
             )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
               <button onClick={() => { setNetMode('local'); setSelStep(1); }} style={{ background: '#eef2ff', color: '#4338ca', border: '2px solid #c7d2fe', borderRadius: 999, padding: '12px 22px', fontWeight: 900, cursor: 'pointer', fontSize: 15 }}>‹ Back</button>
-              <button onClick={() => setupRound()} disabled={players.length < 2} style={{ background: players.length > 1 ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: players.length > 1 ? 'pointer' : 'default', fontSize: 17, boxShadow: players.length > 1 ? '0 6px 18px rgba(22,163,74,0.45)' : 'none' }}>Start the Race! 🏃💨</button>
+              {(() => {
+                const canStart = players.length > 1 && assetsReady;
+                return (
+                  <button onClick={() => setupRound()} disabled={!canStart} style={{ background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 36px', fontWeight: 900, cursor: canStart ? 'pointer' : 'default', fontSize: 17, boxShadow: canStart ? '0 6px 18px rgba(22,163,74,0.45)' : 'none' }}>
+                    {players.length > 1 && !assetsReady ? '⏳ Loading characters…' : 'Start the Race! 🏃💨'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1587,7 +1624,9 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                       <button onClick={() => { setNetMode('online'); setSelStep('share'); }} style={{ ...btnBase, background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', boxShadow: '0 8px 22px rgba(14,165,233,0.5)' }}>🌐 Online</button>
                     </>
                   ) : (
-                    <button onClick={() => setupRound()} style={{ ...btnBase, background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 8px 22px rgba(22,163,74,0.5)' }}>Start the Race! 🏃💨</button>
+                    <button onClick={() => setupRound()} disabled={!assetsReady} style={{ ...btnBase, background: assetsReady ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', boxShadow: assetsReady ? '0 8px 22px rgba(22,163,74,0.5)' : 'none', cursor: assetsReady ? 'pointer' : 'default' }}>
+                      {assetsReady ? 'Start the Race! 🏃💨' : '⏳ Loading characters…'}
+                    </button>
                   )}
                 </>
               )}
