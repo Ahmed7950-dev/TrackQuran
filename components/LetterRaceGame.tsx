@@ -1067,6 +1067,14 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         if (a && held.has('KeyD'))       rot(a, +1);
         if (b && held.has('ArrowLeft'))  rot(b, -1);
         if (b && held.has('ArrowRight')) rot(b, +1);
+        // Virtual joystick drives PLAYER 1 in local play on a touch device —
+        // same mapping as the online branch (local games used to be
+        // keyboard-only, which left phones with no way to play at all).
+        const tj = touchJoyRef.current;
+        if (a && tj.active && tj.mag > 0.22 && now >= a.fallenUntil) {
+          a.heading = (Math.atan2(tj.dx, -tj.dy) * 180 / Math.PI + 360) % 360;
+          if (now >= a.tackleUntil) a.speed = Math.min(maxFor(a), a.speed + RUN_ACCEL * dtF);
+        }
       }
 
       const k = 1 - Math.pow(1 - NET_LERP, dtF); // frame-rate-independent lerp
@@ -1375,9 +1383,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         </>
       )}
 
-      {/* ── Touch controls: virtual joystick + tackle/jump buttons (online on
-          a phone / iPad — each device drives its own racer) ── */}
-      {online && isTouch && phase !== 'select' && (
+      {/* ── Touch controls: virtual joystick + tackle/jump buttons on any
+          phone / iPad. Online: each device drives its own racer. Local: the
+          joystick + Z/X buttons drive Player 1 (KeyZ/KeyX are P1's keys). ── */}
+      {isTouch && phase !== 'select' && (
         <>
           <div
             ref={joyBaseRef}
