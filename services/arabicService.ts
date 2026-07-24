@@ -46,6 +46,7 @@ interface ArabicStudentRow {
   currency: string | null;
   student_type: string | null;
   preply_percentage: number | null;
+  subscription_renewal_date: string | null;
   auth_user_id?: string | null;
   self_registered?: boolean | null;
   approval_status?: string | null;
@@ -128,6 +129,7 @@ function rowToStudent(r: ArabicStudentRow): ArabicStudent {
     currency:            (r.currency as ArabicStudent['currency']) ?? undefined,
     studentType:         (r.student_type as ArabicStudent['studentType']) ?? undefined,
     preplyPercentage:    r.preply_percentage ?? undefined,
+    subscriptionRenewalDate: r.subscription_renewal_date ?? undefined,
     authUserId:          r.auth_user_id      ?? undefined,
     selfRegistered:      r.self_registered   ?? undefined,
     approvalStatus:      (r.approval_status as ArabicStudent['approvalStatus']) ?? undefined,
@@ -160,6 +162,7 @@ function studentToRow(s: ArabicStudent): ArabicStudentRow {
     currency:            s.currency         ?? null,
     student_type:        s.studentType      ?? null,
     preply_percentage:   s.preplyPercentage ?? null,
+    subscription_renewal_date: s.subscriptionRenewalDate ?? null,
     auth_user_id:        s.authUserId       ?? null,
     self_registered:     s.selfRegistered   ?? false,
     approval_status:     s.approvalStatus   ?? 'active',

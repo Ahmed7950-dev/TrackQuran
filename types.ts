@@ -289,6 +289,7 @@ export interface ArabicStudent {
   currency?: 'USD' | 'TRY';
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
+  subscriptionRenewalDate?: string;        // Preply only — a renewal date (YYYY-MM-DD); repeats every 28 days, reminder 1 day before
   // ── Self-registration (student created their own account via Google) ──
   authUserId?: string;
   selfRegistered?: boolean;

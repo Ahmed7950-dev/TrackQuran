@@ -1,12 +1,16 @@
 /**
  * Subscription renewal maths — a fixed 28-day cycle (NOT calendar-monthly).
  *
- * The stored `subscriptionRenewalDate` is the ANCHOR: the first renewal date the
- * tutor sets. Renewals then recur every 28 days after it (anchor + 28·k, k ≥ 1),
- * and a reminder is due 1 day before each one. So if the anchor is 24 Jun, the
- * renewals are 22 Jul, 19 Aug, 16 Sep, … and the reminders land on 21 Jul,
- * 18 Aug, 15 Sep, … The anchor date itself is treated as "already renewed" — the
- * first reminder is one full cycle later.
+ * The stored `subscriptionRenewalDate` IS a renewal date, and renewals repeat
+ * every 28 days from it: occurrences are date + 28·k for k ≥ 0. A reminder is
+ * due 1 day before each occurrence.
+ *
+ * k starts at 0 deliberately: tutors enter the NEXT renewal they know about,
+ * which is usually a future date. Treating the stored date as merely an anchor
+ * whose first renewal is a cycle later (k ≥ 1) silently skipped that first
+ * renewal — a date set to 26 Jul reported "next: 23 Aug" and fired no reminder
+ * on 25 Jul. Past dates still work: the occurrence list rolls forward until it
+ * reaches today, so 24 Jun read on 24 Jul gives 19 Aug (24 Jun + 56).
  */
 
 export const RENEWAL_CYCLE_DAYS = 28;
@@ -38,31 +42,35 @@ function daysBetween(from: Date, to: Date): number {
 }
 
 /**
- * The next renewal date (anchor + 28·k, k ≥ 1) that is today or later, as
- * YYYY-MM-DD. Auto-advances every 28 days so the tutor always sees the upcoming
- * renewal, never a stale past one. Returns null for an invalid anchor.
+ * The next renewal (stored date + 28·k, k ≥ 0) that is today or later, as
+ * YYYY-MM-DD. A future stored date is returned as-is; a past one rolls forward
+ * in 28-day steps, so the tutor always sees the upcoming renewal and never a
+ * stale past one. Returns null for an invalid date.
  */
 export function nextRenewalDate(anchorStr: string, from: Date = todayMidnight()): string | null {
   const anchor = parseAnchor(anchorStr);
   if (!anchor) return null;
   const elapsed = daysBetween(anchor, from);
-  // Smallest k ≥ 1 with anchor + 28·k ≥ today  ⇒  k ≥ elapsed / 28.
-  const k = Math.max(1, Math.ceil(elapsed / RENEWAL_CYCLE_DAYS));
+  // Smallest k ≥ 0 with date + 28·k ≥ today  ⇒  k ≥ elapsed / 28.
+  const k = Math.max(0, Math.ceil(elapsed / RENEWAL_CYCLE_DAYS));
   return toISODate(new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + RENEWAL_CYCLE_DAYS * k));
 }
 
 /**
- * If TODAY is exactly one day before a renewal (anchor + 28·k − 1, k ≥ 1),
+ * If TODAY is exactly one day before a renewal (stored date + 28·k − 1, k ≥ 0),
  * return that renewal's date (tomorrow) as YYYY-MM-DD — the occurrence to remind
- * for. Otherwise null. Never fires before the first full cycle after the anchor.
+ * for. Otherwise null. The k = 0 case is what reminds for the very first
+ * renewal the tutor entered.
  */
 export function renewalReminderOccurrence(anchorStr: string, from: Date = todayMidnight()): string | null {
   const anchor = parseAnchor(anchorStr);
   if (!anchor) return null;
   const elapsed = daysBetween(anchor, from);
-  // Reminder days sit at anchor + 28·k − 1 (k ≥ 1) ⇒ elapsed ≡ 27 (mod 28), elapsed ≥ 27.
-  if (elapsed < RENEWAL_CYCLE_DAYS - 1) return null;
-  if (elapsed % RENEWAL_CYCLE_DAYS !== RENEWAL_CYCLE_DAYS - 1) return null;
+  // Reminder days sit at date + 28·k − 1 (k ≥ 0) ⇒ elapsed + 1 ≡ 0 (mod 28).
+  // The ≥ −1 guard stops dates further than a day in the future from matching
+  // (JS % keeps the sign, so −29 would otherwise pass the modulo test).
+  if (elapsed < -1) return null;
+  if ((elapsed + 1) % RENEWAL_CYCLE_DAYS !== 0) return null;
   const renewal = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1); // tomorrow
   return toISODate(renewal);
 }

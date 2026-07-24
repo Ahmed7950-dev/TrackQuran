@@ -760,6 +760,12 @@ const App: React.FC = () => {
       getVocabWordCountsByLesson(),
     ]).then(async ([students, lessonWordCounts]) => {
       setArabicStudents(students);
+      // Arabic students get the same day-before renewal reminder as Quran ones.
+      for (const s of students) {
+        if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
+        const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
+        if (occ) ensureSubscriptionRenewalReminder({ teacherId, studentId: s.id, studentName: s.name, renewalDate: occ });
+      }
       const customCounts = await getCustomVocabWordCountsForStudents(students.map(s => s.id));
       const totals: Record<string, number> = {};
       for (const s of students) {

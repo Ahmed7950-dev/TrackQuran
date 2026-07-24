@@ -230,6 +230,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
     currency: existing?.currency ?? 'USD',
     studentType: existing?.studentType ?? 'preply',
     preplyPercentage: existing?.preplyPercentage ?? 18,
+    subscriptionRenewalDate: existing?.subscriptionRenewalDate,
   });
   const [grid,        setGrid]        = useState<Set<string>>(
     () => slotsToGrid(existing?.availability ?? [])
@@ -312,6 +313,7 @@ const ArabicAddStudentModal: React.FC<Props> = ({ isOpen, teacherId, onClose, on
       currency:           billing.currency,
       studentType:        billing.studentType,
       preplyPercentage:   billing.preplyPercentage,
+      subscriptionRenewalDate: billing.studentType === 'platform' ? undefined : billing.subscriptionRenewalDate,
       createdAt:          existing?.createdAt ?? new Date().toISOString(),
     };
 
