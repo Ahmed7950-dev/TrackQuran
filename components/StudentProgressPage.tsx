@@ -225,6 +225,8 @@ const NOTE_SUGGESTION_GROUPS: string[][] = [
     ['light', 'heavy', 'Tanween to Alif'],
 ];
 const CUSTOM_NOTE_SUGGESTIONS_KEY = 'quranful:mistakeNoteSuggestions';
+// Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
+const TAJWEED_PREF_KEY = 'quranful:showTajweed';
 const loadCustomNoteSuggestions = (): string[] => {
     try {
         const raw = localStorage.getItem(CUSTOM_NOTE_SUGGESTIONS_KEY);
@@ -819,7 +821,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
     // One switch for the full tajweed color-coding (QPC palette, all rules).
-    const [showTajweed, setShowTajweed] = useState(true);
+    // OFF on a first visit — plain mushaf text is what a reader expects to open
+    // to, and the colors compete with the red/green mistake highlighting. The
+    // choice is remembered per browser once it's been toggled either way.
+    const [showTajweed, setShowTajweed] = useState(() => {
+        try { return localStorage.getItem(TAJWEED_PREF_KEY) === '1'; } catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
+    }, [showTajweed]);
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
         if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
