@@ -214,6 +214,28 @@ const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
     .map(r => `.tj-${r}{color:${TAJWEED_RULES[r].color}} .dark .tj-${r}{color:${TAJWEED_RULES[r].colorDark}}`)
     .join('\n');
 
+// ── Quick note suggestions (live logging) ────────────────────────────────────
+// Tapping a chip appends it to the mistake note, so the common tajweed/reading
+// corrections are one tap instead of typing mid-lesson. Grouped the way a tutor
+// thinks: harakat, then length/hold, then weight. Tutors add their own with "+"
+// (kept per browser — these are personal shorthand, not shared student data).
+const NOTE_SUGGESTION_GROUPS: string[][] = [
+    ['Fatha', 'Kasrah', 'Dammah'],
+    ['short', 'Hold', 'Stretch', 'No Hold'],
+    ['light', 'heavy', 'Tanween to Alif'],
+];
+const CUSTOM_NOTE_SUGGESTIONS_KEY = 'quranful:mistakeNoteSuggestions';
+const loadCustomNoteSuggestions = (): string[] => {
+    try {
+        const raw = localStorage.getItem(CUSTOM_NOTE_SUGGESTIONS_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr.filter((s: unknown): s is string => typeof s === 'string' && !!s.trim()) : [];
+    } catch { return []; }
+};
+const saveCustomNoteSuggestions = (list: string[]): void => {
+    try { localStorage.setItem(CUSTOM_NOTE_SUGGESTIONS_KEY, JSON.stringify(list)); } catch { /* private mode / quota */ }
+};
+
 // Component for rendering a letter with error marking
 const LetterWithError: React.FC<{
     letter: string;
@@ -259,6 +281,50 @@ const LetterWithError: React.FC<{
     const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
+
+    // ── Note-suggestion chips ────────────────────────────────────────────────
+    // Any pointer press INSIDE the popup (chip, +, add-field) must not count as
+    // "clicked away": the input's onBlur auto-submits and would close the popup
+    // mid-tap. This flag makes blur restore focus instead of saving.
+    const keepOpenRef = React.useRef(false);
+    const [customSuggestions, setCustomSuggestions] = React.useState<string[]>([]);
+    const [addingSuggestion, setAddingSuggestion] = React.useState(false);
+    const [newSuggestion, setNewSuggestion] = React.useState('');
+    const addingRef = React.useRef(false);
+    const addInputRef = React.useRef<HTMLInputElement>(null);
+    React.useEffect(() => { addingRef.current = addingSuggestion; }, [addingSuggestion]);
+    // Re-read on each open so a chip added while marking another letter shows up.
+    React.useEffect(() => {
+        if (!isEditing) return;
+        setCustomSuggestions(loadCustomNoteSuggestions());
+        setAddingSuggestion(false);
+        setNewSuggestion('');
+    }, [isEditing]);
+    React.useEffect(() => { if (addingSuggestion) addInputRef.current?.focus(); }, [addingSuggestion]);
+
+    const applySuggestion = (s: string) => {
+        const cur = errorText.trim();
+        onTextChange(cur ? `${cur} ${s}` : s);
+        inputRef.current?.focus();
+    };
+    const commitNewSuggestion = () => {
+        const v = newSuggestion.trim();
+        if (v && !customSuggestions.includes(v) && !NOTE_SUGGESTION_GROUPS.some(g => g.includes(v))) {
+            const next = [...customSuggestions, v];
+            setCustomSuggestions(next);
+            saveCustomNoteSuggestions(next);
+        }
+        setNewSuggestion('');
+        setAddingSuggestion(false);
+        inputRef.current?.focus();
+    };
+    const removeSuggestion = (s: string) => {
+        const next = customSuggestions.filter(x => x !== s);
+        setCustomSuggestions(next);
+        saveCustomNoteSuggestions(next);
+        inputRef.current?.focus();
+    };
+    const chipCls = 'px-1.5 py-0.5 rounded-full text-[10px] font-semibold leading-none transition-colors bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-teal-500 hover:text-white dark:hover:bg-orange-500';
 
     const cancelLongPress = () => {
         if (longPressTimer.current !== null) {
@@ -327,7 +393,62 @@ const LetterWithError: React.FC<{
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
             {isEditing && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
-                    <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden">
+                    <div
+                        onPointerDown={() => { keepOpenRef.current = true; }}
+                        className="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden w-[236px] sm:w-[272px] max-w-[86vw]"
+                    >
+                        {/* Quick suggestions — tap to append to the note */}
+                        <div
+                            dir="ltr" /* the popup sits inside the RTL Quran block, which would reverse the chip order */
+                            onMouseDown={(e) => e.preventDefault()} /* desktop: never blur the note field */
+                            className="px-2 pt-1.5 pb-1 space-y-1 border-b border-slate-100 dark:border-gray-800"
+                        >
+                            {NOTE_SUGGESTION_GROUPS.map((group, gi) => (
+                                <div key={gi} className="flex flex-wrap gap-1">
+                                    {group.map(s => (
+                                        <button key={s} type="button" onClick={() => applySuggestion(s)} className={chipCls}>{s}</button>
+                                    ))}
+                                </div>
+                            ))}
+                            <div className="flex flex-wrap items-center gap-1">
+                                {customSuggestions.map(s => (
+                                    <span key={s} className="inline-flex items-center rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+                                        <button type="button" onClick={() => applySuggestion(s)} className={`${chipCls} rounded-none bg-transparent dark:bg-transparent`}>{s}</button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeSuggestion(s)}
+                                            title={`Remove "${s}"`}
+                                            className="pr-1.5 pl-0.5 text-[10px] leading-none text-slate-400 hover:text-red-500"
+                                        >×</button>
+                                    </span>
+                                ))}
+                                {addingSuggestion ? (
+                                    <span className="inline-flex items-center gap-1">
+                                        <input
+                                            ref={addInputRef}
+                                            type="text"
+                                            value={newSuggestion}
+                                            onChange={(e) => setNewSuggestion(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Enter') { e.preventDefault(); commitNewSuggestion(); }
+                                                else if (e.key === 'Escape') { e.preventDefault(); setAddingSuggestion(false); setNewSuggestion(''); inputRef.current?.focus(); }
+                                            }}
+                                            placeholder="New…"
+                                            className="w-[74px] px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 border border-teal-400 dark:border-orange-400 focus:outline-none"
+                                        />
+                                        <button type="button" onClick={commitNewSuggestion} title="Save suggestion" className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500 dark:bg-orange-500 text-white">✓</button>
+                                    </span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setAddingSuggestion(true)}
+                                        title="Add a suggestion"
+                                        className="w-5 h-5 flex items-center justify-center rounded-full border border-dashed border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400 text-xs font-bold leading-none hover:border-teal-500 hover:text-teal-600 dark:hover:border-orange-500 dark:hover:text-orange-400"
+                                    >+</button>
+                                )}
+                            </div>
+                        </div>
                         <div className="flex items-center gap-1 px-2 py-1">
                             <input
                                 ref={inputRef}
@@ -337,6 +458,13 @@ const LetterWithError: React.FC<{
                                 onKeyDown={handleKeyDown}
                                 onBlur={() => {
                                     setTimeout(() => {
+                                        // A tap inside the popup (chip / + / add-field) isn't "away".
+                                        if (keepOpenRef.current) {
+                                            keepOpenRef.current = false;
+                                            if (!addingRef.current) inputRef.current?.focus();
+                                            return;
+                                        }
+                                        if (addingRef.current) return; // typing a new suggestion
                                         if (errorText.trim()) {
                                             onTextSubmit(letterKey, errorText.trim());
                                         } else {
@@ -344,11 +472,11 @@ const LetterWithError: React.FC<{
                                         }
                                     }, 200);
                                 }}
-                                className="flex-1 text-xs bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none border-0 p-0"
-                                placeholder="Type..."
-                                style={{ width: '80px' }}
+                                className="flex-1 min-w-0 text-xs bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none border-0 p-0"
+                                placeholder="Type or tap a suggestion…"
                             />
                             <button
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
                                     if (errorText.trim()) {
                                         onTextSubmit(letterKey, errorText.trim());
