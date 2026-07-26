@@ -326,6 +326,11 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const channelRef = useRef<P2PGameChannel | null>(null);
   // per-guest 30Hz pose stream, keyed by gid (freshTackle set on a new dash)
   const guestInputsRef = useRef<Map<string, GuestInput & { at: number; freshTackle: boolean }>>(new Map());
+  // Host: last time each guest was heard from ('ready' or 30Hz 'input') — the
+  // heartbeat that lets the reaper remove players who left without saying so.
+  const guestSeenRef = useRef<Map<string, number>>(new Map());
+  // Guest: throttle for the auto-rejoin 'ready' after a mistaken removal.
+  const rejoinAtRef = useRef(0);
   const hostSnapRef = useRef<NetSnapshot | null>(null);
   const gidRef = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `g${Math.random()}`);
   const ownIdxRef = useRef<number>(isGuest ? -1 : 0); // my slot in players[]
@@ -362,7 +367,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     if (mag > 1) { dx /= mag; dy /= mag; }
     touchJoyRef.current = { active: true, dx, dy, mag: Math.min(1, mag) };
     const k = joyKnobRef.current;
-    if (k) k.style.transform = `translate(calc(-50% + ${dx * 34}px), calc(-50% + ${dy * 34}px))`;
+    const travel = r.width * 0.29; // knob range scales with the joystick size
+    if (k) k.style.transform = `translate(calc(-50% + ${dx * travel}px), calc(-50% + ${dy * travel}px))`;
   };
   const joyEnd = () => {
     touchJoyRef.current = { active: false, dx: 0, dy: 0, mag: 0 };
@@ -790,6 +796,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const g = game.current;
       const gid = String(payload.gid || '');
       if (!gid) return;
+      guestSeenRef.current.set(gid, performance.now());
       const nm = (payload.name || 'Player').slice(0, 14);
       const ck = CHARACTERS.some(c => c.key === payload.charKey) ? payload.charKey as CharKey : 'fennec';
       let pl = g.players.find(q => q.gid === gid);
@@ -803,14 +810,53 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     });
     ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: GuestInput }) => {
       if (!payload?.gid) return;
+      guestSeenRef.current.set(payload.gid, performance.now());
       const m = guestInputsRef.current;
       const prev = m.get(payload.gid);
       const freshTackle = payload.ta >= 0 && (!prev || prev.ta < 0 || payload.ta < prev.ta);
       m.set(payload.gid, { ...payload, at: performance.now(), freshTackle: freshTackle || (prev?.freshTackle ?? false) });
     });
+
+    // ── Departed guests leave the FIELD too, not just the socket. ──
+    // A racer is removed when their client says goodbye ('leave', instant) or
+    // goes silent for 6s (closed tab, crash, dead connection) — guests stream
+    // input at 30Hz in every phase, so silence is a dependable signal. Guests
+    // learn of the removal from the next roster snapshot.
+    const removeGuest = (gid: string) => {
+      const g = game.current;
+      const idx = g.players.findIndex(q => q.gid === gid);
+      if (idx <= 0) return; // never remove the host (or an unknown gid)
+      const pl = g.players[idx];
+      // If they were carrying the letter, drop it where they stood so the
+      // round stays winnable for everyone else.
+      if (pl.carrying) g.dropped = { x: pl.x, y: pl.y, at: performance.now() };
+      g.players.splice(idx, 1);
+      // Scores are index-aligned with the roster — splice the same slot.
+      if (idx < scoresRef.current.length) {
+        scoresRef.current = scoresRef.current.filter((_, i) => i !== idx);
+        setScores([...scoresRef.current]);
+      }
+      guestInputsRef.current.delete(gid);
+      guestSeenRef.current.delete(gid);
+      syncStageModels();
+      setRosterTick(t => t + 1);
+    };
+    ch.on('broadcast', { event: 'leave' }, ({ payload }: { payload: { gid: string } }) => {
+      if (payload?.gid) removeGuest(String(payload.gid));
+    });
+    const reaper = window.setInterval(() => {
+      const now = performance.now();
+      for (const pl of [...game.current.players]) {
+        if (pl.gid === 'host' || pl.gid === 'local2') continue;
+        const seen = guestSeenRef.current.get(pl.gid);
+        if (seen === undefined) { guestSeenRef.current.set(pl.gid, now); continue; } // grace on first sight
+        if (now - seen > 6000) removeGuest(pl.gid);
+      }
+    }, 1000);
+
     ch.subscribe();
     channelRef.current = ch;
-    return () => { ch.unsubscribe(); channelRef.current = null; guestInputsRef.current.clear(); };
+    return () => { window.clearInterval(reaper); ch.unsubscribe(); channelRef.current = null; guestInputsRef.current.clear(); guestSeenRef.current.clear(); };
   }, [isGuest, netMode, onlineRoomId, syncStageModels]);
 
   // ── HOST: 30Hz world snapshots (self-contained — the channel may drop some) ─
@@ -877,6 +923,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       } else {
         s.players.forEach((sp, i) => { g.players[i].name = sp.nm; });
       }
+      // Auto-rejoin: if the host's reaper dropped US (phone briefly locked or
+      // backgrounded — no heartbeat for 6s), a snapshot without our gid is how
+      // we find out. Re-announce (throttled) and the host re-adds us.
+      if (ownIdxRef.current < 0 && now - rejoinAtRef.current > 2500) {
+        rejoinAtRef.current = now;
+        ch.send({ type: 'broadcast', event: 'ready', payload: { gid: gidRef.current, name: uiRef.current.p2Name.trim() || 'Player', charKey: uiRef.current.p2Char } });
+      }
       const myIdx = ownIdxRef.current;
       s.players.forEach((sp, i) => {
         const pl = g.players[i];
@@ -937,7 +990,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       }
     });
     channelRef.current = ch;
-    return () => { ch.unsubscribe(); channelRef.current = null; };
+    // Tell the host we're gone so our character is removed at once — on Exit
+    // (unmount) and on tab close/navigation (pagehide). Fire-and-forget; the
+    // host's 6s heartbeat reaper is the backstop if the send doesn't flush.
+    const sayLeave = () => { try { ch.send({ type: 'broadcast', event: 'leave', payload: { gid: gidRef.current } }); } catch { /* socket gone */ } };
+    window.addEventListener('pagehide', sayLeave);
+    return () => {
+      window.removeEventListener('pagehide', sayLeave);
+      sayLeave();
+      ch.unsubscribe();
+      channelRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGuest, roomId, guestJoined]);
 
@@ -1469,19 +1532,19 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           <div
             ref={joyBaseRef}
             onTouchStart={joyMove} onTouchMove={joyMove} onTouchEnd={joyEnd} onTouchCancel={joyEnd}
-            className="lr-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 118, height: 118, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.4)', zIndex: 25, touchAction: 'none' }}>
-            <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.65)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+            className="lr-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.4)', zIndex: 25, touchAction: 'none' }}>
+            <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(255,255,255,0.65)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>MOVE</div>
           </div>
           <div className="lr-actions" style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 16, zIndex: 25 }}>
             <button
               onTouchStart={() => fireKey('KeyZ')} onMouseDown={() => fireKey('KeyZ')}
-              style={{ width: 62, height: 62, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(239,68,68,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              style={{ width: 70, height: 70, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(239,68,68,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
               💥<br />TACKLE
             </button>
             <button
               onTouchStart={() => fireKey('KeyX')} onMouseDown={() => fireKey('KeyX')}
-              style={{ width: 62, height: 62, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(245,158,11,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
+              style={{ width: 70, height: 70, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(245,158,11,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, cursor: 'pointer', touchAction: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.35)', lineHeight: 1.3 }}>
               🦘<br />JUMP
             </button>
           </div>
@@ -1757,10 +1820,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-result-body { flex-direction: column !important; padding: 10px 12px 4px !important; gap: 10px !important; overflow-y: auto !important; }
           .lr-result-dance { flex: 0 0 38vh !important; }
           .lr-result-standings { flex: none !important; }
-          .lr-joy { width: 108px !important; height: 108px !important; bottom: 20px !important; left: 14px !important; }
-          .lr-joy > div:first-child { width: 46px !important; height: 46px !important; }
-          .lr-actions { bottom: 26px !important; right: 14px !important; gap: 10px !important; }
-          .lr-actions button { width: 62px !important; height: 62px !important; font-size: 9px !important; }
+          .lr-joy { width: 170px !important; height: 170px !important; bottom: 20px !important; left: 12px !important; }
+          .lr-joy > div:first-child { width: 72px !important; height: 72px !important; }
+          .lr-actions { bottom: 26px !important; right: 12px !important; gap: 8px !important; }
+          .lr-actions button { width: 76px !important; height: 76px !important; font-size: 10px !important; }
         }
         /* ── responsive: short screens (landscape phones) ── */
         @media (max-height: 480px) {
@@ -1784,10 +1847,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           .lr-hud button { padding: 6px 9px !important; font-size: 12px !important; background: rgba(0,0,0,0.28) !important; }
           .lr-scores { position: absolute !important; top: calc(14vh + 60px) !important; right: 6px !important; flex-direction: column !important; align-items: flex-end !important; gap: 3px !important; max-width: none !important; }
           .lr-scores span { font-size: 10px !important; padding: 2px 7px !important; opacity: 0.9; }
-          .lr-joy { width: 92px !important; height: 92px !important; bottom: 14px !important; left: 10px !important; }
-          .lr-joy > div:first-child { width: 38px !important; height: 38px !important; }
+          .lr-joy { width: 140px !important; height: 140px !important; bottom: 14px !important; left: 10px !important; }
+          .lr-joy > div:first-child { width: 60px !important; height: 60px !important; }
           .lr-actions { bottom: 16px !important; right: 10px !important; gap: 8px !important; }
-          .lr-actions button { width: 54px !important; height: 54px !important; font-size: 8px !important; }
+          .lr-actions button { width: 64px !important; height: 64px !important; font-size: 9px !important; }
           /* visual only — the grab row stays at LETTER_Y in game logic */
           .lr-flag { top: calc(14% + 14px) !important; }
           .lr-flag > div { width: clamp(24px, 4.25vw, 44px) !important; height: clamp(24px, 4.25vw, 44px) !important; }
