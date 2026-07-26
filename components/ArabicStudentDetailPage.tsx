@@ -1088,14 +1088,25 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const lessonsPerWeek = lpw(student);
   const wl             = weeksLeft(student.goalDeadline);
 
-  // Dialect filter for this student — only levantine/msa courses apply
-  const studentDialectFilter = student.arabicDialects.filter(
-    (d): d is ArabicCourseDialect => d === 'levantine' || d === 'msa'
+  // Dialect filter for this student — only levantine/msa courses apply.
+  // MEMOISED: these are passed as props to children, and this component
+  // re-renders on its own schedule (clock ticks in the portal, realtime
+  // notifications). A fresh array each render made children treat the lesson
+  // list as "changed" and refetch — which is what flashed the vocabulary tab's
+  // loading state every few seconds.
+  const studentDialectFilter = useMemo(
+    () => student.arabicDialects.filter(
+      (d): d is ArabicCourseDialect => d === 'levantine' || d === 'msa'
+    ),
+    [student.arabicDialects],
   );
   // Lessons filtered to the student's dialect(s) — used everywhere dialect matters
-  const dialectLessons = studentDialectFilter.length > 0
-    ? lessons.filter(l => studentDialectFilter.includes(l.dialect ?? 'levantine'))
-    : lessons;
+  const dialectLessons = useMemo(
+    () => (studentDialectFilter.length > 0
+      ? lessons.filter(l => studentDialectFilter.includes(l.dialect ?? 'levantine'))
+      : lessons),
+    [lessons, studentDialectFilter],
+  );
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 

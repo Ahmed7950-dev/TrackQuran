@@ -71,14 +71,29 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
     [lessons],
   );
 
+  // Key the fetch on the lesson IDS, not the array identity. Ancestors
+  // re-render on their own schedule (the portal ticks a clock every 30s, and
+  // notifications arrive over realtime), and each render hands us a freshly
+  // filtered `lessons` array — depending on that identity re-ran this effect
+  // and flashed "Loading vocabulary…" every few seconds. The id list only
+  // changes when the actual lesson set does.
+  const lessonIdsKey = orderedLessons.map(l => l.id).join(',');
+  const fetchedKeyRef = React.useRef<string | null>(null);
   useEffect(() => {
+    if (fetchedKeyRef.current === lessonIdsKey) return; // same lessons — nothing to do
     let live = true;
-    setLoading(true);
-    getVocabWordsForLessons(orderedLessons.map(l => l.id))
+    // Only show the full loading state on the FIRST load; later refreshes swap
+    // the data in place so the table never blanks out under the user.
+    if (fetchedKeyRef.current === null) setLoading(true);
+    fetchedKeyRef.current = lessonIdsKey;
+    const ids = lessonIdsKey ? lessonIdsKey.split(',') : [];
+    getVocabWordsForLessons(ids)
       .then(ws => { if (live) { setWords(ws); setLoading(false); } })
-      .catch(() => { if (live) setLoading(false); });
+      .catch(() => {
+        if (live) { setLoading(false); fetchedKeyRef.current = null; } // allow a retry
+      });
     return () => { live = false; };
-  }, [orderedLessons]);
+  }, [lessonIdsKey]);
 
   useEffect(() => { setFlipped(false); }, [cardIndex, phase]);
 
