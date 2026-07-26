@@ -15,6 +15,8 @@ import {
   getVocabMistakesForStudent,
   removeVocabMistakes,
   getLessonLogsForStudent,
+  getArabicStudentNote,
+  getVocabWords,
 } from '../services/arabicService';
 import {
   getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
@@ -22,6 +24,7 @@ import {
 import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
+import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
 import ExamMarkingPage from './ExamMarkingPage';
 import LeaderboardPage from './LeaderboardPage';
 import CalendarPage from './CalendarPage';
@@ -80,9 +83,11 @@ function dialectLabel(d: string) {
 
 const AvailabilityGrid: React.FC<{ slots: WeeklySlot[]; timezone: string }> = ({ slots, timezone }) => {
   const grid = new Set(slots.map(s => `${s.day}:${s.startHour}`));
+  // Always fits its container — table-fixed lets the 7 day columns compress on
+  // narrow screens instead of forcing a sideways scroll.
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-600">
-      <table className="w-full text-xs border-collapse min-w-[420px]">
+    <div className="rounded-xl border border-slate-200 dark:border-gray-600 overflow-hidden">
+      <table className="w-full text-xs border-collapse table-fixed">
         <thead>
           <tr>
             <th className="w-14 bg-slate-50 dark:bg-gray-700 border-b border-r border-slate-200 dark:border-gray-600 py-2 px-2 text-slate-500 dark:text-slate-400 font-semibold text-left">Time</th>
@@ -464,7 +469,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
   function SRSCols(timeline: LessonTimeline | null) {
     if (!timeline) {
       return [2, 3, 4, 5].map(n => (
-        <td key={n} className="px-3 py-3 text-center">
+        <td key={n} className="px-1 sm:px-3 py-3 text-center">
           <span className="text-slate-300 dark:text-slate-600">—</span>
         </td>
       ));
@@ -472,9 +477,9 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
     return timeline.cols.map(col => {
       const cellBg = col.isToday ? 'bg-emerald-100 dark:bg-emerald-900/40' : '';
       return (
-        <td key={col.attemptNumber} className={`px-3 py-3 text-center ${cellBg}`}>
+        <td key={col.attemptNumber} className={`px-1 sm:px-3 py-3 text-center ${cellBg}`}>
           {col.completedAt ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold rounded-full">
+            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] sm:text-xs font-semibold rounded-full">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
               </svg>
@@ -542,16 +547,18 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
             <p className="text-slate-400 dark:text-slate-500 text-sm">No vocabulary tracked yet. Complete a flashcard session to start the schedule.</p>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
+          // Fits the container at every width — tighter padding on phones and a
+          // wrapping lesson column instead of a sideways scroll.
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-gray-700">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colLessonList')}</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colFirstDone')}</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col1day')}</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col3days')}</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col7days')}</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col14days')}</th>
+                  <th className="text-left px-2 sm:px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colLessonList')}</th>
+                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colFirstDone')}</th>
+                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col1day')}</th>
+                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col3days')}</th>
+                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col7days')}</th>
+                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col14days')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -562,7 +569,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                   const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
                   return (
                     <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
-                      <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                      <td className="px-2 sm:px-5 py-3 font-semibold text-slate-700 dark:text-slate-200">
                         <div className="flex items-center gap-2">
                           {allComplete && (
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
@@ -572,7 +579,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                           {lesson.title}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-1 sm:px-3 py-3 text-center">
                         {timeline
                           ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
                           : <span className="text-slate-300 dark:text-slate-600">—</span>
@@ -586,7 +593,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                 {/* ── Separator row when both sections are present ── */}
                 {lessonsWithVocab.length > 0 && listsWithAttempts.length > 0 && (
                   <tr>
-                    <td colSpan={6} className="px-5 py-2 bg-slate-50 dark:bg-gray-700/50 border-y border-slate-100 dark:border-gray-700">
+                    <td colSpan={6} className="px-2 sm:px-5 py-2 bg-slate-50 dark:bg-gray-700/50 border-y border-slate-100 dark:border-gray-700">
                       <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t('arabicStudentDetail.customVocabLists')}</span>
                     </td>
                   </tr>
@@ -599,7 +606,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                   const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
                   return (
                     <tr key={list.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
-                      <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                      <td className="px-2 sm:px-5 py-3 font-semibold text-slate-700 dark:text-slate-200">
                         <div className="flex items-center gap-2">
                           {allComplete && (
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
@@ -613,7 +620,7 @@ const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesU
                           {list.name}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-1 sm:px-3 py-3 text-center">
                         {timeline
                           ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
                           : <span className="text-slate-300 dark:text-slate-600">—</span>
@@ -1013,7 +1020,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [editOpen, setEditOpen]       = useState(false);
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams'>('lessons');
+  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -1041,6 +1048,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   useEffect(() => {
     getLessonLogsForStudent(student.id).then(setLessonLogs);
   }, [student.id]);
+
+  // Teacher's private note — shown in the hero card for the TUTOR only, and
+  // only when there's something written. Never fetched in student mode so the
+  // note can't reach the portal at all.
+  const [teacherNote, setTeacherNote] = useState('');
+  useEffect(() => {
+    if (studentMode) { setTeacherNote(''); return; }
+    getArabicStudentNote(student.id).then(setTeacherNote).catch(() => setTeacherNote(''));
+  }, [student.id, studentMode]);
 
   // Exam unlocks + attempts for this student
   const reloadExams = useCallback(async () => {
@@ -1083,8 +1099,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
+    { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
     { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [{ key: 'exams' as const, label: 'Exams', mobileLabel: 'Exams' }]),
@@ -1206,7 +1223,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             return (
               <>
                 {/* Level overview row */}
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
                   {levelCounts.map(({ lvl, done }) => {
                     const isComplete = done >= 20;
                     const isCurr    = lvl === currentLevel;
@@ -1222,7 +1239,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                       </span>
                     );
                   })}
-                  <span className="ml-auto text-xs text-slate-400 dark:text-slate-500 font-semibold">
+                  <span className="w-full sm:w-auto sm:ml-auto text-center text-xs text-slate-400 dark:text-slate-500 font-semibold">
                     {cur.done} / {Math.min(lvlLessons.length, 20)} · {dialectLessons.filter(l => completedSet.has(l.id)).length} / {dialectLessons.length} total
                   </span>
                 </div>
@@ -1238,10 +1255,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                     const firstInc = levelLessons.findIndex(l => !completedSet.has(l.id));
                     return (
                       <div key={lvl}>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1 text-center">
                           Level {lvl}
                         </p>
-                        <div className="flex flex-wrap items-start gap-x-1 gap-y-2">
+                        <div className="flex flex-wrap justify-center items-start gap-x-1 gap-y-2">
                           {levelLessons.map((lesson, idx) => {
                             const isDone    = completedSet.has(lesson.id);
                             const isCurrent = lvl === currentLevel && !isDone && idx === firstInc;
@@ -1275,13 +1292,36 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             );
           })()}
         </div>
+
+        {/* ── Teacher's note (TUTOR ONLY) ──────────────────────────────────
+            Sits under the lesson circles inside the student card. Rendered
+            only when a note exists; teacherNote stays empty in student mode
+            (never fetched there), so the portal never shows it. */}
+        {!studentMode && teacherNote.trim() && (
+          <div className="mt-5 pt-4 border-t border-amber-200/70 dark:border-amber-800/60">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80 mb-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+              </svg>
+              {t('arabicStudentDetail.teacherNoteTitle')}
+              <span className="font-semibold normal-case tracking-normal text-amber-600/60 dark:text-amber-500/60">
+                {t('arabicStudentDetail.teacherNotePrivate')}
+              </span>
+            </p>
+            <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed" dir="auto">
+              {teacherNote}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ── Section tabs ── */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
+      {/* Tabs WRAP onto as many rows as they need — no sideways scrolling, so
+          every tab (including Lessons Vocabulary) is visible at a glance. */}
+      <div className="flex flex-wrap gap-x-1 gap-y-0 border-b border-slate-200 dark:border-gray-700">
         {TABS.map(tab => (
           <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-            className={`flex-shrink-0 px-3 sm:px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
+            className={`px-2.5 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors -mb-px ${
               activeSection === tab.key
                 ? 'border-amber-500 text-amber-600 dark:text-amber-400'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1305,6 +1345,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           deepLinkLessonId={deepLinkLessonId}
           onDeepLinkConsumed={() => setDeepLinkLessonId(null)}
         />
+      )}
+
+      {/* ── Lessons Vocabulary section (tutor + student portal) ── */}
+      {activeSection === 'vocabulary' && (
+        <ArabicLessonsVocabularyTab lessons={dialectLessons} student={student} />
       )}
 
       {/* ── Exams section (tutor only) ── */}

@@ -740,7 +740,10 @@
     "col7days": "+7 days",
     "col14days": "+14 days",
     "wordCount_one": "{{count}} word learned",
-    "wordCount_other": "{{count}} words learned"
+    "wordCount_other": "{{count}} words learned",
+    "teacherNoteTitle": "Teacher's note",
+    "teacherNotePrivate": "(private — not shown to the student)",
+    "tabLessonsVocab": "Lessons Vocabulary"
   },
   "arabicStudentModal": {
     "editTitle": "Edit Student",

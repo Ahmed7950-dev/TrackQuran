@@ -32,6 +32,13 @@ export function answersMatch(correct: string, user: string): boolean {
   return n(correct) === n(user);
 }
 
+/** Question types the TUTOR marks by hand — never auto-graded. fill_blank is
+ *  here because spelling and diacritic variants make string matching unfair on
+ *  a free-typed blank (same reasoning as short_answer). */
+export const MANUAL_QUESTION_TYPES: string[] = [
+  'fill_blank', 'short_answer', 'multi_answer', 'translate', 'translate_to_english',
+];
+
 // ── Row types & mappers ──────────────────────────────────────────────────────
 interface ExamRow {
   id: string; level: number; version: string; title: string;
@@ -417,9 +424,13 @@ export async function submitAttempt(
         ? Math.round((numCorrect / correctPairs.length) * (item.marks ?? 0))
         : 0;
       grading[item.id] = { awarded, correct: allCorrect };
-    } else if (!grading[item.id]) {
+    } else if (!grading[item.id] && !MANUAL_QUESTION_TYPES.includes(item.questionType ?? '')) {
       grading[item.id] = { awarded: 0, correct: false };
     }
+    // Manual types (fill_blank, short/long answer, translation…) are left with
+    // NO grading entry on purpose: an entry would render as an already-decided
+    // "Wrong" in the marking page. Absent = "needs marking", and the tutor's
+    // click is what creates the verdict.
   }
   const { error } = await supabase.from('arabic_exam_attempts').update({
     status: 'submitted', submitted_at: new Date().toISOString(), grading,

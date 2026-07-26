@@ -706,7 +706,10 @@
     "col7days": "+7 أيام",
     "col14days": "+14 يومًا",
     "wordCount_one": "{{count}} كلمة مُتعلَّمة",
-    "wordCount_other": "{{count}} كلمة مُتعلَّمة"
+    "wordCount_other": "{{count}} كلمة مُتعلَّمة",
+    "teacherNoteTitle": "ملاحظة المعلّم",
+    "teacherNotePrivate": "(خاصة — لا تظهر للطالب)",
+    "tabLessonsVocab": "مفردات الدروس"
   },
   "arabicStudentModal": {
     "editTitle": "تعديل الطالب",

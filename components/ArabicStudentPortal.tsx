@@ -256,9 +256,9 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           </div>
         </div>
 
-        {/* ── Mobile nav bar — full-width scrollable row, hidden on md+ ── */}
-        <nav className="md:hidden border-t border-slate-100 dark:border-gray-700 overflow-x-auto">
-          <div className="flex items-center gap-1 px-4 py-2 min-w-max">
+        {/* ── Mobile nav bar — wraps to fit, hidden on md+ (no side-scrolling) ── */}
+        <nav className="md:hidden border-t border-slate-100 dark:border-gray-700">
+          <div className="flex flex-wrap items-center justify-center gap-1 px-3 py-2">
             <button
               onClick={() => setPortalTab('lessons')}
               className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}

@@ -77,14 +77,24 @@ const ExamMarkingPage: React.FC<{
       <div className="space-y-4">
         {items.map(item => {
           if (item.itemType !== 'question') return <ExamContentItem key={item.id} item={item} />;
-          const g = grading[item.id] ?? { awarded: 0, correct: false };
+          // No grading entry = the tutor hasn't marked it yet (manual types are
+          // deliberately left unmarked on submit). Neither verdict is
+          // highlighted until they choose, so nothing looks pre-judged.
+          const gEntry = grading[item.id];
+          const unmarked = gEntry === undefined;
+          const g = gEntry ?? { awarded: 0, correct: false };
           return (
-            <div key={item.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl p-4">
+            <div key={item.id} className={`bg-white dark:bg-gray-800 border rounded-xl p-4 ${unmarked ? 'border-amber-300 dark:border-amber-700' : 'border-slate-200 dark:border-gray-700'}`}>
               <div className="flex justify-between items-start gap-2 mb-2">
                 <p className="font-semibold text-slate-800 dark:text-slate-100" dir="auto">
                   <span className="text-amber-600 dark:text-amber-400">Q{qNums.get(item.id)}.</span> {item.content}
                 </p>
-                <span className="text-xs font-bold text-slate-400 flex-shrink-0">/ {item.marks ?? 0}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {unmarked && (
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ Needs marking</span>
+                  )}
+                  <span className="text-xs font-bold text-slate-400">/ {item.marks ?? 0}</span>
+                </div>
               </div>
 
               {/* Student answer (read-only) */}
@@ -97,9 +107,9 @@ const ExamMarkingPage: React.FC<{
               {/* Marking controls */}
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-gray-700 pt-2">
                 <button onClick={() => setGrade(item.id, { correct: true, awarded: item.marks ?? 0 })}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold ${g.correct ? 'bg-green-600 text-white' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'}`}>✓ Correct</button>
+                  className={`px-3 py-1 rounded-lg text-xs font-bold ${!unmarked && g.correct ? 'bg-green-600 text-white' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'}`}>✓ Correct</button>
                 <button onClick={() => setGrade(item.id, { correct: false, awarded: 0 })}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold ${!g.correct ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>✗ Wrong</button>
+                  className={`px-3 py-1 rounded-lg text-xs font-bold ${!unmarked && !g.correct ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'}`}>✗ Wrong</button>
                 <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 ml-auto">
                   Marks:
                   <input type="number" min={0} max={item.marks ?? 0} value={g.awarded}

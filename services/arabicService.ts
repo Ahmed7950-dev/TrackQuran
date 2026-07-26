@@ -718,6 +718,20 @@ export async function getVocabWords(lessonId: string): Promise<VocabWord[]> {
   return (data ?? []).map(rowToVocabWord);
 }
 
+/** Every vocabulary word for the given lessons, in one round-trip. Used by the
+ *  Lessons Vocabulary tab, which shows the whole course at once — fetching each
+ *  lesson separately would be ~60 requests. */
+export async function getVocabWordsForLessons(lessonIds: string[]): Promise<VocabWord[]> {
+  if (!lessonIds.length) return [];
+  const { data, error } = await supabase
+    .from('arabic_lesson_vocabulary')
+    .select('*')
+    .in('lesson_id', lessonIds)
+    .order('order_index', { ascending: true });
+  if (error) { console.error('getVocabWordsForLessons:', error.message); return []; }
+  return (data ?? []).map(rowToVocabWord);
+}
+
 export async function createVocabWord(input: {
   lessonId: string;
   arabic: string;

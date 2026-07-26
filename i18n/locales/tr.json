@@ -706,7 +706,10 @@
     "col7days": "+7 gün",
     "col14days": "+14 gün",
     "wordCount_one": "{{count}} kelime öğrenildi",
-    "wordCount_other": "{{count}} kelime öğrenildi"
+    "wordCount_other": "{{count}} kelime öğrenildi",
+    "teacherNoteTitle": "Öğretmen notu",
+    "teacherNotePrivate": "(özel — öğrenciye gösterilmez)",
+    "tabLessonsVocab": "Ders Kelimeleri"
   },
   "arabicStudentModal": {
     "editTitle": "Öğrenciyi Düzenle",

@@ -740,7 +740,9 @@ const HomeworkTab: React.FC<{
     let autoTotal = 0;
     for (const q of practiceItems) {
       const qtype = q.questionType;
-      if (qtype === 'short_answer' || qtype === 'multi_answer') {
+      // fill_blank is MANUAL: spelling/diacritic variants make string matching
+      // unfair, so the tutor decides right/wrong (same as short_answer).
+      if (qtype === 'short_answer' || qtype === 'multi_answer' || qtype === 'fill_blank') {
         res[q.id] = 'manual';
       } else if (qtype === 'matching') {
         try {
@@ -751,15 +753,6 @@ const HomeworkTab: React.FC<{
           if (all) correct++;
           autoTotal++;
         } catch { res[q.id] = 'manual'; }
-      } else if (qtype === 'fill_blank') {
-        const blanksCount = (q.content ?? '').split('___').length - 1;
-        const fbAnswers = q.options?.length ? q.options : [q.correctAnswer ?? ''];
-        const all = Array.from({ length: blanksCount }, (_, i) => i)
-          .every(i => answersMatch(fbAnswers[i] ?? '', subAnswers[q.id]?.[i] ?? ''));
-        res[q.id] = all ? 'correct' : 'wrong';
-        autoGrading[q.id] = { correct: all };
-        if (all) correct++;
-        autoTotal++;
       } else if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
         const ok = answers[q.id] === q.correctAnswer;
         res[q.id] = ok ? 'correct' : 'wrong';
@@ -917,7 +910,12 @@ const HomeworkTab: React.FC<{
                       onChange={e => setSubAnswers(p => ({ ...p, [sid]: { ...(p[sid] ?? {}), [i]: e.target.value } }))}
                       className={`w-32 px-2 py-0.5 border-b-2 text-center text-sm focus:outline-none bg-transparent dark:text-white transition-colors ${
                         done
-                          ? (results[sid] === 'correct' ? 'border-emerald-500 text-emerald-700' : 'border-red-400 text-red-600')
+                          // fill_blank is tutor-marked, so a submitted answer stays
+                          // NEUTRAL (sky) — never pre-judged red — and the expected
+                          // answer isn't revealed before the tutor has marked it.
+                          ? (results[sid] === 'manual' ? 'border-sky-400 text-sky-700 dark:text-sky-300'
+                            : results[sid] === 'correct' ? 'border-emerald-500 text-emerald-700'
+                            : 'border-red-400 text-red-600')
                           : 'border-amber-500 focus:border-amber-600'
                       }`}
                     />
@@ -1375,7 +1373,7 @@ const HomeworkTab: React.FC<{
 
   // ── Tutor review view (teacher role, viewing a specific student) ─────────
   if (!isAdmin && !studentMode && studentId) {
-    const manualTypes: HomeworkQuestionType[] = ['short_answer', 'multi_answer'];
+    const manualTypes: HomeworkQuestionType[] = ['short_answer', 'multi_answer', 'fill_blank'];
     let reviewQNum = 0;
     const totalMarked = Object.keys(grading).length;
     const totalCorrect = (Object.values(grading) as { correct: boolean; note?: string }[]).filter(g => g.correct).length;
@@ -1414,24 +1412,40 @@ const HomeworkTab: React.FC<{
       if (qtype === 'fill_blank') {
         const parts = (item.content ?? '').split('___');
         const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
+        const blanks = parts.length - 1;
+        // NEUTRAL rendering — no auto right/wrong colouring, because the tutor
+        // marks this type by hand. The expected answers are listed underneath
+        // as a reference so the call is quick to make.
         return (
-          <p className="text-sm text-slate-700 dark:text-slate-200 leading-loose">
-            {parts.map((part, i) => (
-              <span key={i}>
-                {part}
-                {i < parts.length - 1 && (() => {
-                  const sv = sub?.[i] ?? '';
-                  const ok = answersMatch(fbAns[i] ?? '', sv);
-                  return (
-                    <span className={`inline-block mx-1 px-2 py-0.5 rounded font-bold text-sm ${sv ? (ok ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300') : 'bg-slate-100 dark:bg-gray-700 text-slate-400 italic'}`}>
-                      {sv || '—'}
-                      {sv && !ok && <span className="ml-1 text-xs text-emerald-600">({fbAns[i]})</span>}
-                    </span>
-                  );
-                })()}
-              </span>
-            ))}
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-700 dark:text-slate-200 leading-loose">
+              {parts.map((part, i) => (
+                <span key={i}>
+                  {part}
+                  {i < parts.length - 1 && (() => {
+                    const sv = sub?.[i] ?? '';
+                    return (
+                      <span className={`inline-block mx-1 px-2 py-0.5 rounded font-bold text-sm ${
+                        sv
+                          ? 'bg-sky-50 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200 border border-sky-200 dark:border-sky-800'
+                          : 'bg-slate-100 dark:bg-gray-700 text-slate-400 italic'
+                      }`} dir="auto">
+                        {sv || '—'}
+                      </span>
+                    );
+                  })()}
+                </span>
+              ))}
+            </p>
+            {fbAns.some(a => (a ?? '').trim()) && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-bold uppercase tracking-wide text-[10px] text-slate-400">Expected:</span>{' '}
+                <span dir="auto">
+                  {Array.from({ length: Math.max(1, blanks) }, (_, i) => fbAns[i] ?? '—').join('  ·  ')}
+                </span>
+              </p>
+            )}
+          </div>
         );
       }
 
@@ -1590,11 +1604,6 @@ const HomeworkTab: React.FC<{
                 const pairs: [string, string][] = JSON.parse(item.correctAnswer ?? '[]');
                 return pairs.every((p, i) => answersMatch(p[1], sub?.[i] ?? ''));
               } catch { return false; }
-            }
-            if (qtype === 'fill_blank') {
-              const fbAns = item.options?.length ? item.options : [item.correctAnswer ?? ''];
-              const blanks = (item.content ?? '').split('___').length - 1;
-              return Array.from({ length: blanks }, (_, i) => i).every(i => answersMatch(fbAns[i] ?? '', sub?.[i] ?? ''));
             }
             if (qtype === 'multiple_choice' || qtype === 'fill_blank_options' || qtype === 'true_false') {
               return ans === item.correctAnswer;
