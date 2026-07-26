@@ -574,7 +574,10 @@ export class PortraitStage {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isLowPowerDevice ? 1.5 : 2));
     this.renderer.setClearColor(0x000000, 0);
 
-    const gltf = await loadGLTF(this.modelUrl);
+    // Phones preview the LITE model too: the full GLB is ~3× the download and
+    // its main-thread parse froze WebKit ~700ms right as the victory screen
+    // mounted (measured in the perf lab). Selector taps also resolve ~3× faster.
+    const gltf = await loadGLTF(isLowPowerDevice ? liteModelUrl(this.modelUrl) : this.modelUrl);
     if (this.disposed) return;
     // clone — the cached scene is shared with the field stage and other previews
     const root = skClone(gltf.scene);

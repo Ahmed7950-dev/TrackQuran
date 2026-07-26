@@ -466,24 +466,43 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const goUntilRef = useRef(0); // keeps the "GO!" flash visible after the race starts
   // Throttle the per-frame React repaint on phones — physics/3D stay full rate,
   // only the DOM overlay (labels, boxes) repaints ~33fps to save reconciliation.
+  // Phones: labels/rings are positioned IMPERATIVELY from the race loop (below),
+  // so the full React repaint only needs to refresh the slow-changing overlay
+  // (boxes, HUD, notes) — ~15fps is plenty and Safari's style-recalc cost drops
+  // by half again. Desktop keeps the full-rate React path.
   const lastPaintRef = useRef(0);
   const paintTick = (now: number) => {
     if ((import.meta as any).env?.DEV && (window as any).__lrNoPaint) return; // perf-lab kill switch
-    if (isLowPowerDevice && now - lastPaintRef.current < 30) return;
+    if (isLowPowerDevice && now - lastPaintRef.current < 66) return;
     lastPaintRef.current = now;
     setTick(t => (t + 1) % 1000000);
+  };
+  // Player wrapper divs (label + grace ring), keyed by roster index. On phones
+  // the loop writes left/top straight to the DOM every frame, so labels stay
+  // glued to the 3D characters between the sparser React repaints.
+  const playerElsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const syncPlayerEls = () => {
+    if (!isLowPowerDevice) return; // desktop React repaints at full rate already
+    const els = playerElsRef.current;
+    game.current.players.forEach((pl, i) => {
+      const el = els[i];
+      if (el) { el.style.left = `${pl.x}%`; el.style.top = `${pl.y}%`; }
+    });
   };
   const queueRef = useRef<string[]>(shuffle(pool));
   const queuePosRef = useRef(0);
   const timersRef = useRef<number[]>([]);
 
-  // ── DEV perf HUD (vite dev server only — never in production builds): main-
-  // thread fps, worst frame, long-frame count and WebGL context losses, written
-  // imperatively into a ref'd div so the HUD itself never triggers re-renders.
-  // Used to chase the iOS Safari jank in the Simulator. ──
+  // ── Perf HUD: main-thread fps, worst frame, long-frame count and WebGL
+  // context losses, written imperatively into a ref'd div so the HUD itself
+  // never triggers re-renders. Always on in dev; in PRODUCTION it can be
+  // summoned with ?lrfps=1 so a student's actual phone can report numbers
+  // (open the game link with &lrfps=1 appended and read the capsule). ──
+  const perfHudOn = ((import.meta as any).env?.DEV as boolean) ||
+    (typeof location !== 'undefined' && new URLSearchParams(location.search).has('lrfps'));
   const perfHudRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!(import.meta as any).env?.DEV) return;
+    if (!perfHudOn) return;
     let raf = 0, last = performance.now(), winStart = last, frames = 0, longFrames = 0, worst = 0, ctxLost = 0;
     const onLost = () => { ctxLost++; };
     window.addEventListener('webglcontextlost', onLost, true);
@@ -500,7 +519,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('webglcontextlost', onLost, true); };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfHudOn]);
 
   // ── Web Audio context (shared by letter playback + tone SFX) ────────────────
   const acRef = useRef<AudioContext | null>(null);
@@ -569,10 +589,41 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       });
     } catch { /* audio unavailable */ }
   }, [ensureAc]);
-  // ── Recorded SFX (files) ────────────────────────────────────────────────────
+  // ── Recorded SFX (files) — pre-decoded Web Audio buffers ────────────────────
+  // These fire MID-RACE (jump/tackle on every press, countdown each round, the
+  // footsteps loop toggling with speed) and previously went through
+  // HTMLAudioElement .currentTime=0 + .play() — the same WebKit main-thread
+  // path that caused the original iPhone jank. Buffers play with ~zero cost.
+  const sfxBufRef = useRef<Partial<Record<keyof typeof SFX_FILES, AudioBuffer>>>({});
+  useEffect(() => {
+    let live = true;
+    const ac = ensureAc();
+    (Object.keys(SFX_FILES) as (keyof typeof SFX_FILES)[]).forEach(key => {
+      fetch(SFX_FILES[key])
+        .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
+        .then(buf => ac.decodeAudioData(buf))
+        .then(b => { if (live) sfxBufRef.current[key] = b; })
+        .catch(() => { /* keep the legacy element fallback */ });
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const sfxFilesRef = useRef<Partial<Record<keyof typeof SFX_FILES, HTMLAudioElement>>>({});
   const playFx = useCallback((key: keyof typeof SFX_FILES, vol = 0.9) => {
     try {
+      const b = sfxBufRef.current[key];
+      if (b) {
+        const ac = ensureAc();
+        ac.resume?.();
+        const src = ac.createBufferSource();
+        const g = ac.createGain();
+        g.gain.value = vol;
+        src.buffer = b;
+        src.connect(g); g.connect(ac.destination);
+        src.start();
+        return;
+      }
+      // decode still in flight — legacy element path
       const m = sfxFilesRef.current;
       let el = m[key];
       if (!el) { el = m[key] = new Audio(SFX_FILES[key]); el.preload = 'auto'; }
@@ -580,19 +631,44 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       el.currentTime = 0;
       el.play().catch(() => { /* pre-gesture autoplay block */ });
     } catch { /* audio unavailable */ }
-  }, []);
-  // footsteps loop — plays while a racer this device drives is running
+  }, [ensureAc]);
+  // footsteps loop — plays while a racer this device drives is running. A
+  // looping BufferSource is started once and toggled by GAIN, so starting and
+  // stopping the sound costs nothing on the main thread mid-race.
   const runLoopRef = useRef<HTMLAudioElement | null>(null);
+  const runLoopNodesRef = useRef<{ src: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const setRunningSfx = useCallback((on: boolean) => {
-    let el = runLoopRef.current;
-    if (!el) {
-      el = runLoopRef.current = new Audio(SFX_FILES.running);
-      el.loop = true;
-      el.volume = 0.32;
-    }
-    if (on) { if (el.paused) el.play().catch(() => {}); }
-    else if (!el.paused) el.pause();
-  }, []);
+    try {
+      const b = sfxBufRef.current.running;
+      if (b) {
+        const ac = ensureAc();
+        let nodes = runLoopNodesRef.current;
+        if (!nodes) {
+          const src = ac.createBufferSource();
+          const gain = ac.createGain();
+          src.buffer = b;
+          src.loop = true;
+          gain.gain.value = 0;
+          src.connect(gain); gain.connect(ac.destination);
+          src.start();
+          nodes = runLoopNodesRef.current = { src, gain };
+        }
+        nodes.gain.gain.setTargetAtTime(on ? 0.32 : 0, ac.currentTime, 0.05);
+        return;
+      }
+      // decode still in flight — legacy element path
+      let el = runLoopRef.current;
+      if (!el) {
+        el = runLoopRef.current = new Audio(SFX_FILES.running);
+        el.loop = true;
+        el.volume = 0.32;
+      }
+      if (on) { if (el.paused) el.play().catch(() => {}); }
+      else if (!el.paused) el.pause();
+    } catch { /* audio unavailable */ }
+  }, [ensureAc]);
+  // Stop the loop source when the game closes.
+  useEffect(() => () => { try { runLoopNodesRef.current?.src.stop(); } catch { /* already stopped */ } }, []);
   const sfxGrab  = useCallback(() => tone([523, 659, 784], 0.09, 'sine', 0.2), [tone]);
   const sfxSteal = useCallback(() => tone([600, 400, 250], 0.08, 'sawtooth', 0.16), [tone]);
   const sfxWrong = useCallback(() => tone([180, 120], 0.16, 'sawtooth', 0.14), [tone]);
@@ -1100,6 +1176,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         }
         const meP = g.players[Math.max(0, myIdx)];
         setRunningSfx(!!meP && meP.speed > 0.05 && now >= meP.fallenUntil);
+        syncPlayerEls();
         paintTick(now);
         raf = requestAnimationFrame(loop);
         return;
@@ -1196,6 +1273,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
         : g.players.some((pl, i) => i < 2 && pl.speed > 0.05 && now >= pl.fallenUntil);
       setRunningSfx(ownRunning);
 
+      syncPlayerEls();
       paintTick(now);
       raf = requestAnimationFrame(loop);
     };
@@ -1240,7 +1318,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     const color = colorAt(i);
     const fallen = now < p.fallenUntil;
     return (
-      <div key={`${p.gid}-${i}`} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
+      <div key={`${p.gid}-${i}`} ref={el => { playerElsRef.current[i] = el; }} style={{ position: 'absolute', left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%,-50%)', zIndex: 10, transition: 'none', pointerEvents: 'none' }}>
         {/* The carried letter is now the 3D crate held in the runner's arms
             (drawn by the WebGL stage). No 2D tile above the head. */}
         {/* The 3D character itself is drawn by the WebGL stage (letterRaceStage)
@@ -1307,8 +1385,8 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       <canvas ref={stageCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 9, pointerEvents: 'none' }} />
       {players.map((p, i) => renderPlayer(p, i))}
 
-      {/* DEV perf HUD — dev server only, imperative updates (see effect above) */}
-      {(import.meta as any).env?.DEV && (
+      {/* Perf HUD — dev always; production via ?lrfps=1 (see effect above) */}
+      {perfHudOn && (
         <div ref={perfHudRef} style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.75)', color: '#4ade80', fontFamily: 'monospace', fontSize: 15, fontWeight: 700, padding: '4px 10px', borderRadius: 8, pointerEvents: 'none', whiteSpace: 'nowrap' }} />
       )}
 
