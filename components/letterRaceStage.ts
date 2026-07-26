@@ -165,12 +165,15 @@ export class RunnerStage {
     // the reduction is invisible; the selector still loads the full models.
     if (isLowPowerDevice) this.models = this.models.map(m => ({ ...m, url: liteModelUrl(m.url) }));
 
-    // Render load scales with player count × pixels × antialias. On phones,
-    // drop antialias and cap the pixel ratio hard (harder still with 3+ racers)
-    // so guest devices keep a smooth frame rate instead of janking.
+    // Render load scales with player count × pixels. The lag investigation
+    // ultimately proved the jank was AUDIO, not rendering, so phones get most
+    // of their visual quality back: antialias stays ON everywhere (MSAA is
+    // close to free on mobile tile-based GPUs) and the pixel-ratio caps are
+    // gentler (1.25/1.5 vs the old 1/1.5). The adaptive frame governor below
+    // is the safety net for genuinely weak devices.
     const nModels = this.models.length;
-    const prCap = isLowPowerDevice ? (nModels >= 3 ? 1 : 1.5) : 2;
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: !isLowPowerDevice });
+    const prCap = isLowPowerDevice ? (nModels >= 3 ? 1.25 : 1.5) : 2;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, prCap));
     this.renderer.setClearColor(0x000000, 0);
 
@@ -392,39 +395,78 @@ export class RunnerStage {
       this.chars.push(rig);
     }
 
-    // On a crowded phone (3+ racers) cap the render to ~38fps: a steady 38 looks
-    // smoother than an erratic 45-55 the GPU can't hold, and halves the load.
+    // Frame pacing. Phones no longer start from a hard ~38fps cap — the lag
+    // was proven to be audio, so animation runs at full rate wherever the
+    // device sustains it. Two guards protect weak phones instead:
+    //  1. the startup PROBE (below) measures real draw cadence for ~0.8s and
+    //     locks a cap the device can actually hold;
+    //  2. a one-way RATCHET keeps watching after that — thermal throttling
+    //     minutes into a race tightens the cap a notch, never loosens it, so
+    //     pacing degrades gracefully instead of stuttering.
     // Animations stay real-time — dt is measured from the last DRAWN frame.
-    let frameMin = isLowPowerDevice && nModels >= 3 ? 26 : 0;
+    let frameMin = 0;
 
     // Adaptive rate lock (mobile only): for the first ~0.8s draw EVERY frame and
     // measure the real rAF cadence — which stretches when the GPU can't finish a
     // frame in time, the one dependable capability signal a browser exposes (GPU
     // timer queries aren't reliable on mobile). Then lock the cap to a rate this
     // exact device can actually hold: a rock-steady 24 beats a stuttering 40.
-    // One-shot, so it never oscillates mid-race; desktop skips it entirely.
-    const probe = { on: isLowPowerDevice, until: 0, sum: 0, n: 0, prev: 0 };
+    // warm: the FIRST draws of a race are shader-compile frames (three.js
+    // builds each character's programs lazily on first render) — measuring
+    // them locked a fast machine to 20fps in the lab. Skip ~25 drawn frames
+    // before opening the measurement window, and lock on the MEDIAN so any
+    // remaining one-off spike (GC, texture upload) can't skew the verdict.
+    const probe = { on: isLowPowerDevice, warm: 0, until: 0, samples: [] as number[], prev: 0 };
+    // Ratchet window (mobile only): rolling 2s average of drawn-frame spacing.
+    const guard = { sum: 0, n: 0, windowEnd: 0 };
     this.lastT = performance.now();
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
       // While probing, bypass the cap so rAF cadence reflects true draw cost.
       if (!probe.on && now - this.lastT < frameMin) return; // skip under the cap
-      const dt = Math.min(0.05, (now - this.lastT) / 1000);
+      const gap = now - this.lastT;
+      const dt = Math.min(0.05, gap / 1000);
       this.lastT = now;
       this.draw(dt);
       if (probe.on) {
-        if (probe.until === 0) { probe.until = now + 800; probe.prev = now; }
+        if (probe.warm < 25) { probe.warm++; probe.prev = now; }
+        else if (probe.until === 0) { probe.until = now + 800; probe.prev = now; }
         else {
           const d = now - probe.prev; probe.prev = now;
-          if (d > 4 && d < 500) { probe.sum += d; probe.n++; } // ignore stalls/hitches
-          if (now >= probe.until && probe.n > 8) {
-            const avg = probe.sum / probe.n; // measured ms per drawn frame
-            // Lock just above measured cost (headroom for the DOM overlay repaint
-            // + netcode on the same thread), clamped to 60fps..20fps.
-            frameMin = Math.max(frameMin, Math.min(50, Math.max(16.6, avg * 1.15)));
+          if (d > 4 && d < 500) probe.samples.push(d);
+          if (now >= probe.until && probe.samples.length > 8) {
+            const sorted = [...probe.samples].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            // rAF fires on a quantized display tick (8.3ms at 120Hz, 16.7 at
+            // 60, 33.3 in iOS Low Power Mode). A cap that lands BETWEEN tick
+            // multiples halves the rate — e.g. capping a steady-30Hz phone at
+            // 38ms forces every draw to wait TWO ticks (15fps). So: estimate
+            // the tick (p10 of samples = fastest sustained spacing), find how
+            // many ticks a frame actually needs (k), and only cap when k > 1 —
+            // placing the cap safely INSIDE the k-tick window.
+            const tick = Math.max(4, sorted[Math.floor(sorted.length * 0.1)]);
+            const k = Math.max(1, Math.round(median / tick));
+            if (k > 1) frameMin = Math.max(frameMin, Math.min(50, (k - 0.25) * tick));
             probe.on = false;
+            guard.windowEnd = now + 2000;
           }
+        }
+      } else if (isLowPowerDevice) {
+        // Ratchet: if the device stops holding the locked rate (thermals, a
+        // heavier round), tighten the cap toward what it IS sustaining.
+        if (gap > 4 && gap < 500) { guard.sum += gap; guard.n++; }
+        if (guard.windowEnd === 0) guard.windowEnd = now + 2000;
+        if (now >= guard.windowEnd) {
+          if (guard.n > 8) {
+            const avg = guard.sum / guard.n;
+            // Fires only when the sustained rate is well below the current cap
+            // (avg ≥ ~22ms), so the quantization concern above never applies.
+            if (avg > Math.max(frameMin, 16.6) * 1.35) {
+              frameMin = Math.min(50, Math.max(frameMin, avg * 1.15));
+            }
+          }
+          guard.sum = 0; guard.n = 0; guard.windowEnd = now + 2000;
         }
       }
     };
@@ -570,8 +612,13 @@ export class PortraitStage {
   async init(): Promise<void> {
     const { THREE, skClone } = await loadMods();
     if (this.disposed) return;
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: !isLowPowerDevice });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isLowPowerDevice ? 1.5 : 2));
+    // Full sharpness everywhere: this is the big close-up view (selector +
+    // victory dance), one character on one small canvas — cheap on any GPU.
+    // Phones keep the LITE model here (the full GLB's main-thread parse froze
+    // WebKit ~700ms when the victory screen mounted), but at 2× + antialias
+    // the lite mesh reads crisp.
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
 
     // Phones preview the LITE model too: the full GLB is ~3× the download and
