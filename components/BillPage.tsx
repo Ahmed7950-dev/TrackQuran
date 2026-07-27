@@ -181,11 +181,25 @@ const BillPage: React.FC<BillPageProps> = ({
     await new Promise(requestAnimationFrame);
 
     try {
-      // Let html2canvas auto-measure the full clone (NO width/height/window/x/y
-      // overrides — those were cropping it). Then build a PDF page that is
-      // exactly the canvas size → whole bill on ONE page, no clipping.
+      // Two PHONE-specific crop causes handled here:
+      // 1. html2canvas renders its document clone in a virtual window sized to
+      //    the REAL viewport by default — ~390px on a phone, narrower than the
+      //    794px bill, so the capture reflowed/cropped. windowWidth forces a
+      //    desktop-sized virtual window, making phone output identical to
+      //    desktop. (Do NOT set width/height/x/y — those crop the canvas.)
+      // 2. iOS Safari silently blanks canvases above ~16.7M pixels, chopping
+      //    the bottom off long bills. Cap the scale so the canvas stays inside
+      //    a safe pixel budget; long bills trade a little sharpness for being
+      //    complete.
+      const fullH = Math.max(clone.scrollHeight, clone.offsetHeight);
+      const SAFE_PIXELS = 15_000_000;
+      const scale = Math.min(2, Math.max(1, Math.sqrt(SAFE_PIXELS / (BILL_W * Math.max(1, fullH)))));
       const canvas: HTMLCanvasElement = await html2pdf()
-        .set({ html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' } })
+        .set({ html2canvas: {
+          scale, useCORS: true, logging: false, backgroundColor: '#ffffff',
+          windowWidth: BILL_W + 60, windowHeight: fullH + 60,
+          scrollX: 0, scrollY: 0,
+        } })
         .from(clone).toCanvas().get('canvas');
 
       const jsPDFCtor = (window as any).jspdf?.jsPDF;
