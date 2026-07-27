@@ -110,6 +110,58 @@ export async function linkGCalSession(
   return rowToSession(data as SessionRow);
 }
 
+/**
+ * Tutor-scheduled lesson (drag-created on the calendar) — a session with NO
+ * Google Calendar event behind it. Regular insert (the upsert conflict key
+ * includes gcal_event_id, which is null here).
+ */
+export async function scheduleLessonSession(
+  teacherId: string,
+  studentId: string,
+  title: string,
+  startAt: string,
+  endAt: string,
+): Promise<LessonSession> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .insert({
+      teacher_id:    teacherId,
+      student_id:    studentId,
+      gcal_event_id: null,
+      title,
+      start_at:      startAt,
+      end_at:        endAt,
+      status:        'confirmed',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return rowToSession(data as SessionRow);
+}
+
+/**
+ * Tutor-scheduled sessions (gcal_event_id null) inside a time range — drawn as
+ * their own blocks on the tutor's calendar grid. GCal-linked sessions are NOT
+ * returned: those render through the Google event itself.
+ */
+export async function getScheduledSessionsRange(
+  teacherId: string,
+  fromISO: string,
+  toISO: string,
+): Promise<LessonSession[]> {
+  const { data, error } = await supabase
+    .from('arabic_lesson_sessions')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .is('gcal_event_id', null)
+    .neq('status', 'cancelled')
+    .gte('start_at', fromISO)
+    .lt('start_at', toISO)
+    .order('start_at', { ascending: true });
+  if (error) throw error;
+  return (data as SessionRow[]).map(rowToSession);
+}
+
 /** Remove a linked session */
 export async function unlinkSession(id: string): Promise<void> {
   const { error } = await supabase

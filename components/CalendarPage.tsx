@@ -24,7 +24,8 @@ import {
   isSlotInPast,
 } from '../services/lessonBookingService';
 import { ArabicStudent, LessonSession, Student } from '../types';
-import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession, setSessionFamily, autoSyncGCalLinks } from '../services/lessonSessionService';
+import { linkAllEventsByTitle, getSessionsListByGcalId, unlinkSessionsByStudentAndTitle, linkGCalSession, setSessionFamily, autoSyncGCalLinks, scheduleLessonSession, getScheduledSessionsRange, unlinkSession } from '../services/lessonSessionService';
+import { createNotification } from '../services/notificationService';
 import { ensurePortalPair } from '../services/portalPairService';
 import { ensureFamilyLink, FamilyStudentRef } from '../services/familyLinkService';
 import { netEarning } from '../utils/timezones';
@@ -249,6 +250,9 @@ interface LinkStudent {
   currency?: 'USD' | 'TRY';
   studentType?: 'preply' | 'platform';
   preplyPercentage?: number;
+  /** Identifier the student's NotificationCenter subscribes with — the share
+   *  token for Arabic portals, the student id for Quran report portals. */
+  notifyId?: string;
 }
 
 const CalendarPage: React.FC<CalendarPageProps> = ({
@@ -271,8 +275,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // Unified linkable-student list — BOTH Quran and Arabic students, so the two
   // calendars act as one unit (same linked events + combined weekly earnings).
   const linkStudents: LinkStudent[] = useMemo(() => [
-    ...quranStudents.map(s => ({ id: s.id, name: s.name, kind: 'quran' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
-    ...arabicStudents.map(s => ({ id: s.id, name: s.name, kind: 'arabic' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage })),
+    ...quranStudents.map(s => ({ id: s.id, name: s.name, kind: 'quran' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage, notifyId: s.id })),
+    ...arabicStudents.map(s => ({ id: s.id, name: s.name, kind: 'arabic' as const, timezone: s.timezone, hourlyRate: s.hourlyRate, currency: s.currency, studentType: s.studentType, preplyPercentage: s.preplyPercentage, notifyId: s.shareToken ?? s.id })),
   ], [quranStudents, arabicStudents]);
   const linkStudentById = useMemo(() => {
     const m = new Map<string, LinkStudent>();
@@ -308,6 +312,157 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const [linkCopied, setLinkCopied] = useState(false);
   /** Set when silent refresh has failed — shows the reconnect banner */
   const [needsReconnect, setNeedsReconnect] = useState(false);
+
+  // ── Tutor drag-to-schedule ────────────────────────────────────────────────
+  // The tutor drags across empty grid space to pick a time range, then chooses
+  // a student (Quran or Arabic) in a modal. The lesson is stored as a session
+  // with NO gcal event, drawn as its own block, and the student is notified in
+  // THEIR timezone. A plain click (no drag) proposes a 60-minute lesson.
+  const canSchedule = !isStudentView && !!teacherId && linkStudents.length > 0;
+  const [scheduledSessions, setScheduledSessions] = useState<LessonSession[]>([]);
+  const [schedReload, setSchedReload] = useState(0);
+  /** In-progress drag: day column + minutes from midnight (Istanbul) */
+  const [dragDraft, setDragDraft] = useState<{ dayIdx: number; startMin: number; endMin: number } | null>(null);
+  const dragRef = useRef<{ dayIdx: number; anchorMin: number; colTop: number; colH: number } | null>(null);
+  /** Drag finished — modal open with the chosen slot */
+  const [scheduleTarget, setScheduleTarget] = useState<{ day: Date; startMin: number; endMin: number } | null>(null);
+  const [scheduleSearch, setScheduleSearch] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  /** Click on an existing scheduled block — manage (cancel) modal */
+  const [manageScheduled, setManageScheduled] = useState<LessonSession | null>(null);
+  const [cancellingScheduled, setCancellingScheduled] = useState(false);
+
+  // Tutor-scheduled sessions for the visible week (drawn as indigo blocks).
+  useEffect(() => {
+    if (!canSchedule || !teacherId) { setScheduledSessions([]); return; }
+    let live = true;
+    const from = new Date(monday); // local midnight Monday — generous 1-day pad both sides
+    from.setDate(from.getDate() - 1);
+    const to = new Date(monday);
+    to.setDate(to.getDate() + 8);
+    getScheduledSessionsRange(teacherId, from.toISOString(), to.toISOString())
+      .then(list => { if (live) setScheduledSessions(list); })
+      .catch(err => console.warn('[Calendar] scheduled sessions fetch failed:', err));
+    return () => { live = false; };
+  }, [canSchedule, teacherId, monday, schedReload]);
+
+  /** Istanbul calendar date (YYYY-MM-DD) of an ISO timestamp — for day matching. */
+  const istDateOfISO = (iso: string): string =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: TUTOR_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+
+  /** "17:30" label for minutes-from-midnight. */
+  const minLabel = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  /** Notify the student about a scheduled/cancelled lesson IN THEIR TIMEZONE. */
+  const notifyStudentLesson = useCallback(async (
+    st: LinkStudent, startISO: string, endISO: string, kindOfNote: 'scheduled' | 'cancelled',
+  ) => {
+    if (!teacherId) return;
+    try {
+      const mins = Math.max(1, Math.round((new Date(endISO).getTime() - new Date(startISO).getTime()) / 60000));
+      const when = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'short', day: 'numeric', month: 'short',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        timeZone: st.timezone ?? TUTOR_TIMEZONE,
+      }).format(new Date(startISO));
+      const tzNote = st.timezone ? `your time — ${shortTZName(st.timezone)}` : 'Istanbul time';
+      const subject = st.kind === 'quran' ? 'Quran' : 'Arabic';
+      await createNotification({
+        teacherId,
+        studentId: st.notifyId ?? st.id,
+        recipient: 'student',
+        bookingId: null,
+        type: kindOfNote === 'scheduled' ? 'lesson_scheduled' : 'booking_cancelled_by_tutor',
+        title: kindOfNote === 'scheduled' ? 'New lesson scheduled 📅' : 'Lesson cancelled',
+        body: kindOfNote === 'scheduled'
+          ? `Your tutor scheduled a ${mins}-minute ${subject} lesson on ${when} (${tzNote}).`
+          : `Your ${subject} lesson on ${when} (${tzNote}) was cancelled by your tutor.`,
+      });
+    } catch { /* best-effort — never block scheduling on a notification */ }
+  }, [teacherId]);
+
+  /** Confirm from the modal: create the session + notify + redraw. */
+  const handleScheduleFor = useCallback(async (st: LinkStudent) => {
+    if (!teacherId || !scheduleTarget || scheduling) return;
+    setScheduling(true);
+    try {
+      const dateStr  = istanbulDateString(scheduleTarget.day);
+      const startISO = new Date(`${dateStr}T${minLabel(scheduleTarget.startMin)}:00+03:00`).toISOString();
+      const endISO   = new Date(`${dateStr}T${minLabel(scheduleTarget.endMin)}:00+03:00`).toISOString();
+      await scheduleLessonSession(teacherId, st.id, `${st.kind === 'quran' ? 'Quran' : 'Arabic'} Lesson — ${st.name}`, startISO, endISO);
+      await notifyStudentLesson(st, startISO, endISO, 'scheduled');
+      setSchedReload(n => n + 1);
+      onSessionLinked?.();
+      setScheduleTarget(null);
+      setScheduleSearch('');
+    } catch (err) {
+      console.error('[Calendar] schedule failed:', err);
+      alert('Could not schedule the lesson — please try again.');
+    } finally {
+      setScheduling(false);
+    }
+  }, [teacherId, scheduleTarget, scheduling, notifyStudentLesson, onSessionLinked]);
+
+  /** Cancel a tutor-scheduled lesson: delete the session + notify the student. */
+  const handleCancelScheduled = useCallback(async () => {
+    const s = manageScheduled;
+    if (!s || cancellingScheduled) return;
+    setCancellingScheduled(true);
+    try {
+      await unlinkSession(s.id);
+      const st = linkStudentById.get(s.studentId);
+      if (st && s.endAt) await notifyStudentLesson(st, s.startAt, s.endAt, 'cancelled');
+      setSchedReload(n => n + 1);
+      onSessionLinked?.();
+      setManageScheduled(null);
+    } catch (err) {
+      console.error('[Calendar] cancel failed:', err);
+      alert('Could not cancel the lesson — please try again.');
+    } finally {
+      setCancellingScheduled(false);
+    }
+  }, [manageScheduled, cancellingScheduled, linkStudentById, notifyStudentLesson, onSessionLinked]);
+
+  /** Mousedown on empty column space starts a drag-to-schedule selection. */
+  const startScheduleDrag = useCallback((dayIdx: number, day: Date, e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSchedule) return;
+    if (e.button !== 0) return;
+    // Ignore drags that begin on an existing block (event / booking / lesson).
+    if ((e.target as HTMLElement).closest('[data-cal-event]')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rawMin = ((e.clientY - rect.top) / HOUR_HEIGHT_PX) * 60;
+    const anchor = Math.max(0, Math.min(23 * 60 + 30, Math.floor(rawMin / 30) * 30));
+    dragRef.current = { dayIdx, anchorMin: anchor, colTop: rect.top, colH: rect.height };
+    setDragDraft({ dayIdx, startMin: anchor, endMin: anchor + 30 });
+    e.preventDefault();
+
+    const onMove = (ev: MouseEvent) => {
+      const dr = dragRef.current;
+      if (!dr) return;
+      const cur = Math.max(0, Math.min(24 * 60, Math.round(((ev.clientY - dr.colTop) / HOUR_HEIGHT_PX) * 60 / 30) * 30));
+      setDragDraft({
+        dayIdx: dr.dayIdx,
+        startMin: Math.min(dr.anchorMin, cur),
+        endMin: Math.max(dr.anchorMin + 30, cur),
+      });
+    };
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      const dr = dragRef.current;
+      dragRef.current = null;
+      setDragDraft(null);
+      if (!dr) return;
+      const cur = Math.max(0, Math.min(24 * 60, Math.round(((ev.clientY - dr.colTop) / HOUR_HEIGHT_PX) * 60 / 30) * 30));
+      let startMin = Math.min(dr.anchorMin, cur);
+      let endMin   = Math.max(dr.anchorMin, cur);
+      if (endMin - startMin < 30) endMin = startMin + 60; // plain click → 1-hour lesson
+      setScheduleTarget({ day, startMin, endMin });
+      setScheduleSearch('');
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [canSchedule]);
   const currentTimeRef  = useRef<HTMLDivElement>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
   // Per-week cache of fetched GCal events so revisiting a week is instant
@@ -1141,12 +1296,56 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                 )
               : [];
 
+            const daySched = canSchedule
+              ? scheduledSessions.filter(s => istDateOfISO(s.startAt) === istanbulDateString(day))
+              : [];
+
             return (
               <div
                 key={dayIdx}
-                className={`relative border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''}`}
+                className={`relative border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50/30 dark:bg-teal-900/10' : ''} ${canSchedule ? 'cursor-crosshair' : ''}`}
                 style={{ height: `${HOUR_HEIGHT_PX * 25}px` }}
+                onMouseDown={canSchedule ? (e) => startScheduleDrag(dayIdx, day, e) : undefined}
               >
+                {/* ── Drag-to-schedule draft selection ── */}
+                {dragDraft && dragDraft.dayIdx === dayIdx && (
+                  <div
+                    className="absolute left-0.5 right-0.5 rounded-lg border-2 border-dashed border-indigo-400 bg-indigo-200/40 dark:bg-indigo-500/20 z-20 pointer-events-none flex items-start justify-center"
+                    style={{
+                      top: `${(dragDraft.startMin / 60) * HOUR_HEIGHT_PX}px`,
+                      height: `${((dragDraft.endMin - dragDraft.startMin) / 60) * HOUR_HEIGHT_PX}px`,
+                    }}
+                  >
+                    <span className="mt-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-white/80 dark:bg-gray-900/70 px-1.5 rounded">
+                      {minLabel(dragDraft.startMin)}–{minLabel(dragDraft.endMin)}
+                    </span>
+                  </div>
+                )}
+
+                {/* ── Tutor-scheduled lessons (no GCal event behind them) ── */}
+                {daySched.map(s => {
+                  const st = linkStudentById.get(s.studentId);
+                  const top = timeToOffsetInTZ(s.startAt, TUTOR_TIMEZONE);
+                  const height = eventHeightInTZ(s.startAt, s.endAt ?? new Date(new Date(s.startAt).getTime() + 3600000).toISOString());
+                  const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
+                  return (
+                    <div
+                      key={s.id}
+                      data-cal-event="1"
+                      onClick={(e) => { e.stopPropagation(); setManageScheduled(s); }}
+                      title={`${st?.name ?? 'Student'} — ${fmtT(s.startAt)}${s.endAt ? ` - ${fmtT(s.endAt)}` : ''}\nScheduled by you — click to manage`}
+                      className="absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 shadow-sm bg-indigo-500 text-white cursor-pointer hover:ring-2 hover:ring-indigo-300 hover:ring-offset-1"
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      <p className="text-[10px] font-bold leading-tight truncate">
+                        {st ? `${st.kind === 'quran' ? '📖' : '🗣️'} ${st.name}` : (s.title ?? 'Lesson')}
+                      </p>
+                      {height >= 40 && (
+                        <p className="text-[9px] opacity-90 leading-tight">{fmtT(s.startAt)}{s.endAt ? ` – ${fmtT(s.endAt)}` : ''}</p>
+                      )}
+                    </div>
+                  );
+                })}
                 {/* Availability / working-hour background — split into two 30-min clickable halves */}
                 {HOURS.slice(0, 24).map(h => {
                   const isAvail = availSet.has(`${dayIdx}-${h}`);
@@ -1258,6 +1457,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                     <div
                       key={b.id}
+                      data-cal-event="1"
                       style={{ top: `${topPx}px`, height: `${heightPx}px` }}
                       onClick={() => setSelectedBooking(b)}
                       className={`absolute left-0.5 right-0.5 rounded-lg px-1.5 py-0.5 overflow-hidden z-20 cursor-pointer hover:brightness-90 transition-all ${bg}`}
@@ -1342,6 +1542,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
                   return (
                     <div
                       key={ev.id}
+                      data-cal-event="1"
                       title={`${isLinked && displayName ? displayName + ' — ' : ''}${ev.summary}\n${timeRange}${rateStr ? `\n${rateStr}` : ''}`}
                       onClick={canLink ? handleEvClick : undefined}
                       className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 shadow-sm transition-all
@@ -1641,6 +1842,111 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       )}
 
       {/* ── GCal Link: student picker modal ──────────────────────────────── */}
+      {/* ── Drag-to-schedule: pick the student for the chosen slot ── */}
+      {scheduleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => !scheduling && setScheduleTarget(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">Schedule a lesson</p>
+              <p className="font-bold text-slate-800 dark:text-slate-100">
+                {scheduleTarget.day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+                {' · '}{minLabel(scheduleTarget.startMin)}–{minLabel(scheduleTarget.endMin)}
+                <span className="text-xs font-semibold text-slate-400 ml-1">(Istanbul)</span>
+              </p>
+              {/* Duration quick-adjust */}
+              <div className="mt-2 flex items-center gap-1.5">
+                {[30, 45, 60, 90].map(mins => {
+                  const active = scheduleTarget.endMin - scheduleTarget.startMin === mins;
+                  return (
+                    <button key={mins} type="button"
+                      onClick={() => setScheduleTarget(t => t ? { ...t, endMin: Math.min(24 * 60, t.startMin + mins) } : t)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
+                      {mins}m
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                The student is notified instantly, with the time shown in THEIR timezone.
+              </p>
+              <input
+                type="text"
+                value={scheduleSearch}
+                onChange={e => setScheduleSearch(e.target.value)}
+                placeholder="Search students…"
+                autoFocus
+                className="mt-2 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+            <div className="overflow-y-auto max-h-72 divide-y divide-slate-100 dark:divide-gray-700">
+              {(() => {
+                const q = scheduleSearch.trim().toLowerCase();
+                const list = linkStudents.filter(s => !q || s.name.toLowerCase().includes(q));
+                if (list.length === 0) {
+                  return <div className="px-5 py-6 text-center text-sm text-slate-400 dark:text-slate-500">No students match.</div>;
+                }
+                return list.map(s => (
+                  <button
+                    key={`${s.kind}-${s.id}`}
+                    disabled={scheduling}
+                    onClick={() => handleScheduleFor(s)}
+                    className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50"
+                  >
+                    <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${s.kind === 'quran' ? 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
+                      {s.kind === 'quran' ? 'QURAN' : 'ARABIC'}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{s.name}</span>
+                      <span className="block text-[11px] text-slate-400 dark:text-slate-500">
+                        {s.timezone ? shortTZName(s.timezone) : 'no timezone — Istanbul assumed'}
+                      </span>
+                    </span>
+                    {scheduling && <span className="text-xs text-slate-400">…</span>}
+                  </button>
+                ));
+              })()}
+            </div>
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700 text-right">
+              <button onClick={() => setScheduleTarget(null)} disabled={scheduling}
+                className="px-4 py-2 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manage a tutor-scheduled lesson (cancel it) ── */}
+      {manageScheduled && (() => {
+        const st = linkStudentById.get(manageScheduled.studentId);
+        const fmtT = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TUTOR_TIMEZONE });
+        const dayLabel = new Date(manageScheduled.startAt).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short', timeZone: TUTOR_TIMEZONE });
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => !cancellingScheduled && setManageScheduled(null)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
+              <div className="px-5 py-4">
+                <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">Scheduled lesson</p>
+                <p className="font-bold text-slate-800 dark:text-slate-100">{st?.name ?? manageScheduled.title ?? 'Student'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  {dayLabel} · {fmtT(manageScheduled.startAt)}{manageScheduled.endAt ? ` – ${fmtT(manageScheduled.endAt)}` : ''} (Istanbul)
+                </p>
+                {st?.timezone && manageScheduled.endAt && (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    Student's time: {new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: st.timezone }).format(new Date(manageScheduled.startAt))} ({shortTZName(st.timezone)})
+                  </p>
+                )}
+              </div>
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-gray-700 flex justify-between items-center">
+                <button onClick={handleCancelScheduled} disabled={cancellingScheduled}
+                  className="px-4 py-2 rounded-lg text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50">
+                  {cancellingScheduled ? 'Cancelling…' : 'Cancel lesson'}
+                </button>
+                <button onClick={() => setManageScheduled(null)} disabled={cancellingScheduled}
+                  className="px-4 py-2 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {linkTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-gray-700 w-full max-w-sm overflow-hidden">
