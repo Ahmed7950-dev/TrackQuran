@@ -22,7 +22,7 @@ import { createGameChannel } from '../services/p2pGameChannel';
 import {
   READ_SECONDS, MAX_UPGRADES, BONUS_AMMO_PER_EXTRA, VERSE_SURAHS,
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
-  ARENA_BG_IMAGE, type WallRect,
+  ARENA_BG_IMAGE, ARENA_WALLS_IMAGE,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -533,6 +533,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       if (d > spec.range + BALANCE.playerRadius) continue;
       const dot = d > 0.01 ? (dx * fx + dy * fy) / d : 1;
       if (dot < 0.25) continue; // roughly a forward cone
+      if (segmentHitsWall(pl.x, pl.y, q.x, q.y)) continue; // no punching through walls
       applyDamage(q, spec.damage, pl);
     }
   };
@@ -667,11 +668,18 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const joyKnobRef = useRef<HTMLDivElement>(null);
   const camRef = useRef({ x: 50, y: 50 });
   const bgImgRef = useRef<HTMLImageElement | null>(null);
+  const wallsImgRef = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
-    if (!ARENA_BG_IMAGE) return;
-    const img = new Image();
-    img.onload = () => { bgImgRef.current = img; };
-    img.src = ARENA_BG_IMAGE;
+    if (ARENA_BG_IMAGE) {
+      const img = new Image();
+      img.onload = () => { bgImgRef.current = img; };
+      img.src = ARENA_BG_IMAGE;
+    }
+    if (ARENA_WALLS_IMAGE) {
+      const img = new Image();
+      img.onload = () => { wallsImgRef.current = img; };
+      img.src = ARENA_WALLS_IMAGE;
+    }
   }, []);
 
   useEffect(() => {
@@ -807,8 +815,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const px = (x: number) => ox + x * scale;
     const py = (y: number) => oy + y * scale;
 
-    // ground
-    ctx.fillStyle = '#0f2418';
+    // ground (out-of-bounds matches the desert art edge so corners don't show void)
+    ctx.fillStyle = bgImgRef.current ? '#d68c47' : '#0f2418';
     ctx.fillRect(0, 0, W, H);
     if (bgImgRef.current) {
       ctx.drawImage(bgImgRef.current, px(0), py(0), 100 * scale, 100 * scale);
@@ -832,20 +840,19 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       ctx.strokeRect(px(0), py(0), 100 * scale, 100 * scale);
     }
 
-    // painter's list: walls + entities sorted by base Y (cheap occlusion)
-    const wallH = 3.4; // pseudo-3D extrusion
+    // Wall ART layered over the ground (visuals only — the WALLS rects are the
+    // collision truth, generated from this very image). Fallback: draw the
+    // collision rects flat if the art hasn't loaded yet.
+    if (wallsImgRef.current) {
+      ctx.drawImage(wallsImgRef.current, px(0), py(0), 100 * scale, 100 * scale);
+    } else {
+      ctx.fillStyle = '#e7d8a8';
+      for (const w of WALLS) ctx.fillRect(px(w.x), py(w.y), w.w * scale, w.h * scale);
+    }
+
+    // painter's list: entities sorted by base Y
     type Item = { y: number; draw: () => void };
     const items: Item[] = [];
-    for (const w of WALLS) {
-      items.push({ y: w.y + w.h, draw: () => {
-        ctx.fillStyle = '#4a3826';
-        ctx.fillRect(px(w.x), py(w.y - wallH), w.w * scale, (w.h + wallH) * scale);
-        ctx.fillStyle = '#6b543a';
-        ctx.fillRect(px(w.x), py(w.y - wallH), w.w * scale, wallH * scale * 0.9);
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-        ctx.strokeRect(px(w.x), py(w.y - wallH), w.w * scale, (w.h + wallH) * scale);
-      } });
-    }
     for (const p of g.players) {
       if (!p.fighting || (!p.alive && ph !== 'victory')) continue;
       if (!p.alive) continue;
