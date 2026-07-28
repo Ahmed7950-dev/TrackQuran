@@ -45,6 +45,7 @@ import { renewalReminderOccurrence } from './utils/renewal';
 import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
 import LetterRaceGame from './components/LetterRaceGame';
+import ReadingBattleGame from './components/ReadingBattleGame';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
@@ -448,6 +449,15 @@ const App: React.FC = () => {
       playerRole="2"
       onExit={() => { window.location.href = '/'; }}
     />
+  );
+
+  // ── Reading Battle — students join the tutor's room, no auth required ──────
+  const readingBattleRoomId = (() => {
+    const m = window.location.pathname.match(/^\/reading-battle\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (readingBattleRoomId) return (
+    <ReadingBattleGame roomId={readingBattleRoomId} onExit={() => { window.location.href = '/'; }} />
   );
 
   // ── Find the Odd Letter online 2P — no auth required ───────────────────────

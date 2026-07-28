@@ -4,6 +4,7 @@ import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import AirplaneGame from './AirplaneGame';
 import LetterRaceGame from './LetterRaceGame';
+import ReadingBattleGame from './ReadingBattleGame';
 import FlappyLettersGame from './FlappyLettersGame';
 import OddLetterGame from './OddLetterGame';
 
@@ -93,8 +94,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter';
-type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
+type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
 
 const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
   const { t } = useI18n();
@@ -218,6 +219,8 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
   const handleStart = () => {
     // Odd-letter has its own letter set → launch even with no alphabet selected.
     if (childMode && gameChoice === 'oddletter') { setView('oddletter'); return; }
+    // Reading Battle brings its own Quran verse content — no letter selection needed.
+    if (childMode && gameChoice === 'battle') { setView('battle'); return; }
     if (unique === 0) return;
     if (childMode && (gameChoice === 'airplane' || gameChoice === 'race' || gameChoice === 'flappy')) {
       setView(gameChoice);
@@ -570,6 +573,50 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
                   {active && (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
                       <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
+
+            {/* Reading Battle (up to 5 players, read verses → earn gear → maze battle) */}
+            {(() => {
+              const active = gameChoice === 'battle';
+              return (
+                <button
+                  onClick={() => setGameChoice('battle')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  style={{
+                    width: 132, minWidth: 0,
+                    borderColor: active ? '#8b5cf6' : '#ede9fe',
+                    background: active
+                      ? 'linear-gradient(160deg,#7c3aed 0%,#6d28d9 100%)'
+                      : 'linear-gradient(160deg,#f8f5ff 0%,#efe9fd 100%)',
+                    boxShadow: active
+                      ? '0 8px 24px rgba(139,92,246,0.45), 0 2px 8px rgba(139,92,246,0.3)'
+                      : '0 2px 8px rgba(139,92,246,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{
+                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
+                    }} />
+                  )}
+                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 92, height: 92, fontSize: 52 }}>
+                    📖⚔️
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-violet-700'}`}>
+                      Reading Battle
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-violet-100' : 'text-violet-500'}`}>
+                      5 players — read &amp; fight!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />
                     </div>
                   )}
                 </button>
@@ -967,6 +1014,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
       )}
       {view === 'race' && (
         <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
+      )}
+      {view === 'battle' && (
+        <ReadingBattleGame onExit={() => setView('select')} />
       )}
       {view === 'oddletter' && (
         <OddLetterGame onExit={() => setView('select')} />
