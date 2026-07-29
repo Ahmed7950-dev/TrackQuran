@@ -1022,7 +1022,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const reader = players.find(p => p.gid === rd.turnGid);
   const iAmReader = rd.turnGid === myGid;
   const winner = players.find(p => p.gid === world.current.winner);
-  const canStart = !isGuest && students.length >= 1 && fighters.length >= 2 && assetsReady && wordsRef.current.length > 0;
+  // Solo allowed for now so the game can be play-tested alone (tutor-as-player
+  // or one student). Raise back to 2 for real sessions.
+  const MIN_FIGHTERS = 1;
+  const canStart = !isGuest && fighters.length >= MIN_FIGHTERS && assetsReady && wordsRef.current.length > 0;
 
   const btnBase: React.CSSProperties = { border: 'none', borderRadius: 999, padding: '13px 30px', fontWeight: 900, cursor: 'pointer', fontSize: 16, color: '#fff' };
 
@@ -1139,7 +1142,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
                 disabled={!canStart}
                 style={{ ...btnBase, width: '100%', background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default' }}>
                 {assetsReady && wordsRef.current.length > 0
-                  ? (fighters.length >= 2 ? 'Start — set levels ▶' : 'Need at least 2 fighters…')
+                  ? (fighters.length >= MIN_FIGHTERS
+                      ? (fighters.length === 1 ? 'Start — solo test ▶' : 'Start — set levels ▶')
+                      : 'Waiting for a fighter…')
                   : '⏳ Loading sounds & verses…'}
               </button>
             )}
