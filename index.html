@@ -50,9 +50,9 @@
       document.documentElement.lang = lang;
       document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
       // Initialize font preference
-      const savedFont = localStorage.getItem('quranicFont') || 'Hafs';
+      let savedFont = localStorage.getItem('quranicFont') || 'Hafs';
+      if (savedFont === 'Husrev') savedFont = 'Hafs'; // removed font — fall back
       document.documentElement.style.setProperty('--quranic-font', savedFont);
-      document.documentElement.dataset.quranFont = savedFont; // per-font CSS (e.g. Husrev stroke) from first paint
     </script>
     <script src="https://unpkg.com/heroicons@2.1.3/24/outline/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -158,19 +158,6 @@
         unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
                        U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
-      /* Turkish (Ottoman) mushaf style — Ahmed Hüsrev Altınbaşak calligraphy,
-         as printed in Hayrat-style Turkish Qurans. Selectable per browser in
-         live logging via the Tools menu (--quranic-font). */
-      @font-face {
-        font-family: 'Husrev';
-        src: url('/Fonts/HusrevHatti-Arapca.woff?v=1') format('woff');
-        font-weight: normal;
-        font-style: normal;
-        font-display: block;
-        size-adjust: 130%; /* face draws small for its em box — match Hafs' visual size */
-        unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
-                       U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
-      }
       @font-face {
         font-family: 'KFGQPC Uthmanic Script HAFS';
         src: url('/Fonts/KFGQPC%20Uthmanic%20Script%20HAFS.otf') format('opentype');
@@ -235,12 +222,6 @@
       }
       .font-quranic {
         font-family: var(--quranic-font, 'Hafs'), 'Amiri Quran', serif;
-      }
-      /* The Hüsrev digital cut is lighter than the printed Turkish mushaf —
-         thicken strokes to match the page (stroke inherits the text colour,
-         so tajweed colouring still works). */
-      html[data-quran-font="Husrev"] .font-quranic {
-        -webkit-text-stroke: 0.026em currentColor;
       }
       @keyframes glow {
         0%, 100% { box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.6); }

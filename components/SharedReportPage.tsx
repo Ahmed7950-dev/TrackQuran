@@ -89,7 +89,6 @@ const QURANIC_FONTS = [
   { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
   { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
-  { name: 'Husrev', displayName: 'Turkish (Hüsrev Hattı)' },
 ] as const;
 
 // ── main page ─────────────────────────────────────────────────────────────────
@@ -119,9 +118,10 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
-  const [quranicFont, setQuranicFont] = useState<string>(() =>
-    localStorage.getItem('quranicFont') || 'Hafs'
-  );
+  const [quranicFont, setQuranicFont] = useState<string>(() => {
+    const f = localStorage.getItem('quranicFont') || 'Hafs';
+    return QURANIC_FONTS.some(o => o.name === f) ? f : 'Hafs'; // guard removed fonts
+  });
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
     const saved = localStorage.getItem('theme');
     if (saved === 'light' || saved === 'dark' || saved === 'reading') return saved;
@@ -164,7 +164,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   // Persist font choice
   useEffect(() => {
     document.documentElement.style.setProperty('--quranic-font', quranicFont);
-    document.documentElement.dataset.quranFont = quranicFont; // weight-match hook
     localStorage.setItem('quranicFont', quranicFont);
   }, [quranicFont]);
 
