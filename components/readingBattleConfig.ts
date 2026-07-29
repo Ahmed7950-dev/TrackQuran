@@ -68,141 +68,75 @@ export const BALANCE = {
 // Flat background art is separate from collisions: swap BG_IMAGE for AI art
 // later, the walls below stay authoritative for gameplay.
 export const ARENA_BG_IMAGE: string | null = '/rb/arena-bg.png';
-/** Wall ART layered over the background. Pure visuals — the WALLS rects below
- *  are the collision truth, GENERATED from this image's alpha channel so art
- *  and physics always match. Regenerate with scratchpad walls_extract.mjs when
- *  the art changes. */
-export const ARENA_WALLS_IMAGE: string | null = '/rb/arena-walls.png';
+/** Brawl-Stars-style obstacles: one 3D block sprite (pre-rendered from the
+ *  user's Tripo model via Blender, front-top ortho) tiled onto WALL_TILES.
+ *  Collision rects and the per-tile draw list both DERIVE from the map below,
+ *  so art and physics always match. Edit the map freely: '#' = block.
+ *  Constraints: keep the border ring open, spawn tiles + 1-tile margin open,
+ *  and every open tile connected (the map below is validated for all three). */
+export const BLOCK_SPRITE: string | null = '/rb/block.png';
+export const BLOCK_ASPECT = 400 / 256;   // sprite height / width
+export const TILE = 4;                    // arena units per tile (25 x 25 grid)
+export const WALL_TILES: string[] = [
+  '.........................',
+  '.........................',
+  '...##.....#...#.....##...',
+  '...##.....#...#.....##...',
+  '.........................',
+  '.#....##...#.#...##....#.',
+  '.#....##.........##....#.',
+  '..........#...#..........',
+  '....#.....#...#.....#....',
+  '....#...............#....',
+  '.......##.......##.......',
+  '..#...................#..',
+  '..#...#...........#...#..',
+  '..#...................#..',
+  '.......##.......##.......',
+  '....#...............#....',
+  '....#.....#...#.....#....',
+  '..........#...#..........',
+  '.#....##.........##....#.',
+  '.#....##...#.#...##....#.',
+  '.........................',
+  '...##.....#...#.....##...',
+  '...##.....#...#.....##...',
+  '.........................',
+  '.........................',
+];
 
 export interface WallRect { x: number; y: number; w: number; h: number }
-/** Collision rects — GENERATED from arena-walls.png alpha (walls_extract.mjs).
- *  Do not hand-edit; regenerate when the walls art changes. */
-export const WALLS: WallRect[] = [
-  { x: 5, y: 22, w: 17, h: 4 },
-  { x: 29, y: 22, w: 12, h: 4 },
-  { x: 42, y: 22, w: 3, h: 4 },
-  { x: 54, y: 22, w: 3, h: 4 },
-  { x: 58, y: 22, w: 14, h: 3 },
-  { x: 78, y: 22, w: 17, h: 4 },
-  { x: 59, y: 25, w: 13, h: 1 },
-  { x: 5, y: 26, w: 2, h: 11 },
-  { x: 15, y: 26, w: 3, h: 6 },
-  { x: 20, y: 26, w: 2, h: 13 },
-  { x: 25, y: 26, w: 6, h: 4 },
-  { x: 43, y: 26, w: 2, h: 7 },
-  { x: 54, y: 26, w: 2, h: 6 },
-  { x: 70, y: 26, w: 6, h: 4 },
-  { x: 78, y: 26, w: 2, h: 13 },
-  { x: 84, y: 26, w: 2, h: 7 },
-  { x: 92, y: 26, w: 3, h: 11 },
-  { x: 11, y: 28, w: 4, h: 5 },
-  { x: 34, y: 28, w: 9, h: 5 },
-  { x: 56, y: 28, w: 10, h: 5 },
-  { x: 86, y: 28, w: 3, h: 5 },
-  { x: 66, y: 29, w: 1, h: 8 },
-  { x: 76, y: 29, w: 1, h: 7 },
-  { x: 25, y: 30, w: 2, h: 7 },
-  { x: 74, y: 30, w: 2, h: 7 },
-  { x: 24, y: 31, w: 1, h: 5 },
-  { x: 7, y: 32, w: 1, h: 5 },
-  { x: 15, y: 32, w: 2, h: 1 },
-  { x: 55, y: 32, w: 1, h: 1 },
-  { x: 8, y: 33, w: 5, h: 4 },
-  { x: 27, y: 33, w: 10, h: 4 },
-  { x: 64, y: 33, w: 2, h: 4 },
-  { x: 67, y: 33, w: 7, h: 4 },
-  { x: 87, y: 33, w: 5, h: 4 },
-  { x: 13, y: 35, w: 7, h: 4 },
-  { x: 80, y: 35, w: 7, h: 4 },
-  { x: 11, y: 37, w: 2, h: 8 },
-  { x: 87, y: 37, w: 2, h: 8 },
-  { x: 2, y: 40, w: 9, h: 5 },
-  { x: 26, y: 40, w: 5, h: 5 },
-  { x: 69, y: 40, w: 5, h: 5 },
-  { x: 89, y: 40, w: 9, h: 5 },
-  { x: 74, y: 44, w: 1, h: 5 },
-  { x: 2, y: 45, w: 2, h: 14 },
-  { x: 17, y: 45, w: 11, h: 4 },
-  { x: 72, y: 45, w: 2, h: 4 },
-  { x: 75, y: 45, w: 9, h: 4 },
-  { x: 96, y: 45, w: 2, h: 14 },
-  { x: 20, y: 49, w: 3, h: 4 },
-  { x: 78, y: 49, w: 3, h: 3 },
-  { x: 98, y: 50, w: 1, h: 7 },
-  { x: 78, y: 52, w: 2, h: 2 },
-  { x: 21, y: 53, w: 1, h: 1 },
-  { x: 4, y: 55, w: 11, h: 4 },
-  { x: 20, y: 55, w: 2, h: 8 },
-  { x: 79, y: 55, w: 1, h: 8 },
-  { x: 85, y: 55, w: 11, h: 4 },
-  { x: 15, y: 56, w: 1, h: 15 },
-  { x: 22, y: 56, w: 1, h: 7 },
-  { x: 78, y: 56, w: 1, h: 7 },
-  { x: 80, y: 56, w: 1, h: 6 },
-  { x: 13, y: 59, w: 2, h: 12 },
-  { x: 23, y: 59, w: 6, h: 4 },
-  { x: 70, y: 59, w: 8, h: 4 },
-  { x: 85, y: 59, w: 2, h: 12 },
-  { x: 29, y: 60, w: 1, h: 8 },
-  { x: 2, y: 62, w: 8, h: 4 },
-  { x: 90, y: 62, w: 8, h: 4 },
-  { x: 10, y: 63, w: 1, h: 8 },
-  { x: 27, y: 63, w: 2, h: 1 },
-  { x: 70, y: 63, w: 3, h: 1 },
-  { x: 89, y: 63, w: 1, h: 8 },
-  { x: 28, y: 64, w: 1, h: 4 },
-  { x: 30, y: 64, w: 7, h: 4 },
-  { x: 64, y: 64, w: 8, h: 4 },
-  { x: 2, y: 66, w: 2, h: 15 },
-  { x: 8, y: 66, w: 2, h: 4 },
-  { x: 90, y: 66, w: 2, h: 4 },
-  { x: 96, y: 66, w: 2, h: 15 },
-  { x: 11, y: 67, w: 2, h: 4 },
-  { x: 16, y: 67, w: 6, h: 4 },
-  { x: 78, y: 67, w: 7, h: 4 },
-  { x: 87, y: 67, w: 2, h: 4 },
-  { x: 35, y: 68, w: 4, h: 4 },
-  { x: 40, y: 68, w: 1, h: 5 },
-  { x: 63, y: 68, w: 3, h: 3 },
-  { x: 39, y: 69, w: 1, h: 4 },
-  { x: 41, y: 69, w: 4, h: 4 },
-  { x: 55, y: 69, w: 8, h: 4 },
-  { x: 9, y: 70, w: 1, h: 1 },
-  { x: 26, y: 70, w: 4, h: 4 },
-  { x: 70, y: 70, w: 4, h: 4 },
-  { x: 90, y: 70, w: 1, h: 1 },
-  { x: 20, y: 71, w: 2, h: 10 },
-  { x: 30, y: 71, w: 1, h: 3 },
-  { x: 63, y: 71, w: 2, h: 2 },
-  { x: 78, y: 71, w: 2, h: 10 },
-  { x: 36, y: 72, w: 3, h: 1 },
-  { x: 98, y: 72, w: 1, h: 7 },
-  { x: 12, y: 73, w: 5, h: 3 },
-  { x: 43, y: 73, w: 2, h: 7 },
-  { x: 55, y: 73, w: 2, h: 8 },
-  { x: 84, y: 73, w: 5, h: 3 },
-  { x: 26, y: 74, w: 2, h: 7 },
-  { x: 72, y: 74, w: 2, h: 7 },
-  { x: 83, y: 74, w: 1, h: 7 },
-  { x: 4, y: 76, w: 1, h: 5 },
-  { x: 11, y: 76, w: 3, h: 5 },
-  { x: 16, y: 76, w: 1, h: 4 },
-  { x: 28, y: 76, w: 1, h: 5 },
-  { x: 42, y: 76, w: 1, h: 5 },
-  { x: 71, y: 76, w: 1, h: 5 },
-  { x: 80, y: 76, w: 1, h: 5 },
-  { x: 86, y: 76, w: 3, h: 4 },
-  { x: 5, y: 77, w: 6, h: 4 },
-  { x: 17, y: 77, w: 3, h: 4 },
-  { x: 29, y: 77, w: 10, h: 4 },
-  { x: 41, y: 77, w: 1, h: 3 },
-  { x: 57, y: 77, w: 1, h: 4 },
-  { x: 60, y: 77, w: 11, h: 4 },
-  { x: 81, y: 77, w: 2, h: 4 },
-  { x: 89, y: 77, w: 7, h: 4 },
-  { x: 43, y: 80, w: 1, h: 1 },
-  { x: 87, y: 80, w: 2, h: 1 },
-];
+
+/** Every block tile's arena-unit origin — one sprite drawn per entry,
+ *  y-sorted with the players for real 2.5D occlusion. */
+export const WALL_TILE_LIST: Array<{ x: number; y: number }> = [];
+for (let r = 0; r < WALL_TILES.length; r++) {
+  for (let c = 0; c < WALL_TILES[r].length; c++) {
+    if (WALL_TILES[r][c] === '#') WALL_TILE_LIST.push({ x: c * TILE, y: r * TILE });
+  }
+}
+
+/** Collision truth — greedy-merged rects over the same map. */
+export const WALLS: WallRect[] = (() => {
+  const rows = WALL_TILES.length, cols = WALL_TILES[0].length;
+  const used = WALL_TILES.map(row => row.split('').map(() => false));
+  const rects: WallRect[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (WALL_TILES[r][c] !== '#' || used[r][c]) continue;
+      let w = 1;
+      while (c + w < cols && WALL_TILES[r][c + w] === '#' && !used[r][c + w]) w++;
+      let h = 1;
+      outer: while (r + h < rows) {
+        for (let i = 0; i < w; i++) if (WALL_TILES[r + h][c + i] !== '#' || used[r + h][c + i]) break outer;
+        h++;
+      }
+      for (let dr = 0; dr < h; dr++) for (let dc = 0; dc < w; dc++) used[r + dr][c + dc] = true;
+      rects.push({ x: c * TILE, y: r * TILE, w: w * TILE, h: h * TILE });
+    }
+  }
+  return rects;
+})();
 
 /** Centre showdown square — no walls inside; the anti-stall zone spares it. */
 export const CENTER_SQUARE = { x: 36, y: 27, w: 28, h: 43 }; // the brick square in the background art

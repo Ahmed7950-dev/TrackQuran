@@ -22,7 +22,7 @@ import { createGameChannel } from '../services/p2pGameChannel';
 import {
   READ_SECONDS, MAX_UPGRADES, BONUS_AMMO_PER_EXTRA, VERSE_SURAHS,
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
-  ARENA_BG_IMAGE, ARENA_WALLS_IMAGE,
+  ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -668,17 +668,17 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const joyKnobRef = useRef<HTMLDivElement>(null);
   const camRef = useRef({ x: 50, y: 50 });
   const bgImgRef = useRef<HTMLImageElement | null>(null);
-  const wallsImgRef = useRef<HTMLImageElement | null>(null);
+  const blockImgRef = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
     if (ARENA_BG_IMAGE) {
       const img = new Image();
       img.onload = () => { bgImgRef.current = img; };
       img.src = ARENA_BG_IMAGE;
     }
-    if (ARENA_WALLS_IMAGE) {
+    if (BLOCK_SPRITE) {
       const img = new Image();
-      img.onload = () => { wallsImgRef.current = img; };
-      img.src = ARENA_WALLS_IMAGE;
+      img.onload = () => { blockImgRef.current = img; };
+      img.src = BLOCK_SPRITE;
     }
   }, []);
 
@@ -840,19 +840,24 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       ctx.strokeRect(px(0), py(0), 100 * scale, 100 * scale);
     }
 
-    // Wall ART layered over the ground (visuals only — the WALLS rects are the
-    // collision truth, generated from this very image). Fallback: draw the
-    // collision rects flat if the art hasn't loaded yet.
-    if (wallsImgRef.current) {
-      ctx.drawImage(wallsImgRef.current, px(0), py(0), 100 * scale, 100 * scale);
-    } else {
-      ctx.fillStyle = '#e7d8a8';
-      for (const w of WALLS) ctx.fillRect(px(w.x), py(w.y), w.w * scale, w.h * scale);
-    }
-
-    // painter's list: entities sorted by base Y
+    // painter's list: entities AND obstacle blocks sorted by base Y, so
+    // players walk behind and in front of the 3D blocks (Brawl Stars look)
     type Item = { y: number; draw: () => void };
     const items: Item[] = [];
+    const blockH = TILE * BLOCK_ASPECT; // sprite extends above its tile
+    for (const t of WALL_TILE_LIST) {
+      items.push({ y: t.y + TILE, draw: () => {
+        const img = blockImgRef.current;
+        if (img) {
+          ctx.drawImage(img, px(t.x), py(t.y + TILE - blockH), TILE * scale, blockH * scale);
+        } else {
+          ctx.fillStyle = '#5f8532';
+          ctx.fillRect(px(t.x), py(t.y), TILE * scale, TILE * scale);
+          ctx.fillStyle = '#79a63f';
+          ctx.fillRect(px(t.x), py(t.y - 1.5), TILE * scale, 1.5 * scale);
+        }
+      } });
+    }
     for (const p of g.players) {
       if (!p.fighting || (!p.alive && ph !== 'victory')) continue;
       if (!p.alive) continue;
