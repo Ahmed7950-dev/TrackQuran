@@ -52,6 +52,7 @@
       // Initialize font preference
       const savedFont = localStorage.getItem('quranicFont') || 'Hafs';
       document.documentElement.style.setProperty('--quranic-font', savedFont);
+      document.documentElement.dataset.quranFont = savedFont; // per-font CSS (e.g. Husrev stroke) from first paint
     </script>
     <script src="https://unpkg.com/heroicons@2.1.3/24/outline/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
