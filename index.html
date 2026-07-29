@@ -166,6 +166,7 @@
         font-weight: normal;
         font-style: normal;
         font-display: block;
+        size-adjust: 130%; /* face draws small for its em box — match Hafs' visual size */
         unicode-range: U+0600-U+06FF, U+0750-U+077F, U+08A0-U+08FF,
                        U+FB50-U+FDFF, U+FE70-U+FEFF, U+0020-U+002F;
       }
@@ -233,6 +234,12 @@
       }
       .font-quranic {
         font-family: var(--quranic-font, 'Hafs'), 'Amiri Quran', serif;
+      }
+      /* The Hüsrev digital cut is lighter than the printed Turkish mushaf —
+         thicken strokes to match the page (stroke inherits the text colour,
+         so tajweed colouring still works). */
+      html[data-quran-font="Husrev"] .font-quranic {
+        -webkit-text-stroke: 0.026em currentColor;
       }
       @keyframes glow {
         0%, 100% { box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.6); }

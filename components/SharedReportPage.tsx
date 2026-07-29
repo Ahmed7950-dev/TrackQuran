@@ -89,6 +89,7 @@ const QURANIC_FONTS = [
   { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
   { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
+  { name: 'Husrev', displayName: 'Turkish (Hüsrev Hattı)' },
 ] as const;
 
 // ── main page ─────────────────────────────────────────────────────────────────
@@ -163,6 +164,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   // Persist font choice
   useEffect(() => {
     document.documentElement.style.setProperty('--quranic-font', quranicFont);
+    document.documentElement.dataset.quranFont = quranicFont; // weight-match hook
     localStorage.setItem('quranicFont', quranicFont);
   }, [quranicFont]);
 

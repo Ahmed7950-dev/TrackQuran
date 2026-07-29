@@ -227,9 +227,6 @@ const NOTE_SUGGESTION_GROUPS: string[][] = [
 const CUSTOM_NOTE_SUGGESTIONS_KEY = 'quranful:mistakeNoteSuggestions';
 // Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';
-// Quran script style. Absent = Madinah ('Hafs'); 'husrev' = Turkish mushaf
-// style (Ahmed Hüsrev Altınbaşak hat, as in Hayrat-printed Qurans).
-const QURAN_FONT_PREF_KEY = 'quranful:quranFont';
 const loadCustomNoteSuggestions = (): string[] => {
     try {
         const raw = localStorage.getItem(CUSTOM_NOTE_SUGGESTIONS_KEY);
@@ -833,12 +830,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
-    const [turkishFont, setTurkishFont] = useState(() => {
-        try { return localStorage.getItem(QURAN_FONT_PREF_KEY) === 'husrev'; } catch { return false; }
-    });
-    useEffect(() => {
-        try { localStorage.setItem(QURAN_FONT_PREF_KEY, turkishFont ? 'husrev' : 'hafs'); } catch { /* private mode / quota */ }
-    }, [turkishFont]);
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
         if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
@@ -2855,8 +2846,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
 
     return (
-        <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8"
-            style={turkishFont ? ({ '--quranic-font': "'Husrev'" } as React.CSSProperties) : undefined}>
+        <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
             {/* Cursor-sharing indicator (tutor side) — confirms the student can
                 see where the tutor is pointing. Toggle with the C key. */}
             {cursorModeActive && !readOnly && (
@@ -3163,13 +3153,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                     className={`me-1.5 w-5 h-5 flex-shrink-0 rounded-full border flex items-center justify-center text-xs font-bold transition-colors ${showTajweed ? 'border-emerald-400 text-emerald-600 dark:text-emerald-300 dark:border-emerald-600 hover:bg-emerald-200/60 dark:hover:bg-emerald-800/50' : 'border-slate-300 text-slate-400 dark:border-gray-600 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
                                                 >i</button>
                                             </div>
-
-                                            {/* Quran script style: Madinah (Hafs) vs Turkish (Hüsrev hat) */}
-                                            <div className="border-t border-slate-100 dark:border-gray-700 my-1" />
-                                            <button onClick={() => setTurkishFont(p => !p)} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${turkishFont ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                <span className="w-4 h-4 flex items-center justify-center text-sm">🕌</span>
-                                                Turkish script
-                                            </button>
 
                                             {/* Teacher's Notes */}
                                             {!readOnly && (<>

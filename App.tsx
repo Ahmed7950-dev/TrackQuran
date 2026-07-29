@@ -112,6 +112,7 @@ const QURANIC_FONTS = [
   { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
   { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
+  { name: 'Husrev', displayName: 'Turkish (Hüsrev Hattı)' },
 ] as const;
 
 const useQuranicFont = () => {
@@ -122,6 +123,7 @@ const useQuranicFont = () => {
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--quranic-font', font);
+    root.dataset.quranFont = font; // lets CSS weight-match specific fonts
     localStorage.setItem('quranicFont', font);
   }, [font]);
 
