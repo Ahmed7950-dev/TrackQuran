@@ -787,7 +787,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     if (isGuest || netMode !== 'online') return;
     const id = onlineRoomId ?? crypto.randomUUID();
     if (!onlineRoomId) { setOnlineRoomId(id); return; } // re-run with the id set
-    const ch = createGameChannel(`letter-race:${id}`, 'host', { p2p: false }); // room = 1:N, Supabase broadcast only
+    const ch = createGameChannel(`letter-race:${id}`, 'host'); // host-star: one datachannel per guest
     // the room opens with just the host — guests join via ready below
     game.current.players = [newRacer(50, uiRef.current.p1Name.trim() || 'Player 1', uiRef.current.p1Char, 'host')];
     syncStageModels();
@@ -870,7 +870,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const ui = uiRef.current;
       g.players[0].name = ui.p1Name.trim() || 'Player 1';
       g.players[0].charKey = ui.p1Char;
-      ch.send({ type: 'broadcast', event: 'state', payload: {
+      ch.streamSend('state', {
         ph: phaseRef.current, cn: ui.countNum, sc: scoresRef.current, rw: ui.roundWinner,
         tg: g.target, fm: letterForm, pr: g.targetPrompt, md: wordMode,
         bx: g.boxes.map(b => ({ l: b.letter, x: Math.round(b.x * 10) / 10, c: b.color, t: b.taken, g: b.isTarget })),
@@ -883,7 +883,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
           fl: Math.max(0, Math.round(pl.fallenUntil - now)),
         })),
         dr: g.dropped ? { x: g.dropped.x, y: g.dropped.y, a: Math.round(now - g.dropped.at) } : null,
-      } satisfies NetSnapshot });
+      } satisfies NetSnapshot);
     }, SNAPSHOT_MS);
     return () => window.clearInterval(iv);
   }, [isGuest, netMode, onlineRoomId, letterForm]);
@@ -891,7 +891,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   // ── GUEST: join the room, apply host snapshots, announce until heard ────────
   useEffect(() => {
     if (!isGuest || !roomId || !guestJoined) return;
-    const ch = createGameChannel(`letter-race:${roomId}`, 'guest', { p2p: false });
+    const ch = createGameChannel(`letter-race:${roomId}`, 'guest');
     ch.on('broadcast', { event: 'state' }, ({ payload: s }: { payload: NetSnapshot }) => {
       const now = performance.now();
       hostSnapRef.current = s;
@@ -1014,13 +1014,13 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       const p = idx >= 0 ? game.current.players[idx] : null;
       if (!p) return; // not in the roster yet
       const now = performance.now();
-      ch.send({ type: 'broadcast', event: 'input', payload: {
+      ch.streamSend('input', {
         gid: gidRef.current,
         x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100,
         h: Math.round(p.heading), sp: Math.round(p.speed * 1000) / 1000,
         ta: now < p.tackleUntil ? Math.round(TACKLE_MS - (p.tackleUntil - now)) : -1,
         ja: now - p.jumpAt < JUMP_ANIM_MS ? Math.round(now - p.jumpAt) : -1,
-      } satisfies GuestInput });
+      } satisfies GuestInput);
     }, SNAPSHOT_MS);
     return () => window.clearInterval(iv);
   }, [isGuest, guestJoined]);

@@ -1392,9 +1392,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
     if (status !== 'playing' || gameMode !== '2p-online' || !channelRef.current || isP2) return;
     const id = setInterval(() => {
       const now = Date.now();
-      channelRef.current?.send({
-        type: 'broadcast', event: 'state',
-        payload: {
+      channelRef.current?.streamSend('state', {
           p1: { x: planePos.current.x, y: planePos.current.y, tilt: tiltRef.current, crashed: p1CrashedRef.current },
           p2: { x: p2Pos.current.x,    y: p2Pos.current.y,    tilt: p2Tilt.current,  crashed: p2CrashedRef.current },
           fuels: [fuelRef.current, p2FuelRef.current] as [number, number],
@@ -1413,8 +1411,7 @@ const AirplaneGame: React.FC<AirplaneGameProps> = ({
           p1Name, p2Name,
           p1Speed: Math.sqrt(velRef.current.x ** 2 + velRef.current.y ** 2) / PLANE_MAX_VEL,
           p2Speed: Math.sqrt(p2Vel.current.x    ** 2 + p2Vel.current.y    ** 2) / PLANE_MAX_VEL,
-        } satisfies P2Snapshot,
-      });
+        } satisfies P2Snapshot);
     }, 33);
     return () => clearInterval(id);
   }, [status, gameMode, isP2, letterForm, queue.length, p1Plane, p2RemotePlane]);

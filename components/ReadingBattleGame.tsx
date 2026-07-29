@@ -268,7 +268,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     if (isGuest) return;
     const id = onlineRoomId ?? crypto.randomUUID();
     if (!onlineRoomId) { setOnlineRoomId(id); return; }
-    const ch = createGameChannel(`reading-battle:${id}`, 'host', { p2p: false });
+    const ch = createGameChannel(`reading-battle:${id}`, 'host');
     world.current.players = [newPlayer('host', 'Tutor', myChar, true, false)];
 
     ch.on('broadcast', { event: 'hello' }, ({ payload }: { payload: { gid: string; name: string; charKey: string } }) => {
@@ -383,7 +383,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         wn: g.winner,
         now: Date.now(),
       };
-      ch.send({ type: 'broadcast', event: 'state', payload: snap });
+      ch.streamSend('state', snap);
     }, SNAPSHOT_MS);
     return () => window.clearInterval(iv);
   }, [isGuest, onlineRoomId]);
@@ -391,7 +391,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   /* ── guest: join + apply snapshots ──────────────────────────────────────── */
   useEffect(() => {
     if (!isGuest || !roomId || !joined) return;
-    const ch = createGameChannel(`reading-battle:${roomId}`, 'guest', { p2p: false });
+    const ch = createGameChannel(`reading-battle:${roomId}`, 'guest');
     ch.on('broadcast', { event: 'state' }, ({ payload: s }: { payload: Snapshot }) => {
       hostSnapRef.current = s;
       clockSkewRef.current = s.now - Date.now();
@@ -472,10 +472,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const ch = channelRef.current;
       const p = me();
       if (!ch || !p) return;
-      ch.send({ type: 'broadcast', event: 'input', payload: {
+      ch.streamSend('input', {
         gid: myGid, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, h: Math.round(p.h),
         atkN: actsRef.current.atk, fireN: actsRef.current.fire, nadeN: actsRef.current.nade,
-      } });
+      });
     }, INPUT_MS);
     return () => window.clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -833,7 +833,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         bs: g.bubbles.filter(b => !b.taken || now - b.takenAt < 400).map(b => ({ id: b.id, letter: b.letter, x: b.x, y: b.y, color: b.color, taken: b.taken })),
         ds: g.dragons,
       };
-      channelRef.current?.send({ type: 'broadcast', event: 'state', payload: snap });
+      channelRef.current?.streamSend('state', snap);
     }, SNAPSHOT_MS);
     return () => clearInterval(iv);
   }, [mode, isP2, phase, bgUrl]);
@@ -999,7 +999,7 @@ const FlappyLettersGame = ({ letters, letterForm = 'isolated', onExit, roomId: p
         failAge: Math.min(2000, now - me.failAt), starAge: Math.min(2000, now - me.starAt),
         flapAge: Math.min(1000, now - me.flapAt),
       };
-      channelRef.current.send({ type: 'broadcast', event: 'input', payload: gs });
+      channelRef.current.streamSend('input', gs);
     }, SNAPSHOT_MS);
     return () => clearInterval(iv);
   }, [isP2, guestJoined, gotFirstSnap]);
