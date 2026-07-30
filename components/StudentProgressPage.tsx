@@ -12,8 +12,7 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
-import MistakeRing, { FIXED_MISTAKE_LABELS } from './MistakeRing';
-import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
+import MistakeRing, { computeRingData, translitOf } from './MistakeRing';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -33,6 +32,8 @@ interface StudentProgressPageProps {
   onClearMistake: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number) => void;
   /** Persists the student's permanent habit flags (outer ring toggles). */
   onSetPermanentFlags?: (studentId: string, flags: string[]) => void;
+  /** Rewrites history: folds custom mistake notes into a fixed ring label. */
+  onReassignMistakes?: (studentId: string, fromLabels: string[], toLabel: string) => void;
   onLogRecitationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
   onRemoveRecitationAchievement: (studentId: string, achievementId: string) => void;
   onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
@@ -222,20 +223,6 @@ const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
 // Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';
 
-// ── Letter transliteration (the ring's "letter recognition" segment) ─────────
-const TRANSLIT: Record<string, string> = {
-    'ا': 'alif', 'أ': 'alif', 'إ': 'alif', 'آ': 'alif', 'ٱ': 'alif', 'ب': 'ba', 'ت': 'ta',
-    'ث': 'tha', 'ج': 'jeem', 'ح': 'haa', 'خ': 'kha', 'د': 'dal', 'ذ': 'dhal', 'ر': 'ra',
-    'ز': 'zay', 'س': 'seen', 'ش': 'sheen', 'ص': 'saad', 'ض': 'daad', 'ط': 'taa', 'ظ': 'dhaa',
-    'ع': 'ayn', 'غ': 'ghayn', 'ف': 'fa', 'ق': 'qaf', 'ك': 'kaf', 'ل': 'lam', 'م': 'meem',
-    'ن': 'noon', 'ه': 'ha', 'و': 'waw', 'ي': 'ya', 'ى': 'ya', 'ئ': 'hamza', 'ؤ': 'hamza',
-    'ء': 'hamza', 'ة': 'ta marbuta',
-};
-const translitOf = (glyph: string): string => {
-    for (const ch of glyph) { const t = TRANSLIT[ch]; if (t) return t; }
-    return glyph.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u200D]/g, '') || glyph;
-};
-
 // Component for rendering a letter with error marking
 const LetterWithError: React.FC<{
     letter: string;
@@ -261,6 +248,7 @@ const LetterWithError: React.FC<{
     ringCustomCounts?: Array<[string, number]>;      // custom mistake label → count
     ringPermFlags?: string[];                        // permanent habit flags
     onToggleFlag?: (flag: string) => void;
+    onReassign?: (fromLabels: string[], toLabel: string) => void;
 }> = ({
     letter,
     letterKey,
@@ -285,6 +273,7 @@ const LetterWithError: React.FC<{
     ringCustomCounts = [],
     ringPermFlags = [],
     onToggleFlag,
+    onReassign,
 }) => {
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
@@ -350,6 +339,7 @@ const LetterWithError: React.FC<{
                             onTextSubmit(letterKey, cur ? `${cur} ${text}` : text);
                         }}
                         onToggleFlag={(f) => onToggleFlag?.(f)}
+                        onReassign={onReassign}
                         onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
                         onCancel={onTextCancel}
                     />
@@ -612,7 +602,7 @@ const LogOption: React.FC<{ src: string; label: string; sub?: string; color: 'or
     );
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -684,49 +674,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
-    // ── Mistake ring data: category counts across the whole student ─────────
-    // Historical notes match case-insensitively ('short' → Short), known
-    // aliases fold in (Stretch → Long), bare letter names (jeem, hamzah…)
-    // count as Letter recognition, and green tajweed-mode logs are excluded.
-    const ringData = useMemo(() => {
-        const fixedByLc = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
-        const aliases: Record<string, string> = { 'stretch': 'Long' };
-        const letterNames = new Set([
-            ...Object.values(TRANSLIT),
-            'hamzah', 'alef', 'aleph', 'jim', 'geem', 'ain', 'ayin', 'ghain', 'zain', 'thal',
-            'dhaal', 'sad', 'dad', 'shin', 'sin', 'teh', 'tah', 'heh', 'mim', 'miim', 'nun',
-            'baa', 'yaa', 'waaw', 'raa', 'daal', 'kaaf', 'laam', 'qaaf', 'faa', 'khaa',
-        ]);
-        const counts: Record<string, number> = {};
-        const custom = new Map<string, number>();
-        for (const [k, m] of Object.entries(studentMistakes)) {
-            if (!isLetterMistakeKey(k)) continue;
-            if (m.errorType === 'tajweed') continue;   // green logs stay out of the ring
-            const raw = m.errorText?.trim();
-            if (!raw) continue;
-            const lc = raw.toLowerCase();
-            if (lc.startsWith('letter recognition') || letterNames.has(lc)) {
-                counts['Letter recognition'] = (counts['Letter recognition'] ?? 0) + 1;
-            } else if (fixedByLc.has(lc)) {
-                const canon = fixedByLc.get(lc)!;
-                counts[canon] = (counts[canon] ?? 0) + 1;
-            } else if (aliases[lc]) {
-                counts[aliases[lc]] = (counts[aliases[lc]] ?? 0) + 1;
-            } else {
-                custom.set(raw, (custom.get(raw) ?? 0) + 1);
-            }
-        }
-        const customCounts = [...custom.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-        return { counts, customCounts };
-    }, [studentMistakes]);
-    const ringPermFlags = useMemo(
-        () => studentMistakes[PERM_MISTAKE_FLAGS_KEY]?.errorText?.split('|').filter(Boolean) ?? [],
-        [studentMistakes]);
+    const ringData = useMemo(() => computeRingData(studentMistakes), [studentMistakes]);
+    const ringPermFlags = ringData.permFlags;
     const handleToggleFlag = useCallback((flag: string) => {
         if (readOnly || !onSetPermanentFlags) return;
         const next = ringPermFlags.includes(flag) ? ringPermFlags.filter(f => f !== flag) : [...ringPermFlags, flag];
         onSetPermanentFlags(student.id, next);
     }, [readOnly, onSetPermanentFlags, ringPermFlags, student.id]);
+
+    const handleReassign = useCallback((fromLabels: string[], toLabel: string) => {
+        if (readOnly || !onReassignMistakes) return;
+        onReassignMistakes(student.id, fromLabels, toLabel);
+    }, [readOnly, onReassignMistakes, student.id]);
 
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
@@ -2565,6 +2524,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ringCustomCounts={ringData.customCounts}
                                     ringPermFlags={ringPermFlags}
                                     onToggleFlag={handleToggleFlag}
+                                    onReassign={handleReassign}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
                                     markLineHeight={showTranslation ? 2.8 : 2.6}
@@ -3247,6 +3207,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ringCustomCounts={ringData.customCounts}
                                     ringPermFlags={ringPermFlags}
                                     onToggleFlag={handleToggleFlag}
+                                    onReassign={handleReassign}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
                                                                             markLineHeight={2.2}
