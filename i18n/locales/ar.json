@@ -1342,6 +1342,10 @@
     "pdfNotLoaded": "لم يتم تحميل مكتبة PDF. تحقّق من اتصالك بالإنترنت وأعد التحميل.",
     "pdfError": "عذرًا، حدث خطأ أثناء إنشاء ملف PDF.",
     "terms": "السداد مستحق عند الاستلام.",
-    "footerThanks": "شكرًا لتعلّمك معنا"
+    "footerThanks": "شكرًا لتعلّمك معنا",
+    "progressTitle": "تقدّم الطلاب",
+    "progressStudentPlaceholder": "اسم الطالب…",
+    "progressPointPlaceholder": "أضف نقطة تقدّم…",
+    "addStudent": "إضافة طالب"
   }
 }

@@ -36,6 +36,21 @@ function attendedKeysInMonth(student: Student, monthDate: Date): string[] {
   return [...keys].sort(); // ascending YYYY-MM-DD
 }
 
+// ── Per-month student progress (multi-student bills) ─────────────────────────
+// Stored as JSON inside the existing bill_improvement_note column (no DB
+// migration): { v: 1, months: { 'YYYY-MM': [{ name, points[] }] } }.
+// A value that doesn't parse is a legacy plain-text note and renders as before.
+export type BillProgressEntry = { name: string; points: string[] };
+type BillProgressStore = { v: 1; months: Record<string, BillProgressEntry[]> };
+const parseProgressStore = (raw?: string): BillProgressStore | null => {
+  if (!raw) return null;
+  try {
+    const j = JSON.parse(raw);
+    if (j && j.v === 1 && j.months && typeof j.months === 'object') return j as BillProgressStore;
+  } catch { /* legacy plain text */ }
+  return null;
+};
+
 interface BillPageProps {
   student: Student;
   students: Student[];
@@ -65,7 +80,11 @@ const BillPage: React.FC<BillPageProps> = ({
   // ── Editable per-student ──
   const [studentName, setStudentName] = useState(student.billStudentName ?? student.name);
   const [payerName, setPayerName] = useState(student.billPayerName ?? '');
-  const [improvementNote, setImprovementNote] = useState(student.billImprovementNote ?? '');
+  const parsedStore = useMemo(() => parseProgressStore(student.billImprovementNote), [student.billImprovementNote]);
+  const legacyNote = parsedStore ? '' : (student.billImprovementNote ?? '');
+  const [progressStore, setProgressStore] = useState<BillProgressStore>(() => parsedStore ?? { v: 1, months: {} });
+  const [newProgressName, setNewProgressName] = useState('');
+  const [pointDrafts, setPointDrafts] = useState<Record<number, string>>({});
   const [priceInput, setPriceInput] = useState(
     student.billPriceOverride != null ? String(student.billPriceOverride)
       : student.hourlyRate != null ? String(student.hourlyRate) : ''
@@ -114,19 +133,39 @@ const BillPage: React.FC<BillPageProps> = ({
   }, [student]);
 
   // ── Persistence (fire-and-forget on blur) ──
+  const serializeNote = useCallback((store: BillProgressStore) =>
+    Object.keys(store.months).length ? JSON.stringify(store) : (legacyNote.trim() || undefined), [legacyNote]);
   const persistStudentBill = useCallback(() => {
     onUpdateStudent({
       ...student,
       billStudentName: studentName.trim() && studentName.trim() !== student.name ? studentName.trim() : undefined,
       billPayerName: payerName.trim() || undefined,
-      billImprovementNote: improvementNote.trim() || undefined,
+      billImprovementNote: serializeNote(progressStore),
       billPriceOverride: priceInput.trim() === '' ? undefined : (Number(priceInput) || undefined),
       billDurations: Object.keys(durations).length ? durations : undefined,
     });
-  }, [student, studentName, payerName, improvementNote, priceInput, durations, onUpdateStudent]);
+  }, [student, studentName, payerName, progressStore, priceInput, durations, onUpdateStudent]);
   const persistTutorBill = useCallback(() => {
     onSaveTutorBillInfo({ receiverName: receiverName.trim(), iban: iban.trim() });
   }, [receiverName, iban, onSaveTutorBillInfo]);
+
+  // Progress entries belong to the billed month; adds/removes persist at once.
+  const monthKey = `${billMonth.getFullYear()}-${pad(billMonth.getMonth() + 1)}`;
+  const progressEntries: BillProgressEntry[] = progressStore.months[monthKey] ?? [];
+  const mutateProgress = (next: BillProgressEntry[], save = true) => {
+    const months = { ...progressStore.months };
+    if (next.length) months[monthKey] = next; else delete months[monthKey];
+    const store: BillProgressStore = { v: 1, months };
+    setProgressStore(store);
+    if (save) onUpdateStudent({
+      ...student,
+      billStudentName: studentName.trim() && studentName.trim() !== student.name ? studentName.trim() : undefined,
+      billPayerName: payerName.trim() || undefined,
+      billImprovementNote: serializeNote(store),
+      billPriceOverride: priceInput.trim() === '' ? undefined : (Number(priceInput) || undefined),
+      billDurations: Object.keys(durations).length ? durations : undefined,
+    });
+  };
 
   // ── Calendar grid (Monday-first) ──
   const calYear = billMonth.getFullYear(), calMonth = billMonth.getMonth();
@@ -281,9 +320,49 @@ const BillPage: React.FC<BillPageProps> = ({
           <p className="text-[11px] text-slate-400 mt-1">{t('bill.lessonsHint')}</p>
         </div>
 
+        {/* Per-student progress points for the billed month */}
         <div>
-          <label className={labelCls}>{t('bill.improvementNote')}</label>
-          <textarea value={improvementNote} onChange={e => setImprovementNote(e.target.value)} onBlur={persistStudentBill} placeholder={t('bill.improvementNotePlaceholder')} rows={2} className={inputCls} />
+          <label className={labelCls}>{t('bill.progressTitle')} — {periodStr}</label>
+          <div className="space-y-2">
+            {progressEntries.map((en, si) => (
+              <div key={si} className="rounded-xl border border-slate-200 dark:border-gray-600 p-2.5 bg-slate-50 dark:bg-gray-700/40">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <input value={en.name}
+                    onChange={e => mutateProgress(progressEntries.map((x, i) => i === si ? { ...x, name: e.target.value } : x), false)}
+                    onBlur={persistStudentBill}
+                    className="flex-1 bg-transparent text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none border-b border-transparent focus:border-teal-400" />
+                  <button onClick={() => mutateProgress(progressEntries.filter((_, i) => i !== si))}
+                    className="w-6 h-6 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 text-sm" aria-label="remove student">✕</button>
+                </div>
+                <div className="space-y-1">
+                  {en.points.map((pt, pi) => (
+                    <div key={pi} className="flex items-start gap-2 rounded-lg bg-teal-50 dark:bg-teal-900/30 px-2.5 py-1.5">
+                      <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">{pi + 1}</span>
+                      <span className="flex-1 text-sm text-slate-700 dark:text-slate-200 leading-snug">{pt}</span>
+                      <button onClick={() => mutateProgress(progressEntries.map((x, i) => i === si ? { ...x, points: x.points.filter((_, j) => j !== pi) } : x))}
+                        className="text-slate-400 hover:text-red-500 text-xs mt-0.5" aria-label="remove point">✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <input value={pointDrafts[si] ?? ''}
+                    onChange={e => setPointDrafts(d => ({ ...d, [si]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && (pointDrafts[si] ?? '').trim()) { mutateProgress(progressEntries.map((x, i) => i === si ? { ...x, points: [...x.points, pointDrafts[si].trim()] } : x)); setPointDrafts(d => ({ ...d, [si]: '' })); } }}
+                    placeholder={t('bill.progressPointPlaceholder')} className={inputCls} />
+                  <button onClick={() => { const v = (pointDrafts[si] ?? '').trim(); if (!v) return; mutateProgress(progressEntries.map((x, i) => i === si ? { ...x, points: [...x.points, v] } : x)); setPointDrafts(d => ({ ...d, [si]: '' })); }}
+                    className="px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold flex-shrink-0">＋</button>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <input value={newProgressName}
+                onChange={e => setNewProgressName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && newProgressName.trim()) { mutateProgress([...progressEntries, { name: newProgressName.trim(), points: [] }]); setNewProgressName(''); } }}
+                placeholder={t('bill.progressStudentPlaceholder')} className={inputCls} />
+              <button onClick={() => { if (!newProgressName.trim()) return; mutateProgress([...progressEntries, { name: newProgressName.trim(), points: [] }]); setNewProgressName(''); }}
+                className="px-3 py-2 rounded-lg bg-slate-700 dark:bg-gray-600 hover:bg-slate-800 text-white text-xs font-bold whitespace-nowrap flex-shrink-0">＋ {t('bill.addStudent')}</button>
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -407,13 +486,32 @@ const BillPage: React.FC<BillPageProps> = ({
             </table>
           </section>
 
-          {/* Improvement note */}
-          {improvementNote.trim() && (
+          {/* Student progress — numbered highlighted lines, grouped per student */}
+          {progressEntries.length > 0 ? (
+            <section className="mt-5 rounded-xl border border-teal-100 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-teal-600 mb-2">{t('bill.progressTitle')} — {periodStr}</p>
+              <div className="space-y-3">
+                {progressEntries.filter(en => en.name.trim() || en.points.length).map((en, si) => (
+                  <div key={si}>
+                    <p className="text-sm font-bold text-slate-900 mb-1">{en.name}</p>
+                    <div className="space-y-1">
+                      {en.points.map((pt, i) => (
+                        <div key={i} className="flex items-start gap-2 rounded-lg bg-teal-50 px-3 py-1.5">
+                          <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-px">{i + 1}</span>
+                          <span className="text-sm text-slate-700 leading-relaxed">{pt}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : legacyNote.trim() ? (
             <section className="mt-5 rounded-xl bg-teal-50 border border-teal-100 p-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-teal-600 mb-1">{t('bill.improvementNote')}</p>
-              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{improvementNote}</p>
+              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{legacyNote}</p>
             </section>
-          )}
+          ) : null}
 
           {/* BIG TOTAL */}
           <section className="mt-6 flex justify-end">
