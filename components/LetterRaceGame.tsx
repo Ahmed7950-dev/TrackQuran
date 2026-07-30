@@ -152,7 +152,7 @@ const CHARACTERS = [
   { key: 'doll',      name: 'Lily',   model: '/models/doll.glb?v=1',      scale: 0.8,  portrait: '/sprites/race-doll-front.png?v=1', face: '/sprites/profile-doll.jpg?v=1' },
   { key: 'zoro',      name: 'Zoro',   model: '/models/zoro.glb?v=1',      scale: 0.9,  portrait: '/sprites/race-zoro-front.png?v=1', face: '/sprites/profile-zoro.jpg?v=1' },
   { key: 'panther',   name: 'Panther', model: '/models/panther.glb?v=1',  scale: 0.92, portrait: '/sprites/race-panther-front.png?v=1', face: '/sprites/profile-panther.jpg?v=1' },
-  { key: 'bunny',     name: 'Bunny',  model: '/models/bunny.glb?v=1',     scale: 0.82, portrait: '/sprites/race-bunny-front.png?v=1', face: '/sprites/profile-bunny.jpg?v=1' },
+  { key: 'bunny',     name: 'Bunny',  model: '/models/bunny.glb?v=1',     scale: 0.82, portrait: '/sprites/race-bunny-front.png?v=1', face: '/sprites/profile-bunny.jpg?v=2' },
   { key: 'steve',     name: 'Steve',  model: '/models/steve.glb?v=1',     scale: 0.85, portrait: '/sprites/race-steve-front.png?v=1', face: '/sprites/profile-steve.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
