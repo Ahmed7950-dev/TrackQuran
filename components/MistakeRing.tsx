@@ -25,6 +25,13 @@ export interface MistakeArea {
  *  is never stored as this literal string. */
 export const EMPTY_MISTAKE_LABEL = '(No comment)';
 
+/** Custom (free-text) mistakes only count from this moment on — the tutor asked
+ *  for a clean inner ring, since years of old free-text notes were noise. Notes
+ *  that map onto a FIXED label (Fatha, sukoon → Sakin, letter names, …) are
+ *  unaffected and still fold in from all of history. Clear this constant to
+ *  bring the old custom notes back. */
+export const CUSTOM_MISTAKES_SINCE = Date.parse('2026-07-30T18:00:00Z');
+
 // Fixed areas in the tutor's required order. The logged text = sub label
 // (Letter recognition logs "Letter recognition (<translit>)" — see onPick).
 export const MISTAKE_AREAS: MistakeArea[] = [
@@ -104,7 +111,10 @@ export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: 
     } else if (aliases[lc]) {
       counts[aliases[lc]] = (counts[aliases[lc]] ?? 0) + 1;
     } else {
-      custom.set(raw, (custom.get(raw) ?? 0) + 1);
+      // Free-text mistake: only from the cutoff on (older ones are ignored
+      // entirely — they don't show in the ring and don't count in the total).
+      const t = m.date ? Date.parse(m.date) : NaN;
+      if (!isNaN(t) && t >= CUSTOM_MISTAKES_SINCE) custom.set(raw, (custom.get(raw) ?? 0) + 1);
     }
   }
   const customAll = [...custom.entries()].sort((a, b) => b[1] - a[1]);
