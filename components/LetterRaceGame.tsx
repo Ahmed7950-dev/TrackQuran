@@ -136,7 +136,7 @@ const CHARACTERS = [
   { key: 'chibi',     name: 'Mei',    model: '/models/chibi.glb?v=7',     scale: 0.78, portrait: '/sprites/race-chibi-front.png?v=1', face: '/sprites/profile-chibi.jpg?v=1' },
   { key: 'tiger',     name: 'Namir',  model: '/models/tiger.glb?v=7',     scale: 0.92, portrait: '/sprites/race-tiger-front.png?v=1', face: '/sprites/profile-tiger.jpg?v=1' },
   { key: 'alien',     name: 'Cosmo',  model: '/models/alien.glb?v=7',     scale: 0.8,  portrait: '/sprites/race-alien-front.png?v=1', face: '/sprites/profile-alien.jpg?v=1' },
-  { key: 'goku',      name: 'Goku',   model: '/models/goku.glb?v=7',      scale: 0.85, portrait: '/sprites/race-goku-front.png?v=1', face: '/sprites/profile-goku.jpg?v=1' },
+  { key: 'goku',      name: 'Goku',   model: '/models/goku.glb?v=8',      scale: 0.88, portrait: '/sprites/race-goku-front.png?v=2', face: '/sprites/profile-goku.jpg?v=2' },
   { key: 'jaafar',    name: 'Jaafar', model: '/models/jaafar.glb?v=7',    scale: 0.95, portrait: '/sprites/race-jaafar-front.png?v=1', face: '/sprites/profile-jaafar.jpg?v=1' },
   { key: 'luffy',     name: 'Luffy',  model: '/models/luffy.glb?v=7',     scale: 0.88, portrait: '/sprites/race-luffy-front.png?v=1', face: '/sprites/profile-luffy.jpg?v=2' },
   { key: 'roshi',     name: 'Roshi',  model: '/models/roshi.glb?v=7',     scale: 0.8,  portrait: '/sprites/race-roshi-front.png?v=1', face: '/sprites/profile-roshi.jpg?v=1' },
@@ -151,6 +151,9 @@ const CHARACTERS = [
   { key: 'robot',     name: 'Robo',   model: '/models/robot.glb?v=1',     scale: 0.9,  portrait: '/sprites/race-robot-front.png?v=1', face: '/sprites/profile-robot.jpg?v=1' },
   { key: 'doll',      name: 'Lily',   model: '/models/doll.glb?v=1',      scale: 0.8,  portrait: '/sprites/race-doll-front.png?v=1', face: '/sprites/profile-doll.jpg?v=1' },
   { key: 'zoro',      name: 'Zoro',   model: '/models/zoro.glb?v=1',      scale: 0.9,  portrait: '/sprites/race-zoro-front.png?v=1', face: '/sprites/profile-zoro.jpg?v=1' },
+  { key: 'panther',   name: 'Panther', model: '/models/panther.glb?v=1',  scale: 0.92, portrait: '/sprites/race-panther-front.png?v=1', face: '/sprites/profile-panther.jpg?v=1' },
+  { key: 'bunny',     name: 'Bunny',  model: '/models/bunny.glb?v=1',     scale: 0.82, portrait: '/sprites/race-bunny-front.png?v=1', face: '/sprites/profile-bunny.jpg?v=1' },
+  { key: 'steve',     name: 'Steve',  model: '/models/steve.glb?v=1',     scale: 0.85, portrait: '/sprites/race-steve-front.png?v=1', face: '/sprites/profile-steve.jpg?v=1' },
 ] as const;
 type CharKey = typeof CHARACTERS[number]['key'];
 const charOf = (key: CharKey) => CHARACTERS.find(c => c.key === key) ?? CHARACTERS[0];
