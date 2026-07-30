@@ -16,21 +16,28 @@ import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
 
 export interface MistakeArea {
   name: string;
+  title: string;          // human label (study page)
   color: string;          // base hex
   subs: string[];         // logged errorText labels, in order
 }
 
+/** Sentinel for "marked but no comment" — logged as an EMPTY errorText, so it
+ *  is never stored as this literal string. */
+export const EMPTY_MISTAKE_LABEL = '(No comment)';
+
 // Fixed areas in the tutor's required order. The logged text = sub label
 // (Letter recognition logs "Letter recognition (<translit>)" — see onPick).
 export const MISTAKE_AREAS: MistakeArea[] = [
-  { name: 'length',   color: '#0ea5a4', subs: ['Short', 'Long'] },
-  { name: 'hold',     color: '#7c86f8', subs: ['Hold', 'No Hold'] },
-  { name: 'harakah',  color: '#f0a626', subs: ['Fatha', 'Kasrah', 'Dammah'] },
-  { name: 'silence',  color: '#f26d8c', subs: ['Silent', 'Not Silent'] },
-  { name: 'weight',   color: '#a186f2', subs: ['Heavy', 'Light'] },
-  { name: 'change',   color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
-  { name: 'stop',     color: '#8fc93a', subs: ['Stop', 'No Stop'] },
-  { name: 'recognition', color: '#f59a63', subs: ['Letter recognition'] },
+  { name: 'length',   title: 'Length',        color: '#0ea5a4', subs: ['Short', 'Long'] },
+  { name: 'hold',     title: 'Hold',          color: '#7c86f8', subs: ['Hold', 'No Hold'] },
+  { name: 'harakah',  title: 'Harakah',       color: '#f0a626', subs: ['Fatha', 'Kasrah', 'Dammah'] },
+  { name: 'sakin',    title: 'Sakin',         color: '#a8763e', subs: ['Sakin'] },
+  { name: 'silence',  title: 'Silence',       color: '#f26d8c', subs: ['Silent', 'Not Silent'] },
+  { name: 'weight',   title: 'Weight',        color: '#a186f2', subs: ['Heavy', 'Light'] },
+  { name: 'change',   title: 'Letter change', color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
+  { name: 'stop',     title: 'Stop',          color: '#8fc93a', subs: ['Stop', 'No Stop'] },
+  { name: 'recognition', title: 'Letter recognition', color: '#f59a63', subs: ['Letter recognition'] },
+  { name: 'noComment',   title: 'No comment',         color: '#94a3b8', subs: [EMPTY_MISTAKE_LABEL] },
 ];
 export const FIXED_MISTAKE_LABELS = new Set(MISTAKE_AREAS.flatMap(a => a.subs));
 
@@ -69,17 +76,22 @@ export interface RingData {
 /** Shared history → ring-data folding. Case-insensitive against the fixed
  *  labels, aliases fold in (Stretch → Long), bare letter names count as
  *  Letter recognition, green tajweed-mode logs are excluded. */
-export const computeRingData = (mistakes: Record<string, Mistake>): RingData => {
+export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: string | null): RingData => {
   const fixedByLc = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
-  const aliases: Record<string, string> = { 'stretch': 'Long' };
+  const aliases: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin' };
   const counts: Record<string, number> = {};
   const custom = new Map<string, number>();
   const confusions = new Map<string, number>();
   for (const [k, m] of Object.entries(mistakes)) {
     if (!isLetterMistakeKey(k)) continue;
+    if (excludeKey && k === excludeKey) continue;   // the letter being edited right now
     if (m.errorType === 'tajweed') continue;     // green logs stay out of the ring
     const raw = m.errorText?.trim();
-    if (!raw) continue;
+    if (!raw) {
+      // Marked with no comment — a highlight-only mistake.
+      counts[EMPTY_MISTAKE_LABEL] = (counts[EMPTY_MISTAKE_LABEL] ?? 0) + 1;
+      continue;
+    }
     const lc = raw.toLowerCase();
     const recogMatch = lc.match(/^letter recognition\s*\(?\s*([^)]*)/);
     if (recogMatch || LETTER_NAMES.has(lc)) {
@@ -112,6 +124,7 @@ export const computeRingData = (mistakes: Record<string, Mistake>): RingData => 
 const DISPLAY: Record<string, string> = {
   'No Hold': 'No hold', 'Not Silent': 'Not silent', 'Change to Alif': 'To Alif',
   'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
+  [EMPTY_MISTAKE_LABEL]: 'No comment',
 };
 const FLAG_DISPLAY: Record<string, string> = {
   'Fast reading': 'Fast', 'Choppy reading': 'Choppy',
@@ -324,7 +337,11 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
                 onChange={e => onTextChange?.(e.target.value)}
                 onKeyDown={e => {
                   e.stopPropagation();
-                  if (e.key === 'Enter') { e.preventDefault(); onSubmitText?.(); }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Enter with nothing typed = highlight-only mistake.
+                    if (errorText.trim()) onSubmitText?.(); else onPick?.(EMPTY_MISTAKE_LABEL);
+                  }
                   else if (e.key === 'Escape') { e.preventDefault(); onCancel?.(); }
                 }}
                 placeholder="Other…"

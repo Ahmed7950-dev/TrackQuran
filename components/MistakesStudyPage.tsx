@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Student } from '../types';
-import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
+import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES, EMPTY_MISTAKE_LABEL } from './MistakeRing';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mistakes Study — a read-only analysis of everything the tutor has logged for
@@ -80,7 +80,7 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
               <div key={area.name} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: area.color }} />
-                  <p className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200 capitalize">{area.name}</p>
+                  <p className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">{area.title}</p>
                   <span className="ms-auto text-xs font-bold text-slate-400">{total}× {data.total > 0 ? `· ${Math.round((total / data.total) * 100)}%` : ''}</span>
                 </div>
                 <div className="space-y-2">
@@ -89,7 +89,7 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
                     return (
                       <div key={label} className="flex items-center gap-2.5">
                         <span className={`w-24 flex-shrink-0 text-xs font-semibold ${c > 0 ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-500'}`}>
-                          {label === 'Letter recognition' ? 'Letter ?' : label}
+                          {label === 'Letter recognition' ? 'Letter ?' : label === EMPTY_MISTAKE_LABEL ? 'No comment' : label}
                         </span>
                         <Bar value={c} max={maxCount} color={area.color} />
                         <span className="w-7 text-end text-xs font-bold text-slate-500 dark:text-slate-400">{c || '—'}</span>

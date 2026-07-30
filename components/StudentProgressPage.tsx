@@ -12,7 +12,7 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
-import MistakeRing, { computeRingData, translitOf } from './MistakeRing';
+import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL } from './MistakeRing';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -334,6 +334,9 @@ const LetterWithError: React.FC<{
                         errorText={errorText}
                         onTextChange={onTextChange}
                         onPick={(label) => {
+                            // "No comment" logs an EMPTY note — the letter stays
+                            // highlighted with no text attached.
+                            if (label === EMPTY_MISTAKE_LABEL) { onTextSubmit(letterKey, ''); return; }
                             const text = label === 'Letter recognition' ? `Letter recognition (${translitOf(letter)})` : label;
                             const cur = errorText.trim();
                             onTextSubmit(letterKey, cur ? `${cur} ${text}` : text);
@@ -674,13 +677,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
-    const ringData = useMemo(() => computeRingData(studentMistakes), [studentMistakes]);
-    const ringPermFlags = ringData.permFlags;
-    const handleToggleFlag = useCallback((flag: string) => {
-        if (readOnly || !onSetPermanentFlags) return;
-        const next = ringPermFlags.includes(flag) ? ringPermFlags.filter(f => f !== flag) : [...ringPermFlags, flag];
-        onSetPermanentFlags(student.id, next);
-    }, [readOnly, onSetPermanentFlags, ringPermFlags, student.id]);
 
     const handleReassign = useCallback((fromLabels: string[], toLabel: string) => {
         if (readOnly || !onReassignMistakes) return;
@@ -744,6 +740,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Letter error marking state
     const [editingLetterKey, setEditingLetterKey] = useState<string | null>(null);
     const [errorTextInput, setErrorTextInput] = useState<string>('');
+
+    // The click that opens the ring pre-marks the letter with no note; exclude
+    // it so "No comment" doesn't light up merely because the ring is open.
+    const ringData = useMemo(() => computeRingData(studentMistakes, editingLetterKey), [studentMistakes, editingLetterKey]);
+    const ringPermFlags = ringData.permFlags;
+    const handleToggleFlag = useCallback((flag: string) => {
+        if (readOnly || !onSetPermanentFlags) return;
+        const next = ringPermFlags.includes(flag) ? ringPermFlags.filter(f => f !== flag) : [...ringPermFlags, flag];
+        onSetPermanentFlags(student.id, next);
+    }, [readOnly, onSetPermanentFlags, ringPermFlags, student.id]);
     
     // Memorization practice state (counter for tracking recitation count)
     const [memorizationCounter, setMemorizationCounter] = useState<number>(0);
