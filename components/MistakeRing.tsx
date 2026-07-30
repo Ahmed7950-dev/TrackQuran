@@ -239,8 +239,8 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
       middle.push(
         <g key={`m-${label}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => pickMiddle(label)}>
           <path d={sector(r0, r1, a0, a1)}
-            fill={area.color} fillOpacity={on ? 0.92 - si * 0.16 : 0.16}
-            stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5} />
+            fill={on ? area.color : '#ffffff'} fillOpacity={on ? 0.92 - si * 0.16 : 0.92}
+            stroke={on ? '#ffffff' : '#dbe2ea'} strokeOpacity={0.9} strokeWidth={1.5} />
           <ArcText id={`mr-m-${ai}-${si}`} r={(r0 + r1) / 2} a0={a0} a1={a1}
             text={display} fill={on ? '#ffffff' : '#3f4c5e'} size={11} />
         </g>
