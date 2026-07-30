@@ -21,14 +21,14 @@ export interface MistakeArea {
 // Fixed areas in the tutor's required order. The logged text = sub label
 // (Letter recognition logs "Letter recognition (<translit>)" — see onPick).
 export const MISTAKE_AREAS: MistakeArea[] = [
-  { name: 'length',   color: '#0d9488', subs: ['Short', 'Long'] },
-  { name: 'hold',     color: '#6366f1', subs: ['Hold', 'No Hold'] },
-  { name: 'harakah',  color: '#f59e0b', subs: ['Fatha', 'Kasrah', 'Dammah'] },
-  { name: 'silence',  color: '#f43f5e', subs: ['Silent', 'Not Silent'] },
-  { name: 'weight',   color: '#8b5cf6', subs: ['Heavy', 'Light'] },
-  { name: 'change',   color: '#0ea5e9', subs: ['Change to Alif', 'Change to Ha'] },
-  { name: 'stop',     color: '#84cc16', subs: ['Stop', 'No Stop'] },
-  { name: 'recognition', color: '#fb923c', subs: ['Letter recognition'] },
+  { name: 'length',   color: '#0ea5a4', subs: ['Short', 'Long'] },
+  { name: 'hold',     color: '#7c86f8', subs: ['Hold', 'No Hold'] },
+  { name: 'harakah',  color: '#f0a626', subs: ['Fatha', 'Kasrah', 'Dammah'] },
+  { name: 'silence',  color: '#f26d8c', subs: ['Silent', 'Not Silent'] },
+  { name: 'weight',   color: '#a186f2', subs: ['Heavy', 'Light'] },
+  { name: 'change',   color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
+  { name: 'stop',     color: '#8fc93a', subs: ['Stop', 'No Stop'] },
+  { name: 'recognition', color: '#f59a63', subs: ['Letter recognition'] },
 ];
 export const FIXED_MISTAKE_LABELS = new Set(MISTAKE_AREAS.flatMap(a => a.subs));
 
@@ -44,8 +44,8 @@ const FLAG_DISPLAY: Record<string, string> = {
   'Breaking up words': 'Breaks words', 'Articulation points': 'Articulation',
 };
 
-const CX = 210, CY = 210;
-const R_HOLE = 72, R_IN0 = 76, R_IN1 = 106, R_MID0 = 110, R_MID1 = 176, R_OUT0 = 180, R_OUT1 = 206;
+const CX = 215, CY = 215;
+const R_HOLE = 70, R_IN0 = 74, R_IN1 = 104, R_MID0 = 112, R_MID1 = 182, R_OUT0 = 190, R_OUT1 = 212;
 
 const pt = (r: number, aDeg: number): [number, number] => {
   const a = ((aDeg - 90) * Math.PI) / 180;
@@ -83,14 +83,6 @@ const ArcText: React.FC<{ id: string; r: number; a0: number; a1: number; text: s
       </g>
     );
   };
-/** Two-line curved label: name on the outer line, percentage on the inner. */
-const ArcLabel2: React.FC<{ id: string; rMid: number; a0: number; a1: number; text: string; sub?: string; fill: string; size?: number }> =
-  ({ id, rMid, a0, a1, text, sub, fill, size = 10 }) => (
-    <>
-      <ArcText id={`${id}-t`} r={sub ? rMid + 6 : rMid} a0={a0} a1={a1} text={text} fill={fill} size={size} />
-      {sub && <ArcText id={`${id}-s`} r={rMid - 7} a0={a0} a1={a1} text={sub} fill={fill} size={size - 1} weight={800} />}
-    </>
-  );
 
 interface MistakeRingProps {
   counts: Record<string, number>;              // fixed label → times logged (recognition aggregated)
@@ -113,6 +105,12 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
 }) => {
   const inputRef = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => { inputRef.current?.focus(); }, []);
+  React.useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalFixed = MISTAKE_AREAS.reduce((s, a) => s + a.subs.reduce((x, l) => x + (counts[l] ?? 0), 0), 0);
 
@@ -141,16 +139,14 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
       const r0 = r1 - layerH;
       const c = counts[label] ?? 0;
       const on = c > 0;
-      const pct = totalFixed > 0 ? Math.round((c / totalFixed) * 100) : 0;
       const display = DISPLAY[label] ?? label;
       middle.push(
         <g key={`m-${label}`} className="mr-seg" onClick={() => onPick(label)}>
           <path d={sector(r0, r1, a0, a1)}
-            fill={area.color} fillOpacity={on ? 0.9 - si * 0.18 : 0.14}
-            stroke={area.color} strokeOpacity={0.55} strokeWidth={1} />
+            fill={area.color} fillOpacity={on ? 0.92 - si * 0.16 : 0.16}
+            stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5} />
           <ArcText id={`mr-m-${ai}-${si}`} r={(r0 + r1) / 2} a0={a0} a1={a1}
-            text={on ? `${display} · ${pct}%` : display}
-            fill={on ? '#ffffff' : '#334155'} size={10.5} />
+            text={display} fill={on ? '#ffffff' : '#3f4c5e'} size={11} />
         </g>
       );
     });
@@ -164,8 +160,8 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
     return (
       <g key={`o-${flag}`} className="mr-seg" onClick={() => onToggleFlag(flag)}>
         <path d={sector(R_OUT0, R_OUT1, a0 + GAP / 2, a1 - GAP / 2)}
-          fill={on ? '#059669' : '#ffffff'} fillOpacity={on ? 0.85 : 0.85}
-          stroke={on ? '#047857' : '#cbd5e1'} strokeOpacity={0.7} strokeWidth={1} />
+          fill={on ? '#10b981' : '#ffffff'} fillOpacity={on ? 0.9 : 0.88}
+          stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5} />
         <ArcText id={`mr-o-${i}`} r={(R_OUT0 + R_OUT1) / 2} a0={a0 + GAP / 2} a1={a1 - GAP / 2}
           text={`${on ? '✓ ' : ''}${FLAG_DISPLAY[flag]}`} fill={on ? '#ffffff' : '#475569'} size={11} />
       </g>
@@ -177,16 +173,15 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   let ia = 0;
   const inner = customCounts.map(([label, c], i) => {
     const span = (c / customTotal) * 360;
-    const colors = ['#64748b', '#7c3aed', '#0891b2', '#dc2626', '#ca8a04', '#16a34a'];
+    const colors = ['#8296ab', '#b48ef5', '#3ec3d5', '#ef8080', '#e2b93d', '#63c584'];
     const col = colors[i % colors.length];
     const el = (
       <g key={`i-${label}`} className="mr-seg" onClick={() => onPick(label)}>
         <path d={sector(R_IN0, R_IN1, ia + GAP / 2, ia + span - GAP / 2)}
-          fill={col} fillOpacity={0.72} stroke={col} strokeOpacity={0.6} strokeWidth={1} />
-        {span > 24 && (
-          <ArcLabel2 id={`mr-i-${i}`} rMid={(R_IN0 + R_IN1) / 2} a0={ia + GAP / 2} a1={ia + span - GAP / 2}
-            text={label.length > 14 ? label.slice(0, 13) + '…' : label}
-            sub={`${Math.round((c / customTotal) * 100)}%`} fill="#ffffff" size={9} />
+          fill={col} fillOpacity={0.82} stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5} />
+        {span > 20 && (
+          <ArcText id={`mr-i-${i}`} r={(R_IN0 + R_IN1) / 2} a0={ia + GAP / 2} a1={ia + span - GAP / 2}
+            text={label.length > 16 ? label.slice(0, 15) + '…' : label} fill="#ffffff" size={9.5} />
         )}
       </g>
     );
@@ -195,10 +190,12 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   });
 
   return (
-    <div dir="ltr" className="relative pointer-events-auto" style={{ width: 420, height: 420, maxWidth: '95vw', maxHeight: '95vw' }}>
-      <svg viewBox="0 0 420 420" className="w-full h-full" style={{ filter: 'drop-shadow(0 10px 24px rgba(15,23,42,0.30))' }}>
+    <div dir="ltr" className="relative pointer-events-auto" style={{ width: 'min(94vw, 90vh, 760px)', height: 'min(94vw, 90vh, 760px)' }}>
+      <svg viewBox="0 0 430 430" className="w-full h-full" style={{ filter: 'drop-shadow(0 10px 24px rgba(15,23,42,0.30))' }}>
         {/* soft translucent backdrop so the rings float over the Quran text */}
-        <circle cx={CX} cy={CY} r={R_OUT1 + 3} fill="#f8fafc" fillOpacity={0.66} />
+        <circle cx={CX} cy={CY} r={R_OUT1 + 3} fill="#f6f8fb" fillOpacity={0.72} />
+        <circle cx={CX} cy={CY} r={(R_IN1 + R_MID0) / 2} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={2} />
+        <circle cx={CX} cy={CY} r={(R_MID1 + R_OUT0) / 2} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={2} />
         <circle cx={CX} cy={CY} r={R_HOLE} fill="#ffffff" fillOpacity={0.97} stroke="#e2e8f0" />
         <style>{`.mr-seg { cursor: pointer; } .mr-seg:hover path { filter: brightness(0.92) saturate(1.35); }`}</style>
         {outer}

@@ -685,16 +685,36 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
     // ── Mistake ring data: category counts across the whole student ─────────
+    // Historical notes match case-insensitively ('short' → Short), known
+    // aliases fold in (Stretch → Long), bare letter names (jeem, hamzah…)
+    // count as Letter recognition, and green tajweed-mode logs are excluded.
     const ringData = useMemo(() => {
+        const fixedByLc = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
+        const aliases: Record<string, string> = { 'stretch': 'Long' };
+        const letterNames = new Set([
+            ...Object.values(TRANSLIT),
+            'hamzah', 'alef', 'aleph', 'jim', 'geem', 'ain', 'ayin', 'ghain', 'zain', 'thal',
+            'dhaal', 'sad', 'dad', 'shin', 'sin', 'teh', 'tah', 'heh', 'mim', 'miim', 'nun',
+            'baa', 'yaa', 'waaw', 'raa', 'daal', 'kaaf', 'laam', 'qaaf', 'faa', 'khaa',
+        ]);
         const counts: Record<string, number> = {};
         const custom = new Map<string, number>();
         for (const [k, m] of Object.entries(studentMistakes)) {
             if (!isLetterMistakeKey(k)) continue;
-            const t = m.errorText?.trim();
-            if (!t) continue;
-            if (t.startsWith('Letter recognition')) counts['Letter recognition'] = (counts['Letter recognition'] ?? 0) + 1;
-            else if (FIXED_MISTAKE_LABELS.has(t)) counts[t] = (counts[t] ?? 0) + 1;
-            else custom.set(t, (custom.get(t) ?? 0) + 1);
+            if (m.errorType === 'tajweed') continue;   // green logs stay out of the ring
+            const raw = m.errorText?.trim();
+            if (!raw) continue;
+            const lc = raw.toLowerCase();
+            if (lc.startsWith('letter recognition') || letterNames.has(lc)) {
+                counts['Letter recognition'] = (counts['Letter recognition'] ?? 0) + 1;
+            } else if (fixedByLc.has(lc)) {
+                const canon = fixedByLc.get(lc)!;
+                counts[canon] = (counts[canon] ?? 0) + 1;
+            } else if (aliases[lc]) {
+                counts[aliases[lc]] = (counts[aliases[lc]] ?? 0) + 1;
+            } else {
+                custom.set(raw, (custom.get(raw) ?? 0) + 1);
+            }
         }
         const customCounts = [...custom.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
         return { counts, customCounts };
