@@ -226,7 +226,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       const prevPages = prevRecitedPages.size;
       if (prevPages === 0) return null;
 
-      const allEntries = Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][];
+      const allEntries = (Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][]).filter(([k]) => k.includes(':'));
       const isReading = (m: import('../types').Mistake) => !m.errorType || m.errorType === 'reading';
       const isTajweed = (m: import('../types').Mistake) => m.errorType === 'tajweed';
 

@@ -10,7 +10,7 @@ import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
 import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus, ensureShareTokenById } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
-import { QURAN_METADATA, POINTS_PER_WORD } from './constants';
+import { QURAN_METADATA, POINTS_PER_WORD , PERM_MISTAKE_FLAGS_KEY } from './constants';
 import { useI18n } from './context/I18nProvider';
 import Footer from './components/Footer';
 import Logo from './components/Logo';
@@ -1000,6 +1000,16 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
+  // Outer-ring permanent habit flags: one reserved entry in the mistakes map.
+  const handleSetPermanentFlags = (studentId: string, flags: string[]) => {
+    const student = students.find(st => st.id === studentId);
+    if (!student) return;
+    const mistakes = { ...(student.mistakes || {}) };
+    if (flags.length) mistakes[PERM_MISTAKE_FLAGS_KEY] = { level: 0, date: new Date().toISOString(), errorText: flags.join('|') };
+    else delete mistakes[PERM_MISTAKE_FLAGS_KEY];
+    handleUpdateStudent({ ...student, mistakes });
+  };
+
   const handleCycleMistakeLevel = (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
@@ -1983,6 +1993,7 @@ const App: React.FC = () => {
             memorizationAchievements={sessionStudent.memorizationAchievements || []}
             onUpdateProgress={handleUpdateProgress}
             onCycleMistakeLevel={handleCycleMistakeLevel}
+            onSetPermanentFlags={handleSetPermanentFlags}
             onClearMistake={handleClearMistake}
             onLogRecitationRange={handleLogRecitationRange}
             onRemoveRecitationAchievement={handleRemoveRecitationAchievement}

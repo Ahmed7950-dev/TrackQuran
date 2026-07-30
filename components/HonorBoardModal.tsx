@@ -154,7 +154,7 @@ const HonorBoardModal: React.FC<HonorBoardModalProps> = ({ isOpen, onClose, stud
         // Memorized pages count as read too (hifz implies reading).
         const pagesRead = new Set([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]).size;
         const grossScore = (pagesRead / TOTAL_QURAN_PAGES) * 1_000_000;
-        const mistakePenalty = Object.keys(student.mistakes || {}).length * MISTAKE_PENALTY_POINTS;
+        const mistakePenalty = Object.keys(student.mistakes || {}).filter(k => k.includes(':')).length * MISTAKE_PENALTY_POINTS;
         return Math.max(0, grossScore - mistakePenalty);
       } else { // monthly
         // Points come from BOTH reading and memorization achievements.

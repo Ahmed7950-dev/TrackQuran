@@ -180,3 +180,10 @@ export const MILESTONES: Milestone[] = [
         isAchieved: (completedPages) => arePagesCovered(completedPages, 1, TOTAL_QURAN_PAGES)
     },
 ];
+// ── Mistake-map reserved keys ────────────────────────────────────────────────
+// student.mistakes is keyed by "surah:ayah:word[:letter]". The single reserved
+// key below stores the student's PERMANENT habit flags (fast/choppy reading…)
+// as a pipe-joined errorText. Anything iterating mistake keys positionally
+// must filter with isLetterMistakeKey.
+export const PERM_MISTAKE_FLAGS_KEY = '__flags__';
+export const isLetterMistakeKey = (k: string): boolean => /^\d+:\d+(?::\d+){1,2}$/.test(k);

@@ -1,3 +1,4 @@
+import { isLetterMistakeKey } from '../constants';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Student, QuranVerse, Mistake } from '../types';
 import { QURAN_METADATA } from '../constants';
@@ -217,7 +218,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         const processMistakes = async () => {
             setLoading(true);
             const mistakes = student.mistakes || {};
-            let mistakeKeys = Object.keys(mistakes);
+            let mistakeKeys = Object.keys(mistakes).filter(isLetterMistakeKey);
 
             // Filter mistakes by date
             if (dateFilter !== 'all') {

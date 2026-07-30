@@ -11,6 +11,8 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
+import MistakeRing, { FIXED_MISTAKE_LABELS } from './MistakeRing';
+import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -28,6 +30,8 @@ interface StudentProgressPageProps {
   onUpdateProgress: (studentId: string, surah: number, ayah: number) => void;
   onCycleMistakeLevel: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => void;
   onClearMistake: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number) => void;
+  /** Persists the student's permanent habit flags (outer ring toggles). */
+  onSetPermanentFlags?: (studentId: string, flags: string[]) => void;
   onLogRecitationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
   onRemoveRecitationAchievement: (studentId: string, achievementId: string) => void;
   onLogMemorizationRange: (studentId: string, range: { start: Progress, end: Progress }, quality: number, isRevision: boolean) => void;
@@ -214,28 +218,21 @@ const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
     .map(r => `.tj-${r}{color:${TAJWEED_RULES[r].color}} .dark .tj-${r}{color:${TAJWEED_RULES[r].colorDark}}`)
     .join('\n');
 
-// ── Quick note suggestions (live logging) ────────────────────────────────────
-// Tapping a chip appends it to the mistake note, so the common tajweed/reading
-// corrections are one tap instead of typing mid-lesson. Grouped the way a tutor
-// thinks: harakat, then length/hold, then weight. Tutors add their own with "+"
-// (kept per browser — these are personal shorthand, not shared student data).
-const NOTE_SUGGESTION_GROUPS: string[][] = [
-    ['Fatha', 'Kasrah', 'Dammah'],
-    ['short', 'Hold', 'Stretch', 'No Hold'],
-    ['light', 'heavy', 'Tanween to Alif'],
-];
-const CUSTOM_NOTE_SUGGESTIONS_KEY = 'quranful:mistakeNoteSuggestions';
 // Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';
-const loadCustomNoteSuggestions = (): string[] => {
-    try {
-        const raw = localStorage.getItem(CUSTOM_NOTE_SUGGESTIONS_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr.filter((s: unknown): s is string => typeof s === 'string' && !!s.trim()) : [];
-    } catch { return []; }
+
+// ── Letter transliteration (the ring's "letter recognition" segment) ─────────
+const TRANSLIT: Record<string, string> = {
+    'ا': 'alif', 'أ': 'alif', 'إ': 'alif', 'آ': 'alif', 'ٱ': 'alif', 'ب': 'ba', 'ت': 'ta',
+    'ث': 'tha', 'ج': 'jeem', 'ح': 'haa', 'خ': 'kha', 'د': 'dal', 'ذ': 'dhal', 'ر': 'ra',
+    'ز': 'zay', 'س': 'seen', 'ش': 'sheen', 'ص': 'saad', 'ض': 'daad', 'ط': 'taa', 'ظ': 'dhaa',
+    'ع': 'ayn', 'غ': 'ghayn', 'ف': 'fa', 'ق': 'qaf', 'ك': 'kaf', 'ل': 'lam', 'م': 'meem',
+    'ن': 'noon', 'ه': 'ha', 'و': 'waw', 'ي': 'ya', 'ى': 'ya', 'ئ': 'hamza', 'ؤ': 'hamza',
+    'ء': 'hamza', 'ة': 'ta marbuta',
 };
-const saveCustomNoteSuggestions = (list: string[]): void => {
-    try { localStorage.setItem(CUSTOM_NOTE_SUGGESTIONS_KEY, JSON.stringify(list)); } catch { /* private mode / quota */ }
+const translitOf = (glyph: string): string => {
+    for (const ch of glyph) { const t = TRANSLIT[ch]; if (t) return t; }
+    return glyph.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u200D]/g, '') || glyph;
 };
 
 // Component for rendering a letter with error marking
@@ -259,6 +256,10 @@ const LetterWithError: React.FC<{
     joinTrail?: boolean;
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
+    ringCounts?: Record<string, number>;             // fixed mistake label → count (whole student)
+    ringCustomCounts?: Array<[string, number]>;      // custom mistake label → count
+    ringPermFlags?: string[];                        // permanent habit flags
+    onToggleFlag?: (flag: string) => void;
 }> = ({
     letter,
     letterKey,
@@ -279,55 +280,13 @@ const LetterWithError: React.FC<{
     joinTrail,
     markLineHeight = 2.6,
     focusMode,
+    ringCounts = {},
+    ringCustomCounts = [],
+    ringPermFlags = [],
+    onToggleFlag,
 }) => {
-    const inputRef = React.useRef<HTMLInputElement>(null);
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
-
-    // ── Note-suggestion chips ────────────────────────────────────────────────
-    // Any pointer press INSIDE the popup (chip, +, add-field) must not count as
-    // "clicked away": the input's onBlur auto-submits and would close the popup
-    // mid-tap. This flag makes blur restore focus instead of saving.
-    const keepOpenRef = React.useRef(false);
-    const [customSuggestions, setCustomSuggestions] = React.useState<string[]>([]);
-    const [addingSuggestion, setAddingSuggestion] = React.useState(false);
-    const [newSuggestion, setNewSuggestion] = React.useState('');
-    const addingRef = React.useRef(false);
-    const addInputRef = React.useRef<HTMLInputElement>(null);
-    React.useEffect(() => { addingRef.current = addingSuggestion; }, [addingSuggestion]);
-    // Re-read on each open so a chip added while marking another letter shows up.
-    React.useEffect(() => {
-        if (!isEditing) return;
-        setCustomSuggestions(loadCustomNoteSuggestions());
-        setAddingSuggestion(false);
-        setNewSuggestion('');
-    }, [isEditing]);
-    React.useEffect(() => { if (addingSuggestion) addInputRef.current?.focus(); }, [addingSuggestion]);
-
-    // One tap = logged. Anything already typed is kept and the chip appended,
-    // so "Fatha" typed + tap "No Hold" still saves the whole note.
-    const applySuggestion = (s: string) => {
-        const cur = errorText.trim();
-        onTextSubmit(letterKey, cur ? `${cur} ${s}` : s);
-    };
-    const commitNewSuggestion = () => {
-        const v = newSuggestion.trim();
-        if (v && !customSuggestions.includes(v) && !NOTE_SUGGESTION_GROUPS.some(g => g.includes(v))) {
-            const next = [...customSuggestions, v];
-            setCustomSuggestions(next);
-            saveCustomNoteSuggestions(next);
-        }
-        setNewSuggestion('');
-        setAddingSuggestion(false);
-        inputRef.current?.focus();
-    };
-    const removeSuggestion = (s: string) => {
-        const next = customSuggestions.filter(x => x !== s);
-        setCustomSuggestions(next);
-        saveCustomNoteSuggestions(next);
-        inputRef.current?.focus();
-    };
-    const chipCls = 'px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold leading-none transition-colors bg-slate-100 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-teal-500 hover:text-white dark:hover:bg-orange-500 active:scale-95';
 
     const cancelLongPress = () => {
         if (longPressTimer.current !== null) {
@@ -346,12 +305,6 @@ const LetterWithError: React.FC<{
         }, 500);
     };
     
-    React.useEffect(() => {
-        if (isEditing && inputRef.current) {
-            inputRef.current.focus();
-        }
-    }, [isEditing]);
-
     const getLetterStyle = (): React.CSSProperties => {
         if (clickState === 1) return {
             backgroundColor: 'rgba(254,240,138,0.80)',
@@ -379,127 +332,26 @@ const LetterWithError: React.FC<{
         return {};
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            if (errorText.trim()) {
-                onTextSubmit(letterKey, errorText.trim());
-            } else {
-                onTextCancel();
-            }
-        } else if (e.key === 'Escape') {
-            onTextCancel();
-        }
-    };
-
     return (
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
             {isEditing && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-auto">
-                    <div
-                        onPointerDown={() => { keepOpenRef.current = true; }}
-                        className="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 overflow-hidden w-[248px] sm:w-[292px] max-w-[86vw]"
-                    >
-                        {/* "+" tucked into the corner so it never costs a row */}
-                        <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => setAddingSuggestion(true)}
-                            title="Add a suggestion"
-                            className="absolute top-1 right-1 z-10 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 text-sm font-bold leading-none hover:bg-slate-100 dark:hover:bg-gray-700 hover:text-teal-600 dark:hover:text-orange-400"
-                        >+</button>
-
-                        {/* Quick suggestions — one tap logs the note */}
-                        <div
-                            dir="ltr" /* the popup sits inside the RTL Quran block, which would reverse the chip order */
-                            onMouseDown={(e) => e.preventDefault()} /* desktop: never blur the note field */
-                            className="px-2 pt-2 pb-1.5 space-y-1.5 border-b border-slate-100 dark:border-gray-800"
-                        >
-                            {NOTE_SUGGESTION_GROUPS.map((group, gi) => (
-                                <div key={gi} className="flex flex-wrap justify-center gap-1.5">
-                                    {group.map(s => (
-                                        <button key={s} type="button" onClick={() => applySuggestion(s)} className={chipCls}>{s}</button>
-                                    ))}
-                                </div>
-                            ))}
-                            {(customSuggestions.length > 0 || addingSuggestion) && (
-                                <div className="flex flex-wrap justify-center items-center gap-1.5">
-                                    {customSuggestions.map(s => (
-                                        <span key={s} className="inline-flex items-center rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
-                                            <button type="button" onClick={() => applySuggestion(s)} className={`${chipCls} rounded-none bg-transparent dark:bg-transparent pr-1`}>{s}</button>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeSuggestion(s)}
-                                                title={`Remove "${s}"`}
-                                                className="pr-2 pl-0.5 text-[11px] leading-none text-slate-400 hover:text-red-500"
-                                            >×</button>
-                                        </span>
-                                    ))}
-                                    {addingSuggestion && (
-                                        <span className="inline-flex items-center gap-1">
-                                            <input
-                                                ref={addInputRef}
-                                                type="text"
-                                                value={newSuggestion}
-                                                onChange={(e) => setNewSuggestion(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    e.stopPropagation();
-                                                    if (e.key === 'Enter') { e.preventDefault(); commitNewSuggestion(); }
-                                                    else if (e.key === 'Escape') { e.preventDefault(); setAddingSuggestion(false); setNewSuggestion(''); inputRef.current?.focus(); }
-                                                }}
-                                                placeholder="New…"
-                                                className="w-[86px] px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 border border-teal-400 dark:border-orange-400 focus:outline-none"
-                                            />
-                                            <button type="button" onClick={commitNewSuggestion} title="Save suggestion" className="px-2 py-1 rounded-full text-[11px] font-bold bg-teal-500 dark:bg-orange-500 text-white">✓</button>
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-1 px-2 py-1">
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={errorText}
-                                onChange={(e) => onTextChange(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                onBlur={() => {
-                                    setTimeout(() => {
-                                        // A tap inside the popup (chip / + / add-field) isn't "away".
-                                        if (keepOpenRef.current) {
-                                            keepOpenRef.current = false;
-                                            if (!addingRef.current) inputRef.current?.focus();
-                                            return;
-                                        }
-                                        if (addingRef.current) return; // typing a new suggestion
-                                        if (errorText.trim()) {
-                                            onTextSubmit(letterKey, errorText.trim());
-                                        } else {
-                                            onTextCancel();
-                                        }
-                                    }, 200);
-                                }}
-                                className="flex-1 min-w-0 text-xs bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none border-0 p-0"
-                                placeholder="Type or tap a suggestion…"
-                            />
-                            <button
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                    if (errorText.trim()) {
-                                        onTextSubmit(letterKey, errorText.trim());
-                                    } else {
-                                        onTextCancel();
-                                    }
-                                }}
-                                className="w-4 h-4 flex items-center justify-center rounded bg-teal-500 dark:bg-orange-500 hover:bg-teal-600 dark:hover:bg-orange-600 transition-colors flex-shrink-0"
-                                title="Enter"
-                            >
-                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
+                <div className="fixed inset-0 z-[9999] grid place-items-center pointer-events-none">
+                    <MistakeRing
+                        counts={ringCounts}
+                        customCounts={ringCustomCounts}
+                        permFlags={ringPermFlags}
+                        translit={translitOf(letter)}
+                        errorText={errorText}
+                        onTextChange={onTextChange}
+                        onPick={(label) => {
+                            const text = label === 'Letter recognition' ? `Letter recognition (${translitOf(letter)})` : label;
+                            const cur = errorText.trim();
+                            onTextSubmit(letterKey, cur ? `${cur} ${text}` : text);
+                        }}
+                        onToggleFlag={(f) => onToggleFlag?.(f)}
+                        onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
+                        onCancel={onTextCancel}
+                    />
                 </div>
             )}
             {mistake && mistake.errorText && !isEditing && (
@@ -758,7 +610,7 @@ const LogOption: React.FC<{ src: string; label: string; sub?: string; color: 'or
     );
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -830,6 +682,30 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
+    // ── Mistake ring data: category counts across the whole student ─────────
+    const ringData = useMemo(() => {
+        const counts: Record<string, number> = {};
+        const custom = new Map<string, number>();
+        for (const [k, m] of Object.entries(studentMistakes)) {
+            if (!isLetterMistakeKey(k)) continue;
+            const t = m.errorText?.trim();
+            if (!t) continue;
+            if (t.startsWith('Letter recognition')) counts['Letter recognition'] = (counts['Letter recognition'] ?? 0) + 1;
+            else if (FIXED_MISTAKE_LABELS.has(t)) counts[t] = (counts[t] ?? 0) + 1;
+            else custom.set(t, (custom.get(t) ?? 0) + 1);
+        }
+        const customCounts = [...custom.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+        return { counts, customCounts };
+    }, [studentMistakes]);
+    const ringPermFlags = useMemo(
+        () => studentMistakes[PERM_MISTAKE_FLAGS_KEY]?.errorText?.split('|').filter(Boolean) ?? [],
+        [studentMistakes]);
+    const handleToggleFlag = useCallback((flag: string) => {
+        if (readOnly || !onSetPermanentFlags) return;
+        const next = ringPermFlags.includes(flag) ? ringPermFlags.filter(f => f !== flag) : [...ringPermFlags, flag];
+        onSetPermanentFlags(student.id, next);
+    }, [readOnly, onSetPermanentFlags, ringPermFlags, student.id]);
+
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
         if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
@@ -2483,10 +2359,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const handleLetterTextCancel = useCallback(() => {
         if (editingLetterKey) {
             letterClickStates.current[editingLetterKey] = 0;
+            // The first click pre-marks the letter before the ring opens; a
+            // cancel with nothing logged should leave no trace behind.
+            const m = studentMistakes[editingLetterKey];
+            if (m && !m.errorText) {
+                const [surah, ayah, wordIndex, letterIndex] = editingLetterKey.split(':').map(Number);
+                onClearMistake(student.id, surah, ayah, wordIndex, letterIndex);
+            }
         }
         setEditingLetterKey(null);
         setErrorTextInput('');
-    }, [editingLetterKey]);
+    }, [editingLetterKey, studentMistakes, onClearMistake, student.id]);
 
     const handleVerseContainerClick = (e: React.MouseEvent<HTMLSpanElement>, surahNum: number, ayahNum: number) => {
         // If a long press was just completed, reset and ignore this click
@@ -2656,6 +2539,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onLetterClick={readOnly ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
+                                    ringCounts={ringData.counts}
+                                    ringCustomCounts={ringData.customCounts}
+                                    ringPermFlags={ringPermFlags}
+                                    onToggleFlag={handleToggleFlag}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
                                     markLineHeight={showTranslation ? 2.8 : 2.6}
@@ -3334,6 +3221,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onLetterClick={readOnly ? () => {} : handleLetterClick}
                                                                             onTextChange={setErrorTextInput}
                                                                             onTextSubmit={handleLetterTextSubmit}
+                                    ringCounts={ringData.counts}
+                                    ringCustomCounts={ringData.customCounts}
+                                    ringPermFlags={ringPermFlags}
+                                    onToggleFlag={handleToggleFlag}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
                                                                             markLineHeight={2.2}
