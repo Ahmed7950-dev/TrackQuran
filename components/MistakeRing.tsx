@@ -45,7 +45,7 @@ const FLAG_DISPLAY: Record<string, string> = {
 };
 
 const CX = 210, CY = 210;
-const R_HOLE = 74, R_IN0 = 78, R_IN1 = 112, R_MID0 = 116, R_MID1 = 174, R_OUT0 = 178, R_OUT1 = 206;
+const R_HOLE = 72, R_IN0 = 76, R_IN1 = 106, R_MID0 = 110, R_MID1 = 176, R_OUT0 = 180, R_OUT1 = 206;
 
 const pt = (r: number, aDeg: number): [number, number] => {
   const a = ((aDeg - 90) * Math.PI) / 180;
@@ -125,35 +125,34 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   const weights = MISTAKE_AREAS.map(areaWeight);
   const wSum = weights.reduce((a, b) => a + b, 0);
 
-  // Middle ring segments
+  // Middle ring: each area is ONE angular slice in its own hue; its subs
+  // stack as concentric layers inside the slice (first sub outermost), the
+  // way the tutor sketched it — Stop above, No stop under.
   const middle: React.ReactNode[] = [];
+  const RGAP = 1.6;                                  // radial gap between layers
   let angle = 0;
   MISTAKE_AREAS.forEach((area, ai) => {
     const span = (weights[ai] / wSum) * 360;
-    const areaCount = area.subs.reduce((x, l) => x + (counts[l] ?? 0), 0);
-    // sub split: proportional inside the area, with a floor so all stay tappable
-    const subCounts = area.subs.map(l => counts[l] ?? 0);
-    const subWeights = area.subs.map((_, i) => areaCount === 0 ? 1 : 0.45 + 2.4 * (subCounts[i] / areaCount));
-    const swSum = subWeights.reduce((a, b) => a + b, 0);
-    let a0 = angle;
+    const a0 = angle + GAP / 2, a1 = angle + span - GAP / 2;
+    const n = area.subs.length;
+    const layerH = (R_MID1 - R_MID0 - RGAP * (n - 1)) / n;
     area.subs.forEach((label, si) => {
-      const sSpan = (subWeights[si] / swSum) * span;
-      const c = subCounts[si];
+      const r1 = R_MID1 - si * (layerH + RGAP);      // first sub on top (outer)
+      const r0 = r1 - layerH;
+      const c = counts[label] ?? 0;
       const on = c > 0;
-      const shade = [0.88, 0.62, 0.42][si] ?? 0.5;
       const pct = totalFixed > 0 ? Math.round((c / totalFixed) * 100) : 0;
-      const display = label === 'Letter recognition' ? DISPLAY[label] : (DISPLAY[label] ?? label);
+      const display = DISPLAY[label] ?? label;
       middle.push(
         <g key={`m-${label}`} className="mr-seg" onClick={() => onPick(label)}>
-          <path d={sector(R_MID0, R_MID1, a0 + GAP / 2, a0 + sSpan - GAP / 2)}
-            fill={on ? area.color : '#ffffff'} fillOpacity={on ? shade : 0.9}
-            stroke={on ? area.color : '#cbd5e1'} strokeOpacity={0.65} strokeWidth={1} />
-          <ArcLabel2 id={`mr-m-${si}-${ai}`} rMid={(R_MID0 + R_MID1) / 2} a0={a0 + GAP / 2} a1={a0 + sSpan - GAP / 2}
-            text={display} sub={on ? `${pct}%` : undefined}
-            fill={on && shade > 0.55 ? '#ffffff' : '#334155'} />
+          <path d={sector(r0, r1, a0, a1)}
+            fill={area.color} fillOpacity={on ? 0.9 - si * 0.18 : 0.14}
+            stroke={area.color} strokeOpacity={0.55} strokeWidth={1} />
+          <ArcText id={`mr-m-${ai}-${si}`} r={(r0 + r1) / 2} a0={a0} a1={a1}
+            text={on ? `${display} · ${pct}%` : display}
+            fill={on ? '#ffffff' : '#334155'} size={10.5} />
         </g>
       );
-      a0 += sSpan;
     });
     angle += span;
   });
