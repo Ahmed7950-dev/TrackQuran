@@ -1,3 +1,4 @@
+import ReactDOM from 'react-dom';
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import lottie from 'lottie-web';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -334,7 +335,7 @@ const LetterWithError: React.FC<{
 
     return (
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
-            {isEditing && (
+            {isEditing && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[9999] grid place-items-center pointer-events-none">
                     <MistakeRing
                         counts={ringCounts}
@@ -352,7 +353,8 @@ const LetterWithError: React.FC<{
                         onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
                         onCancel={onTextCancel}
                     />
-                </div>
+                </div>,
+                document.body
             )}
             {mistake && mistake.errorText && !isEditing && (
                 <div

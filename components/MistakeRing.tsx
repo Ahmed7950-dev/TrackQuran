@@ -44,8 +44,8 @@ const FLAG_DISPLAY: Record<string, string> = {
   'Breaking up words': 'Breaks words', 'Articulation points': 'Articulation',
 };
 
-const CX = 170, CY = 170;
-const R_HOLE = 62, R_IN0 = 66, R_IN1 = 92, R_MID0 = 96, R_MID1 = 140, R_OUT0 = 144, R_OUT1 = 166;
+const CX = 210, CY = 210;
+const R_HOLE = 74, R_IN0 = 78, R_IN1 = 112, R_MID0 = 116, R_MID1 = 174, R_OUT0 = 178, R_OUT1 = 206;
 
 const pt = (r: number, aDeg: number): [number, number] => {
   const a = ((aDeg - 90) * Math.PI) / 180;
@@ -59,20 +59,38 @@ const sector = (r0: number, r1: number, a0: number, a1: number): string => {
   return `M${x0.toFixed(2)},${y0.toFixed(2)} A${r1},${r1} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} L${x2.toFixed(2)},${y2.toFixed(2)} A${r0},${r0} 0 ${large} 0 ${x3.toFixed(2)},${y3.toFixed(2)} Z`;
 };
 
-/** Label placed along the ring, rotated tangentially, kept upright. */
-const ArcLabel: React.FC<{ r: number; angle: number; text: string; sub?: string; fill: string; size?: number }> =
-  ({ r, angle, text, sub, fill, size = 9 }) => {
-    const [x, y] = pt(r, angle);
-    const flip = angle > 180;                       // left half → flip to stay readable
-    const rot = flip ? angle + 90 : angle - 90;
+/** Text following the ring's curve. Bottom-half arcs run reversed so the
+ *  text never renders upside down; radii are nudged so the glyphs stay
+ *  centered inside the band either way. */
+const ArcText: React.FC<{ id: string; r: number; a0: number; a1: number; text: string; fill: string; size?: number; weight?: number }> =
+  ({ id, r, a0, a1, text, fill, size = 10, weight = 700 }) => {
+    const mid = (a0 + a1) / 2;
+    const flip = mid > 90 && mid < 270;             // bottom half → reverse direction
+    // Auto-fit: textPath CLIPS text longer than its arc — shrink to fit
+    const arcLen = (r * (a1 - a0) * Math.PI) / 180;
+    size = Math.max(6, Math.min(size, (arcLen - 3) / (text.length * 0.58)));
+    const rr = flip ? r + size * 0.38 : r - size * 0.38;
+    const [x0, y0] = pt(rr, flip ? a1 : a0);
+    const [x1, y1] = pt(rr, flip ? a0 : a1);
+    const large = a1 - a0 > 180 ? 1 : 0;
+    const d = `M${x0.toFixed(2)},${y0.toFixed(2)} A${rr},${rr} 0 ${large} ${flip ? 0 : 1} ${x1.toFixed(2)},${y1.toFixed(2)}`;
     return (
-      <text x={x} y={y} transform={`rotate(${rot} ${x} ${y})`} textAnchor="middle" dominantBaseline="middle"
-        fill={fill} fontSize={size} fontWeight={700} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-        <tspan x={x} dy={sub ? -4 : 0}>{text}</tspan>
-        {sub && <tspan x={x} dy={10} fontSize={size - 1} fontWeight={800}>{sub}</tspan>}
-      </text>
+      <g style={{ pointerEvents: 'none', userSelect: 'none' }}>
+        <path id={id} d={d} fill="none" />
+        <text fill={fill} fontSize={size} fontWeight={weight}>
+          <textPath href={`#${id}`} startOffset="50%" textAnchor="middle">{text}</textPath>
+        </text>
+      </g>
     );
   };
+/** Two-line curved label: name on the outer line, percentage on the inner. */
+const ArcLabel2: React.FC<{ id: string; rMid: number; a0: number; a1: number; text: string; sub?: string; fill: string; size?: number }> =
+  ({ id, rMid, a0, a1, text, sub, fill, size = 10 }) => (
+    <>
+      <ArcText id={`${id}-t`} r={sub ? rMid + 6 : rMid} a0={a0} a1={a1} text={text} fill={fill} size={size} />
+      {sub && <ArcText id={`${id}-s`} r={rMid - 7} a0={a0} a1={a1} text={sub} fill={fill} size={size - 1} weight={800} />}
+    </>
+  );
 
 interface MistakeRingProps {
   counts: Record<string, number>;              // fixed label → times logged (recognition aggregated)
@@ -124,14 +142,13 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
       const on = c > 0;
       const shade = [0.88, 0.62, 0.42][si] ?? 0.5;
       const pct = totalFixed > 0 ? Math.round((c / totalFixed) * 100) : 0;
-      const mid = a0 + sSpan / 2;
       const display = label === 'Letter recognition' ? DISPLAY[label] : (DISPLAY[label] ?? label);
       middle.push(
         <g key={`m-${label}`} className="mr-seg" onClick={() => onPick(label)}>
           <path d={sector(R_MID0, R_MID1, a0 + GAP / 2, a0 + sSpan - GAP / 2)}
             fill={on ? area.color : '#ffffff'} fillOpacity={on ? shade : 0.9}
             stroke={on ? area.color : '#cbd5e1'} strokeOpacity={0.65} strokeWidth={1} />
-          <ArcLabel r={(R_MID0 + R_MID1) / 2} angle={mid}
+          <ArcLabel2 id={`mr-m-${si}-${ai}`} rMid={(R_MID0 + R_MID1) / 2} a0={a0 + GAP / 2} a1={a0 + sSpan - GAP / 2}
             text={display} sub={on ? `${pct}%` : undefined}
             fill={on && shade > 0.55 ? '#ffffff' : '#334155'} />
         </g>
@@ -145,14 +162,13 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   const outer = PERMANENT_MISTAKES.map((flag, i) => {
     const a0 = i * 90, a1 = (i + 1) * 90;
     const on = permFlags.includes(flag);
-    const mid = (a0 + a1) / 2;
     return (
       <g key={`o-${flag}`} className="mr-seg" onClick={() => onToggleFlag(flag)}>
         <path d={sector(R_OUT0, R_OUT1, a0 + GAP / 2, a1 - GAP / 2)}
           fill={on ? '#059669' : '#ffffff'} fillOpacity={on ? 0.85 : 0.85}
           stroke={on ? '#047857' : '#cbd5e1'} strokeOpacity={0.7} strokeWidth={1} />
-        <ArcLabel r={(R_OUT0 + R_OUT1) / 2} angle={mid}
-          text={`${on ? '✓ ' : ''}${FLAG_DISPLAY[flag]}`} fill={on ? '#ffffff' : '#475569'} size={9.5} />
+        <ArcText id={`mr-o-${i}`} r={(R_OUT0 + R_OUT1) / 2} a0={a0 + GAP / 2} a1={a1 - GAP / 2}
+          text={`${on ? '✓ ' : ''}${FLAG_DISPLAY[flag]}`} fill={on ? '#ffffff' : '#475569'} size={11} />
       </g>
     );
   });
@@ -162,7 +178,6 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   let ia = 0;
   const inner = customCounts.map(([label, c], i) => {
     const span = (c / customTotal) * 360;
-    const mid = ia + span / 2;
     const colors = ['#64748b', '#7c3aed', '#0891b2', '#dc2626', '#ca8a04', '#16a34a'];
     const col = colors[i % colors.length];
     const el = (
@@ -170,9 +185,9 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
         <path d={sector(R_IN0, R_IN1, ia + GAP / 2, ia + span - GAP / 2)}
           fill={col} fillOpacity={0.72} stroke={col} strokeOpacity={0.6} strokeWidth={1} />
         {span > 24 && (
-          <ArcLabel r={(R_IN0 + R_IN1) / 2} angle={mid}
-            text={label.length > 11 ? label.slice(0, 10) + '…' : label}
-            sub={`${Math.round((c / customTotal) * 100)}%`} fill="#ffffff" size={8} />
+          <ArcLabel2 id={`mr-i-${i}`} rMid={(R_IN0 + R_IN1) / 2} a0={ia + GAP / 2} a1={ia + span - GAP / 2}
+            text={label.length > 14 ? label.slice(0, 13) + '…' : label}
+            sub={`${Math.round((c / customTotal) * 100)}%`} fill="#ffffff" size={9} />
         )}
       </g>
     );
@@ -181,8 +196,8 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   });
 
   return (
-    <div dir="ltr" className="relative pointer-events-auto" style={{ width: 340, height: 340, maxWidth: '92vw', maxHeight: '92vw' }}>
-      <svg viewBox="0 0 340 340" className="w-full h-full" style={{ filter: 'drop-shadow(0 10px 24px rgba(15,23,42,0.30))' }}>
+    <div dir="ltr" className="relative pointer-events-auto" style={{ width: 420, height: 420, maxWidth: '95vw', maxHeight: '95vw' }}>
+      <svg viewBox="0 0 420 420" className="w-full h-full" style={{ filter: 'drop-shadow(0 10px 24px rgba(15,23,42,0.30))' }}>
         {/* soft translucent backdrop so the rings float over the Quran text */}
         <circle cx={CX} cy={CY} r={R_OUT1 + 3} fill="#f8fafc" fillOpacity={0.66} />
         <circle cx={CX} cy={CY} r={R_HOLE} fill="#ffffff" fillOpacity={0.97} stroke="#e2e8f0" />
