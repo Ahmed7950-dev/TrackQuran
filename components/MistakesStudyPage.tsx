@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Student } from '../types';
-import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES, EMPTY_MISTAKE_LABEL } from './MistakeRing';
+import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mistakes Study — a read-only analysis of everything the tutor has logged for
@@ -89,7 +89,7 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
                     return (
                       <div key={label} className="flex items-center gap-2.5">
                         <span className={`w-24 flex-shrink-0 text-xs font-semibold ${c > 0 ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-500'}`}>
-                          {label === 'Letter recognition' ? 'Letter ?' : label === EMPTY_MISTAKE_LABEL ? 'No comment' : label}
+                          {label === 'Letter recognition' ? 'Letter ?' : label}
                         </span>
                         <Bar value={c} max={maxCount} color={area.color} />
                         <span className="w-7 text-end text-xs font-bold text-slate-500 dark:text-slate-400">{c || '—'}</span>

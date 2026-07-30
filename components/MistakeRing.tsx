@@ -21,8 +21,10 @@ export interface MistakeArea {
   subs: string[];         // logged errorText labels, in order
 }
 
-/** Sentinel for "marked but no comment" — logged as an EMPTY errorText, so it
- *  is never stored as this literal string. */
+/** Sentinel meaning "log this letter with no comment at all" — pressing Enter
+ *  on the empty text box picks it, and the parent turns it into an EMPTY
+ *  errorText. It is deliberately NOT one of MISTAKE_AREAS: a plain highlight
+ *  gets no ring segment and is not counted. */
 export const EMPTY_MISTAKE_LABEL = '(No comment)';
 
 /** Custom (free-text) mistakes only count from this moment on — the tutor asked
@@ -44,7 +46,6 @@ export const MISTAKE_AREAS: MistakeArea[] = [
   { name: 'change',   title: 'Letter change', color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
   { name: 'stop',     title: 'Stop',          color: '#8fc93a', subs: ['Stop', 'No Stop'] },
   { name: 'recognition', title: 'Letter recognition', color: '#f59a63', subs: ['Letter recognition'] },
-  { name: 'noComment',   title: 'No comment',         color: '#94a3b8', subs: [EMPTY_MISTAKE_LABEL] },
 ];
 export const FIXED_MISTAKE_LABELS = new Set(MISTAKE_AREAS.flatMap(a => a.subs));
 
@@ -94,11 +95,7 @@ export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: 
     if (excludeKey && k === excludeKey) continue;   // the letter being edited right now
     if (m.errorType === 'tajweed') continue;     // green logs stay out of the ring
     const raw = m.errorText?.trim();
-    if (!raw) {
-      // Marked with no comment — a highlight-only mistake.
-      counts[EMPTY_MISTAKE_LABEL] = (counts[EMPTY_MISTAKE_LABEL] ?? 0) + 1;
-      continue;
-    }
+    if (!raw) continue;      // highlight-only mark: no ring segment, not counted
     const lc = raw.toLowerCase();
     const recogMatch = lc.match(/^letter recognition\s*\(?\s*([^)]*)/);
     if (recogMatch || LETTER_NAMES.has(lc)) {
@@ -134,7 +131,6 @@ export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: 
 const DISPLAY: Record<string, string> = {
   'No Hold': 'No hold', 'Not Silent': 'Not silent', 'Change to Alif': 'To Alif',
   'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
-  [EMPTY_MISTAKE_LABEL]: 'No comment',
 };
 const FLAG_DISPLAY: Record<string, string> = {
   'Fast reading': 'Fast', 'Choppy reading': 'Choppy',
