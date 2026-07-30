@@ -41,6 +41,7 @@ export const MISTAKE_AREAS: MistakeArea[] = [
   { name: 'hold',     title: 'Hold',          color: '#7c86f8', subs: ['Hold', 'No Hold'] },
   { name: 'harakah',  title: 'Harakah',       color: '#f0a626', subs: ['Fatha', 'Kasrah', 'Dammah'] },
   { name: 'sakin',    title: 'Sakin',         color: '#a8763e', subs: ['Sakin'] },
+  { name: 'tanween',  title: 'Tanween',       color: '#c2569e', subs: ['Tanween'] },
   { name: 'silence',  title: 'Silence',       color: '#f26d8c', subs: ['Silent', 'Not Silent'] },
   { name: 'weight',   title: 'Weight',        color: '#a186f2', subs: ['Heavy', 'Light'] },
   { name: 'change',   title: 'Letter change', color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
@@ -86,7 +87,7 @@ export interface RingData {
  *  Letter recognition, green tajweed-mode logs are excluded. */
 export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: string | null): RingData => {
   const fixedByLc = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
-  const aliases: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin' };
+  const aliases: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin', 'tanwin': 'Tanween', 'tanveen': 'Tanween', 'tanwīn': 'Tanween' };
   const counts: Record<string, number> = {};
   const custom = new Map<string, number>();
   const confusions = new Map<string, number>();
