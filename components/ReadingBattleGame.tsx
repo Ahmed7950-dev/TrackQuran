@@ -41,7 +41,6 @@ interface RBPlayer {
   alive: boolean; frozenUntil: number;   // 0 = not frozen
   kills: number; dmg: number;
   lastMeleeAt: number; lastFireAt: number;
-  animT: number; lastX: number; lastY: number; // sprite walk-cycle bookkeeping
 }
 
 interface Bullet { on: boolean; x: number; y: number; dx: number; dy: number; left: number; owner: string }
@@ -169,7 +168,7 @@ const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stret
       try {
         const { PortraitStage } = await import('./letterRaceStage');
         if (dead || !ref.current) return;
-        const st = new PortraitStage(ref.current, '/rb/hero.glb?v=2', false, 1, clip, Math.PI);
+        const st = new PortraitStage(ref.current, HERO_GLB, false, 1, clip, 0, 0.6);
         stage = st;
         await st.init();
       } catch { /* hero is decorative — never block the game on it */ }
@@ -179,12 +178,13 @@ const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stret
   return <canvas ref={ref} className={className} />;
 };
 
-// hero-sheet.png — 8 rows of directions x 8 frames of the Shoot Rifle cycle.
-// Row d was rendered with the camera orbited d*45 deg around the soldier and the
-// model faces the d0 camera, so: row 0 = facing down-screen, row 4 = up-screen,
-// +1 row per +45 deg of heading (h is clockwise from up-screen).
-const HERO_SHEET_URL = '/rb/hero-sheet.png?v=2';
-const spriteRow = (h: number) => (4 + Math.round((((h % 360) + 360) % 360) / 45)) % 8;
+// The Mixamo soldier. Clips: 'stretch' (reading page), 'run' (Shoot Rifle
+// cycle) + 'idle' (held aim pose) for the RunnerStage battle overlay.
+// Rest pose faces +Z like the Tripo rigs — no yaw offset anywhere.
+const HERO_GLB = '/rb/hero.glb?v=3';
+// per-fighter hue-rotate tints so identical soldiers stay tellable apart
+// (index 0 keeps the original camo)
+const HERO_HUES = [0, 160, 280, 60, 210, 320, 110, 250];
 
 const UPGRADE_META = [
   { icon: '🔪', label: 'Knife' },
@@ -204,7 +204,6 @@ function newPlayer(gid: string, name: string, charKey: string, isTutor: boolean,
     hp: BALANCE.health, armor: 0, ammo: 0, grenades: 0,
     alive: true, frozenUntil: 0, kills: 0, dmg: 0,
     lastMeleeAt: 0, lastFireAt: 0,
-    animT: 0, lastX: 50, lastY: 50,
   };
 }
 
@@ -742,8 +741,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const nadeDragRef = useRef({ active: false, sx: 0, sy: 0, baseAx: 50, baseAy: 50, ax: 50, ay: 50 });
   const nadeAtRef = useRef({ x: 50, y: 50 });   // last grenade target (guests stream it)
   const viewRef = useRef({ ox: 0, oy: 0, scale: 1, dpr: 1 }); // canvas → arena mapping
-  const heroImgRef = useRef<HTMLImageElement | null>(null);
-  const tintCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  // live 3D soldiers — RunnerStage overlay canvas (same renderer as Letter Race)
+  const stageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const stageFightersRef = useRef<string[]>([]);
+  const stagePrevRef = useRef<Map<string, { x: number; y: number; t: number; sp: number }>>(new Map());
   const camRef = useRef({ x: 50, y: 50 });
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const blockImgRef = useRef<HTMLImageElement | null>(null);
@@ -758,10 +759,62 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       img.onload = () => { blockImgRef.current = img; };
       img.src = BLOCK_SPRITE;
     }
-    const hs = new Image();
-    hs.onload = () => { heroImgRef.current = hs; };
-    hs.src = HERO_SHEET_URL;
   }, []);
+
+  /* ── battle overlay: one RunnerStage renders every fighter as a live 3D
+        soldier (scissored viewports over the arena canvas, Letter Race's
+        renderer). Built when the battle roster locks at preBattle. ─────────── */
+  const inBattle = phase === 'preBattle' || phase === 'battle' || phase === 'victory';
+  useEffect(() => {
+    if (!inBattle) return;
+    const canvas = stageCanvasRef.current;
+    if (!canvas) return;
+    let stage: { dispose(): void } | null = null;
+    let dead = false;
+    const gids = world.current.players.filter(p => p.fighting).map(p => p.gid);
+    stageFightersRef.current = gids;
+    (async () => {
+      try {
+        const { RunnerStage } = await import('./letterRaceStage');
+        if (dead) return;
+        const models = gids.map((_, i) => ({
+          url: HERO_GLB, scale: 1, pinOrigin: true,
+          tint: i === 0 ? undefined : HERO_HUES[i % HERO_HUES.length],
+        }));
+        const st = new RunnerStage(canvas, () => {
+          const v = viewRef.current;
+          const W = canvas.clientWidth || 1;
+          const H = canvas.clientHeight || 1;
+          const now = performance.now();
+          return stageFightersRef.current.map(gid => {
+            const p = world.current.players.find(q => q.gid === gid);
+            if (!p || !p.alive || !p.fighting) return null;
+            // walk detection: smoothed speed from position deltas (works for
+            // self AND snapshot-interpolated opponents alike)
+            let rec = stagePrevRef.current.get(gid);
+            if (!rec) { rec = { x: p.x, y: p.y, t: now, sp: 0 }; stagePrevRef.current.set(gid, rec); }
+            const dt = (now - rec.t) / 1000;
+            if (dt > 0.01) {
+              const inst = Math.hypot(p.x - rec.x, p.y - rec.y) / dt / BALANCE.moveSpeed;
+              rec.sp += (Math.min(1, inst) - rec.sp) * 0.35;
+              rec.x = p.x; rec.y = p.y; rec.t = now;
+            }
+            return {
+              x: ((v.ox + p.x * v.scale) / v.dpr / W) * 100,
+              y: ((v.oy + p.y * v.scale) / v.dpr / H) * 100,
+              heading: p.h,
+              speed: rec.sp * 0.13,           // RunnerStage normalizes against 0.13
+              anim: (rec.sp > 0.12 ? 'run' : 'idle') as 'run' | 'idle',
+            };
+          });
+        }, models, { size: () => (viewRef.current.scale / viewRef.current.dpr) * 13 });
+        stage = st;
+        await st.init();
+      } catch { /* the 3D soldiers are visual — never block the battle */ }
+    })();
+    return () => { dead = true; stage?.dispose(); stagePrevRef.current.clear(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inBattle]);
 
   useEffect(() => {
     let raf = 0;
@@ -883,28 +936,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGuest]);
 
-  // per-player tinted copies of the hero sheet (colour identity like the capsules had)
-  const tintedSheet = (color: string): HTMLCanvasElement | null => {
-    const img = heroImgRef.current;
-    if (!img) return null;
-    const cache = tintCacheRef.current;
-    let c = cache.get(color);
-    if (!c) {
-      c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      const g = c.getContext('2d');
-      if (!g) return null;
-      g.drawImage(img, 0, 0);
-      g.globalCompositeOperation = 'source-atop';
-      g.globalAlpha = 0.30;
-      g.fillStyle = color;
-      g.fillRect(0, 0, c.width, c.height);
-      cache.set(color, c);
-    }
-    return c;
-  };
-
-  /* ── canvas painter (pseudo-3D walls + hero sprites) ────────────────────── */
+  /* ── canvas painter (pseudo-3D walls; bodies live on the 3D overlay) ────── */
   const drawArena = (dt: number) => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -983,37 +1015,15 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const c = charOf(p.charKey);
       items.push({ y: p.y, draw: () => {
         const X = px(p.x), Y = py(p.y), R = BALANCE.playerRadius * scale;
-        // shadow + identity ring in the player's colour
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.45, R * 0.95, R * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+        // identity ring only — body + contact shadow come from the 3D overlay
         ctx.strokeStyle = c.color; ctx.lineWidth = 2 * dpr;
         ctx.beginPath(); ctx.ellipse(X, Y + R * 0.45, R * 0.95, R * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
-        const sheet = tintedSheet(c.color);
-        if (sheet) {
-          // the soldier — 8-direction sheet; frames advance only while moving
-          const moved = Math.hypot(p.x - p.lastX, p.y - p.lastY) > 0.03;
-          if (moved) p.animT += dt;
-          p.lastX = p.x; p.lastY = p.y;
-          const cell = sheet.width / 8;
-          const col = moved ? Math.floor(p.animT * 10) % 8 : 2;
-          const row = spriteRow(p.h);
-          const S = R * 3.6;
-          if (p.frozenUntil) ctx.globalAlpha = 0.55;
-          // feet (alpha bottom ≈ 0.86 of the cell) land on the shadow centre
-          ctx.drawImage(sheet, col * cell, row * cell, cell, cell, X - S / 2, Y + R * 0.45 - S * 0.86, S, S);
-          ctx.globalAlpha = 1;
-        } else {
-          // sheet still loading — capsule stand-in
-          ctx.fillStyle = p.frozenUntil ? '#94a3b8' : c.color;
-          ctx.strokeStyle = c.trim; ctx.lineWidth = 2 * dpr;
-          ctx.beginPath(); ctx.ellipse(X, Y, R * 0.85, R * 1.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        }
         // name + bars
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = p.gid === myGid ? '#fde047' : '#ffffff';
-        ctx.fillText(p.name, X, Y - R * 2.6);
-        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 2.3;
+        ctx.fillText(p.name, X, Y - R * 3.0);
+        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 2.7;
         ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, byy, bw, bh);
         ctx.fillStyle = '#4ade80'; ctx.fillRect(bx, byy, bw * clamp(p.hp / BALANCE.health, 0, 1), bh);
         if (p.armor > 0) {
@@ -1362,7 +1372,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     <div ref={rootRef} className="fixed inset-0 z-[9999] overflow-hidden select-none" style={{ background: 'linear-gradient(160deg,#071a10 0%,#0d2b1a 60%,#123a22 100%)', touchAction: phase === 'battle' ? 'none' : undefined, cursor: phase === 'battle' && !isTouch && !paused ? 'none' : undefined }}>
 
       {/* battle canvas (always mounted; painter only draws in battle phases) */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ display: phase === 'preBattle' || phase === 'battle' || phase === 'victory' ? 'block' : 'none' }} />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ display: inBattle ? 'block' : 'none' }} />
+      {/* live 3D soldiers — transparent overlay, input passes through */}
+      <canvas ref={stageCanvasRef} className="absolute inset-0 w-full h-full" style={{ display: inBattle ? 'block' : 'none', pointerEvents: 'none', zIndex: 5 }} />
 
       {/* ── top bar ── */}
       <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-2 px-3 py-2" style={{ background: 'linear-gradient(rgba(4,20,10,0.7), rgba(4,20,10,0))' }}>

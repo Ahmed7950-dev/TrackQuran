@@ -130,7 +130,12 @@ interface CharRig {
   crateMixamo?: boolean;   // crate parented to a Mixamo chest bone (fennec)
 }
 
-export interface RunnerModel { url: string; scale: number; tint?: boolean }
+// tint: true = the classic P2 teal (165°), or any hue-rotate angle in degrees.
+// yawOffset: extra Y spin for models whose rest pose faces AWAY (Mixamo GLBs).
+// pinOrigin: anchor the hips pin to the BIND pose instead of the clip's first
+// frame — for clips whose frame 0 already sits away from the armature origin
+// (the Reading Battle soldier's Shoot Rifle starts 1.1m into its walk).
+export interface RunnerModel { url: string; scale: number; tint?: boolean | number; yawOffset?: number; pinOrigin?: boolean }
 
 export class RunnerStage {
   private renderer: any = null;
@@ -142,6 +147,7 @@ export class RunnerStage {
   private disposed = false;
   private THREE: any = null;
   private models: RunnerModel[];
+  private opts: { size?: () => number };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -149,10 +155,12 @@ export class RunnerStage {
     models: RunnerModel[] = [
       { url: '/models/runner.glb', scale: 1 }, { url: '/models/runner.glb', scale: 1 },
     ],
+    opts: { size?: () => number } = {},   // size: viewport square in CSS px (Reading Battle ties it to the arena zoom)
   ) {
     this.canvas = canvas;
     this.getPoses = getPoses;
     this.models = models;
+    this.opts = opts;
   }
 
   async init(): Promise<void> {
@@ -203,6 +211,11 @@ export class RunnerStage {
         const P = parent.matrixWorld.clone();
         const Pinv = P.clone().invert();
         const w = new THREE.Vector3();
+        // pinOrigin models: hold the hips at their BIND-pose spot (the loaded
+        // scene is still in bind pose here), not wherever frame 0 happens to be
+        const pinOrigin = this.models.some(m => m.pinOrigin);
+        const bind = new THREE.Vector3();
+        if (pinOrigin) hips.getWorldPosition(bind);
         for (const clip of gltf.animations) {
           for (const tr of clip.tracks as any[]) {
             if (!tr.name.endsWith('.position') || !/hips/i.test(tr.name)) continue;
@@ -210,7 +223,10 @@ export class RunnerStage {
             let wx0 = 0, wz0 = 0;
             for (let i = 0; i < v.length; i += 3) {
               w.set(v[i], v[i + 1], v[i + 2]).applyMatrix4(P);
-              if (i === 0) { wx0 = w.x; wz0 = w.z; }
+              if (i === 0) {
+                wx0 = pinOrigin ? bind.x : w.x;
+                wz0 = pinOrigin ? bind.z : w.z;
+              }
               w.x = wx0; w.z = wz0;
               w.applyMatrix4(Pinv);
               v[i] = w.x; v[i + 1] = w.y; v[i + 2] = w.z;
@@ -222,13 +238,13 @@ export class RunnerStage {
 
     // P2 gets a teal texture variant — the base color map redrawn through a
     // CSS hue-rotate on a canvas (same tint the sprites used).
-    const makeTintedTexture = (tex: any): any => {
+    const makeTintedTexture = (tex: any, hue = 165): any => {
       try {
         const img = tex.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap;
         const c = document.createElement('canvas');
         c.width = (img as any).width; c.height = (img as any).height;
         const ctx = c.getContext('2d')!;
-        ctx.filter = 'hue-rotate(165deg)';
+        ctx.filter = `hue-rotate(${hue}deg)`;
         ctx.drawImage(img as any, 0, 0);
         // NOTE: not tex.clone() — clones share the underlying image Source,
         // so writing the tinted canvas would repaint Player 1 too.
@@ -318,7 +334,9 @@ export class RunnerStage {
       root.position.z -= (bb.mn.z + bb.mx.z) / 2;
       root.position.y -= bb.mn.y;
 
-      if (this.models[who].tint) {
+      const tintVal = this.models[who].tint;
+      if (tintVal) {
+        const hue = typeof tintVal === 'number' ? tintVal : 165;
         const seen = new Map<any, any>();
         root.traverse((o: any) => {
           if (o.isMesh && o.material) {
@@ -326,7 +344,7 @@ export class RunnerStage {
             const tinted = mats.map((m: any) => {
               if (!seen.has(m)) {
                 const nm = m.clone();
-                if (nm.map) nm.map = makeTintedTexture(nm.map);
+                if (nm.map) nm.map = makeTintedTexture(nm.map, hue);
                 seen.set(m, nm);
               }
               return seen.get(m);
@@ -521,7 +539,8 @@ export class RunnerStage {
     r.clear();
     r.setScissorTest(true);
     // character viewport square, sized relative to the field (like the 70px sprite)
-    const S = ((import.meta as any).env?.DEV && (window as any).__lrSizeOverride) || Math.max(110, Math.round(H * 0.17));
+    const S = ((import.meta as any).env?.DEV && (window as any).__lrSizeOverride)
+      || (this.opts.size ? Math.max(40, Math.round(this.opts.size())) : Math.max(110, Math.round(H * 0.17)));
     // draw players further up the field first, so nearer ones (lower on
     // screen = closer to the top-down camera) overlap them naturally
     const order = this.chars.map((_, i) => i)
@@ -549,7 +568,7 @@ export class RunnerStage {
       // model yaw: heading 0 = up-screen (away from the camera → back visible).
       // ONE fixed camera angle for every animation — running, tackling and
       // falling all render from the same three-quarter view.
-      c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI;
+      c.root.rotation.y = -p.heading * Math.PI / 180 + Math.PI + (this.models[i]?.yawOffset ?? 0);
       const px = (p.x / 100) * W;
       const py = (p.y / 100) * H;
       // viewport centered horizontally, character feet ~62% down the square
@@ -594,6 +613,7 @@ export class PortraitStage {
   private charScale: number;
   private clip: string;
   private yaw: number;
+  private liteLightMul: number;
   private mixer: any = null;
   private scene: any = null;
   private camera: any = null;
@@ -602,13 +622,14 @@ export class PortraitStage {
   private fitW = 0.42;
   private centerY = 0.55;
 
-  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle', yaw = 0) {
+  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle', yaw = 0, liteLightMul = 1) {
     this.canvas = canvas;
     this.modelUrl = modelUrl;
     this.tinted = tinted;
     this.charScale = charScale; // kept for API compat — portraits self-frame now
     this.clip = clip;           // which animation to play (e.g. 'victory' on the result page)
     this.yaw = yaw;             // extra Y spin — models whose rest pose faces away (Mixamo GLBs)
+    this.liteLightMul = liteLightMul; // dim lights when the LITE model loads (maps stripped → renders brighter)
   }
 
   async init(): Promise<void> {
@@ -716,13 +737,16 @@ export class PortraitStage {
 
     const scene = new THREE.Scene();
     scene.add(root);
-    const key = new THREE.DirectionalLight(0xffffff, 3.0);
+    // the lite variant loses its metal/roughness maps and reads over-bright —
+    // scale the whole rig down by liteLightMul on those devices only
+    const lm = isLowPowerDevice ? this.liteLightMul : 1;
+    const key = new THREE.DirectionalLight(0xffffff, 3.0 * lm);
     key.position.set(-1.2, 2.5, 3);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xbfd8ff, 1.5);
+    const fill = new THREE.DirectionalLight(0xbfd8ff, 1.5 * lm);
     fill.position.set(2, 1.5, 1);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+    scene.add(new THREE.AmbientLight(0xffffff, 1.6 * lm));
 
     // true front view; distance computed per-aspect so the whole character
     // (hair to feet, cape tip to cape tip) always fits — see updateCamera()
