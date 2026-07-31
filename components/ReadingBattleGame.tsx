@@ -99,6 +99,21 @@ function segmentHitsWall(x1: number, y1: number, x2: number, y2: number): boolea
   return false;
 }
 
+/** March along the segment, stop just before entering a wall — for aim lines. */
+function clipSegmentAtWall(x1: number, y1: number, x2: number, y2: number): [number, number] {
+  const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 0.6) || 1;
+  let lx = x1, ly = y1;
+  for (let i = 1; i <= steps; i++) {
+    const x = x1 + ((x2 - x1) * i) / steps;
+    const y = y1 + ((y2 - y1) * i) / steps;
+    for (const w of WALLS) {
+      if (x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h) return [lx, ly];
+    }
+    lx = x; ly = y;
+  }
+  return [x2, y2];
+}
+
 const inCenter = (x: number, y: number) =>
   x >= CENTER_SQUARE.x && x <= CENTER_SQUARE.x + CENTER_SQUARE.w &&
   y >= CENTER_SQUARE.y && y <= CENTER_SQUARE.y + CENTER_SQUARE.h;
@@ -970,9 +985,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const X = px(p.x), Y = py(p.y), R = BALANCE.playerRadius * scale;
         // shadow + identity ring in the player's colour
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.55, R * 1.05, R * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.45, R * 0.95, R * 0.4, 0, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = c.color; ctx.lineWidth = 2 * dpr;
-        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.55, R * 1.05, R * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.45, R * 0.95, R * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
         const sheet = tintedSheet(c.color);
         if (sheet) {
           // the soldier — 8-direction sheet; frames advance only while moving
@@ -982,9 +997,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           const cell = sheet.width / 8;
           const col = moved ? Math.floor(p.animT * 10) % 8 : 2;
           const row = spriteRow(p.h);
-          const S = R * 4.6;
+          const S = R * 3.6;
           if (p.frozenUntil) ctx.globalAlpha = 0.55;
-          ctx.drawImage(sheet, col * cell, row * cell, cell, cell, X - S / 2, Y + R * 0.7 - S, S, S);
+          // feet (alpha bottom ≈ 0.86 of the cell) land on the shadow centre
+          ctx.drawImage(sheet, col * cell, row * cell, cell, cell, X - S / 2, Y + R * 0.45 - S * 0.86, S, S);
           ctx.globalAlpha = 1;
         } else {
           // sheet still loading — capsule stand-in
@@ -996,8 +1012,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = p.gid === myGid ? '#fde047' : '#ffffff';
-        ctx.fillText(p.name, X, Y - R * 3.6);
-        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 3.3;
+        ctx.fillText(p.name, X, Y - R * 2.6);
+        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 2.3;
         ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, byy, bw, bh);
         ctx.fillStyle = '#4ade80'; ctx.fillRect(bx, byy, bw * clamp(p.hp / BALANCE.health, 0, 1), bh);
         if (p.armor > 0) {
@@ -1015,20 +1031,24 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
     // ── local-only aim visuals — drawn on MY canvas only, opponents never see
     if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
+      const selfR = BALANCE.playerRadius * scale;
+      const handY = py(self.y) - selfR * 1.0; // the rifle sits here on the sprite, not at the feet
       if (!isTouch && mouseRef.current.inside) {
         const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
+        const [ex, ey] = clipSegmentAtWall(self.x, self.y, a.ax, a.ay);
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(px(self.x), py(self.y)); ctx.lineTo(px(a.ax), py(a.ay)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px(self.x), handY); ctx.lineTo(px(ex), py(ey)); ctx.stroke();
         ctx.setLineDash([]);
       } else if (isTouch && aimJoyRef.current.active) {
         const rad = (self.h * Math.PI) / 180;
+        const [ex, ey] = clipSegmentAtWall(self.x, self.y, self.x + Math.sin(rad) * 16, self.y - Math.cos(rad) * 16);
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(px(self.x), py(self.y));
-        ctx.lineTo(px(self.x + Math.sin(rad) * 16), py(self.y - Math.cos(rad) * 16)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px(self.x), handY);
+        ctx.lineTo(px(ex), py(ey)); ctx.stroke();
         ctx.setLineDash([]);
       }
       const nd = nadeDragRef.current;

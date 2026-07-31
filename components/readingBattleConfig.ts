@@ -57,7 +57,7 @@ export const BALANCE = {
   knife:   { damage: 15, range: 4.2, cooldownMs: 380 },
   ak:      { damage: 10, magazine: 30, extraAmmo: 30, fireRateMs: 165, bulletSpeed: 90, bulletRange: 60 },
   grenade: { count: 3, damageCenter: 40, damageEdge: 10, radius: 11, throwDist: 16, flightMs: 700, fuseMs: 2000 },
-  moveSpeed: 22,            // arena units / second
+  moveSpeed: 15,            // arena units / second
   playerRadius: 2.0,
   antiStall: { afterMs: 90_000, dps: 2 },   // outside the centre square
   battleCountdownMs: 3400,
