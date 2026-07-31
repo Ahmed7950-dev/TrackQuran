@@ -41,6 +41,7 @@ interface RBPlayer {
   alive: boolean; frozenUntil: number;   // 0 = not frozen
   kills: number; dmg: number;
   lastMeleeAt: number; lastFireAt: number;
+  animT: number; lastX: number; lastY: number; // sprite walk-cycle bookkeeping
 }
 
 interface Bullet { on: boolean; x: number; y: number; dx: number; dy: number; left: number; owner: string }
@@ -54,6 +55,7 @@ interface Snapshot {
   rd: { tg: string; tEnd: number; seg: string; evT: string; evN: number; done: number };
   bt: { st: number; zn: number; bl: Array<[number, number]>; gn: Array<[number, number, number]> };
   wn: string;
+  pz: number;   // 1 = battle paused (ESC) — everyone freezes together
   now: number;
 }
 
@@ -141,6 +143,34 @@ async function fetchVersePool(): Promise<string[]> {
   return words;
 }
 
+// ── The hero character (Mixamo soldier) — live 3D on DOM screens.
+//    'stretch' = Arm Stretching loop (reading challenge), 'shoot' = rifle pose.
+const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stretch', className }) => {
+  const ref = React.useRef<HTMLCanvasElement>(null);
+  React.useEffect(() => {
+    let stage: { dispose(): void } | null = null;
+    let dead = false;
+    (async () => {
+      try {
+        const { PortraitStage } = await import('./letterRaceStage');
+        if (dead || !ref.current) return;
+        const st = new PortraitStage(ref.current, '/rb/hero.glb?v=2', false, 1, clip, Math.PI);
+        stage = st;
+        await st.init();
+      } catch { /* hero is decorative — never block the game on it */ }
+    })();
+    return () => { dead = true; stage?.dispose(); };
+  }, [clip]);
+  return <canvas ref={ref} className={className} />;
+};
+
+// hero-sheet.png — 8 rows of directions x 8 frames of the Shoot Rifle cycle.
+// Row d was rendered with the camera orbited d*45 deg around the soldier and the
+// model faces the d0 camera, so: row 0 = facing down-screen, row 4 = up-screen,
+// +1 row per +45 deg of heading (h is clockwise from up-screen).
+const HERO_SHEET_URL = '/rb/hero-sheet.png?v=2';
+const spriteRow = (h: number) => (4 + Math.round((((h % 360) + 360) % 360) / 45)) % 8;
+
 const UPGRADE_META = [
   { icon: '🔪', label: 'Knife' },
   { icon: '🦺', label: 'Armor' },
@@ -159,6 +189,7 @@ function newPlayer(gid: string, name: string, charKey: string, isTutor: boolean,
     hp: BALANCE.health, armor: 0, ammo: 0, grenades: 0,
     alive: true, frozenUntil: 0, kills: 0, dmg: 0,
     lastMeleeAt: 0, lastFireAt: 0,
+    animT: 0, lastX: 50, lastY: 50,
   };
 }
 
@@ -187,6 +218,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const [qrOpen, setQrOpen] = useState(false);
   const [spectateIdx, setSpectateIdx] = useState(0);
   const [assetsReady, setAssetsReady] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const pauseStartRef = useRef(0);
+  const [isFs, setIsFs] = useState(false);
 
   const shareLink = onlineRoomId ? `${ONLINE_SITE_URL}/reading-battle/${onlineRoomId}` : '';
 
@@ -298,7 +333,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const pl = world.current.players.find(q => q.gid === payload.gid);
       if (!pl) return;
       if (pl.frozenUntil) pl.frozenUntil = 0; // reconnected
-      if (pl.alive && phaseRef.current === 'battle') {
+      if (pl.alive && phaseRef.current === 'battle' && !pausedRef.current) {
         // guests own their movement (Letter Race model); host clamps + resolves walls
         const [x, y] = collideWalls(clamp(payload.x, 0, 100), clamp(payload.y, 0, 100), BALANCE.playerRadius);
         pl.x = x; pl.y = y; pl.h = payload.h ?? pl.h;
@@ -306,7 +341,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const nxt = { atk: payload.atkN ?? 0, fire: payload.fireN ?? 0, nade: payload.nadeN ?? 0 };
         for (let i = prev.atk; i < nxt.atk; i++) hostMelee(pl);
         for (let i = prev.fire; i < nxt.fire; i++) hostFire(pl);
-        for (let i = prev.nade; i < nxt.nade; i++) hostNade(pl);
+        for (let i = prev.nade; i < nxt.nade; i++) hostNade(pl, typeof payload.nx === 'number' ? payload.nx : undefined, typeof payload.ny === 'number' ? payload.ny : undefined);
         guestActsRef.current.set(payload.gid, nxt);
       } else {
         guestActsRef.current.set(payload.gid, { atk: payload.atkN ?? 0, fire: payload.fireN ?? 0, nade: payload.nadeN ?? 0 });
@@ -316,6 +351,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     ch.on('broadcast', { event: 'leave' }, ({ payload }: { payload: { gid: string } }) => {
       if (payload?.gid) removeGuest(String(payload.gid));
     });
+
+    // any player's ESC pauses the battle for everyone
+    ch.on('broadcast', { event: 'pause' }, () => hostTogglePause());
 
     const reaper = window.setInterval(() => {
       const now = performance.now();
@@ -381,6 +419,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           gn: nadesRef.current.filter(n => n.on).map(n => [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, nadeHeight(n)] as [number, number, number]),
         },
         wn: g.winner,
+        pz: pausedRef.current ? 1 : 0,
         now: Date.now(),
       };
       ch.streamSend('state', snap);
@@ -431,6 +470,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       world.current.rd = { ...world.current.rd, turnGid: s.rd.tg, tEnd: s.rd.tEnd, seg: s.rd.seg, evT: s.rd.evT, evN: s.rd.evN, done: s.rd.done };
       world.current.bt.startedAt = s.bt.st; world.current.bt.zoneOn = !!s.bt.zn;
       world.current.winner = s.wn;
+      if (!!s.pz !== pausedRef.current) { pausedRef.current = !!s.pz; setPaused(!!s.pz); }
       // mirror projectiles for rendering
       const bl = bulletsRef.current;
       bl.forEach(b => { b.on = false; });
@@ -475,6 +515,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       ch.streamSend('input', {
         gid: myGid, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, h: Math.round(p.h),
         atkN: actsRef.current.atk, fireN: actsRef.current.fire, nadeN: actsRef.current.nade,
+        nx: Math.round(nadeAtRef.current.x * 10) / 10, ny: Math.round(nadeAtRef.current.y * 10) / 10,
       });
     }, INPUT_MS);
     return () => window.clearInterval(iv);
@@ -552,16 +593,26 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     b.dx = Math.sin(rad); b.dy = -Math.cos(rad);
     b.left = BALANCE.ak.bulletRange;
   };
-  const hostNade = (pl: RBPlayer) => {
+  const hostNade = (pl: RBPlayer, tx?: number, ty?: number) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
     if (pl.grenades <= 0) return;
     pl.grenades--;
     const n = nadesRef.current.find(n => !n.on) ?? nadesRef.current[0];
-    const rad = (pl.h * Math.PI) / 180;
     n.on = true; n.owner = pl.gid; n.t0 = performance.now();
     n.sx = pl.x; n.sy = pl.y;
-    n.tx = clamp(pl.x + Math.sin(rad) * BALANCE.grenade.throwDist, 3, 97);
-    n.ty = clamp(pl.y - Math.cos(rad) * BALANCE.grenade.throwDist, 3, 97);
+    // aimed throw (mouse / drag circle) capped at throwDist; heading throw otherwise
+    let dx: number, dy: number;
+    if (typeof tx === 'number' && typeof ty === 'number') {
+      dx = tx - pl.x; dy = ty - pl.y;
+      const d = Math.hypot(dx, dy);
+      if (d > BALANCE.grenade.throwDist) { dx *= BALANCE.grenade.throwDist / d; dy *= BALANCE.grenade.throwDist / d; }
+    } else {
+      const rad = (pl.h * Math.PI) / 180;
+      dx = Math.sin(rad) * BALANCE.grenade.throwDist;
+      dy = -Math.cos(rad) * BALANCE.grenade.throwDist;
+    }
+    n.tx = clamp(pl.x + dx, 3, 97);
+    n.ty = clamp(pl.y + dy, 3, 97);
     n.x = n.sx; n.y = n.sy;
   };
 
@@ -644,6 +695,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     g.bt.startedAt = Date.now() + BALANCE.battleCountdownMs;
     g.bt.zoneOn = false;
     g.winner = '';
+    pausedRef.current = false; setPaused(false);
     bulletsRef.current.forEach(b => { b.on = false; });
     nadesRef.current.forEach(n => { n.on = false; });
     setPhase('preBattle');
@@ -666,6 +718,17 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const touchJoyRef = useRef({ active: false, dx: 0, dy: 0, mag: 0 });
   const joyBaseRef = useRef<HTMLDivElement>(null);
   const joyKnobRef = useRef<HTMLDivElement>(null);
+  // aim: mouse (desktop) / right stick (mobile) — h is the AIM direction now
+  const mouseRef = useRef({ inside: false, cx: 0, cy: 0 });
+  const lmbRef = useRef(false);
+  const aimJoyRef = useRef({ active: false, dx: 0, dy: -1, mag: 0 });
+  const aimBaseRef = useRef<HTMLDivElement>(null);
+  const aimKnobRef = useRef<HTMLDivElement>(null);
+  const nadeDragRef = useRef({ active: false, sx: 0, sy: 0, baseAx: 50, baseAy: 50, ax: 50, ay: 50 });
+  const nadeAtRef = useRef({ x: 50, y: 50 });   // last grenade target (guests stream it)
+  const viewRef = useRef({ ox: 0, oy: 0, scale: 1, dpr: 1 }); // canvas → arena mapping
+  const heroImgRef = useRef<HTMLImageElement | null>(null);
+  const tintCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const camRef = useRef({ x: 50, y: 50 });
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const blockImgRef = useRef<HTMLImageElement | null>(null);
@@ -680,6 +743,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       img.onload = () => { blockImgRef.current = img; };
       img.src = BLOCK_SPRITE;
     }
+    const hs = new Image();
+    hs.onload = () => { heroImgRef.current = hs; };
+    hs.src = HERO_SHEET_URL;
   }, []);
 
   useEffect(() => {
@@ -696,7 +762,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       if (!isGuest) {
         if (ph === 'reading' && Date.now() >= g.rd.tEnd) hostNextReader();
         if (ph === 'preBattle' && Date.now() >= g.bt.startedAt) setPhase('battle');
-        if (ph === 'battle') {
+        if (ph === 'battle' && !pausedRef.current) {
           if (!g.bt.zoneOn && Date.now() - g.bt.startedAt > BALANCE.antiStall.afterMs) g.bt.zoneOn = true;
           if (g.bt.zoneOn) {
             for (const p of g.players) {
@@ -711,7 +777,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
       // OWN movement (host-as-player and guests alike) during battle
       const p = me();
-      if (ph === 'battle' && p && p.alive && p.fighting && !p.frozenUntil) {
+      if (ph === 'battle' && !pausedRef.current && p && p.alive && p.fighting && !p.frozenUntil) {
         let mx = 0, my = 0;
         const held = keysRef.current;
         if (held.has('KeyW') || held.has('ArrowUp')) my -= 1;
@@ -729,10 +795,26 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           p.h = (Math.atan2(mx, -my) * 180) / Math.PI;
           if (p.h < 0) p.h += 360;
         }
+        // aim OVERRIDES the movement heading: mouse cursor (desktop) or the
+        // right stick (mobile). Falls back to the movement heading otherwise.
+        if (!isTouch && mouseRef.current.inside) {
+          const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
+          const adx = a.ax - p.x, ady = a.ay - p.y;
+          if (Math.hypot(adx, ady) > 0.8) {
+            p.h = (Math.atan2(adx, -ady) * 180) / Math.PI;
+            if (p.h < 0) p.h += 360;
+          }
+        } else if (isTouch && aimJoyRef.current.active && aimJoyRef.current.mag > 0.25) {
+          const aj = aimJoyRef.current;
+          p.h = (Math.atan2(aj.dx, -aj.dy) * 180) / Math.PI;
+          if (p.h < 0) p.h += 360;
+        }
+        // hold-to-fire (LMB / right stick) — doShoot swaps to knife when dry
+        if ((!isTouch && lmbRef.current) || (isTouch && aimJoyRef.current.active && aimJoyRef.current.mag > 0.35)) doShoot();
       }
 
       // host: advance projectiles + resolve hits
-      if (!isGuest && ph === 'battle') {
+      if (!isGuest && ph === 'battle' && !pausedRef.current) {
         for (const b of bulletsRef.current) {
           if (!b.on) continue;
           const step = BALANCE.ak.bulletSpeed * dt;
@@ -786,7 +868,28 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGuest]);
 
-  /* ── canvas painter (placeholder art, pseudo-3D walls) ──────────────────── */
+  // per-player tinted copies of the hero sheet (colour identity like the capsules had)
+  const tintedSheet = (color: string): HTMLCanvasElement | null => {
+    const img = heroImgRef.current;
+    if (!img) return null;
+    const cache = tintCacheRef.current;
+    let c = cache.get(color);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext('2d');
+      if (!g) return null;
+      g.drawImage(img, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.globalAlpha = 0.30;
+      g.fillStyle = color;
+      g.fillRect(0, 0, c.width, c.height);
+      cache.set(color, c);
+    }
+    return c;
+  };
+
+  /* ── canvas painter (pseudo-3D walls + hero sprites) ────────────────────── */
   const drawArena = (dt: number) => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -814,6 +917,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const oy = H / 2 - cam.y * scale;
     const px = (x: number) => ox + x * scale;
     const py = (y: number) => oy + y * scale;
+    viewRef.current = { ox, oy, scale, dpr };
 
     // ground (out-of-bounds matches the desert art edge so corners don't show void)
     ctx.fillStyle = bgImgRef.current ? '#d68c47' : '#0f2418';
@@ -864,27 +968,36 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const c = charOf(p.charKey);
       items.push({ y: p.y, draw: () => {
         const X = px(p.x), Y = py(p.y), R = BALANCE.playerRadius * scale;
-        // shadow
+        // shadow + identity ring in the player's colour
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.75, R * 0.9, R * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-        // capsule body (placeholder character — registry-driven colours)
-        ctx.fillStyle = p.frozenUntil ? '#94a3b8' : c.color;
-        ctx.strokeStyle = c.trim; ctx.lineWidth = 2 * dpr;
-        ctx.beginPath(); ctx.ellipse(X, Y, R * 0.85, R * 1.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        // facing indicator
-        const rad = (p.h * Math.PI) / 180;
-        ctx.strokeStyle = c.trim; ctx.lineWidth = 3 * dpr;
-        ctx.beginPath(); ctx.moveTo(X, Y);
-        ctx.lineTo(X + Math.sin(rad) * R * 1.5, Y - Math.cos(rad) * R * 1.5); ctx.stroke();
-        // face emoji
-        ctx.font = `${Math.round(R * 1.0)}px sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(c.emoji, X, Y - R * 0.15);
+        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.55, R * 1.05, R * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = c.color; ctx.lineWidth = 2 * dpr;
+        ctx.beginPath(); ctx.ellipse(X, Y + R * 0.55, R * 1.05, R * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+        const sheet = tintedSheet(c.color);
+        if (sheet) {
+          // the soldier — 8-direction sheet; frames advance only while moving
+          const moved = Math.hypot(p.x - p.lastX, p.y - p.lastY) > 0.03;
+          if (moved) p.animT += dt;
+          p.lastX = p.x; p.lastY = p.y;
+          const cell = sheet.width / 8;
+          const col = moved ? Math.floor(p.animT * 10) % 8 : 2;
+          const row = spriteRow(p.h);
+          const S = R * 4.6;
+          if (p.frozenUntil) ctx.globalAlpha = 0.55;
+          ctx.drawImage(sheet, col * cell, row * cell, cell, cell, X - S / 2, Y + R * 0.7 - S, S, S);
+          ctx.globalAlpha = 1;
+        } else {
+          // sheet still loading — capsule stand-in
+          ctx.fillStyle = p.frozenUntil ? '#94a3b8' : c.color;
+          ctx.strokeStyle = c.trim; ctx.lineWidth = 2 * dpr;
+          ctx.beginPath(); ctx.ellipse(X, Y, R * 0.85, R * 1.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
         // name + bars
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = p.gid === myGid ? '#fde047' : '#ffffff';
-        ctx.fillText(p.name, X, Y - R * 2.15);
-        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 1.85;
+        ctx.fillText(p.name, X, Y - R * 3.6);
+        const bw = R * 2.2, bh = 4 * dpr, bx = X - bw / 2, byy = Y - R * 3.3;
         ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, byy, bw, bh);
         ctx.fillStyle = '#4ade80'; ctx.fillRect(bx, byy, bw * clamp(p.hp / BALANCE.health, 0, 1), bh);
         if (p.armor > 0) {
@@ -899,6 +1012,41 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     }
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.draw();
+
+    // ── local-only aim visuals — drawn on MY canvas only, opponents never see
+    if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
+      if (!isTouch && mouseRef.current.inside) {
+        const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.setLineDash([5 * dpr, 5 * dpr]);
+        ctx.beginPath(); ctx.moveTo(px(self.x), py(self.y)); ctx.lineTo(px(a.ax), py(a.ay)); ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (isTouch && aimJoyRef.current.active) {
+        const rad = (self.h * Math.PI) / 180;
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.setLineDash([5 * dpr, 5 * dpr]);
+        ctx.beginPath(); ctx.moveTo(px(self.x), py(self.y));
+        ctx.lineTo(px(self.x + Math.sin(rad) * 16), py(self.y - Math.cos(rad) * 16)); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const nd = nadeDragRef.current;
+      if (nd.active) {
+        // vivid landing circle while the grenade button is held
+        const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
+        const TR = BALANCE.grenade.radius * scale * pulse;
+        ctx.fillStyle = 'rgba(190,242,100,0.18)';
+        ctx.beginPath(); ctx.arc(px(nd.ax), py(nd.ay), TR, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(190,242,100,0.95)';
+        ctx.lineWidth = 3 * dpr;
+        ctx.setLineDash([7 * dpr, 5 * dpr]);
+        ctx.beginPath(); ctx.arc(px(nd.ax), py(nd.ay), TR, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(190,242,100,0.95)';
+        ctx.beginPath(); ctx.arc(px(nd.ax), py(nd.ay), 3.5 * dpr, 0, Math.PI * 2); ctx.fill();
+      }
+    }
 
     // projectiles above everything
     ctx.fillStyle = '#fef08a';
@@ -938,19 +1086,27 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         ctx.beginPath(); ctx.arc(px(f.x), py(f.y), 6 * dpr * t, 0, Math.PI * 2); ctx.stroke();
       }
     }
+
+    // dot cursor — the OS cursor is hidden during desktop battle
+    if (ph === 'battle' && !isTouch && !pausedRef.current && mouseRef.current.inside) {
+      const m = mouseRef.current;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(m.cx * dpr, m.cy * dpr, 3 * dpr, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath(); ctx.arc(m.cx * dpr, m.cy * dpr, 6.5 * dpr, 0, Math.PI * 2); ctx.stroke();
+    }
   };
 
   /* ── inputs: keyboard + joystick + action buttons ───────────────────────── */
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-      const HANDLED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyJ', 'KeyK', 'KeyL'];
+      const HANDLED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'];
       if (!HANDLED.includes(e.code)) return;
       e.preventDefault();
+      if (e.code === 'Escape') { requestPauseToggle(); return; }
       keysRef.current.add(e.code);
-      if (e.code === 'KeyJ') doAttack();
-      if (e.code === 'KeyK') doFire();
-      if (e.code === 'KeyL') doNade();
     };
     const up = (e: KeyboardEvent) => keysRef.current.delete(e.code);
     window.addEventListener('keydown', down);
@@ -959,20 +1115,83 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doAttack = () => {
+  // ONE trigger: rifle when armed, knife/fists automatically when out of ammo
+  // (the knife has no button of its own). Guests predict their own cooldowns
+  // locally so held autofire doesn't flood the action counters.
+  const doShoot = () => {
     const p = me();
-    if (!p || !p.alive || phaseRef.current !== 'battle') return;
-    if (isGuest) actsRef.current.atk++; else hostMelee(p);
+    if (!p || !p.alive || phaseRef.current !== 'battle' || pausedRef.current) return;
+    const gun = p.upgrades >= 3 && p.ammo > 0;
+    if (!isGuest) { if (gun) hostFire(p); else hostMelee(p); return; }
+    const now = performance.now();
+    if (gun) {
+      if (now - p.lastFireAt < BALANCE.ak.fireRateMs) return;
+      p.lastFireAt = now;
+      actsRef.current.fire++;
+      playSfx('shot', 0.55);
+    } else {
+      const spec = p.upgrades >= 1 ? BALANCE.knife : BALANCE.fists;
+      if (now - p.lastMeleeAt < spec.cooldownMs) return;
+      p.lastMeleeAt = now;
+      actsRef.current.atk++;
+      playSfx('melee', 0.5);
+    }
   };
-  const doFire = () => {
+  const doNade = (tx: number, ty: number) => {
     const p = me();
-    if (!p || !p.alive || phaseRef.current !== 'battle') return;
-    if (isGuest) actsRef.current.fire++; else hostFire(p);
+    if (!p || !p.alive || phaseRef.current !== 'battle' || pausedRef.current) return;
+    if (p.grenades <= 0) return;
+    if (isGuest) { nadeAtRef.current = { x: tx, y: ty }; actsRef.current.nade++; }
+    else hostNade(p, tx, ty);
   };
-  const doNade = () => {
-    const p = me();
-    if (!p || !p.alive || phaseRef.current !== 'battle') return;
-    if (isGuest) actsRef.current.nade++; else hostNade(p);
+
+  /* ── pause (ESC — networked, freezes everyone) ──────────────────────────── */
+  const hostTogglePause = () => {
+    if (phaseRef.current !== 'battle') return;
+    if (!pausedRef.current) {
+      pausedRef.current = true;
+      pauseStartRef.current = performance.now();
+      setPaused(true);
+    } else {
+      // shift running clocks by the paused span so fuses/zone don't jump
+      const span = performance.now() - pauseStartRef.current;
+      nadesRef.current.forEach(n => { if (n.on) n.t0 += span; });
+      world.current.bt.startedAt += span;
+      pausedRef.current = false;
+      setPaused(false);
+    }
+  };
+  const requestPauseToggle = () => {
+    if (phaseRef.current !== 'battle') return;
+    if (isGuest) { try { channelRef.current?.send({ type: 'broadcast', event: 'pause', payload: { gid: myGid } }); } catch { /* offline */ } }
+    else hostTogglePause();
+  };
+
+  /* ── fullscreen ─────────────────────────────────────────────────────────── */
+  const fsSupported = typeof document !== 'undefined' &&
+    !!((document.documentElement as any).requestFullscreen || (document.documentElement as any).webkitRequestFullscreen);
+  const toggleFs = () => {
+    const el = rootRef.current as any;
+    const doc = document as any;
+    try {
+      if (!(doc.fullscreenElement || doc.webkitFullscreenElement)) {
+        (el?.requestFullscreen || el?.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
+      } else {
+        (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)?.catch?.(() => {});
+      }
+    } catch { /* unsupported */ }
+  };
+  useEffect(() => {
+    const onFs = () => setIsFs(!!((document as any).fullscreenElement || (document as any).webkitFullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    return () => { document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('webkitfullscreenchange', onFs); };
+  }, []);
+
+  /* ── canvas px → arena units (via the transform drawArena stored) ───────── */
+  const arenaFromClient = (cx: number, cy: number) => {
+    const v = viewRef.current;
+    return { ax: (cx * v.dpr - v.ox) / v.scale, ay: (cy * v.dpr - v.oy) / v.scale };
   };
 
   const isTouch = typeof window !== 'undefined' &&
@@ -980,7 +1199,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
      (((import.meta as any).env?.DEV) && (window as any).__rbForceTouch === true));
   const joyMove = (e: React.TouchEvent) => {
     const base = joyBaseRef.current;
-    const t = e.touches[0];
+    const t = e.targetTouches[0]; // NOT touches[0] — both sticks are used at once
     if (!base || !t) return;
     const r = base.getBoundingClientRect();
     let dx = (t.clientX - (r.left + r.width / 2)) / (r.width / 2);
@@ -997,6 +1216,95 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const k = joyKnobRef.current;
     if (k) k.style.transform = 'translate(-50%,-50%)';
   };
+
+  /* ── right stick: aim + autofire while held ─────────────────────────────── */
+  const aimMove = (e: React.TouchEvent) => {
+    const base = aimBaseRef.current;
+    const t = e.targetTouches[0];
+    if (!base || !t) return;
+    const r = base.getBoundingClientRect();
+    let dx = (t.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    let dy = (t.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    const mag = Math.hypot(dx, dy);
+    if (mag > 1) { dx /= mag; dy /= mag; }
+    aimJoyRef.current = { active: true, dx, dy, mag: Math.min(1, mag) };
+    const k = aimKnobRef.current;
+    const travel = r.width * 0.29;
+    if (k) k.style.transform = `translate(calc(-50% + ${dx * travel}px), calc(-50% + ${dy * travel}px))`;
+  };
+  const aimEnd = () => {
+    aimJoyRef.current = { active: false, dx: 0, dy: -1, mag: 0 };
+    const k = aimKnobRef.current;
+    if (k) k.style.transform = 'translate(-50%,-50%)';
+  };
+
+  /* ── grenade button: hold shows a draggable landing circle, release throws ─ */
+  const updateNadeTarget = (cx: number, cy: number) => {
+    const nd = nadeDragRef.current;
+    const p = me();
+    if (!nd.active || !p) return;
+    const v = viewRef.current;
+    const cssPerUnit = v.scale / v.dpr;
+    const ax = nd.baseAx + (cx - nd.sx) / cssPerUnit;
+    const ay = nd.baseAy + (cy - nd.sy) / cssPerUnit;
+    let dx = ax - p.x, dy = ay - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > BALANCE.grenade.throwDist) { dx *= BALANCE.grenade.throwDist / d; dy *= BALANCE.grenade.throwDist / d; }
+    nd.ax = clamp(p.x + dx, 3, 97);
+    nd.ay = clamp(p.y + dy, 3, 97);
+  };
+  const nadeTouchStart = (e: React.TouchEvent) => {
+    const p = me();
+    const t = e.targetTouches[0];
+    if (!p || !t || !p.alive || phaseRef.current !== 'battle' || pausedRef.current || p.grenades <= 0) return;
+    const rad = (p.h * Math.PI) / 180;
+    const d = BALANCE.grenade.throwDist * 0.55;
+    nadeDragRef.current = {
+      active: true, sx: t.clientX, sy: t.clientY,
+      baseAx: p.x + Math.sin(rad) * d, baseAy: p.y - Math.cos(rad) * d,
+      ax: p.x, ay: p.y,
+    };
+    updateNadeTarget(t.clientX, t.clientY);
+  };
+  const nadeTouchMove = (e: React.TouchEvent) => {
+    const t = e.targetTouches[0];
+    if (t) updateNadeTarget(t.clientX, t.clientY);
+  };
+  const nadeTouchEnd = () => {
+    const nd = nadeDragRef.current;
+    if (!nd.active) return;
+    nd.active = false;
+    doNade(nd.ax, nd.ay);
+  };
+
+  /* ── desktop mouse: steer aim, LMB fire (hold = auto), RMB grenade ──────── */
+  useEffect(() => {
+    if (isTouch) return;
+    const mm = (e: MouseEvent) => { const m = mouseRef.current; m.inside = true; m.cx = e.clientX; m.cy = e.clientY; };
+    const mout = (e: MouseEvent) => { if (!e.relatedTarget) { mouseRef.current.inside = false; lmbRef.current = false; } };
+    const md = (e: MouseEvent) => {
+      if (phaseRef.current !== 'battle' || pausedRef.current) return;
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest && t.closest('button, input, a')) return; // UI stays clickable
+      if (e.button === 0) { lmbRef.current = true; doShoot(); }
+      else if (e.button === 2) { const a = arenaFromClient(e.clientX, e.clientY); doNade(a.ax, a.ay); }
+    };
+    const mu = (e: MouseEvent) => { if (e.button === 0) lmbRef.current = false; };
+    const cm = (e: MouseEvent) => { if (phaseRef.current === 'battle') e.preventDefault(); };
+    window.addEventListener('mousemove', mm);
+    window.addEventListener('mouseout', mout);
+    window.addEventListener('mousedown', md);
+    window.addEventListener('mouseup', mu);
+    window.addEventListener('contextmenu', cm);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('mouseout', mout);
+      window.removeEventListener('mousedown', md);
+      window.removeEventListener('mouseup', mu);
+      window.removeEventListener('contextmenu', cm);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTouch]);
 
   // scroll lock (same iOS handling as Letter Race)
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1031,7 +1339,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
   /* ═══════════════════════════ RENDER ═══════════════════════════ */
   return (
-    <div ref={rootRef} className="fixed inset-0 z-[9999] overflow-hidden select-none" style={{ background: 'linear-gradient(160deg,#071a10 0%,#0d2b1a 60%,#123a22 100%)', touchAction: phase === 'battle' ? 'none' : undefined }}>
+    <div ref={rootRef} className="fixed inset-0 z-[9999] overflow-hidden select-none" style={{ background: 'linear-gradient(160deg,#071a10 0%,#0d2b1a 60%,#123a22 100%)', touchAction: phase === 'battle' ? 'none' : undefined, cursor: phase === 'battle' && !isTouch && !paused ? 'none' : undefined }}>
 
       {/* battle canvas (always mounted; painter only draws in battle phases) */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ display: phase === 'preBattle' || phase === 'battle' || phase === 'victory' ? 'block' : 'none' }} />
@@ -1052,6 +1360,12 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             </span>
           ))}
         </span>
+        {fsSupported && (
+          <button onClick={toggleFs} title={isFs ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: 10, padding: '7px 11px', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+            {isFs ? '⇲' : '⛶'}
+          </button>
+        )}
       </div>
 
       {/* ══ LOBBY ══ */}
@@ -1221,8 +1535,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             {/* the SEGMENT — only the reader + the referee see the text.
                 Quran text: proper font, large, never altered. */}
             {(iAmReader || !isGuest) && !readCountingDown && (
-              <div key={rd.evN + rd.seg} className={`bg-[#fdf8ee] rounded-3xl border-4 border-amber-300 px-6 py-10 text-center shadow-2xl ${rd.evT === 'buzz' ? 'rb-shake' : ''}`}>
-                <p style={{ ...HAFS, fontSize: 'clamp(34px, 7vw, 64px)', lineHeight: 2 }} className="text-slate-900">{rd.seg}</p>
+              <div key={rd.evN + rd.seg} className={`bg-[#fdf8ee] rounded-3xl border-4 border-amber-300 px-6 py-12 text-center shadow-2xl ${rd.evT === 'buzz' ? 'rb-shake' : ''}`}>
+                <p dir="rtl" style={{ fontSize: 'clamp(44px, 9vw, 84px)', lineHeight: 2.3 }} className="font-quranic text-slate-900">{rd.seg}</p>
               </div>
             )}
             {!iAmReader && isGuest && (
@@ -1241,6 +1555,18 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             {!isGuest && (
               <button onClick={hostNextReader} className="w-full text-white/50 text-xs font-semibold underline">skip to next reader ▸</button>
             )}
+
+            {/* the hero, stretching before the fight — reader's gear under it */}
+            <div className="bg-white/10 border border-white/15 rounded-2xl p-3 flex flex-col items-center">
+              <RBHero clip="stretch" className="w-44 h-52" />
+              {reader && (
+                <div className="flex gap-2 text-2xl mt-1">
+                  {UPGRADE_META.map((u, i) => (
+                    <span key={i} title={u.label} className={i < reader.upgrades ? '' : 'opacity-20 grayscale'}>{u.icon}</span>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* live upgrade progress — everyone sees it */}
             <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-2">
@@ -1295,37 +1621,48 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               <div
                 ref={joyBaseRef}
                 onTouchStart={joyMove} onTouchMove={joyMove} onTouchEnd={joyEnd} onTouchCancel={joyEnd}
-                className="rb-joy" style={{ position: 'absolute', bottom: 30, left: 22, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.4)', zIndex: 25, touchAction: 'none' }}>
+                className="rb-joy rb-joy-l" style={{ position: 'absolute', bottom: 30, left: 22, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(255,255,255,0.4)', zIndex: 25, touchAction: 'none' }}>
                 <div ref={joyKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(255,255,255,0.65)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
                 <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>MOVE</div>
               </div>
-              <div className="rb-actions" style={{ position: 'absolute', bottom: 40, right: 22, display: 'flex', gap: 12, zIndex: 25 }}>
-                <button onTouchStart={doAttack} onMouseDown={doAttack}
-                  style={{ width: 70, height: 70, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(239,68,68,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, touchAction: 'none', lineHeight: 1.25 }}>
-                  {meP.upgrades >= 1 ? '🔪' : '👊'}<br />{meP.upgrades >= 1 ? 'KNIFE' : 'FISTS'}
-                </button>
-                {meP.upgrades >= 3 && (
-                  <button onTouchStart={doFire} onMouseDown={doFire}
-                    style={{ width: 70, height: 70, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(245,158,11,0.55)', color: '#fff', fontWeight: 900, fontSize: 11, touchAction: 'none', lineHeight: 1.25 }}>
-                    🔫<br />{meP.ammo}
-                  </button>
-                )}
-                {meP.grenades > 0 && (
-                  <button onTouchStart={doNade} onMouseDown={doNade}
-                    style={{ width: 70, height: 70, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(132,204,22,0.5)', color: '#fff', fontWeight: 900, fontSize: 11, touchAction: 'none', lineHeight: 1.25 }}>
-                    💣<br />×{meP.grenades}
-                  </button>
-                )}
+              <div
+                ref={aimBaseRef}
+                onTouchStart={aimMove} onTouchMove={aimMove} onTouchEnd={aimEnd} onTouchCancel={aimEnd}
+                className="rb-joy rb-joy-r" style={{ position: 'absolute', bottom: 30, right: 22, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '2px solid rgba(252,165,165,0.5)', zIndex: 25, touchAction: 'none' }}>
+                <div ref={aimKnobRef} style={{ position: 'absolute', left: '50%', top: '50%', width: 58, height: 58, borderRadius: '50%', background: 'rgba(254,202,202,0.7)', boxShadow: '0 3px 10px rgba(0,0,0,0.35)', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: -22, width: '100%', textAlign: 'center', color: '#fff', fontWeight: 900, fontSize: 11, textShadow: '0 1px 3px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>
+                  {meP.upgrades >= 3 && meP.ammo > 0 ? `SHOOT · ${meP.ammo}` : meP.upgrades >= 1 ? 'KNIFE' : 'FISTS'}
+                </div>
               </div>
+              {meP.grenades > 0 && (
+                <button
+                  className="rb-nade"
+                  onTouchStart={nadeTouchStart} onTouchMove={nadeTouchMove} onTouchEnd={nadeTouchEnd} onTouchCancel={nadeTouchEnd}
+                  style={{ position: 'absolute', bottom: 192, right: 44, width: 66, height: 66, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.5)', background: 'rgba(132,204,22,0.55)', color: '#fff', fontWeight: 900, fontSize: 11, touchAction: 'none', lineHeight: 1.25, zIndex: 25 }}>
+                  💣<br />×{meP.grenades}
+                </button>
+              )}
             </>
           )}
           {!isTouch && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-black/40 rounded-full px-4 py-1.5 text-white/70 text-xs font-semibold">
-              WASD move · J {meP.upgrades >= 1 ? 'knife' : 'fists'}{meP.upgrades >= 3 ? ` · K fire (${meP.ammo})` : ''}{meP.grenades > 0 ? ` · L grenade (×${meP.grenades})` : ''}
+              WASD move · mouse aim · click {meP.upgrades >= 3 && meP.ammo > 0 ? `fire (${meP.ammo})` : meP.upgrades >= 1 ? 'knife' : 'fists'}{meP.grenades > 0 ? ` · right-click grenade (×${meP.grenades})` : ''} · ESC pause
             </div>
           )}
         </>
       )}
+      {/* ══ PAUSED (ESC — everyone freezes) ══ */}
+      {phase === 'battle' && paused && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(4,20,10,0.6)' }}>
+          <div className="text-center space-y-4">
+            <p className="text-white text-6xl">⏸</p>
+            <p className="text-white text-2xl font-extrabold">Game paused</p>
+            <button onClick={requestPauseToggle} style={{ ...btnBase, background: 'linear-gradient(135deg,#16a34a,#15803d)' }}>▶ Resume</button>
+            {!isTouch && <p className="text-emerald-200/70 text-xs font-semibold">ESC resumes for everyone</p>}
+          </div>
+        </div>
+      )}
+
       {/* spectator overlay (dead or referee-only) */}
       {phase === 'battle' && (!meP || !meP.fighting || !meP.alive) && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 text-center">
@@ -1385,15 +1722,18 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         @keyframes rbPop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         .rb-pop { animation: rbPop 0.4s ease-out; }
         @media (max-width: 740px) {
-          .rb-joy { width: 170px !important; height: 170px !important; bottom: 20px !important; left: 12px !important; }
+          .rb-joy { width: 170px !important; height: 170px !important; bottom: 20px !important; }
+          .rb-joy-l { left: 12px !important; }
+          .rb-joy-r { right: 12px !important; }
           .rb-joy > div:first-child { width: 72px !important; height: 72px !important; }
-          .rb-actions { bottom: 26px !important; right: 12px !important; gap: 8px !important; }
-          .rb-actions button { width: 76px !important; height: 76px !important; font-size: 10px !important; }
+          .rb-nade { width: 76px !important; height: 76px !important; bottom: 204px !important; right: 58px !important; font-size: 10px !important; }
         }
         @media (max-height: 480px) {
-          .rb-joy { width: 140px !important; height: 140px !important; bottom: 14px !important; left: 10px !important; }
+          .rb-joy { width: 140px !important; height: 140px !important; bottom: 14px !important; }
+          .rb-joy-l { left: 10px !important; }
+          .rb-joy-r { right: 10px !important; }
           .rb-joy > div:first-child { width: 60px !important; height: 60px !important; }
-          .rb-actions button { width: 64px !important; height: 64px !important; font-size: 9px !important; }
+          .rb-nade { width: 62px !important; height: 62px !important; bottom: 166px !important; right: 48px !important; font-size: 9px !important; }
         }
       `}</style>
     </div>

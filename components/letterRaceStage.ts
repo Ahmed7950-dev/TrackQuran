@@ -593,6 +593,7 @@ export class PortraitStage {
   private tinted: boolean;
   private charScale: number;
   private clip: string;
+  private yaw: number;
   private mixer: any = null;
   private scene: any = null;
   private camera: any = null;
@@ -601,12 +602,13 @@ export class PortraitStage {
   private fitW = 0.42;
   private centerY = 0.55;
 
-  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle') {
+  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle', yaw = 0) {
     this.canvas = canvas;
     this.modelUrl = modelUrl;
     this.tinted = tinted;
     this.charScale = charScale; // kept for API compat — portraits self-frame now
     this.clip = clip;           // which animation to play (e.g. 'victory' on the result page)
+    this.yaw = yaw;             // extra Y spin — models whose rest pose faces away (Mixamo GLBs)
   }
 
   async init(): Promise<void> {
@@ -675,6 +677,8 @@ export class PortraitStage {
     // scale knob is ignored here, it only made big characters overflow the frame.
     const skinned: any[] = [];
     root.traverse((o: any) => { if (o.isSkinnedMesh) skinned.push(o); });
+    // spin BEFORE measuring — all the bounds/centering below then account for it
+    if (this.yaw) root.rotation.y = this.yaw;
     root.updateMatrixWorld(true);
     const boneBounds = () => {
       const mn = new THREE.Vector3(1e9, 1e9, 1e9), mx = new THREE.Vector3(-1e9, -1e9, -1e9);
