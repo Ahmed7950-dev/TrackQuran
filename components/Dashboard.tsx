@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory } from '../types';
+import { Student, SortCriteria, SurahMetadata, AttendanceStatus, AgeCategory, Mistake } from '../types';
 import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
@@ -604,14 +604,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
             const days = getDaysSinceLastActivity(s);
             if (days !== null && days > 14) return 2e9;
             // Students with 0 pages read sit just above inactive
-            const rp = getRecitedPagesSet(s);
-            if (rp.size === 0) return 1e9;
-            // Everyone else: sort ascending by mistakes-per-page
-            const valid = Object.entries(s.mistakes || {}).filter(([key]) => {
+            // Same denominator as the DISPLAYED rate: recited ∪ memorized pages.
+            const pages = new Set<number>([...getRecitedPagesSet(s), ...getMemorizedPagesSet(s)]);
+            if (pages.size === 0) return 1e9;
+            // Everyone else: ascending by the exact rate the card shows —
+            // yellow (fixed) marks excluded, reading + tajweed counted.
+            const valid = Object.entries(s.mistakes || {}).filter(([key, m]) => {
+              if (!(m as Mistake).errorType) return false;
               const [su, ay] = key.split(':').map(Number);
-              return !isNaN(su) && !isNaN(ay) && rp.has(getPageOfAyah(su, ay));
+              return !isNaN(su) && !isNaN(ay) && pages.has(getPageOfAyah(su, ay));
             });
-            return valid.length / rp.size;
+            return valid.length / pages.size;
           };
           return getSortKey(a) - getSortKey(b);
         }
