@@ -1,13 +1,13 @@
 import React from 'react';
 import { RecitationAchievement, MemorizationAchievement, Mistake } from '../types';
 import { useI18n } from '../context/I18nProvider';
-import { computeMistakesRate } from '../services/dataService';
+import { fullyRecitedPageSet, getPageOfAyah } from '../services/dataService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Overall mistakes ratio over time. One point per progress-log date; each
-// point = the student's mistake ratio AS OF that day (distinct mistake verses
-// ÷ pages read so far — the same formula as the live stat, replayed
-// cumulatively). Rose color; the exact ratio printed above every dot.
+// Overall mistakes ratio over time — the SAME metric as the "mistakes rate"
+// stat card above the chart (marked letters on read pages ÷ fully read pages),
+// replayed cumulatively at each progress-log date so the last point matches
+// the headline number. Rose color; the exact ratio printed above every dot.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MistakeRatioChartProps {
@@ -19,19 +19,36 @@ interface MistakeRatioChartProps {
 const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchievements, memorizationAchievements, mistakes }) => {
   const { t, language } = useI18n();
 
-  // X axis: every calendar date with logged progress (either type).
+  // X axis: every calendar date with logged progress — plus the latest mistake
+  // date when it falls after the last progress log, so the chart always ends
+  // at the same value the stat card shows.
+  const mistakeEntries = Object.entries(mistakes).filter(([k]) => {
+    const [su, a] = k.split(':').map(Number);
+    return !isNaN(su) && !isNaN(a);
+  });
   const dateKeys = [...new Set([
     ...recitationAchievements.map(a => a.date.slice(0, 10)),
     ...memorizationAchievements.map(a => a.date.slice(0, 10)),
   ])].sort();
+  const lastMistakeDate = mistakeEntries.reduce((mx, [, m]) => {
+    const d = (m.date ?? '').slice(0, 10);
+    return d > mx ? d : mx;
+  }, '');
+  if (dateKeys.length && lastMistakeDate > dateKeys[dateKeys.length - 1]) dateKeys.push(lastMistakeDate);
 
-  // Cumulative ratio at the end of each date.
-  const mistakeEntries = Object.entries(mistakes);
+  // Cumulative ratio at the end of each date — identical semantics to the
+  // stat card: numerator = marked LETTERS on read pages (all error types),
+  // denominator = fully read pages (recited ∪ memorized) as of that date.
   const dataPoints = dateKeys.map(dateKey => {
     const rec = recitationAchievements.filter(a => a.date.slice(0, 10) <= dateKey);
     const mem = memorizationAchievements.filter(a => a.date.slice(0, 10) <= dateKey);
-    const mis = Object.fromEntries(mistakeEntries.filter(([, m]) => (m.date ?? '').slice(0, 10) <= dateKey));
-    return { date: new Date(dateKey), ratio: computeMistakesRate(rec, mis, mem) };
+    const pages = new Set<number>([...fullyRecitedPageSet(rec as any), ...fullyRecitedPageSet(mem as any)]);
+    const n = mistakeEntries.filter(([k, m]) => {
+      if ((m.date ?? '').slice(0, 10) > dateKey) return false;
+      const [su, a] = k.split(':').map(Number);
+      return pages.has(getPageOfAyah(su, a));
+    }).length;
+    return { date: new Date(dateKey), ratio: pages.size > 0 ? Math.round((n / pages.size) * 100) / 100 : 0 };
   });
 
   if (dataPoints.length < 2) {
@@ -98,7 +115,7 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
               {/* the exact ratio, printed above every dot */}
               <text x={xScale(d.date)} y={yScale(d.ratio) - 9} textAnchor="middle"
                 className="fill-rose-600 dark:fill-rose-300" fontSize="10" fontWeight="700">
-                {d.ratio}
+                {d.ratio.toFixed(2)}
               </text>
             </g>
           ))}

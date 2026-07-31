@@ -334,7 +334,7 @@ function buildCoveredVerseKeys(achievements: AchRange[]): Set<string> {
 }
 
 /** Pages where every verse on the page is covered by at least one achievement */
-function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
+export function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
   const map     = getPageVerseMap();
   const covered = buildCoveredVerseKeys(achievements);
   const pages   = new Set<number>();
