@@ -14,6 +14,7 @@ import EditStudentDataModal from './EditStudentModal';
 import ExportReportModal from './ExportReportModal';
 import AddAttendanceModal from './AddAttendanceModal';
 import ProgressChart from './ProgressChart';
+import MistakeRatioChart from './MistakeRatioChart';
 import { useI18n } from '../context/I18nProvider';
 import StudentHeader from './StudentHeader';
 import ModernToggle from './ModernToggle';
@@ -205,7 +206,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const [calendarDate, setCalendarDate] = useState(new Date());
 
     // Fix: Replaced 'a.useState' with 'useState'.
-    const [chartView, setChartView] = useState<'reading' | 'memorization'>('reading');
+    const [chartView, setChartView] = useState<'reading' | 'memorization' | 'mistakes'>('reading');
     const [tajweedCompletions, setTajweedCompletions] = useState<TajweedCompletion[]>([]);
 
     useEffect(() => {
@@ -1029,19 +1030,25 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-semibold text-slate-700 dark:text-slate-200">{t('studentDetail.progressOverTime')}</h3>
-                    <ModernToggle value={chartView} onChange={setChartView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
+                    <ModernToggle value={chartView} onChange={setChartView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} labelThree="Mistakes ratio" />
                 </div>
                 {chartView === 'reading' ? (
                      <ProgressChart achievements={student.recitationAchievements} type="reading" />
-                ) : (
+                ) : chartView === 'memorization' ? (
                     <ProgressChart achievements={student.memorizationAchievements} type="memorization" />
+                ) : (
+                    <MistakeRatioChart
+                        recitationAchievements={student.recitationAchievements}
+                        memorizationAchievements={student.memorizationAchievements}
+                        mistakes={student.mistakes || {}}
+                    />
                 )}
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                 <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-slate-700 dark:text-slate-200">{t('studentDetail.quranProgress')}</h3>
-                    <ModernToggle value={quranBarView} onChange={setQuranBarView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
+                    <ModernToggle value={quranBarView} onChange={v => setQuranBarView(v as 'reading' | 'memorization')} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
                 </div>
                 <div className="mt-4">
                     {quranBarView === 'reading' 
@@ -1054,7 +1061,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-semibold text-slate-700 dark:text-slate-200">{t('studentDetail.milestoneJourney')}</h3>
-                    <ModernToggle value={milestoneView} onChange={setMilestoneView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
+                    <ModernToggle value={milestoneView} onChange={v => setMilestoneView(v as 'reading' | 'memorization')} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} />
                 </div>
                 {milestoneView === 'reading'
                     ? <MilestoneSection completedPages={readPages} />

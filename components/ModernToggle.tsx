@@ -1,20 +1,23 @@
 import React from 'react';
 
 const ModernToggle: React.FC<{
-    value: 'reading' | 'memorization';
-    onChange: (value: 'reading' | 'memorization') => void;
+    value: 'reading' | 'memorization' | 'mistakes';
+    onChange: (value: 'reading' | 'memorization' | 'mistakes') => void;
     labelOne: string;
     labelTwo: string;
+    /** Optional third option ('mistakes') — horizontal orientation only. */
+    labelThree?: string;
     orientation?: 'horizontal' | 'vertical';
-}> = ({ value, onChange, labelOne, labelTwo, orientation = 'horizontal' }) => {
+}> = ({ value, onChange, labelOne, labelTwo, labelThree, orientation = 'horizontal' }) => {
     const isHorizontal = orientation === 'horizontal';
+    const three = isHorizontal && !!labelThree;
 
     const containerClasses = isHorizontal
-        ? 'w-20 h-10 flex-row'
+        ? `${three ? 'w-[120px]' : 'w-20'} h-10 flex-row`
         : 'w-10 h-20 flex-col';
-    
+
     const movingPartTransform = isHorizontal
-        ? (value === 'reading' ? 'translate-x-0' : 'translate-x-10')
+        ? (value === 'reading' ? 'translate-x-0' : value === 'memorization' ? 'translate-x-10' : 'translate-x-20')
         : (value === 'reading' ? 'translate-y-0' : 'translate-y-10');
 
     return (
@@ -47,6 +50,21 @@ const ModernToggle: React.FC<{
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
             </button>
+
+            {/* Button 3 (optional): Mistakes ratio */}
+            {three && (
+                <button
+                    onClick={() => onChange('mistakes')}
+                    title={labelThree}
+                    aria-label={labelThree}
+                    className={`relative z-10 w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-300 ${value === 'mistakes' ? 'text-rose-500 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}
+                >
+                    {/* Warning-circle icon */}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </button>
+            )}
         </div>
     );
 };
