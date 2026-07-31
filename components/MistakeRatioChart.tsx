@@ -44,6 +44,7 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
     const mem = memorizationAchievements.filter(a => a.date.slice(0, 10) <= dateKey);
     const pages = new Set<number>([...fullyRecitedPageSet(rec as any), ...fullyRecitedPageSet(mem as any)]);
     const n = mistakeEntries.filter(([k, m]) => {
+      if (!m.errorType) return false;               // yellow = fixed, not counted
       if ((m.date ?? '').slice(0, 10) > dateKey) return false;
       const [su, a] = k.split(':').map(Number);
       return pages.has(getPageOfAyah(su, a));

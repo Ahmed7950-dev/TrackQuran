@@ -362,7 +362,8 @@ export const computeMistakesRate = (
   ]);
   if (pages.size === 0) return 0;
   const mistakeVerses = new Set<string>();
-  for (const key of Object.keys(mistakes)) {
+  for (const [key, m] of Object.entries(mistakes)) {
+    if (!(m as { errorType?: string })?.errorType) continue;  // yellow = fixed
     const parts = key.split(':');
     if (parts.length >= 2) mistakeVerses.add(`${parts[0]}:${parts[1]}`);
   }

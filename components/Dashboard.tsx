@@ -56,10 +56,11 @@ const calculateScore = (student: Student): number => {
     const recitedPages = new Set([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]);
     const grossScore = (recitedPages.size / TOTAL_QURAN_PAGES) * 1_000_000;
 
-    const validMistakes = Object.keys(student.mistakes || {}).filter(key => {
+    // Yellow (no errorType) = a FIXED mistake — it no longer counts or penalizes.
+    const validMistakes = Object.entries(student.mistakes || {}).filter(([key, m]) => {
+        if (!(m as { errorType?: string }).errorType) return false;
         const [surah, ayah] = key.split(':').map(Number);
         if (isNaN(surah) || isNaN(ayah)) return false;
-        
         const pageOfMistake = getPageOfAyah(surah, ayah);
         return recitedPages.has(pageOfMistake);
     });
@@ -185,7 +186,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       if (isNaN(surah) || isNaN(ayah)) return false;
       return recitedPagesForMistakes.has(getPageOfAyah(surah, ayah));
     });
-    const readingMistakesCount = validMistakeEntries.filter(([, m]) => !m.errorType || m.errorType === 'reading').length;
+    const readingMistakesCount = validMistakeEntries.filter(([, m]) => m.errorType === 'reading').length; // yellow (fixed) excluded
     const tajweedMistakesCount = validMistakeEntries.filter(([, m]) => m.errorType === 'tajweed').length;
     const mistakePages = recitedPagesForMistakes.size;
     const readingRate = mistakePages > 0 ? readingMistakesCount / mistakePages : 0;
@@ -227,7 +228,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
       if (prevPages === 0) return null;
 
       const allEntries = (Object.entries(student.mistakes || {}) as [string, import('../types').Mistake][]).filter(([k]) => k.includes(':'));
-      const isReading = (m: import('../types').Mistake) => !m.errorType || m.errorType === 'reading';
+      const isReading = (m: import('../types').Mistake) => m.errorType === 'reading'; // yellow (fixed) excluded
       const isTajweed = (m: import('../types').Mistake) => m.errorType === 'tajweed';
 
       // NOW: every mistake on a recited page (this is exactly what the displayed rate uses).

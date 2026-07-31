@@ -316,7 +316,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             const [surah, ayah] = key.split(':').map(Number);
             return !isNaN(surah) && !isNaN(ayah) && readPages.has(getPageOfAyah(surah, ayah));
         });
-        const reading = valid.filter(([, m]) => !m.errorType || m.errorType === 'reading').length;
+        const reading = valid.filter(([, m]) => m.errorType === 'reading').length; // yellow (fixed) excluded
         const tajweed = valid.filter(([, m]) => m.errorType === 'tajweed').length;
         const pages = readPages.size;
         return { rate: pages > 0 ? (reading + tajweed) / pages : 0, reading, tajweed, total: reading + tajweed };
