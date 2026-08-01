@@ -23,6 +23,7 @@ import {
   READ_SECONDS, MAX_UPGRADES, BONUS_AMMO_PER_EXTRA, VERSE_SURAHS,
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
+  RB_GUN, RB_FIRE,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -188,12 +189,7 @@ const HERO_HUES = [0, 160, 280, 60, 210, 320, 110, 250];
 // The Tripo tech-gun, parented to the soldier's right hand. Transform tuned
 // live via window.__rbGun in DEV, then baked here; muzzle = local offset the
 // aim line starts from.
-const RB_GUN = {
-  url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
-  // user-tuned on the /gun-tune bench (1 Aug 2026)
-  s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708,
-  muzzle: [0.5, 0.4, 0] as [number, number, number],
-};
+// RB_GUN + RB_FIRE live in readingBattleConfig.ts (user-tuned on /gun-tune)
 
 const UPGRADE_META = [
   { icon: '🔪', label: 'Knife' },
@@ -622,7 +618,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const b = bulletsRef.current.find(b => !b.on) ?? bulletsRef.current[0];
     const rad = (pl.h * Math.PI) / 180;
     b.on = true; b.owner = pl.gid;
-    b.x = pl.x + Math.sin(rad) * 2.4; b.y = pl.y - Math.cos(rad) * 2.4;
+    // spawn at the tuned fire origin: forward along the aim + toward the gun hand
+    b.x = pl.x + Math.sin(rad) * RB_FIRE.forward + Math.cos(rad) * RB_FIRE.side;
+    b.y = pl.y - Math.cos(rad) * RB_FIRE.forward + Math.sin(rad) * RB_FIRE.side;
     b.dx = Math.sin(rad); b.dy = -Math.cos(rad);
     b.left = BALANCE.ak.bulletRange;
   };
@@ -1092,32 +1090,27 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
     // ── local-only aim visuals — drawn on MY canvas only, opponents never see
     if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
-      const selfR = BALANCE.playerRadius * scale;
-      // the line leaves the GUN MUZZLE (projected by the 3D stage) and runs
-      // along the BULLET TRACK: the ground ray lifted by the same muzzle
-      // height the bullets render at — shots ride the dashes exactly.
-      // Rifle-height fallback covers the moment before the model loads.
-      const mzl = stageObjRef.current?.getMuzzle?.(stageSelfIdxRef.current);
-      const mx0 = mzl ? mzl.x * dpr : px(self.x);
-      const my0 = mzl ? mzl.y * dpr : py(self.y) - selfR * 1.0;
-      const lift = 1.2 * scale; // keep in sync with muzzleLift below
+      // the line IS the bullet track: it starts at the tuned fire origin
+      // (RB_FIRE forward/side of the player, lifted) and runs along the aim,
+      // clipped by walls — bullets ride the dashes by construction
+      const lift = RB_FIRE.lift * scale;
+      const rad0 = (self.h * Math.PI) / 180;
+      const fx0 = Math.sin(rad0), fy0 = -Math.cos(rad0);
+      const sx0 = self.x + fx0 * RB_FIRE.forward + Math.cos(rad0) * RB_FIRE.side;
+      const sy0 = self.y + fy0 * RB_FIRE.forward + Math.sin(rad0) * RB_FIRE.side;
+      const drawAimLine = (len: number) => {
+        const [ex, ey] = clipSegmentAtWall(sx0, sy0, sx0 + fx0 * len, sy0 + fy0 * len);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.setLineDash([5 * dpr, 5 * dpr]);
+        ctx.beginPath(); ctx.moveTo(px(sx0), py(sy0) - lift); ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
+        ctx.setLineDash([]);
+      };
       if (!isTouch && mouseRef.current.inside) {
         const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
-        const [ex, ey] = clipSegmentAtWall(self.x, self.y, a.ax, a.ay);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1.5 * dpr;
-        ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(mx0, my0); ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
-        ctx.setLineDash([]);
+        drawAimLine(Math.max(2, Math.hypot(a.ax - self.x, a.ay - self.y) - RB_FIRE.forward));
       } else if (isTouch && aimJoyRef.current.active) {
-        const rad = (self.h * Math.PI) / 180;
-        const [ex, ey] = clipSegmentAtWall(self.x, self.y, self.x + Math.sin(rad) * 16, self.y - Math.cos(rad) * 16);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1.5 * dpr;
-        ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(mx0, my0);
-        ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
-        ctx.setLineDash([]);
+        drawAimLine(16);
       }
       const nd = nadeDragRef.current;
       if (nd.active) {
@@ -1136,9 +1129,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
     }
 
-    // projectiles above everything — bullets fly at MUZZLE height (the gun
-    // sits ~1.2 arena units above the ground on screen), not along the floor
-    const muzzleLift = 1.2 * scale;
+    // projectiles above everything — bullets fly at the tuned fire height,
+    // not along the floor
+    const muzzleLift = RB_FIRE.lift * scale;
     ctx.fillStyle = '#fef08a';
     for (const b of bulletsRef.current) {
       if (!b.on) continue;

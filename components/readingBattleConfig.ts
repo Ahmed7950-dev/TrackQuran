@@ -151,3 +151,20 @@ export const SPAWNS: Array<{ x: number; y: number }> = [
 ];
 
 export const MAX_PLAYERS = 5;
+
+/** The tech-gun prop in the soldier's hand — user-tuned on the /gun-tune bench. */
+export const RB_GUN = {
+  url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
+  s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708,
+  muzzle: [0.5, 0.4, 0] as [number, number, number],
+};
+
+/** Where fire leaves the gun (user-tuned on the /gun-tune bench).
+ *  forward = arena units ahead of the player along the aim,
+ *  side    = units toward the character's RIGHT of the aim,
+ *  lift    = visual height of the bullet track + aim line. */
+export const RB_FIRE = {
+  forward: 2.4,
+  side: 0,
+  lift: 1.2,
+};

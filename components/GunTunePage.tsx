@@ -7,15 +7,13 @@
 // No auth — the page can't change anything for anyone else.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useRef, useState } from 'react';
+import { RB_GUN, RB_FIRE } from './readingBattleConfig';
 
 const HERO_GLB = '/rb/hero.glb?v=4';
 
-const DEFAULTS = {
-  url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
-  // keep in sync with RB_GUN in ReadingBattleGame.tsx (user-tuned 1 Aug 2026)
-  s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708,
-  muzzle: [0.5, 0.4, 0] as [number, number, number],
-};
+// live values come straight from the shipped config — tune from there
+const DEFAULTS = RB_GUN;
+const FIRE_DEFAULTS = RB_FIRE;
 
 const deg = (rad: number) => Math.round((rad * 180) / Math.PI);
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -28,10 +26,12 @@ const wrap = (r: number) => {
 
 const GunTunePage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fireCanvasRef = useRef<HTMLCanvasElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
   // ONE object for the whole session — the stage reads it every frame
   const cfgRef = useRef({ ...DEFAULTS, muzzle: [...DEFAULTS.muzzle] as [number, number, number] });
+  const fireRef = useRef({ ...FIRE_DEFAULTS });
   const poseRef = useRef<{ heading: number; anim: 'idle' | 'run' }>({ heading: 90, anim: 'idle' });
   const [, setTick] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -66,18 +66,46 @@ const GunTunePage: React.FC = () => {
       } else if (d) {
         d.style.display = 'none';
       }
+      // fire-origin preview: the SAME maths the arena uses (13 units per
+      // viewport) — orange dot = where bullets are born, dashes = their track
+      const fc = fireCanvasRef.current, sc = canvasRef.current;
+      if (fc && sc) {
+        const W = sc.clientWidth, H = sc.clientHeight;
+        if (fc.width !== W || fc.height !== H) { fc.width = W; fc.height = H; }
+        const g = fc.getContext('2d');
+        if (g) {
+          g.clearRect(0, 0, W, H);
+          const S = Math.min(460, W || 460);
+          const u = S / 13;
+          const gx = 0.5 * W, gy = 0.62 * H; // the character's ground point
+          const rad2 = (poseRef.current.heading * Math.PI) / 180;
+          const f = fireRef.current;
+          const fx = Math.sin(rad2), fy = -Math.cos(rad2);
+          const ox = gx + (fx * f.forward + Math.cos(rad2) * f.side) * u;
+          const oy = gy + (fy * f.forward + Math.sin(rad2) * f.side) * u - f.lift * u;
+          g.strokeStyle = 'rgba(255,255,255,0.85)';
+          g.lineWidth = 1.5;
+          g.setLineDash([5, 5]);
+          g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + fx * 9 * u, oy + fy * 9 * u); g.stroke();
+          g.setLineDash([]);
+          g.fillStyle = '#ffb020';
+          g.beginPath(); g.arc(ox, oy, 4.5, 0, Math.PI * 2); g.fill();
+        }
+      }
     }, 60);
     return () => { dead = true; window.clearInterval(iv); stage?.dispose(); };
   }, []);
 
   const cfg = cfgRef.current;
+  const fire = fireRef.current;
   const set = (k: 's' | 'x' | 'y' | 'z' | 'rx' | 'ry' | 'rz', v: number) => {
     (cfg as any)[k] = v;
     setTick(t => t + 1);
   };
   const setMuzzle = (i: number, v: number) => { cfg.muzzle[i] = v; setTick(t => t + 1); };
+  const setFire = (k: 'forward' | 'side' | 'lift', v: number) => { fire[k] = v; setTick(t => t + 1); };
 
-  const json = `{ s: ${+cfg.s.toFixed(1)}, x: ${+cfg.x.toFixed(1)}, y: ${+cfg.y.toFixed(1)}, z: ${+cfg.z.toFixed(1)}, rx: ${+cfg.rx.toFixed(4)}, ry: ${+cfg.ry.toFixed(4)}, rz: ${+cfg.rz.toFixed(4)}, muzzle: [${cfg.muzzle.map(v => +v.toFixed(2)).join(', ')}] }`;
+  const json = `gun { s: ${+cfg.s.toFixed(1)}, x: ${+cfg.x.toFixed(1)}, y: ${+cfg.y.toFixed(1)}, z: ${+cfg.z.toFixed(1)}, rx: ${+cfg.rx.toFixed(4)}, ry: ${+cfg.ry.toFixed(4)}, rz: ${+cfg.rz.toFixed(4)}, muzzle: [${cfg.muzzle.map(v => +v.toFixed(2)).join(', ')}] } · fire { forward: ${+fire.forward.toFixed(1)}, side: ${+fire.side.toFixed(1)}, lift: ${+fire.lift.toFixed(1)} }`;
 
   const Row: React.FC<{ label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }> =
     ({ label, value, min, max, step, onChange, fmt }) => (
@@ -101,6 +129,7 @@ const GunTunePage: React.FC = () => {
           {/* the live soldier */}
           <div className="relative rounded-2xl overflow-hidden border border-white/10" style={{ width: 'min(460px, 92vw)', height: 'min(460px, 92vw)', background: 'linear-gradient(#9aa8b5, #6e7c8a)' }}>
             <canvas ref={canvasRef} className="w-full h-full" />
+            <canvas ref={fireCanvasRef} className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }} />
             <div ref={dotRef} style={{ position: 'absolute', width: 12, height: 12, borderRadius: '50%', border: '2px solid #ff4fa3', background: 'rgba(255,79,163,0.35)', pointerEvents: 'none', display: 'none' }} />
           </div>
 
@@ -138,13 +167,20 @@ const GunTunePage: React.FC = () => {
               <div className="flex gap-2 pt-1">
                 <button onClick={() => set('ry', wrap(cfg.ry + Math.PI))} className="px-2 py-1 rounded text-xs font-bold bg-amber-600">Flip ↔ (Y 180°)</button>
                 <button onClick={() => set('rz', wrap(cfg.rz + Math.PI))} className="px-2 py-1 rounded text-xs font-bold bg-amber-600">Flip ↕ (Z 180°)</button>
-                <button onClick={() => { Object.assign(cfg, { ...DEFAULTS, muzzle: [...DEFAULTS.muzzle] }); setTick(t => t + 1); }}
+                <button onClick={() => { Object.assign(cfg, { ...DEFAULTS, muzzle: [...DEFAULTS.muzzle] }); Object.assign(fire, FIRE_DEFAULTS); setTick(t => t + 1); }}
                   className="ml-auto px-2 py-1 rounded text-xs font-bold bg-white/10">Reset</button>
               </div>
             </div>
 
             <div className="bg-white/5 rounded-2xl p-3 space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">Muzzle (the pink dot — aim line starts here)</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">Fire origin (orange dot + dashes = where bullets fly)</p>
+              <Row label="Forward" value={fire.forward} min={-2} max={8} step={0.1} onChange={v => setFire('forward', v)} />
+              <Row label="Side" value={fire.side} min={-5} max={5} step={0.1} onChange={v => setFire('side', v)} />
+              <Row label="Height" value={fire.lift} min={0} max={5} step={0.1} onChange={v => setFire('lift', v)} />
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-3 space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">Muzzle (the pink dot — 3D marker on the gun)</p>
               <Row label="Muzzle X" value={cfg.muzzle[0]} min={-10} max={10} step={0.1} onChange={v => setMuzzle(0, v)} />
               <Row label="Muzzle Y" value={cfg.muzzle[1]} min={-10} max={10} step={0.1} onChange={v => setMuzzle(1, v)} />
               <Row label="Muzzle Z" value={cfg.muzzle[2]} min={-10} max={10} step={0.1} onChange={v => setMuzzle(2, v)} />
