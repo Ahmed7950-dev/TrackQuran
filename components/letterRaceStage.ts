@@ -218,7 +218,14 @@ export class RunnerStage {
 
     const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
-    for (const url of unique) loaded.set(url, await loadGLTF(url));
+    for (const url of unique) {
+      try { loaded.set(url, await loadGLTF(url)); } catch { loaded.set(url, null); }
+    }
+    // a broken character URL falls back to any model that DID load — one bad
+    // asset must never blank the whole field
+    const anyChar = [...loaded.values()].find(v => v);
+    if (!anyChar) throw new Error('no character model loaded');
+    for (const url of unique) if (!loaded.get(url)) loaded.set(url, anyChar);
     // props are decorative — a missing gun must never sink the characters
     for (const url of [...new Set(this.models.filter(m => m.prop).map(m => m.prop!.url))]) {
       try { loaded.set(url, await loadGLTF(url)); } catch { loaded.set(url, null); }
