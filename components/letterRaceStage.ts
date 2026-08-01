@@ -289,13 +289,18 @@ export class RunnerStage {
 
     // P2 gets a teal texture variant — the base color map redrawn through a
     // CSS hue-rotate on a canvas (same tint the sprites used).
-    const makeTintedTexture = (tex: any, hue = 165): any => {
+    const makeTintedTexture = (tex: any, hue = 165, colorize = false): any => {
       try {
         const img = tex.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap;
         const c = document.createElement('canvas');
         c.width = (img as any).width; c.height = (img as any).height;
         const ctx = c.getContext('2d')!;
-        ctx.filter = `hue-rotate(${hue}deg)`;
+        // colorize: force a strong uniform recolour (sepia flattens to a warm
+        // base, then saturate + hue-rotate dye it) — desaturated textures like
+        // the RB soldier's grey camo barely respond to a plain hue-rotate
+        ctx.filter = colorize
+          ? `sepia(1) saturate(2.4) hue-rotate(${hue}deg)`
+          : `hue-rotate(${hue}deg)`;
         ctx.drawImage(img as any, 0, 0);
         // NOTE: not tex.clone() — clones share the underlying image Source,
         // so writing the tinted canvas would repaint Player 1 too.
@@ -388,6 +393,7 @@ export class RunnerStage {
       const tintVal = this.models[who].tint;
       if (tintVal) {
         const hue = typeof tintVal === 'number' ? tintVal : 165;
+        const colorize = typeof tintVal === 'number'; // numeric tints = full uniform recolour
         const seen = new Map<any, any>();
         root.traverse((o: any) => {
           if (o.isMesh && o.material) {
@@ -395,7 +401,7 @@ export class RunnerStage {
             const tinted = mats.map((m: any) => {
               if (!seen.has(m)) {
                 const nm = m.clone();
-                if (nm.map) nm.map = makeTintedTexture(nm.map, hue);
+                if (nm.map) nm.map = makeTintedTexture(nm.map, hue, colorize);
                 seen.set(m, nm);
               }
               return seen.get(m);

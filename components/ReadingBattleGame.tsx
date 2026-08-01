@@ -1064,7 +1064,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     viewRef.current = { ox, oy, scale, dpr };
 
     // ground (out-of-bounds matches the desert art edge so corners don't show void)
-    ctx.fillStyle = bgImgRef.current ? '#d68c47' : '#0f2418';
+    ctx.fillStyle = bgImgRef.current ? '#f19e54' : '#0f2418'; // sampled from the v2 art's edges
     ctx.fillRect(0, 0, W, H);
     if (bgImgRef.current) {
       ctx.drawImage(bgImgRef.current, px(0), py(0), 100 * scale, 100 * scale);

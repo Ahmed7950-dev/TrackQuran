@@ -68,7 +68,7 @@ export const BALANCE = {
 // ── Arena (100 × 100 units) ──────────────────────────────────────────────────
 // Flat background art is separate from collisions: swap BG_IMAGE for AI art
 // later, the walls below stay authoritative for gameplay.
-export const ARENA_BG_IMAGE: string | null = '/rb/arena-bg.png';
+export const ARENA_BG_IMAGE: string | null = '/rb/arena-bg.png?v=2';
 /** Brawl-Stars-style obstacles: one 3D block sprite (pre-rendered from the
  *  user's Tripo model via Blender, front-top ortho) tiled onto WALL_TILES.
  *  Collision rects and the per-tile draw list both DERIVE from the map below,
@@ -140,7 +140,7 @@ export const WALLS: WallRect[] = (() => {
 })();
 
 /** Centre showdown square — no walls inside; the anti-stall zone spares it. */
-export const CENTER_SQUARE = { x: 36, y: 27, w: 28, h: 43 }; // the brick square in the background art
+export const CENTER_SQUARE = { x: 41, y: 39, w: 18, h: 22 }; // the brick courtyard in the v2 background art (measured)
 
 /** Far-apart spawn points (assigned randomly). */
 export const SPAWNS: Array<{ x: number; y: number }> = [
