@@ -1542,106 +1542,127 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         )}
       </div>
 
-      {/* ══ LOBBY ══ */}
+      {/* ══ LOBBY — full-screen showcase ══ */}
       {phase === 'lobby' && (
-        <div className="absolute inset-0 z-20 overflow-y-auto flex items-start justify-center pt-14 pb-8 px-4">
-          <div className="w-full max-w-md space-y-4">
-            <div className="text-center">
-              <h1 className="text-2xl font-extrabold text-white">📖 Read → earn gear → ⚔️ battle!</h1>
-              <p className="text-emerald-200/80 text-sm mt-1">Up to {MAX_PLAYERS} fighters · tutor is the referee</p>
-            </div>
+        <div className="absolute inset-0 z-20 overflow-y-auto">
+          {/* ambient glows */}
+          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(1100px 520px at 30% -8%, rgba(16,185,129,0.16), transparent 60%), radial-gradient(900px 520px at 92% 108%, rgba(245,158,11,0.12), transparent 60%)' }} />
 
-            {/* name + character */}
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-3">
-              <input
-                value={myName}
-                onChange={e => setMyName(e.target.value.slice(0, 14))}
-                placeholder={isGuest ? 'Your name…' : 'Your name (tutor)…'}
-                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              />
-              <div className="flex flex-col items-center">
-                <RBHero clip="stretch" className="w-36 h-44" />
-                <p className="text-white/50 text-[11px] font-semibold -mt-1">Your soldier — colours are assigned automatically</p>
+          <div className="relative min-h-full max-w-[1500px] mx-auto flex flex-col lg:flex-row lg:items-stretch gap-6 px-4 sm:px-10 pt-14 pb-8">
+
+            {/* ── left: the soldier showcase ── */}
+            <div className="flex-1 flex flex-col items-center justify-center py-2">
+              <h1 className="text-3xl sm:text-4xl xl:text-5xl font-extrabold text-white text-center tracking-tight">
+                📖 Read <span className="text-emerald-300">→</span> earn gear <span className="text-emerald-300">→</span> ⚔️ battle!
+              </h1>
+              <p className="text-emerald-200/80 text-sm sm:text-base mt-2 mb-2 text-center">Up to {MAX_PLAYERS} fighters · the tutor referees the reading</p>
+
+              {/* pedestal + big soldier */}
+              <div className="relative flex flex-col items-center">
+                <div className="absolute bottom-10 w-64 h-24 rounded-full pointer-events-none" style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(8px)' }} />
+                <RBHero clip="stretch" className="relative w-[240px] h-[330px] sm:w-[300px] sm:h-[410px] xl:w-[340px] xl:h-[470px]" />
+                <p className="text-white/45 text-[11px] font-semibold -mt-2">Your soldier — uniform colours are assigned automatically</p>
               </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5 text-center">Choose your weapon</p>
-                <div className="flex gap-2 justify-center">
+
+              {/* weapon rack */}
+              <div className="mt-5 w-full max-w-xl">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Choose your weapon</p>
+                <div className="grid grid-cols-4 gap-2 sm:gap-3">
                   {RB_GUNS.map((g, i) => (
                     <button key={g.key} onClick={() => pickGun(i)}
-                      className={`rounded-xl px-2 py-1.5 flex flex-col items-center border-2 transition-all ${myGun === i ? 'border-emerald-400 bg-white/15' : 'border-transparent bg-white/5 opacity-75'}`}>
-                      <img src={g.thumb} alt={g.name} className="w-16 h-8 object-contain" />
-                      <span className="text-[10px] font-bold text-white/85 mt-0.5">{g.name}</span>
+                      className={`group rounded-2xl px-2 pt-3 pb-2 flex flex-col items-center border transition-all duration-150 ${myGun === i
+                        ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)] scale-[1.03]'
+                        : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
+                      <img src={g.thumb} alt={g.name} className={`w-full max-w-[96px] h-10 sm:h-12 object-contain transition-transform duration-150 ${myGun === i ? 'scale-110' : 'group-hover:scale-105'}`} />
+                      <span className={`text-[11px] font-bold mt-1.5 ${myGun === i ? 'text-emerald-300' : 'text-white/70'}`}>{g.name}</span>
+                      <span className={`text-[9px] font-bold tracking-widest ${myGun === i ? 'text-emerald-400/90' : 'text-transparent'}`}>EQUIPPED</span>
                     </button>
                   ))}
                 </div>
               </div>
-              {!isGuest && (
-                <label className="flex items-center gap-2 text-white/90 text-sm font-semibold cursor-pointer">
-                  <input type="checkbox" checked={tutorPlays} onChange={e => {
-                    setTutorPlays(e.target.checked);
-                    const t = world.current.players.find(p => p.gid === 'host');
-                    if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; }
-                  }} className="w-4 h-4 rounded" />
-                  I'm playing too (referee + fighter)
-                </label>
-              )}
             </div>
 
-            {/* share (host) / join (guest) */}
-            {!isGuest ? (
-              <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Invite students</p>
-                <div className="flex items-center gap-2">
-                  <input readOnly value={shareLink} className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-black/30 text-emerald-100 text-xs font-mono" />
-                  <button onClick={() => { try { navigator.clipboard?.writeText(shareLink); } catch { /* */ } setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1500); }}
-                    className="px-3 py-2 rounded-lg bg-emerald-500 text-white text-xs font-bold whitespace-nowrap">{linkCopied ? '✓ Copied' : 'Copy link'}</button>
-                  <button onClick={() => setQrOpen(true)} className="px-3 py-2 rounded-lg bg-white text-slate-800 text-xs font-bold">QR</button>
+            {/* ── right: control panel ── */}
+            <div className="w-full lg:w-[400px] flex flex-col gap-4 justify-center pb-4">
+
+              <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5 space-y-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">{isGuest ? 'Fighter' : 'Referee'}</p>
+                <input
+                  value={myName}
+                  onChange={e => setMyName(e.target.value.slice(0, 14))}
+                  placeholder={isGuest ? 'Your name…' : 'Your name (tutor)…'}
+                  className="w-full px-4 py-3.5 rounded-2xl bg-black/25 border border-white/15 text-white text-lg placeholder:text-white/35 font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                {!isGuest && (
+                  <label className="flex items-center gap-3 text-white/90 text-sm font-semibold cursor-pointer bg-black/20 rounded-2xl px-4 py-3 border border-white/10">
+                    <input type="checkbox" checked={tutorPlays} onChange={e => {
+                      setTutorPlays(e.target.checked);
+                      const t = world.current.players.find(p => p.gid === 'host');
+                      if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; }
+                    }} className="w-5 h-5 rounded accent-emerald-500" />
+                    I'm playing too <span className="text-white/50 font-medium">(referee + fighter)</span>
+                  </label>
+                )}
+              </div>
+
+              {!isGuest ? (
+                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5 space-y-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">Invite students</p>
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={shareLink} className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-emerald-100 text-xs font-mono" />
+                    <button onClick={() => { try { navigator.clipboard?.writeText(shareLink); } catch { /* */ } setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1500); }}
+                      className="px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold whitespace-nowrap transition-colors">{linkCopied ? '✓ Copied' : 'Copy link'}</button>
+                    <button onClick={() => setQrOpen(true)} className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-slate-800 text-xs font-bold transition-colors">QR</button>
+                  </div>
+                </div>
+              ) : (
+                !joined && (
+                  <button
+                    onClick={() => { ensureAc().resume?.(); setJoined(true); }}
+                    disabled={!myName.trim()}
+                    style={{ ...btnBase, width: '100%', padding: '16px 30px', background: myName.trim() ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#47556988', cursor: myName.trim() ? 'pointer' : 'default', boxShadow: myName.trim() ? '0 8px 30px rgba(249,115,22,0.35)' : 'none' }}>
+                    🔗 Join the battle!
+                  </button>
+                )
+              )}
+              {isGuest && joined && (
+                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl px-5 py-4 text-center text-emerald-200 text-sm font-semibold">
+                  {gotSnap ? '✅ Connected — waiting for the tutor to start…' : '⏳ Joining…'}
+                </div>
+              )}
+
+              {/* roster */}
+              <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">Players</p>
+                  <span className="text-xs font-extrabold text-white/80 bg-black/30 border border-white/10 rounded-full px-2.5 py-0.5">{fighters.length}/{MAX_PLAYERS}</span>
+                </div>
+                {players.length === 0 && <p className="text-white/40 text-sm">Share the link — students appear here…</p>}
+                <div className="space-y-2">
+                  {players.map(p => (
+                    <div key={p.gid} className="flex items-center gap-3 text-white text-sm font-semibold bg-black/20 border border-white/5 rounded-2xl px-3 py-2">
+                      <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold text-white shadow-inner" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
+                      <span className="flex-1 truncate">{p.gid === 'host' ? (myName || 'Tutor') : p.name}</span>
+                      {p.isTutor
+                        ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/25 text-amber-200 font-bold">{p.fighting ? 'REFEREE + FIGHTER' : 'REFEREE'}</span>
+                        : <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 font-bold">{RB_GUNS[p.gun]?.name?.toUpperCase() ?? ''}</span>}
+                    </div>
+                  ))}
                 </div>
               </div>
-            ) : (
-              !joined && (
-                <button
-                  onClick={() => { ensureAc().resume?.(); setJoined(true); }}
-                  disabled={!myName.trim()}
-                  style={{ ...btnBase, width: '100%', background: myName.trim() ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#47556988', cursor: myName.trim() ? 'pointer' : 'default' }}>
-                  🔗 Join the battle!
+
+              {!isGuest && (
+                <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.fighting = tutorPlays; } setPhase('levels'); }}
+                  disabled={!canStart}
+                  style={{ ...btnBase, width: '100%', padding: '17px 30px', fontSize: 17, background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default', boxShadow: canStart ? '0 8px 30px rgba(22,163,74,0.35)' : 'none' }}>
+                  {assetsReady && wordsRef.current.length > 0
+                    ? (fighters.length >= MIN_FIGHTERS
+                        ? (fighters.length === 1 ? 'Start — solo test ▶' : 'Start — set levels ▶')
+                        : 'Waiting for a fighter…')
+                    : '⏳ Loading sounds & verses…'}
                 </button>
-              )
-            )}
-            {isGuest && joined && (
-              <p className="text-center text-emerald-200 text-sm font-semibold">
-                {gotSnap ? '✅ Connected — waiting for the tutor to start…' : '⏳ Joining…'}
-              </p>
-            )}
-
-            {/* roster */}
-            <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-emerald-300 mb-2">
-                Players ({fighters.length}/{MAX_PLAYERS})
-              </p>
-              {players.length === 0 && <p className="text-white/50 text-sm">Waiting…</p>}
-              <div className="space-y-1.5">
-                {players.map(p => (
-                  <div key={p.gid} className="flex items-center gap-2 text-white text-sm font-semibold">
-                    <span className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold text-white" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
-                    <span>{p.gid === 'host' ? (myName || 'Tutor') : p.name}</span>
-                    {p.isTutor && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/30 text-amber-200 font-bold">{p.fighting ? 'REFEREE + FIGHTER' : 'REFEREE'}</span>}
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
-
-            {!isGuest && (
-              <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.fighting = tutorPlays; } setPhase('levels'); }}
-                disabled={!canStart}
-                style={{ ...btnBase, width: '100%', background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default' }}>
-                {assetsReady && wordsRef.current.length > 0
-                  ? (fighters.length >= MIN_FIGHTERS
-                      ? (fighters.length === 1 ? 'Start — solo test ▶' : 'Start — set levels ▶')
-                      : 'Waiting for a fighter…')
-                  : '⏳ Loading sounds & verses…'}
-              </button>
-            )}
           </div>
         </div>
       )}
