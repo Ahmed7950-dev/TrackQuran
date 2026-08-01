@@ -44,7 +44,10 @@ interface RBPlayer {
   lastMeleeAt: number; lastFireAt: number;
 }
 
-interface Bullet { on: boolean; x: number; y: number; dx: number; dy: number; left: number; owner: string }
+interface Bullet {
+  on: boolean; x: number; y: number; dx: number; dy: number; left: number; owner: string;
+  vx: number; vy: number; // visual offset (arena units): ground point → the gun muzzle at fire time
+}
 interface Nade   { on: boolean; x: number; y: number; sx: number; sy: number; tx: number; ty: number; t0: number; owner: string }
 interface Fx     { on: boolean; kind: 'boom' | 'poof' | 'hit'; x: number; y: number; t0: number }
 
@@ -53,7 +56,7 @@ interface Snapshot {
   players: Array<{ gid: string; nm: string; ck: string; tu: number; fi: number; lv: number; up: number; ba: number;
     x: number; y: number; h: number; hp: number; ar: number; am: number; gr: number; al: number; fz: number; k: number; d: number }>;
   rd: { tg: string; tEnd: number; seg: string; evT: string; evN: number; done: number };
-  bt: { st: number; zn: number; bl: Array<[number, number]>; gn: Array<[number, number, number]> };
+  bt: { st: number; zn: number; bl: Array<[number, number, number]>; gn: Array<[number, number, number]> };
   wn: string;
   pz: number;   // 1 = battle paused (ESC) — everyone freezes together
   now: number;
@@ -250,7 +253,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     bt: { startedAt: 0, zoneOn: false },
     winner: '',
   });
-  const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '' })));
+  const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0 })));
   const nadesRef   = useRef<Nade[]>(Array.from({ length: 12 }, () => ({ on: false, x: 0, y: 0, sx: 0, sy: 0, tx: 0, ty: 0, t0: 0, owner: '' })));
   const fxRef      = useRef<Fx[]>(Array.from({ length: 24 }, () => ({ on: false, kind: 'hit', x: 0, y: 0, t0: 0 })));
   const wordsRef   = useRef<string[]>([]);
@@ -433,7 +436,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         rd: { tg: g.rd.turnGid, tEnd: g.rd.tEnd, seg: g.rd.seg, evT: g.rd.evT, evN: g.rd.evN, done: g.rd.done },
         bt: {
           st: g.bt.startedAt, zn: g.bt.zoneOn ? 1 : 0,
-          bl: bulletsRef.current.filter(b => b.on).map(b => [Math.round(b.x * 10) / 10, Math.round(b.y * 10) / 10] as [number, number]),
+          bl: bulletsRef.current.filter(b => b.on).map(b => [Math.round(b.x * 10) / 10, Math.round(b.y * 10) / 10, Math.max(0, g.players.findIndex(q => q.gid === b.owner))] as [number, number, number]),
           gn: nadesRef.current.filter(n => n.on).map(n => [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, nadeHeight(n)] as [number, number, number]),
         },
         wn: g.winner,
@@ -493,7 +496,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const bl = bulletsRef.current;
       const prevBl = bl.map(b => ({ on: b.on, x: b.x, y: b.y }));
       bl.forEach(b => { b.on = false; });
-      s.bt.bl.slice(0, bl.length).forEach(([x, y], i) => {
+      s.bt.bl.slice(0, bl.length).forEach(([x, y, oi], i) => {
         const b = bl[i];
         b.on = true;
         // direction from consecutive snapshots → smooth local flight below
@@ -501,7 +504,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           const ddx = x - prevBl[i].x, ddy = y - prevBl[i].y;
           const d = Math.hypot(ddx, ddy);
           if (d > 0.01 && d < 20) { b.dx = ddx / d; b.dy = ddy / d; }
-        } else { b.dx = 0; b.dy = 0; }
+        } else {
+          b.dx = 0; b.dy = 0;
+          // fresh bullet: anchor its visual to the shooter's muzzle
+          [b.vx, b.vy] = muzzleVisOffset(g.players[oi]?.gid ?? '', x, y);
+        }
         b.x = x; b.y = y;
       });
       const gn = nadesRef.current;
@@ -607,6 +614,21 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       applyDamage(q, spec.damage, pl);
     }
   };
+  /** Screen offset (arena units) from a ground point to a player's LIVE gun
+   *  muzzle, as the 3D stage projects it — bullets and the aim line anchor to
+   *  this so fire visually leaves the barrel at every facing. Falls back to a
+   *  plain height lift while the model is still loading. */
+  const muzzleVisOffset = (gid: string, gx: number, gy: number): [number, number] => {
+    const idx = stageFightersRef.current.indexOf(gid);
+    const m = idx >= 0 ? stageObjRef.current?.getMuzzle?.(idx) : null;
+    if (!m) return [0, -RB_FIRE.lift];
+    const v = viewRef.current;
+    return [
+      (m.x * v.dpr - (v.ox + gx * v.scale)) / v.scale,
+      (m.y * v.dpr - (v.oy + gy * v.scale)) / v.scale,
+    ];
+  };
+
   const hostFire = (pl: RBPlayer) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
     if (pl.upgrades < 3 || pl.ammo <= 0) return;
@@ -618,10 +640,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const b = bulletsRef.current.find(b => !b.on) ?? bulletsRef.current[0];
     const rad = (pl.h * Math.PI) / 180;
     b.on = true; b.owner = pl.gid;
-    // spawn at the tuned fire origin: forward along the aim + toward the gun hand
+    // spawn at the fire origin: forward along the aim + toward the gun hand
     b.x = pl.x + Math.sin(rad) * RB_FIRE.forward + Math.cos(rad) * RB_FIRE.side;
     b.y = pl.y - Math.cos(rad) * RB_FIRE.forward + Math.sin(rad) * RB_FIRE.side;
     b.dx = Math.sin(rad); b.dy = -Math.cos(rad);
+    [b.vx, b.vy] = muzzleVisOffset(pl.gid, b.x, b.y);
     b.left = BALANCE.ak.bulletRange;
   };
   const hostNade = (pl: RBPlayer, tx?: number, ty?: number) => {
@@ -1090,20 +1113,23 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
     // ── local-only aim visuals — drawn on MY canvas only, opponents never see
     if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
-      // the line IS the bullet track: it starts at the tuned fire origin
-      // (RB_FIRE forward/side of the player, lifted) and runs along the aim,
-      // clipped by walls — bullets ride the dashes by construction
-      const lift = RB_FIRE.lift * scale;
+      // the line IS the bullet track: anchored to the LIVE gun muzzle (3D
+      // projection) and parallel to the ground aim ray, clipped by walls —
+      // exactly what a bullet fired this instant will fly
       const rad0 = (self.h * Math.PI) / 180;
       const fx0 = Math.sin(rad0), fy0 = -Math.cos(rad0);
       const sx0 = self.x + fx0 * RB_FIRE.forward + Math.cos(rad0) * RB_FIRE.side;
       const sy0 = self.y + fy0 * RB_FIRE.forward + Math.sin(rad0) * RB_FIRE.side;
+      const [ovx, ovy] = muzzleVisOffset(myGid, sx0, sy0);
       const drawAimLine = (len: number) => {
         const [ex, ey] = clipSegmentAtWall(sx0, sy0, sx0 + fx0 * len, sy0 + fy0 * len);
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(px(sx0), py(sy0) - lift); ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px(sx0) + ovx * scale, py(sy0) + ovy * scale);
+        ctx.lineTo(px(ex) + ovx * scale, py(ey) + ovy * scale);
+        ctx.stroke();
         ctx.setLineDash([]);
       };
       if (!isTouch && mouseRef.current.inside) {
@@ -1129,13 +1155,12 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
     }
 
-    // projectiles above everything — bullets fly at the tuned fire height,
-    // not along the floor
-    const muzzleLift = RB_FIRE.lift * scale;
+    // projectiles above everything — each bullet carries the exact ground→
+    // muzzle offset captured when it was fired, so shots leave the barrel
     ctx.fillStyle = '#fef08a';
     for (const b of bulletsRef.current) {
       if (!b.on) continue;
-      ctx.beginPath(); ctx.arc(px(b.x), py(b.y) - muzzleLift, 0.18 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px(b.x) + b.vx * scale, py(b.y) + b.vy * scale, 0.18 * scale, 0, Math.PI * 2); ctx.fill();
     }
     for (const n of nadesRef.current) {
       if (!n.on) continue;
