@@ -47,6 +47,7 @@ import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
 import LetterRaceGame from './components/LetterRaceGame';
 import ReadingBattleGame from './components/ReadingBattleGame';
+import GunTunePage from './components/GunTunePage';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
@@ -461,6 +462,9 @@ const App: React.FC = () => {
   if (readingBattleRoomId) return (
     <ReadingBattleGame roomId={readingBattleRoomId} onExit={() => { window.location.href = '/'; }} />
   );
+
+  // ── RB gun placement bench — tuning utility, no auth needed ────────────────
+  if (window.location.pathname === '/gun-tune') return <GunTunePage />;
 
   // ── Find the Odd Letter online 2P — no auth required ───────────────────────
   const oddLetterRoomId = (() => {
