@@ -46,7 +46,9 @@ interface RBPlayer {
 
 interface Bullet {
   on: boolean; x: number; y: number; dx: number; dy: number; left: number; owner: string;
-  vx: number; vy: number; // visual offset (arena units): ground point → the gun muzzle at fire time
+  vx: number; vy: number;   // visual offset (arena units): ground point → the gun muzzle at fire time
+  spx: number; spy: number; // ground spawn point (visual decay reference)
+  decay: number;            // ground distance over which the muzzle offset fades to 0 (≈ aim distance)
 }
 interface Nade   { on: boolean; x: number; y: number; sx: number; sy: number; tx: number; ty: number; t0: number; owner: string }
 interface Fx     { on: boolean; kind: 'boom' | 'poof' | 'hit'; x: number; y: number; t0: number }
@@ -253,7 +255,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     bt: { startedAt: 0, zoneOn: false },
     winner: '',
   });
-  const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0 })));
+  const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0, spx: 0, spy: 0, decay: 14 })));
   const nadesRef   = useRef<Nade[]>(Array.from({ length: 12 }, () => ({ on: false, x: 0, y: 0, sx: 0, sy: 0, tx: 0, ty: 0, t0: 0, owner: '' })));
   const fxRef      = useRef<Fx[]>(Array.from({ length: 24 }, () => ({ on: false, kind: 'hit', x: 0, y: 0, t0: 0 })));
   const wordsRef   = useRef<string[]>([]);
@@ -507,7 +509,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         } else {
           b.dx = 0; b.dy = 0;
           // fresh bullet: anchor its visual to the shooter's muzzle
-          [b.vx, b.vy] = muzzleVisOffset(g.players[oi]?.gid ?? '', x, y);
+          const ownerGid = g.players[oi]?.gid ?? '';
+          [b.vx, b.vy] = muzzleVisOffset(ownerGid, x, y);
+          b.spx = x; b.spy = y;
+          b.decay = ownerGid === myGid ? aimDistance() : 14;
         }
         b.x = x; b.y = y;
       });
@@ -629,7 +634,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     ];
   };
 
-  const hostFire = (pl: RBPlayer) => {
+  const hostFire = (pl: RBPlayer, aimDist = 14) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
     if (pl.upgrades < 3 || pl.ammo <= 0) return;
     const now = performance.now();
@@ -645,6 +650,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     b.y = pl.y - Math.cos(rad) * RB_FIRE.forward + Math.sin(rad) * RB_FIRE.side;
     b.dx = Math.sin(rad); b.dy = -Math.cos(rad);
     [b.vx, b.vy] = muzzleVisOffset(pl.gid, b.x, b.y);
+    b.spx = b.x; b.spy = b.y; b.decay = Math.max(2, aimDist);
     b.left = BALANCE.ak.bulletRange;
   };
   const hostNade = (pl: RBPlayer, tx?: number, ty?: number) => {
@@ -1126,14 +1132,18 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const sx0 = self.x + fx0 * RB_FIRE.forward + Math.cos(rad0) * RB_FIRE.side;
       const sy0 = self.y + fy0 * RB_FIRE.forward + Math.sin(rad0) * RB_FIRE.side;
       const [ovx, ovy] = muzzleVisOffset(myGid, sx0, sy0);
+      // straight from the muzzle DOWN TO the aim point: the muzzle offset
+      // fades to zero across the aim distance, so the far end lands exactly
+      // on the cursor circle — and the bullets glide the same slope
       const drawAimLine = (len: number) => {
         const [ex, ey] = clipSegmentAtWall(sx0, sy0, sx0 + fx0 * len, sy0 + fy0 * len);
+        const fade = Math.max(0, 1 - Math.hypot(ex - sx0, ey - sy0) / Math.max(2, len));
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
         ctx.beginPath();
         ctx.moveTo(px(sx0) + ovx * scale, py(sy0) + ovy * scale);
-        ctx.lineTo(px(ex) + ovx * scale, py(ey) + ovy * scale);
+        ctx.lineTo(px(ex) + ovx * scale * fade, py(ey) + ovy * scale * fade);
         ctx.stroke();
         ctx.setLineDash([]);
       };
@@ -1160,12 +1170,15 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
     }
 
-    // projectiles above everything — each bullet carries the exact ground→
-    // muzzle offset captured when it was fired, so shots leave the barrel
+    // projectiles above everything — each bullet leaves the barrel with its
+    // captured muzzle offset and glides down to the aim point (the offset
+    // fades over the aim distance, exactly like the dashed line)
     ctx.fillStyle = '#fef08a';
     for (const b of bulletsRef.current) {
       if (!b.on) continue;
-      ctx.beginPath(); ctx.arc(px(b.x) + b.vx * scale, py(b.y) + b.vy * scale, 0.18 * scale, 0, Math.PI * 2); ctx.fill();
+      const trav = Math.hypot(b.x - b.spx, b.y - b.spy);
+      const fade = b.decay > 0 ? Math.max(0, 1 - trav / b.decay) : 0;
+      ctx.beginPath(); ctx.arc(px(b.x) + b.vx * scale * fade, py(b.y) + b.vy * scale * fade, 0.18 * scale, 0, Math.PI * 2); ctx.fill();
     }
     for (const n of nadesRef.current) {
       if (!n.on) continue;
@@ -1231,11 +1244,20 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   // ONE trigger: rifle when armed, knife/fists automatically when out of ammo
   // (the knife has no button of its own). Guests predict their own cooldowns
   // locally so held autofire doesn't flood the action counters.
+  /** Ground distance from me to the aim target (cursor / stick line end). */
+  const aimDistance = (): number => {
+    const p = me();
+    if (!p) return 14;
+    if (isTouch || !mouseRef.current.inside) return 16;
+    const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
+    return Math.max(2, Math.hypot(a.ax - p.x, a.ay - p.y) - RB_FIRE.forward);
+  };
+
   const doShoot = () => {
     const p = me();
     if (!p || !p.alive || phaseRef.current !== 'battle' || pausedRef.current) return;
     const gun = p.upgrades >= 3 && p.ammo > 0;
-    if (!isGuest) { if (gun) hostFire(p); else hostMelee(p); return; }
+    if (!isGuest) { if (gun) hostFire(p, aimDistance()); else hostMelee(p); return; }
     const now = performance.now();
     if (gun) {
       if (now - p.lastFireAt < BALANCE.ak.fireRateMs) return;
