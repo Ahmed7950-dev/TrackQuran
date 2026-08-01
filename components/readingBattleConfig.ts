@@ -42,11 +42,12 @@ export const RB_SOUNDS: Record<string, string | null> = {
   correct:   null,   // rising chime
   buzz:      null,   // harsh buzz
   upgrade:   null,   // fanfare
-  shot:      null,   // AK shot
+  shot:      '/rb/sfx/bullet.m4a',   // AK shot (user's bullet.wav)
   melee:     null,   // swing
-  boom:      null,   // grenade
+  boom:      '/rb/sfx/grenade.m4a',  // grenade explosion (user's grenade.flac)
   poof:      null,   // elimination
   win:       null,   // victory fanfare
+  wounded:   '/rb/sfx/wounded.m4a',  // a player takes a hit (user's wounded.wav)
 };
 
 // ── Battle balance (spec §7.2 — tune freely) ─────────────────────────────────

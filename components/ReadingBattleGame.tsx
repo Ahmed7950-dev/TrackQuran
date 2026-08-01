@@ -470,6 +470,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const p = g.players[i];
         p.name = sp.nm; p.charKey = sp.ck; p.isTutor = !!sp.tu; p.fighting = !!sp.fi;
         p.level = sp.lv; p.upgrades = sp.up; p.bonusAmmo = sp.ba;
+        // a real hit knocks ≥5 hp+armor between snapshots (zone drain is ~0.1)
+        const dmgTaken = (p.hp - sp.hp) + (p.armor - sp.ar);
+        if (s.ph === 'battle' && dmgTaken >= 5) playSfx('wounded', sp.gid === myGid ? 0.9 : 0.5);
         p.hp = sp.hp; p.armor = sp.ar; p.ammo = sp.am; p.grenades = sp.gr;
         const wasAlive = p.alive;
         p.alive = !!sp.al; p.frozenUntil = sp.fz ? now + sp.fz : 0;
@@ -513,12 +516,22 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           [b.vx, b.vy] = muzzleVisOffset(ownerGid, x, y);
           b.spx = x; b.spy = y;
           b.decay = ownerGid === myGid ? aimDistance() : 14;
+          // opponents' gunfire (own shots already play locally in doShoot)
+          if (ownerGid !== myGid) playSfx('shot', 0.35);
         }
         b.x = x; b.y = y;
       });
       const gn = nadesRef.current;
+      const prevGn = gn.map(n => ({ on: n.on, x: n.x, y: n.y }));
       gn.forEach(n => { n.on = false; });
       s.bt.gn.slice(0, gn.length).forEach(([x, y], i) => { gn[i].on = true; gn[i].x = x; gn[i].y = y; });
+      // a grenade slot that vanished mid-battle = it exploded — guests get
+      // the boom + blast ring too (they only mirror positions otherwise)
+      if (s.ph === 'battle') {
+        prevGn.forEach((pg, i) => {
+          if (pg.on && !gn[i].on) { spawnFx('boom', pg.x, pg.y); playSfx('boom', 0.9); }
+        });
+      }
       if (s.ph !== phaseRef.current) {
         if (s.ph === 'battle') playSfx('countdown');
         if (s.ph === 'victory') playSfx('win');
@@ -580,6 +593,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     victim.hp -= (dmg - a);
     if (attacker) attacker.dmg += dmg;
     spawnFx('hit', victim.x, victim.y);
+    playSfx('wounded', victim.gid === myGid ? 0.9 : 0.55);
     if (victim.hp <= 0) hostEliminate(victim, attacker);
   };
   const hostEliminate = (victim: RBPlayer, attacker: RBPlayer | null) => {
