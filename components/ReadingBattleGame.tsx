@@ -679,7 +679,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     g.rd.done = 0; g.rd.ptr = 0;
     g.rd.turnGid = order[0];
     hostDealSegment();
-    g.rd.tEnd = Date.now() + READ_SECONDS * 1000 + 3400; // 3-2-1 + 15s
+    g.rd.tEnd = Date.now() + READ_SECONDS * 1000 + 3400; // 3-2-1 + the reading turn
     setPhase('reading');
   };
   const hostDealSegment = () => {
@@ -754,6 +754,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     nadesRef.current.forEach(n => { n.on = false; });
     setPhase('preBattle');
     playSfx('countdown');
+  };
+  /** Tutor shortcut: no reading round — everyone battles with FULL gear. */
+  const hostSkipToBattle = () => {
+    world.current.players.forEach(p => { p.upgrades = MAX_UPGRADES; p.level = 5; });
+    hostStartBattle();
   };
   const hostPlayAgain = () => {
     const g = world.current;
@@ -1609,6 +1614,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             <button onClick={() => { playSfx('countdown', 0.5); hostBeginReading(); }}
               style={{ ...btnBase, width: '100%', background: 'linear-gradient(135deg,#16a34a,#15803d)' }}>
               All set — begin reading 📖
+            </button>
+            <button onClick={() => { playSfx('countdown', 0.5); hostSkipToBattle(); }}
+              style={{ ...btnBase, width: '100%', background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+              ⚔️ Skip reading — battle now, full gear for everyone
             </button>
           </div>
         </div>

@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Reading phase ────────────────────────────────────────────────────────────
-export const READ_SECONDS = 15;          // per-student reading turn
+export const READ_SECONDS = 30;          // per-student reading turn
 export const MAX_UPGRADES = 5;
 export const BONUS_AMMO_PER_EXTRA = 10;  // each Correct beyond 5 (needs the AK)
 
