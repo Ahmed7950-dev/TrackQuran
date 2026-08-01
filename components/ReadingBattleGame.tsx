@@ -1093,18 +1093,21 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     // ── local-only aim visuals — drawn on MY canvas only, opponents never see
     if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
       const selfR = BALANCE.playerRadius * scale;
-      // the line leaves the GUN MUZZLE (projected by the 3D stage); rifle-height
-      // fallback covers the moment before the model finishes loading
+      // the line leaves the GUN MUZZLE (projected by the 3D stage) and runs
+      // along the BULLET TRACK: the ground ray lifted by the same muzzle
+      // height the bullets render at — shots ride the dashes exactly.
+      // Rifle-height fallback covers the moment before the model loads.
       const mzl = stageObjRef.current?.getMuzzle?.(stageSelfIdxRef.current);
       const mx0 = mzl ? mzl.x * dpr : px(self.x);
       const my0 = mzl ? mzl.y * dpr : py(self.y) - selfR * 1.0;
+      const lift = 1.2 * scale; // keep in sync with muzzleLift below
       if (!isTouch && mouseRef.current.inside) {
         const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
         const [ex, ey] = clipSegmentAtWall(self.x, self.y, a.ax, a.ay);
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(mx0, my0); ctx.lineTo(px(ex), py(ey)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mx0, my0); ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
         ctx.setLineDash([]);
       } else if (isTouch && aimJoyRef.current.active) {
         const rad = (self.h * Math.PI) / 180;
@@ -1113,7 +1116,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
         ctx.beginPath(); ctx.moveTo(mx0, my0);
-        ctx.lineTo(px(ex), py(ey)); ctx.stroke();
+        ctx.lineTo(px(ex), py(ey) - lift); ctx.stroke();
         ctx.setLineDash([]);
       }
       const nd = nadeDragRef.current;
