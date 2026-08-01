@@ -1133,11 +1133,13 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
     }
 
-    // projectiles above everything
+    // projectiles above everything — bullets fly at MUZZLE height (the gun
+    // sits ~1.2 arena units above the ground on screen), not along the floor
+    const muzzleLift = 1.2 * scale;
     ctx.fillStyle = '#fef08a';
     for (const b of bulletsRef.current) {
       if (!b.on) continue;
-      ctx.beginPath(); ctx.arc(px(b.x), py(b.y), 0.18 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px(b.x), py(b.y) - muzzleLift, 0.18 * scale, 0, Math.PI * 2); ctx.fill();
     }
     for (const n of nadesRef.current) {
       if (!n.on) continue;
