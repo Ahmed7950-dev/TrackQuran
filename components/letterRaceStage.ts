@@ -128,14 +128,36 @@ interface CharRig {
   camera: any;
   crate?: any;             // 3D wooden crate held while carrying (hidden otherwise)
   crateMixamo?: boolean;   // crate parented to a Mixamo chest bone (fennec)
+  prop?: any;              // rigid prop (Reading Battle gun) on a hand bone
+  muzzleObj?: any;         // marker inside the prop — its screen pos feeds the aim line
+  occ?: any;               // depth-only InstancedMesh hiding the body behind obstacles
+  occDummy?: any;
 }
+
+// A rigid prop (the RB tech gun) parented to a named bone; muzzle = marker
+// offset local to the prop whose screen position the game reads per frame.
+export interface RunnerPropCfg {
+  url: string; bone: string;
+  s: number; x: number; y: number; z: number; rx: number; ry: number; rz: number;
+  muzzle: [number, number, number];
+}
+// Screen-space obstacle for hide-behind: ground-centre + extents in CSS px
+// (h = visible height above the ground line). The art itself stays on the 2D
+// canvas below — these render DEPTH ONLY, so hidden body pixels just drop out
+// and the 2D block shows through; the glow twin then draws the silhouette.
+export interface StageOccluder { cx: number; cy: number; w: number; d: number; h: number }
 
 // tint: true = the classic P2 teal (165°), or any hue-rotate angle in degrees.
 // yawOffset: extra Y spin for models whose rest pose faces AWAY (Mixamo GLBs).
 // pinOrigin: anchor the hips pin to the BIND pose instead of the clip's first
 // frame — for clips whose frame 0 already sits away from the armature origin
 // (the Reading Battle soldier's Shoot Rifle starts 1.1m into its walk).
-export interface RunnerModel { url: string; scale: number; tint?: boolean | number; yawOffset?: number; pinOrigin?: boolean }
+// glow: x-ray silhouette colour shown where obstacles hide the body.
+// prop: rigid prop config (see RunnerPropCfg).
+export interface RunnerModel {
+  url: string; scale: number; tint?: boolean | number; yawOffset?: number; pinOrigin?: boolean;
+  glow?: string; prop?: RunnerPropCfg;
+}
 
 export class RunnerStage {
   private renderer: any = null;
@@ -147,7 +169,11 @@ export class RunnerStage {
   private disposed = false;
   private THREE: any = null;
   private models: RunnerModel[];
-  private opts: { size?: () => number };
+  private opts: { size?: () => number; occluders?: () => StageOccluder[] };
+  // ndc-per-scene-unit derivatives at the character (shared camera geometry)
+  private calib = { kx: 0.28, kyY: 0.24, kyZ: 0.2 };
+  private muzzles: ({ x: number; y: number } | null)[] = [];
+  private tmpV: any = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -155,12 +181,17 @@ export class RunnerStage {
     models: RunnerModel[] = [
       { url: '/models/runner.glb', scale: 1 }, { url: '/models/runner.glb', scale: 1 },
     ],
-    opts: { size?: () => number } = {},   // size: viewport square in CSS px (Reading Battle ties it to the arena zoom)
+    opts: { size?: () => number; occluders?: () => StageOccluder[] } = {},   // size: viewport square in CSS px
   ) {
     this.canvas = canvas;
     this.getPoses = getPoses;
     this.models = models;
     this.opts = opts;
+  }
+
+  /** Screen position (CSS px, top-origin) of character i's prop muzzle — null until rendered. */
+  getMuzzle(i: number): { x: number; y: number } | null {
+    return this.muzzles[i] ?? null;
   }
 
   async init(): Promise<void> {
@@ -188,9 +219,29 @@ export class RunnerStage {
     const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
     for (const url of unique) loaded.set(url, await loadGLTF(url));
+    // props are decorative — a missing gun must never sink the characters
+    for (const url of [...new Set(this.models.filter(m => m.prop).map(m => m.prop!.url))]) {
+      try { loaded.set(url, await loadGLTF(url)); } catch { loaded.set(url, null); }
+    }
     if (this.disposed) return;
     const crateGltf = await loadCrate();
     if (this.disposed) return;
+
+    // camera geometry is identical for every character — derive the ndc-per-
+    // scene-unit slopes once (occluder boxes + muzzle projection use them)
+    {
+      const calCam = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
+      calCam.position.set(0, 3.0, 3.9);
+      calCam.lookAt(0, 0.45, 0);
+      calCam.updateMatrixWorld();
+      const ndc = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).project(calCam);
+      const o0 = ndc(0, 0, 0);
+      this.calib = {
+        kx: Math.abs(ndc(1, 0, 0).x - o0.x),
+        kyY: Math.abs(ndc(0, 1, 0).y - o0.y),
+        kyZ: Math.abs(ndc(0, 0, 1).y - o0.y),
+      };
+    }
 
     // Mixamo clips bake the root's TRAVEL into the hips position track — the
     // model runs forward inside its render window and snaps back every loop.
@@ -202,7 +253,7 @@ export class RunnerStage {
     // (Retargeted characters like the robot are baked in-place already and
     // their root bone name doesn't match — the loop simply skips them.)
     for (const gltf of loaded.values()) {
-      if (gltf.__hipsPinned) continue; // cached GLBs are patched exactly once
+      if (!gltf || gltf.__hipsPinned) continue; // null = failed prop; patch cached GLBs exactly once
       gltf.__hipsPinned = true;
       const hips = gltf.scene.getObjectByName('mixamorig:Hips') ?? gltf.scene.getObjectByProperty('isBone', true);
       const parent = hips?.parent;
@@ -392,6 +443,76 @@ export class RunnerStage {
       // hidden until the runner picks up a letter. Wood, so just opaque it and
       // kill frustum culling (skinned neighbours animate wide).
       const rig: CharRig = { root, mixer, actions, current: '', scene, camera };
+
+      // rigid prop (the RB gun) on a named bone + muzzle marker inside it
+      const propCfg = this.models[who].prop;
+      const propGltf = propCfg ? loaded.get(propCfg.url) : null;
+      if (propCfg && propGltf?.scene) {
+        const bone = root.getObjectByName(propCfg.bone);
+        if (bone) {
+          const prop = skClone(propGltf.scene);
+          prop.traverse((o: any) => {
+            if (o.isMesh) {
+              o.frustumCulled = false;
+              const mats = Array.isArray(o.material) ? o.material : [o.material];
+              for (const m of mats) {
+                if (!m) continue;
+                m.transparent = false; m.depthWrite = true;
+                if (typeof m.metalness === 'number') m.metalness = Math.min(m.metalness, 0.2);
+                if (typeof m.roughness === 'number') m.roughness = Math.max(m.roughness, 0.55);
+                m.needsUpdate = true;
+              }
+            }
+          });
+          bone.add(prop);
+          const mz = new THREE.Object3D();
+          prop.add(mz);
+          rig.prop = prop;
+          rig.muzzleObj = mz;
+        }
+      }
+
+      // depth-only obstacle boxes: they write DEPTH but no colour, so body
+      // pixels behind them vanish and the 2D block art shows through
+      if (this.opts.occluders) {
+        const occMat = new THREE.MeshBasicMaterial();
+        occMat.colorWrite = false;
+        // upright PLANES, not boxes: a plane's silhouette matches the 2D block
+        // art rectangle exactly, so the hide/glow boundary hugs the art edges
+        const occ = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), occMat, 48);
+        occ.renderOrder = -1;
+        occ.frustumCulled = false;
+        occ.count = 0;
+        scene.add(occ);
+        rig.occ = occ;
+      }
+
+      // x-ray glow: skinned twins sharing the SAME skeleton, drawn only where
+      // something nearer already wrote depth (GreaterDepth) — the classic
+      // hidden-behind-cover silhouette
+      const glowColor = this.models[who].glow;
+      if (glowColor) {
+        // ORDER IS THE TRICK: occluders (renderOrder -1) lay down depth, the
+        // glow twins (-0.5, opaque queue) then pass GreaterDepth exactly where
+        // an occluder covers them — the body hasn't rendered yet, so its own
+        // overlapping parts can't self-x-ray. The body (0) draws last and
+        // overwrites glow wherever it is actually visible.
+        const gm = new THREE.MeshBasicMaterial({ color: glowColor, depthWrite: false });
+        gm.depthFunc = THREE.GreaterDepth;
+        const skinnedMeshes: any[] = [];
+        root.traverse((o: any) => { if (o.isSkinnedMesh) skinnedMeshes.push(o); });
+        for (const o of skinnedMeshes) {
+          const twin = new THREE.SkinnedMesh(o.geometry, gm);
+          twin.position.copy(o.position);
+          twin.quaternion.copy(o.quaternion);
+          twin.scale.copy(o.scale);
+          twin.bind(o.skeleton, o.bindMatrix);
+          twin.frustumCulled = false;
+          twin.renderOrder = -0.5;
+          o.parent.add(twin);
+        }
+      }
+
       if (crateGltf?.scene) {
         let bone: any = null;
         for (const nm of CRATE_BONES) { bone = root.getObjectByName(nm); if (bone) break; }
@@ -541,6 +662,9 @@ export class RunnerStage {
     // character viewport square, sized relative to the field (like the 70px sprite)
     const S = ((import.meta as any).env?.DEV && (window as any).__lrSizeOverride)
       || (this.opts.size ? Math.max(40, Math.round(this.opts.size())) : Math.max(110, Math.round(H * 0.17)));
+    // obstacles + muzzle bookkeeping (Reading Battle) — evaluated once per frame
+    const occList = this.opts.occluders ? this.opts.occluders() : null;
+    this.muzzles = this.chars.map(() => null);
     // draw players further up the field first, so nearer ones (lower on
     // screen = closer to the top-down camera) overlap them naturally
     const order = this.chars.map((_, i) => i)
@@ -553,6 +677,16 @@ export class RunnerStage {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue; // never vanish on bad data
       this.setAnim(c, p.anim, Math.min(1, p.speed / 0.13)); // 0.13 = game MAX_SPEED
       c.mixer.update(dt);
+      if (c.prop) {
+        // live-tunable in DEV: window.__rbGun = { s,x,y,z,rx,ry,rz,muzzle:[..] }
+        const cfg = (((import.meta as any).env?.DEV && (window as any).__rbGun) || this.models[i]?.prop) as RunnerPropCfg;
+        if (cfg) {
+          c.prop.scale.setScalar(cfg.s);
+          c.prop.position.set(cfg.x, cfg.y, cfg.z);
+          c.prop.rotation.set(cfg.rx, cfg.ry, cfg.rz);
+          if (c.muzzleObj && cfg.muzzle) c.muzzleObj.position.set(cfg.muzzle[0], cfg.muzzle[1], cfg.muzzle[2]);
+        }
+      }
       if (c.crate) {
         const on = p.anim === 'carry';
         c.crate.visible = on;
@@ -574,10 +708,43 @@ export class RunnerStage {
       // viewport centered horizontally, character feet ~62% down the square
       const vx = Math.round(px - S / 2);
       const vy = Math.round(H - py - S * 0.38); // WebGL y-up: bottom of viewport
+      // nearby obstacle boxes, converted from screen CSS px into scene units
+      // via the calibrated projection slopes (they render depth only)
+      if (c.occ && occList) {
+        const cssX = this.calib.kx * S / 2;   // css px per scene unit
+        const cssY = this.calib.kyY * S / 2;
+        const cssZ = this.calib.kyZ * S / 2;
+        const dummy = (c.occDummy ??= new this.THREE.Object3D());
+        let n = 0;
+        for (const o of occList) {
+          if (n >= 48) break;
+          const relX = o.cx - px, relY = o.cy - py;
+          if (Math.abs(relX) > S * 0.8 || Math.abs(relY) > S * 0.9) continue;
+          // plane stands on the obstacle's BASE line (its ground contact edge)
+          const baseZ = (relY + o.d / 2) / cssZ;
+          dummy.position.set(relX / cssX, (o.h / cssY) / 2, baseZ);
+          dummy.scale.set(o.w / cssX, o.h / cssY, 1);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          c.occ.setMatrixAt(n++, dummy.matrix);
+        }
+        c.occ.count = n;
+        c.occ.instanceMatrix.needsUpdate = true;
+      }
       r.setViewport(vx, vy, S, S);
       r.setScissor(vx, vy, S, S);
       r.clearDepth(); // fresh depth per character; color is preserved
       r.render(c.scene, c.camera);
+      // muzzle → screen CSS px (top-origin) for the game's aim line
+      if (c.muzzleObj) {
+        const v = (this.tmpV ??= new this.THREE.Vector3());
+        c.muzzleObj.getWorldPosition(v);
+        v.project(c.camera);
+        this.muzzles[i] = {
+          x: vx + (v.x * 0.5 + 0.5) * S,
+          y: H - (vy + (v.y * 0.5 + 0.5) * S),
+        };
+      }
     }
     r.setScissorTest(false);
   }

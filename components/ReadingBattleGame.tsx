@@ -181,10 +181,18 @@ const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stret
 // The Mixamo soldier. Clips: 'stretch' (reading page), 'run' (Shoot Rifle
 // cycle) + 'idle' (held aim pose) for the RunnerStage battle overlay.
 // Rest pose faces +Z like the Tripo rigs — no yaw offset anywhere.
-const HERO_GLB = '/rb/hero.glb?v=3';
+const HERO_GLB = '/rb/hero.glb?v=4';
 // per-fighter hue-rotate tints so identical soldiers stay tellable apart
 // (index 0 keeps the original camo)
 const HERO_HUES = [0, 160, 280, 60, 210, 320, 110, 250];
+// The Tripo tech-gun, parented to the soldier's right hand. Transform tuned
+// live via window.__rbGun in DEV, then baked here; muzzle = local offset the
+// aim line starts from.
+const RB_GUN = {
+  url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
+  s: 60, x: 0, y: 4, z: 2, rx: 0, ry: 0, rz: -1.5708,
+  muzzle: [-3.4, -1, 0] as [number, number, number],
+};
 
 const UPGRADE_META = [
   { icon: '🔪', label: 'Knife' },
@@ -224,7 +232,6 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const [, setTick] = useState(0);
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(roomId ?? null);
   const [myName, setMyName] = useState('');
-  const [myChar, setMyChar] = useState<string>(RB_CHARACTERS[0].key);
   const [tutorPlays, setTutorPlays] = useState(false);
   const [joined, setJoined] = useState(false);        // guest pressed Join
   const [gotSnap, setGotSnap] = useState(false);
@@ -318,7 +325,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const id = onlineRoomId ?? crypto.randomUUID();
     if (!onlineRoomId) { setOnlineRoomId(id); return; }
     const ch = createGameChannel(`reading-battle:${id}`, 'host');
-    world.current.players = [newPlayer('host', 'Tutor', myChar, true, false)];
+    world.current.players = [newPlayer('host', 'Tutor', RB_CHARACTERS[0].key, true, false)];
 
     ch.on('broadcast', { event: 'hello' }, ({ payload }: { payload: { gid: string; name: string; charKey: string } }) => {
       const g = world.current;
@@ -334,10 +341,10 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         let nm = (payload.name || 'Player').slice(0, 14).trim() || 'Player';
         const clash = (n: string) => g.players.some(q => q.gid !== gid && q.name === n);
         if (clash(nm)) { let i = 2; while (clash(`${nm} (${i})`)) i++; nm = `${nm} (${i})`; }
-        pl = newPlayer(gid, nm, payload.charKey, false, true);
+        // identity colour by join order — the animal picker is gone
+        pl = newPlayer(gid, nm, RB_CHARACTERS[g.players.length % RB_CHARACTERS.length].key, false, true);
         g.players.push(pl);
       }
-      pl.charKey = RB_CHARACTERS.some(c => c.key === payload.charKey) ? payload.charKey : RB_CHARACTERS[0].key;
       setTick(t => t + 1);
     });
 
@@ -487,8 +494,19 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       if (!!s.pz !== pausedRef.current) { pausedRef.current = !!s.pz; setPaused(!!s.pz); }
       // mirror projectiles for rendering
       const bl = bulletsRef.current;
+      const prevBl = bl.map(b => ({ on: b.on, x: b.x, y: b.y }));
       bl.forEach(b => { b.on = false; });
-      s.bt.bl.slice(0, bl.length).forEach(([x, y], i) => { bl[i].on = true; bl[i].x = x; bl[i].y = y; });
+      s.bt.bl.slice(0, bl.length).forEach(([x, y], i) => {
+        const b = bl[i];
+        b.on = true;
+        // direction from consecutive snapshots → smooth local flight below
+        if (prevBl[i].on) {
+          const ddx = x - prevBl[i].x, ddy = y - prevBl[i].y;
+          const d = Math.hypot(ddx, ddy);
+          if (d > 0.01 && d < 20) { b.dx = ddx / d; b.dy = ddy / d; }
+        } else { b.dx = 0; b.dy = 0; }
+        b.x = x; b.y = y;
+      });
       const gn = nadesRef.current;
       gn.forEach(n => { n.on = false; });
       s.bt.gn.slice(0, gn.length).forEach(([x, y], i) => { gn[i].on = true; gn[i].x = x; gn[i].y = y; });
@@ -500,13 +518,13 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       // auto-rejoin if the reaper dropped us while our phone slept
       if (!g.players.some(p => p.gid === myGid) && performance.now() - rejoinAtRef.current > 2500) {
         rejoinAtRef.current = performance.now();
-        ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: myChar } });
+        ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key } });
       }
       setTick(t => t + 1);
     });
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
-        const hello = () => ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: myChar } });
+        const hello = () => ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key } });
         hello();
         const iv = window.setInterval(() => { if (hostSnapRef.current) window.clearInterval(iv); else hello(); }, 2000);
       }
@@ -743,6 +761,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const viewRef = useRef({ ox: 0, oy: 0, scale: 1, dpr: 1 }); // canvas → arena mapping
   // live 3D soldiers — RunnerStage overlay canvas (same renderer as Letter Race)
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const stageObjRef = useRef<any>(null);
+  const stageSelfIdxRef = useRef(0);
   const stageFightersRef = useRef<string[]>([]);
   const stagePrevRef = useRef<Map<string, { x: number; y: number; t: number; sp: number }>>(new Map());
   const camRef = useRef({ x: 50, y: 50 });
@@ -773,13 +793,16 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     let dead = false;
     const gids = world.current.players.filter(p => p.fighting).map(p => p.gid);
     stageFightersRef.current = gids;
+    stageSelfIdxRef.current = gids.indexOf(myGid);
     (async () => {
       try {
         const { RunnerStage } = await import('./letterRaceStage');
         if (dead) return;
-        const models = gids.map((_, i) => ({
+        const models = gids.map((gid, i) => ({
           url: HERO_GLB, scale: 1, pinOrigin: true,
           tint: i === 0 ? undefined : HERO_HUES[i % HERO_HUES.length],
+          glow: charOf(world.current.players.find(q => q.gid === gid)?.charKey ?? '').color,
+          prop: RB_GUN,
         }));
         const st = new RunnerStage(canvas, () => {
           const v = viewRef.current;
@@ -807,12 +830,29 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               anim: (rec.sp > 0.12 ? 'run' : 'idle') as 'run' | 'idle',
             };
           });
-        }, models, { size: () => (viewRef.current.scale / viewRef.current.dpr) * 13 });
+        }, models, {
+          size: () => (viewRef.current.scale / viewRef.current.dpr) * 13,
+          // block footprints in CSS px — the stage turns them into depth-only
+          // boxes so soldiers hide behind them (glow silhouette shows through)
+          occluders: () => {
+            const v = viewRef.current;
+            const u = v.scale / v.dpr;
+            const bx = v.ox / v.dpr, by = v.oy / v.dpr;
+            return WALL_TILE_LIST.map(t => ({
+              cx: bx + (t.x + TILE / 2) * u,
+              cy: by + (t.y + TILE / 2) * u,
+              w: TILE * u,
+              d: TILE * u,
+              h: 6.25 * u,   // the art's full visible height above its base line
+            }));
+          },
+        });
         stage = st;
+        stageObjRef.current = st;
         await st.init();
       } catch { /* the 3D soldiers are visual — never block the battle */ }
     })();
-    return () => { dead = true; stage?.dispose(); stagePrevRef.current.clear(); };
+    return () => { dead = true; stage?.dispose(); stageObjRef.current = null; stagePrevRef.current.clear(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inBattle]);
 
@@ -917,6 +957,16 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               const dmg = BALANCE.grenade.damageEdge + (BALANCE.grenade.damageCenter - BALANCE.grenade.damageEdge) * (1 - d / R);
               applyDamage(q, Math.round(dmg), g.players.find(pp => pp.gid === n.owner) ?? null);
             }
+          }
+        }
+      }
+      // guests: fly the mirrored bullets forward between snapshots so shots
+      // render at full frame rate instead of stepping at snapshot rate
+      if (isGuest && ph === 'battle' && !pausedRef.current) {
+        for (const b of bulletsRef.current) {
+          if (b.on && (b.dx || b.dy)) {
+            b.x += b.dx * BALANCE.ak.bulletSpeed * dt;
+            b.y += b.dy * BALANCE.ak.bulletSpeed * dt;
           }
         }
       }
@@ -1042,14 +1092,18 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     // ── local-only aim visuals — drawn on MY canvas only, opponents never see
     if (ph === 'battle' && !pausedRef.current && self && self.alive && self.fighting) {
       const selfR = BALANCE.playerRadius * scale;
-      const handY = py(self.y) - selfR * 1.0; // the rifle sits here on the sprite, not at the feet
+      // the line leaves the GUN MUZZLE (projected by the 3D stage); rifle-height
+      // fallback covers the moment before the model finishes loading
+      const mzl = stageObjRef.current?.getMuzzle?.(stageSelfIdxRef.current);
+      const mx0 = mzl ? mzl.x * dpr : px(self.x);
+      const my0 = mzl ? mzl.y * dpr : py(self.y) - selfR * 1.0;
       if (!isTouch && mouseRef.current.inside) {
         const a = arenaFromClient(mouseRef.current.cx, mouseRef.current.cy);
         const [ex, ey] = clipSegmentAtWall(self.x, self.y, a.ax, a.ay);
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(px(self.x), handY); ctx.lineTo(px(ex), py(ey)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mx0, my0); ctx.lineTo(px(ex), py(ey)); ctx.stroke();
         ctx.setLineDash([]);
       } else if (isTouch && aimJoyRef.current.active) {
         const rad = (self.h * Math.PI) / 180;
@@ -1057,7 +1111,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1.5 * dpr;
         ctx.setLineDash([5 * dpr, 5 * dpr]);
-        ctx.beginPath(); ctx.moveTo(px(self.x), handY);
+        ctx.beginPath(); ctx.moveTo(mx0, my0);
         ctx.lineTo(px(ex), py(ey)); ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -1065,7 +1119,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       if (nd.active) {
         // vivid landing circle while the grenade button is held
         const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
-        const TR = BALANCE.grenade.radius * scale * pulse;
+        const TR = BALANCE.grenade.radius * scale * pulse * (isTouch ? 0.5 : 1);
         ctx.fillStyle = 'rgba(190,242,100,0.18)';
         ctx.beginPath(); ctx.arc(px(nd.ax), py(nd.ay), TR, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(190,242,100,0.95)';
@@ -1082,15 +1136,15 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     ctx.fillStyle = '#fef08a';
     for (const b of bulletsRef.current) {
       if (!b.on) continue;
-      ctx.beginPath(); ctx.arc(px(b.x), py(b.y), 2.2 * dpr, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px(b.x), py(b.y), 0.18 * scale, 0, Math.PI * 2); ctx.fill();
     }
     for (const n of nadesRef.current) {
       if (!n.on) continue;
       const h = nadeHeight(n);
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.beginPath(); ctx.ellipse(px(n.x), py(n.y), 3 * dpr, 1.6 * dpr, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(px(n.x), py(n.y), 0.24 * scale, 0.13 * scale, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#365314';
-      ctx.beginPath(); ctx.arc(px(n.x), py(n.y - h), 3.2 * dpr, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px(n.x), py(n.y - h), 0.26 * scale, 0, Math.PI * 2); ctx.fill();
     }
     // fx
     const now = performance.now();
@@ -1388,7 +1442,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             <span key={p.gid} title={p.name}
               className={`w-6 h-6 rounded-full flex items-center justify-center text-xs border-2 ${p.alive ? 'border-white/70' : 'border-white/20 opacity-40'}`}
               style={{ background: charOf(p.charKey).color }}>
-              {charOf(p.charKey).emoji}
+              <span className="font-extrabold text-white">{(p.name || '?').charAt(0).toUpperCase()}</span>
             </span>
           ))}
         </span>
@@ -1417,22 +1471,16 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
                 placeholder={isGuest ? 'Your name…' : 'Your name (tutor)…'}
                 className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
               />
-              <div className="grid grid-cols-4 gap-2">
-                {RB_CHARACTERS.map(c => (
-                  <button key={c.key} onClick={() => setMyChar(c.key)}
-                    className={`rounded-xl p-2 flex flex-col items-center gap-1 border-2 transition-all ${myChar === c.key ? 'border-white scale-105' : 'border-transparent opacity-75'}`}
-                    style={{ background: c.color }}>
-                    <span className="text-2xl">{c.emoji}</span>
-                    <span className="text-[10px] font-bold text-white/90">{c.name}</span>
-                  </button>
-                ))}
+              <div className="flex flex-col items-center">
+                <RBHero clip="stretch" className="w-36 h-44" />
+                <p className="text-white/50 text-[11px] font-semibold -mt-1">Your soldier — colours are assigned automatically</p>
               </div>
               {!isGuest && (
                 <label className="flex items-center gap-2 text-white/90 text-sm font-semibold cursor-pointer">
                   <input type="checkbox" checked={tutorPlays} onChange={e => {
                     setTutorPlays(e.target.checked);
                     const t = world.current.players.find(p => p.gid === 'host');
-                    if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; t.charKey = myChar; }
+                    if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; }
                   }} className="w-4 h-4 rounded" />
                   I'm playing too (referee + fighter)
                 </label>
@@ -1475,7 +1523,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               <div className="space-y-1.5">
                 {players.map(p => (
                   <div key={p.gid} className="flex items-center gap-2 text-white text-sm font-semibold">
-                    <span className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: charOf(p.charKey).color }}>{charOf(p.charKey).emoji}</span>
+                    <span className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold text-white" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
                     <span>{p.gid === 'host' ? (myName || 'Tutor') : p.name}</span>
                     {p.isTutor && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/30 text-amber-200 font-bold">{p.fighting ? 'REFEREE + FIGHTER' : 'REFEREE'}</span>}
                   </div>
@@ -1484,7 +1532,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             </div>
 
             {!isGuest && (
-              <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.charKey = myChar; t.fighting = tutorPlays; } setPhase('levels'); }}
+              <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.fighting = tutorPlays; } setPhase('levels'); }}
                 disabled={!canStart}
                 style={{ ...btnBase, width: '100%', background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default' }}>
                 {assetsReady && wordsRef.current.length > 0
@@ -1509,7 +1557,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-3">
               {students.map(p => (
                 <div key={p.gid} className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: charOf(p.charKey).color }}>{charOf(p.charKey).emoji}</span>
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-extrabold text-white" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
                   <span className="flex-1 text-white font-bold text-sm truncate">{p.name}</span>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map(lv => (
@@ -1555,7 +1603,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             <div className="text-center">
               <p className="text-emerald-300 font-bold text-sm uppercase tracking-widest">Now reading</p>
               <p className="text-white text-2xl font-extrabold flex items-center justify-center gap-2">
-                <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: charOf(reader?.charKey ?? '').color }}>{charOf(reader?.charKey ?? '').emoji}</span>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-white" style={{ background: charOf(reader?.charKey ?? '').color }}>{(reader?.name ?? '?').charAt(0).toUpperCase()}</span>
                 {reader?.name ?? '…'}
               </p>
               <div className={`mt-2 text-6xl font-extrabold tabular-nums ${readSecondsLeft <= 5 && !readCountingDown ? 'text-red-400' : 'text-white'}`}>
@@ -1605,7 +1653,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Gear earned</p>
               {students.map(p => (
                 <div key={p.gid} className={`flex items-center gap-2 ${p.gid === rd.turnGid ? 'bg-white/10 rounded-lg px-2 py-1 -mx-2' : ''}`}>
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0" style={{ background: charOf(p.charKey).color }}>{charOf(p.charKey).emoji}</span>
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold text-white flex-shrink-0" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
                   <span className="text-white text-sm font-bold w-24 truncate">{p.name}</span>
                   <span className="flex gap-1 text-lg">
                     {UPGRADE_META.map((u, i) => (
@@ -1714,14 +1762,14 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             </h2>
             {winner && (
               <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
-                <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: charOf(winner.charKey).color }}>{charOf(winner.charKey).emoji}</span>
-                <span className="text-white font-bold">{charOf(winner.charKey).name}</span>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-white" style={{ background: charOf(winner.charKey).color }}>{(winner.name || '?').charAt(0).toUpperCase()}</span>
+                <span className="text-white font-bold">Champion 🎖️</span>
               </div>
             )}
             <div className="bg-white/10 border border-white/15 rounded-2xl p-4 space-y-1.5 text-left">
               {fighters.map(p => (
                 <div key={p.gid} className="flex items-center gap-2 text-sm text-white">
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs" style={{ background: charOf(p.charKey).color }}>{charOf(p.charKey).emoji}</span>
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-extrabold text-white" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
                   <span className="font-bold flex-1 truncate">{p.name}</span>
                   <span className="text-white/70">⚔️ {p.kills} · 💥 {p.dmg} dmg · 🎁 {p.upgrades} gear</span>
                 </div>
