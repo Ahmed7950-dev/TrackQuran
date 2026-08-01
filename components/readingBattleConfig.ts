@@ -160,6 +160,15 @@ export const RB_GUN = {
   muzzle: [0.5, 0.4, 0] as [number, number, number],
 };
 
+/** Selectable weapons (lobby picker). All Tripo rifles are normalized to the
+ *  same 1-unit length, so every one shares RB_GUN's hand transform + muzzle. */
+export const RB_GUNS = [
+  { key: 'tech',   name: 'Tech',   url: '/rb/gun.glb?v=1',  thumb: '/rb/guns/tech.png' },
+  { key: 'falcon', name: 'Falcon', url: '/rb/gun2.glb?v=1', thumb: '/rb/guns/falcon.png' },
+  { key: 'storm',  name: 'Storm',  url: '/rb/gun3.glb?v=1', thumb: '/rb/guns/storm.png' },
+  { key: 'viper',  name: 'Viper',  url: '/rb/gun4.glb?v=1', thumb: '/rb/guns/viper.png' },
+];
+
 /** Where fire leaves the gun (user-tuned on the /gun-tune bench).
  *  forward = arena units ahead of the player along the aim,
  *  side    = units toward the character's RIGHT of the aim,
