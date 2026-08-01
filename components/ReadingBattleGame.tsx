@@ -190,8 +190,9 @@ const HERO_HUES = [0, 160, 280, 60, 210, 320, 110, 250];
 // aim line starts from.
 const RB_GUN = {
   url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
-  s: 60, x: 0, y: 4, z: 2, rx: 0, ry: 0, rz: -1.5708,
-  muzzle: [-3.4, -1, 0] as [number, number, number],
+  // user-tuned on the /gun-tune bench (1 Aug 2026)
+  s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708,
+  muzzle: [0.5, 0.4, 0] as [number, number, number],
 };
 
 const UPGRADE_META = [
