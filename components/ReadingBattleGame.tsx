@@ -838,6 +838,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const blockImgRef = useRef<HTMLImageElement | null>(null);
   const cloudCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stormSfxAtRef = useRef(0);   // rate-limits the in-cloud hurt cry
   useEffect(() => {
     if (ARENA_BG_IMAGE) {
       const img = new Image();
@@ -1020,6 +1021,19 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         }
         // hold-to-fire (LMB / right stick) — doShoot swaps to knife when dry
         if ((!isTouch && lmbRef.current) || (isTouch && aimJoyRef.current.active && aimJoyRef.current.mag > 0.35)) doShoot();
+      }
+
+      // caught in the cloud: the same hurt cry as taking a bullet, on a slow
+      // repeat. Every client decides this locally (the storm is a pure
+      // function of the battle clock), so guests hear it without extra data —
+      // their per-snapshot hp drop is far too small to trip the hit detector.
+      if (ph === 'battle' && !pausedRef.current && p && p.alive && p.fighting) {
+        const nowMs = Date.now() + (isGuest ? clockSkewRef.current : 0);
+        const rings = stormRings(nowMs, g.bt.startedAt);
+        if (rings > 0 && !stormSafe(p.x, p.y, rings) && now - stormSfxAtRef.current > 1100) {
+          stormSfxAtRef.current = now;
+          playSfx('wounded', 0.9);
+        }
       }
 
       // host: advance projectiles + resolve hits
@@ -1286,11 +1300,14 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const t1x = Math.min(GRID_TILES + STORM_PAD, Math.ceil((W - ox) / scale / TILE) + 1);
         const t0y = Math.max(-STORM_PAD, Math.floor(-oy / scale / TILE) - 1);
         const t1y = Math.min(GRID_TILES + STORM_PAD, Math.ceil((H - oy) / scale / TILE) + 1);
-        const cw = TILE * scale * 0.92;          // under one tile → gaps between puffs
+        // big puffs on a checkerboard: full-size clouds that still leave the
+        // ground visible between them instead of merging into one mass
+        const cw = TILE * scale * 1.5;
         const chh = cw * (2 / 3);                // the Lottie art is 3:2
         const ring0At = g.bt.startedAt + BALANCE.storm.startMs;
         for (let ty = t0y; ty < t1y; ty++) {
           for (let tx = t0x; tx < t1x; tx++) {
+            if (((tx + ty) & 1) !== 0) continue;   // checkerboard spacing
             const r = tileRing(tx, ty);
             if (r >= rings) continue;
             // each ring pops in on its own beat (rows outside the map ride ring 0)
