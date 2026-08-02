@@ -173,10 +173,10 @@ export const RB_HEROES = [
     gun: { bone: 'mixamorigRightHand', s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
   },
   {
-    // the Titan's Mixamo auto-rig lives in metre-scale bone space (the
-    // soldier's is centimetres) — hence the ~80× smaller numbers
-    key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=1',
-    gun: { bone: 'mixamorigRightHand', s: 0.85, x: -0.22, y: 0.31, z: 0.09, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
+    // the Titan is roughly half the soldier's bone-space height, so his gun
+    // numbers are about half the soldier's
+    key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=5',
+    gun: { bone: 'mixamorigRightHand', s: 34, x: -7.7, y: 10.3, z: 3, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
   },
 ];
 

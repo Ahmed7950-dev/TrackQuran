@@ -56,6 +56,7 @@ const GunTunePage: React.FC = () => {
         { size: () => Math.min(460, canvas.clientWidth || 460) });
         stage = st;
         stageRef.current = st;
+        if ((import.meta as any).env?.DEV) (window as any).__tuneStage = st;
         await st.init();
       } catch { /* page is a utility — nothing to break */ }
     })();
