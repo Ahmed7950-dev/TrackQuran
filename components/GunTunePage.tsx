@@ -7,13 +7,12 @@
 // No auth — the page can't change anything for anyone else.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useRef, useState } from 'react';
-import { RB_GUN, RB_FIRE } from './readingBattleConfig';
-
-const HERO_GLB = '/rb/hero.glb?v=4';
+import { RB_GUN, RB_FIRE, RB_HEROES } from './readingBattleConfig';
 
 // live values come straight from the shipped config — tune from there
 const DEFAULTS = RB_GUN;
 const FIRE_DEFAULTS = RB_FIRE;
+const heroGun = (i: number) => ({ url: RB_GUN.url, ...RB_HEROES[i].gun, muzzle: [...RB_HEROES[i].gun.muzzle] as [number, number, number] });
 
 const deg = (rad: number) => Math.round((rad * 180) / Math.PI);
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -33,12 +32,16 @@ const GunTunePage: React.FC = () => {
   const cfgRef = useRef({ ...DEFAULTS, muzzle: [...DEFAULTS.muzzle] as [number, number, number] });
   const fireRef = useRef({ ...FIRE_DEFAULTS });
   const poseRef = useRef<{ heading: number; anim: 'idle' | 'run' }>({ heading: 90, anim: 'idle' });
+  const [hero, setHero] = useState(0);
+  const heroRef = useRef(0);
   const [, setTick] = useState(0);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let stage: { dispose(): void } | null = null;
     let dead = false;
+    // a character switch rebuilds the stage and starts from that hero's config
+    Object.assign(cfgRef.current, heroGun(hero));
     (async () => {
       try {
         const { RunnerStage } = await import('./letterRaceStage');
@@ -49,7 +52,7 @@ const GunTunePage: React.FC = () => {
           heading: poseRef.current.heading,
           speed: poseRef.current.anim === 'run' ? 0.09 : 0,
           anim: poseRef.current.anim,
-        }], [{ url: HERO_GLB, scale: 1, pinOrigin: true, prop: cfgRef.current }],
+        }], [{ url: RB_HEROES[hero].url, scale: 1, pinOrigin: true, prop: cfgRef.current }],
         { size: () => Math.min(460, canvas.clientWidth || 460) });
         stage = st;
         stageRef.current = st;
@@ -94,7 +97,7 @@ const GunTunePage: React.FC = () => {
       }
     }, 60);
     return () => { dead = true; window.clearInterval(iv); stage?.dispose(); };
-  }, []);
+  }, [hero]);
 
   const cfg = cfgRef.current;
   const fire = fireRef.current;
@@ -105,7 +108,7 @@ const GunTunePage: React.FC = () => {
   const setMuzzle = (i: number, v: number) => { cfg.muzzle[i] = v; setTick(t => t + 1); };
   const setFire = (k: 'forward' | 'side' | 'lift', v: number) => { fire[k] = v; setTick(t => t + 1); };
 
-  const json = `gun { s: ${+cfg.s.toFixed(1)}, x: ${+cfg.x.toFixed(1)}, y: ${+cfg.y.toFixed(1)}, z: ${+cfg.z.toFixed(1)}, rx: ${+cfg.rx.toFixed(4)}, ry: ${+cfg.ry.toFixed(4)}, rz: ${+cfg.rz.toFixed(4)}, muzzle: [${cfg.muzzle.map(v => +v.toFixed(2)).join(', ')}] } · fire { forward: ${+fire.forward.toFixed(1)}, side: ${+fire.side.toFixed(1)}, lift: ${+fire.lift.toFixed(1)} }`;
+  const json = `${RB_HEROES[hero].key} gun { s: ${+cfg.s.toFixed(1)}, x: ${+cfg.x.toFixed(1)}, y: ${+cfg.y.toFixed(1)}, z: ${+cfg.z.toFixed(1)}, rx: ${+cfg.rx.toFixed(4)}, ry: ${+cfg.ry.toFixed(4)}, rz: ${+cfg.rz.toFixed(4)}, muzzle: [${cfg.muzzle.map(v => +v.toFixed(2)).join(', ')}] } · fire { forward: ${+fire.forward.toFixed(1)}, side: ${+fire.side.toFixed(1)}, lift: ${+fire.lift.toFixed(1)} }`;
 
   const Row: React.FC<{ label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }> =
     ({ label, value, min, max, step, onChange, fmt }) => (
@@ -137,6 +140,12 @@ const GunTunePage: React.FC = () => {
           <div className="flex-1 min-w-[280px] space-y-4">
             <div className="bg-white/5 rounded-2xl p-3 space-y-2">
               <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">View</p>
+              <div className="flex gap-2 pb-1">
+                {RB_HEROES.map((h, i) => (
+                  <button key={h.key} onClick={() => { heroRef.current = i; setHero(i); }}
+                    className={`px-3 py-1 rounded text-xs font-bold ${hero === i ? 'bg-emerald-500' : 'bg-white/10'}`}>{h.name}</button>
+                ))}
+              </div>
               <Row label="Facing" value={poseRef.current.heading} min={0} max={360} step={5}
                 onChange={v => { poseRef.current.heading = v; setTick(t => t + 1); }} fmt={v => `${v}°`} />
               <div className="flex gap-2">
@@ -167,7 +176,7 @@ const GunTunePage: React.FC = () => {
               <div className="flex gap-2 pt-1">
                 <button onClick={() => set('ry', wrap(cfg.ry + Math.PI))} className="px-2 py-1 rounded text-xs font-bold bg-amber-600">Flip ↔ (Y 180°)</button>
                 <button onClick={() => set('rz', wrap(cfg.rz + Math.PI))} className="px-2 py-1 rounded text-xs font-bold bg-amber-600">Flip ↕ (Z 180°)</button>
-                <button onClick={() => { Object.assign(cfg, { ...DEFAULTS, muzzle: [...DEFAULTS.muzzle] }); Object.assign(fire, FIRE_DEFAULTS); setTick(t => t + 1); }}
+                <button onClick={() => { Object.assign(cfg, heroGun(heroRef.current)); Object.assign(fire, FIRE_DEFAULTS); setTick(t => t + 1); }}
                   className="ml-auto px-2 py-1 rounded text-xs font-bold bg-white/10">Reset</button>
               </div>
             </div>

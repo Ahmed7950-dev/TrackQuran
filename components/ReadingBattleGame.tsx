@@ -24,7 +24,7 @@ import {
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
   STORM_RINGS, STORM_PAD,
-  RB_GUN, RB_FIRE, RB_GUNS,
+  RB_FIRE, RB_GUNS, RB_HEROES,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -43,7 +43,8 @@ interface RBPlayer {
   alive: boolean; frozenUntil: number;   // 0 = not frozen
   kills: number; dmg: number;
   lastMeleeAt: number; lastFireAt: number;
-  gun: number;  // index into RB_GUNS (lobby weapon choice)
+  gun: number;   // index into RB_GUNS (lobby weapon choice)
+  hero: number;  // index into RB_HEROES (lobby character choice)
 }
 
 interface Bullet {
@@ -58,7 +59,7 @@ interface Fx     { on: boolean; kind: 'boom' | 'poof' | 'hit'; x: number; y: num
 interface Snapshot {
   ph: Phase;
   players: Array<{ gid: string; nm: string; ck: string; tu: number; fi: number; lv: number; up: number; ba: number;
-    x: number; y: number; h: number; hp: number; ar: number; am: number; gr: number; al: number; fz: number; k: number; d: number; wp: number }>;
+    x: number; y: number; h: number; hp: number; ar: number; am: number; gr: number; al: number; fz: number; k: number; d: number; wp: number; hr: number }>;
   rd: { tg: string; tEnd: number; seg: string; evT: string; evN: number; done: number };
   bt: { st: number; zn: number; bl: Array<[number, number, number]>; gn: Array<[number, number, number]> };
   wn: string;
@@ -183,7 +184,7 @@ async function fetchVersePool(): Promise<string[]> {
 
 // ── The hero character (Mixamo soldier) — live 3D on DOM screens.
 //    'stretch' = Arm Stretching loop (reading challenge), 'shoot' = rifle pose.
-const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stretch', className }) => {
+const RBHero: React.FC<{ clip?: string; className?: string; url?: string }> = ({ clip = 'stretch', className, url = HERO_GLB }) => {
   const ref = React.useRef<HTMLCanvasElement>(null);
   React.useEffect(() => {
     let stage: { dispose(): void } | null = null;
@@ -192,13 +193,13 @@ const RBHero: React.FC<{ clip?: string; className?: string }> = ({ clip = 'stret
       try {
         const { PortraitStage } = await import('./letterRaceStage');
         if (dead || !ref.current) return;
-        const st = new PortraitStage(ref.current, HERO_GLB, false, 1, clip, 0, 0.6);
+        const st = new PortraitStage(ref.current, url, false, 1, clip, 0, 0.6);
         stage = st;
         await st.init();
       } catch { /* hero is decorative — never block the game on it */ }
     })();
     return () => { dead = true; stage?.dispose(); };
-  }, [clip]);
+  }, [clip, url]);
   return <canvas ref={ref} className={className} />;
 };
 
@@ -212,7 +213,7 @@ const HERO_HUES = [0, 160, 280, 60, 210, 320, 110, 250];
 // The Tripo tech-gun, parented to the soldier's right hand. Transform tuned
 // live via window.__rbGun in DEV, then baked here; muzzle = local offset the
 // aim line starts from.
-// RB_GUN + RB_FIRE live in readingBattleConfig.ts (user-tuned on /gun-tune)
+// Gun attachments live per-hero in RB_HEROES + RB_FIRE in readingBattleConfig.ts (tuned on /gun-tune)
 
 const UPGRADE_META = [
   { icon: '🔪', label: 'Knife' },
@@ -224,9 +225,9 @@ const UPGRADE_META = [
 
 const charOf = (key: string) => RB_CHARACTERS.find(c => c.key === key) ?? RB_CHARACTERS[0];
 
-function newPlayer(gid: string, name: string, charKey: string, isTutor: boolean, fighting: boolean, gun = 0): RBPlayer {
+function newPlayer(gid: string, name: string, charKey: string, isTutor: boolean, fighting: boolean, gun = 0, hero = 0): RBPlayer {
   return {
-    gid, name, charKey, isTutor, fighting, gun,
+    gid, name, charKey, isTutor, fighting, gun, hero,
     level: 3, upgrades: 0, bonusAmmo: 0,
     x: 50, y: 50, h: 0,
     hp: BALANCE.health, armor: 0, ammo: 0, grenades: 0,
@@ -255,6 +256,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const [tutorPlays, setTutorPlays] = useState(false);
   const [myGun, setMyGun] = useState(0);
   const myGunRef = useRef(0);
+  const [myHero, setMyHero] = useState(0);
+  const myHeroRef = useRef(0);
   const [joined, setJoined] = useState(false);        // guest pressed Join
   const [gotSnap, setGotSnap] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -349,7 +352,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const ch = createGameChannel(`reading-battle:${id}`, 'host');
     world.current.players = [newPlayer('host', 'Tutor', RB_CHARACTERS[0].key, true, false)];
 
-    ch.on('broadcast', { event: 'hello' }, ({ payload }: { payload: { gid: string; name: string; charKey: string; gun?: number } }) => {
+    ch.on('broadcast', { event: 'hello' }, ({ payload }: { payload: { gid: string; name: string; charKey: string; gun?: number; hero?: number } }) => {
       const g = world.current;
       const gid = String(payload.gid || '');
       if (!gid) return;
@@ -368,6 +371,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         g.players.push(pl);
       }
       if (typeof payload.gun === 'number') pl.gun = ((payload.gun | 0) % RB_GUNS.length + RB_GUNS.length) % RB_GUNS.length;
+      if (typeof payload.hero === 'number') pl.hero = ((payload.hero | 0) % RB_HEROES.length + RB_HEROES.length) % RB_HEROES.length;
       setTick(t => t + 1);
     });
 
@@ -454,7 +458,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, h: Math.round(p.h),
           hp: Math.round(p.hp), ar: Math.round(p.armor), am: p.ammo, gr: p.grenades,
           al: p.alive ? 1 : 0, fz: p.frozenUntil ? Math.max(0, Math.round(p.frozenUntil - performance.now())) : 0,
-          k: p.kills, d: Math.round(p.dmg), wp: p.gun,
+          k: p.kills, d: Math.round(p.dmg), wp: p.gun, hr: p.hero,
         })),
         rd: { tg: g.rd.turnGid, tEnd: g.rd.tEnd, seg: g.rd.seg, evT: g.rd.evT, evN: g.rd.evN, done: g.rd.done },
         bt: {
@@ -491,6 +495,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const p = g.players[i];
         p.name = sp.nm; p.charKey = sp.ck; p.isTutor = !!sp.tu; p.fighting = !!sp.fi;
         p.gun = sp.wp ?? 0;
+        p.hero = sp.hr ?? 0;
         p.level = sp.lv; p.upgrades = sp.up; p.bonusAmmo = sp.ba;
         // a real hit knocks ≥5 hp+armor between snapshots (zone drain is ~0.1)
         const dmgTaken = (p.hp - sp.hp) + (p.armor - sp.ar);
@@ -562,13 +567,13 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       // auto-rejoin if the reaper dropped us while our phone slept
       if (!g.players.some(p => p.gid === myGid) && performance.now() - rejoinAtRef.current > 2500) {
         rejoinAtRef.current = performance.now();
-        ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: myGunRef.current } });
+        ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: myGunRef.current, hero: myHeroRef.current } });
       }
       setTick(t => t + 1);
     });
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
-        const hello = () => ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: myGunRef.current } });
+        const hello = () => ch.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: myGunRef.current, hero: myHeroRef.current } });
         hello();
         const iv = window.setInterval(() => { if (hostSnapRef.current) window.clearInterval(iv); else hello(); }, 2000);
       }
@@ -896,12 +901,13 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         if (dead) return;
         const models = gids.map((gid, i) => {
           const pl = world.current.players.find(q => q.gid === gid);
+          const heroDef = RB_HEROES[pl?.hero ?? 0] ?? RB_HEROES[0];
           return {
-            url: HERO_GLB, scale: 1, pinOrigin: true,
+            url: heroDef.url, scale: 1, pinOrigin: true,
             tint: i === 0 ? undefined : HERO_HUES[i % HERO_HUES.length],
             glow: charOf(pl?.charKey ?? '').color,
-            // same hand transform + muzzle for every rifle — only the model swaps
-            prop: { ...RB_GUN, url: RB_GUNS[pl?.gun ?? 0]?.url ?? RB_GUN.url },
+            // each character carries its own hand transform; only the rifle swaps
+            prop: { ...heroDef.gun, url: RB_GUNS[pl?.gun ?? 0]?.url ?? RB_GUNS[0].url },
           };
         });
         const st = new RunnerStage(canvas, () => {
@@ -1356,18 +1362,27 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   // ONE trigger: rifle when armed, knife/fists automatically when out of ammo
   // (the knife has no button of its own). Guests predict their own cooldowns
   // locally so held autofire doesn't flood the action counters.
-  /** Lobby weapon choice — host writes his player directly, guests re-hello. */
+  /** Lobby choices — host writes his player directly, guests re-hello. */
+  const sendChoiceHello = () => {
+    try {
+      channelRef.current?.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: myGunRef.current, hero: myHeroRef.current } });
+    } catch { /* offline — the next auto-hello carries it */ }
+  };
   const pickGun = (i: number) => {
     setMyGun(i);
     myGunRef.current = i;
     if (!isGuest) {
       const t = world.current.players.find(p => p.gid === 'host');
       if (t) t.gun = i;
-    } else if (joined) {
-      try {
-        channelRef.current?.send({ type: 'broadcast', event: 'hello', payload: { gid: myGid, name: myName || 'Player', charKey: RB_CHARACTERS[0].key, gun: i } });
-      } catch { /* offline — the next auto-hello carries it */ }
-    }
+    } else if (joined) sendChoiceHello();
+  };
+  const pickHero = (i: number) => {
+    setMyHero(i);
+    myHeroRef.current = i;
+    if (!isGuest) {
+      const t = world.current.players.find(p => p.gid === 'host');
+      if (t) t.hero = i;
+    } else if (joined) sendChoiceHello();
   };
 
   /** Ground distance from me to the aim target (cursor / stick line end). */
@@ -1649,12 +1664,29 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               {/* pedestal + big soldier */}
               <div className="relative flex flex-col items-center">
                 <div className="absolute bottom-10 w-64 h-24 rounded-full pointer-events-none" style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(8px)' }} />
-                <RBHero clip="stretch" className="relative w-[240px] h-[330px] sm:w-[300px] sm:h-[410px] xl:w-[340px] xl:h-[470px]" />
+                <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="relative w-[240px] h-[330px] sm:w-[300px] sm:h-[410px] xl:w-[340px] xl:h-[470px]" />
                 <p className="text-white/45 text-[11px] font-semibold -mt-2">Your soldier — uniform colours are assigned automatically</p>
               </div>
 
+              {/* character choice */}
+              <div className="mt-4 w-full max-w-xl">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Choose your fighter</p>
+                <div className="flex gap-3 justify-center">
+                  {RB_HEROES.map((h, i) => (
+                    <button key={h.key} onClick={() => pickHero(i)}
+                      className={`rounded-2xl px-4 py-2 flex flex-col items-center border transition-all duration-150 ${myHero === i
+                        ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)]'
+                        : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
+                      <RBHero clip="idle" url={h.url} className="w-20 h-28" />
+                      <span className={`text-[11px] font-bold mt-1 ${myHero === i ? 'text-emerald-300' : 'text-white/70'}`}>{h.name}</span>
+                      <span className={`text-[9px] font-bold tracking-widest ${myHero === i ? 'text-emerald-400/90' : 'text-transparent'}`}>SELECTED</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* weapon rack */}
-              <div className="mt-5 w-full max-w-xl">
+              <div className="mt-4 w-full max-w-xl">
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Choose your weapon</p>
                 <div className="grid grid-cols-4 gap-2 sm:gap-3">
                   {RB_GUNS.map((g, i) => (
@@ -1852,7 +1884,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
 
             {/* the hero, stretching before the fight — reader's gear under it */}
             <div className="bg-white/10 border border-white/15 rounded-2xl p-3 flex flex-col items-center">
-              <RBHero clip="stretch" className="w-44 h-52" />
+              <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="w-44 h-52" />
               {reader && (
                 <div className="flex gap-2 text-2xl mt-1">
                   {UPGRADE_META.map((u, i) => (

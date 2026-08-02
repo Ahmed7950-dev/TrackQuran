@@ -164,12 +164,25 @@ export const SPAWNS: Array<{ x: number; y: number }> = [
 
 export const MAX_PLAYERS = 5;
 
-/** The tech-gun prop in the soldier's hand — user-tuned on the /gun-tune bench. */
-export const RB_GUN = {
-  url: '/rb/gun.glb?v=1', bone: 'mixamorigRightHand',
-  s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708,
-  muzzle: [0.5, 0.4, 0] as [number, number, number],
-};
+/** Playable characters — each GLB carries the same clip set (stretch/run/idle)
+ *  on a mixamorig skeleton, and each carries its own gun attachment (hand bone
+ *  + transform + muzzle marker), tunable on /gun-tune. */
+export const RB_HEROES = [
+  {
+    key: 'soldier', name: 'Soldier', url: '/rb/hero.glb?v=4',
+    gun: { bone: 'mixamorigRightHand', s: 74, x: -16.5, y: 22, z: 6.5, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
+  },
+  {
+    // the Titan's Mixamo auto-rig lives in metre-scale bone space (the
+    // soldier's is centimetres) — hence the ~80× smaller numbers
+    key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=1',
+    gun: { bone: 'mixamorigRightHand', s: 0.85, x: -0.22, y: 0.31, z: 0.09, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
+  },
+];
+
+/** Back-compat alias: the Soldier's gun attachment (must stay BELOW RB_HEROES
+ *  — an alias above the declaration builds fine but breaks at runtime). */
+export const RB_GUN = { url: '/rb/gun.glb?v=1', ...RB_HEROES[0].gun };
 
 /** Selectable weapons (lobby picker). All Tripo rifles are normalized to the
  *  same 1-unit length, so every one shares RB_GUN's hand transform + muzzle. */
