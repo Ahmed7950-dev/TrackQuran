@@ -23,6 +23,7 @@ import {
   READ_SECONDS, MAX_UPGRADES, BONUS_AMMO_PER_EXTRA, VERSE_SURAHS,
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
+  STORM_RINGS, STORM_PAD,
   RB_GUN, RB_FIRE, RB_GUNS,
 } from './readingBattleConfig';
 
@@ -120,20 +121,25 @@ function clipSegmentAtWall(x1: number, y1: number, x2: number, y2: number): [num
   return [x2, y2];
 }
 
-/** The storm's SAFE rect at a moment in time: the full arena shrinking
- *  linearly to CENTER_SQUARE. frac 0 = no storm yet, 1 = fully closed.
- *  Pure function of bt.startedAt, so every client computes it locally
- *  (guests apply their clock skew) with zero extra network traffic. */
-function stormSafeRect(nowMs: number, startedAt: number) {
-  const frac = clamp((nowMs - startedAt - BALANCE.storm.startMs) / BALANCE.storm.closeMs, 0, 1);
-  return {
-    x: CENTER_SQUARE.x * frac,
-    y: CENTER_SQUARE.y * frac,
-    w: 100 + (CENTER_SQUARE.w - 100) * frac,
-    h: 100 + (CENTER_SQUARE.h - 100) * frac,
-    frac,
-  };
+/* ── the bat-cloud storm (Brawl-Stars poison) ─────────────────────────────
+   Whole RINGS of tiles get clouded, one beat at a time: the outermost row
+   of the map first, then the next one in. Everything is a pure function of
+   bt.startedAt, so every client agrees with zero extra network traffic —
+   guests just add their clock skew. */
+const GRID_TILES = Math.round(100 / TILE);   // 25 × 25, same grid as the blocks
+
+/** How many rings have landed (0 = the storm hasn't started). */
+function stormRings(nowMs: number, startedAt: number): number {
+  const since = nowMs - startedAt - BALANCE.storm.startMs;
+  if (since < 0) return 0;
+  return Math.min(STORM_RINGS, Math.floor(since / BALANCE.storm.stepMs) + 1);
 }
+/** A tile's ring: 0 = outermost row/column, negative beyond the arena edge. */
+const tileRing = (tx: number, ty: number) =>
+  Math.min(tx, GRID_TILES - 1 - tx, ty, GRID_TILES - 1 - ty);
+/** Is this arena point still clear of cloud? */
+const stormSafe = (x: number, y: number, rings: number) =>
+  rings <= 0 || tileRing(Math.floor(x / TILE), Math.floor(y / TILE)) >= rings;
 
 /* ── audio: pre-decoded buffers, synth placeholders (Letter Race fix) ─────── */
 function synthBuffer(ac: AudioContext, key: string): AudioBuffer {
@@ -964,14 +970,12 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         if (ph === 'reading' && Date.now() >= g.rd.tEnd) hostNextReader();
         if (ph === 'preBattle' && Date.now() >= g.bt.startedAt) setPhase('battle');
         if (ph === 'battle' && !pausedRef.current) {
-          const safe = stormSafeRect(Date.now(), g.bt.startedAt);
-          g.bt.zoneOn = safe.frac > 0; // wire-compat flag (banner on guests)
-          if (safe.frac > 0) {
+          const rings = stormRings(Date.now(), g.bt.startedAt);
+          g.bt.zoneOn = rings > 0; // wire-compat flag (banner on guests)
+          if (rings > 0) {
             for (const p of g.players) {
               if (!p.alive || !p.fighting) continue;
-              const inSafe = p.x >= safe.x && p.x <= safe.x + safe.w &&
-                             p.y >= safe.y && p.y <= safe.y + safe.h;
-              if (!inSafe) {
+              if (!stormSafe(p.x, p.y, rings)) {
                 p.hp -= BALANCE.storm.dps * dt;
                 if (p.hp <= 0) hostEliminate(p, null);
               }
@@ -1271,43 +1275,36 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
     }
 
-    // ── the bat-cloud storm: everything outside the safe rect is covered ──
+    // ── the bat-cloud storm: rings of tile clouds, no backdrop ──
     if (ph === 'battle') {
       const nowMs = Date.now() + (isGuest ? clockSkewRef.current : 0);
-      const safe = stormSafeRect(nowMs, g.bt.startedAt);
-      if (safe.frac > 0) {
-        const sxr = px(safe.x), syr = py(safe.y);
-        const swr = safe.w * scale, shr = safe.h * scale;
-        ctx.save();
-        // clip = whole canvas minus the safe rect, so the cloud also rolls
-        // in over the out-of-bounds desert beyond the arena edge
-        ctx.beginPath();
-        ctx.rect(0, 0, W, H);
-        ctx.rect(sxr, syr, swr, shr);
-        ctx.clip('evenodd');
-        ctx.fillStyle = 'rgba(28,22,48,0.38)';
-        ctx.fillRect(0, 0, W, H);
-        const cc = cloudCanvasRef.current;
-        if (cc) {
-          // loose drifting puffs — the dark tint below carries the danger,
-          // the clouds add texture without hiding the ground or the players
-          const tw = 13 * scale, th = (tw * 2) / 3;
-          const drift = ((performance.now() / 1000) * 1.1 * scale) % (tw * 1.05);
-          ctx.globalAlpha = 0.62;
-          let row = 0;
-          for (let yy = -th; yy < H + th; yy += th * 0.85, row++) {
-            const rowOff = (row % 2) * tw * 0.5;
-            for (let xx = -tw - drift - rowOff; xx < W + tw; xx += tw * 1.05) {
-              ctx.drawImage(cc, xx, yy, tw, th);
-            }
+      const rings = stormRings(nowMs, g.bt.startedAt);
+      const cc = cloudCanvasRef.current;
+      if (rings > 0 && cc) {
+        // only the tiles actually on screen
+        const t0x = Math.max(-STORM_PAD, Math.floor(-ox / scale / TILE) - 1);
+        const t1x = Math.min(GRID_TILES + STORM_PAD, Math.ceil((W - ox) / scale / TILE) + 1);
+        const t0y = Math.max(-STORM_PAD, Math.floor(-oy / scale / TILE) - 1);
+        const t1y = Math.min(GRID_TILES + STORM_PAD, Math.ceil((H - oy) / scale / TILE) + 1);
+        const cw = TILE * scale * 1.55;          // slight overlap between tiles
+        const chh = cw * (2 / 3);                // the Lottie art is 3:2
+        const ring0At = g.bt.startedAt + BALANCE.storm.startMs;
+        for (let ty = t0y; ty < t1y; ty++) {
+          for (let tx = t0x; tx < t1x; tx++) {
+            const r = tileRing(tx, ty);
+            if (r >= rings) continue;
+            // each ring pops in on its own beat (rows outside the map ride ring 0)
+            const age = nowMs - (ring0At + Math.max(0, r) * BALANCE.storm.stepMs);
+            const t = clamp(age / 320, 0, 1);
+            const back = 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2);
+            const sc = 0.3 + 0.7 * back;         // easeOutBack: a little pop
+            const w2 = cw * sc, h2 = chh * sc;
+            const cx = px((tx + 0.5) * TILE), cy = py((ty + 0.5) * TILE);
+            ctx.globalAlpha = 0.92 * clamp(t * 2.5, 0.15, 1);
+            ctx.drawImage(cc, cx - w2 / 2, cy - h2 / 2, w2, h2);
           }
-          ctx.globalAlpha = 1;
         }
-        // glowing front edge of the safe area
-        ctx.strokeStyle = `rgba(196,181,253,${0.35 + 0.25 * Math.sin(performance.now() / 300)})`;
-        ctx.lineWidth = 2.5 * dpr;
-        ctx.strokeRect(sxr, syr, swr, shr);
-        ctx.restore();
+        ctx.globalAlpha = 1;
       }
     }
 

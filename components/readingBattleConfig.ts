@@ -60,10 +60,11 @@ export const BALANCE = {
   grenade: { count: 3, damageCenter: 40, damageEdge: 10, radius: 11, throwDist: 16, flightMs: 700, fuseMs: 2000 },
   moveSpeed: 15,            // arena units / second
   playerRadius: 2.0,
-  /** The bat-cloud storm: after startMs the cloud closes in from every side
-   *  toward CENTER_SQUARE over closeMs; standing inside it burns dps (armor
-   *  is bypassed). Forces the endgame to the centre courtyard. */
-  storm: { startMs: 45_000, closeMs: 90_000, dps: 3 },
+  /** The bat-cloud storm (Brawl-Stars poison): after startMs, one RING of
+   *  cloud tiles pops in every stepMs — the outermost row/column of the map
+   *  first, then the next one in, and so on until only the centre courtyard
+   *  is left. Standing on a clouded tile burns dps (armor is bypassed). */
+  storm: { startMs: 45_000, stepMs: 9_000, dps: 3 },
   battleCountdownMs: 3400,
   frozenGraceMs: 10_000,    // disconnected player is killable, then eliminated
 };
@@ -141,6 +142,13 @@ export const WALLS: WallRect[] = (() => {
   }
   return rects;
 })();
+
+/** Storm geometry, in TILE units of the same 25×25 grid the blocks use.
+ *  RINGS = how many rows the cloud eats before it stops (10 leaves tiles
+ *  10..14 open ≈ the centre courtyard). PAD = extra cloud rows drawn beyond
+ *  the arena edge so the storm reads as arriving from outside the map. */
+export const STORM_RINGS = 10;
+export const STORM_PAD = 5;
 
 /** Centre showdown square — no walls inside; the anti-stall zone spares it. */
 export const CENTER_SQUARE = { x: 41, y: 39, w: 18, h: 22 }; // the brick courtyard in the v2 background art (measured)
