@@ -1286,7 +1286,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         const t1x = Math.min(GRID_TILES + STORM_PAD, Math.ceil((W - ox) / scale / TILE) + 1);
         const t0y = Math.max(-STORM_PAD, Math.floor(-oy / scale / TILE) - 1);
         const t1y = Math.min(GRID_TILES + STORM_PAD, Math.ceil((H - oy) / scale / TILE) + 1);
-        const cw = TILE * scale * 1.55;          // slight overlap between tiles
+        const cw = TILE * scale * 0.92;          // under one tile → gaps between puffs
         const chh = cw * (2 / 3);                // the Lottie art is 3:2
         const ring0At = g.bt.startedAt + BALANCE.storm.startMs;
         for (let ty = t0y; ty < t1y; ty++) {
