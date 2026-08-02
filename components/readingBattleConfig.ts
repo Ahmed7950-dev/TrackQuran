@@ -175,7 +175,7 @@ export const RB_HEROES = [
   {
     // the Titan is roughly half the soldier's bone-space height, so his gun
     // numbers are about half the soldier's
-    key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=5',
+    key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=7',
     gun: { bone: 'mixamorigRightHand', s: 34, x: -7.7, y: 10.3, z: 3, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
   },
 ];
