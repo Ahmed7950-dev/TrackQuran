@@ -60,7 +60,10 @@ export const BALANCE = {
   grenade: { count: 3, damageCenter: 40, damageEdge: 10, radius: 11, throwDist: 16, flightMs: 700, fuseMs: 2000 },
   moveSpeed: 15,            // arena units / second
   playerRadius: 2.0,
-  antiStall: { afterMs: 90_000, dps: 2 },   // outside the centre square
+  /** The bat-cloud storm: after startMs the cloud closes in from every side
+   *  toward CENTER_SQUARE over closeMs; standing inside it burns dps (armor
+   *  is bypassed). Forces the endgame to the centre courtyard. */
+  storm: { startMs: 45_000, closeMs: 90_000, dps: 3 },
   battleCountdownMs: 3400,
   frozenGraceMs: 10_000,    // disconnected player is killable, then eliminated
 };
