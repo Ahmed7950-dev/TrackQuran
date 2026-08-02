@@ -794,6 +794,7 @@ export class PortraitStage {
   private clip: string;
   private yaw: number;
   private liteLightMul: number;
+  private silhouettePad: number;
   private mixer: any = null;
   private scene: any = null;
   private camera: any = null;
@@ -802,7 +803,7 @@ export class PortraitStage {
   private fitW = 0.42;
   private centerY = 0.55;
 
-  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle', yaw = 0, liteLightMul = 1) {
+  constructor(canvas: HTMLCanvasElement, modelUrl: string, tinted: boolean, charScale = 1, clip = 'idle', yaw = 0, liteLightMul = 1, silhouettePad = 0) {
     this.canvas = canvas;
     this.modelUrl = modelUrl;
     this.tinted = tinted;
@@ -810,6 +811,7 @@ export class PortraitStage {
     this.clip = clip;           // which animation to play (e.g. 'victory' on the result page)
     this.yaw = yaw;             // extra Y spin — models whose rest pose faces away (Mixamo GLBs)
     this.liteLightMul = liteLightMul; // dim lights when the LITE model loads (maps stripped → renders brighter)
+    this.silhouettePad = silhouettePad; // >0 → frame the real posed skin, leaving this fraction of body height as headroom
   }
 
   async init(): Promise<void> {
@@ -887,6 +889,27 @@ export class PortraitStage {
       for (const m of skinned) for (const b of m.skeleton.bones) { b.getWorldPosition(v); mn.min(v); mx.max(v); }
       return { mn, mx };
     };
+    /** True world extents of the deformed skin, sampled from the vertices the
+     *  GPU will actually pose. Only used when the static geometry box lies. */
+    const skinnedBounds = () => {
+      const mn = new THREE.Vector3(1e9, 1e9, 1e9), mx = new THREE.Vector3(-1e9, -1e9, -1e9);
+      const v = new THREE.Vector3();
+      let seen = 0;
+      for (const m of skinned) {
+        const pos = m.geometry?.attributes?.position;
+        if (!pos || typeof m.applyBoneTransform !== 'function') continue;
+        const stride = Math.max(1, Math.floor(pos.count / 3000)); // ~3k samples is plenty for a silhouette
+        for (let i = 0; i < pos.count; i += stride) {
+          v.fromBufferAttribute(pos, i);
+          m.applyBoneTransform(i, v);
+          m.localToWorld(v);
+          mn.min(v); mx.max(v);
+          seen++;
+        }
+      }
+      return seen ? { mn, mx } : null;
+    };
+
     let bb = boneBounds();
     const h = Math.max(0.001, bb.mx.y - bb.mn.y);
     root.scale.setScalar(0.98 / h);
@@ -909,6 +932,21 @@ export class PortraitStage {
       top = meshBox.max.y + 0.05;
       bottom = Math.min(0, meshBox.min.y) - 0.02;
       halfW = Math.max(Math.abs(meshBox.min.x), Math.abs(meshBox.max.x)) * 1.08;
+    }
+    // Opt-in (Reading Battle cards): frame from the REAL posed silhouette with
+    // fixed headroom instead of the bind-pose box. That box is authored per
+    // model — the soldier ships a wide T-pose box, the titan a collapsed slab —
+    // so the generic path puts one camera at 3.45 and the other at 2.74 and the
+    // titan looks zoomed in. Measuring the actual skin frames every fighter the
+    // same, standing at the same distance whatever its rig looks like at bind.
+    if (this.silhouettePad > 0) {
+      const sb = skinnedBounds();
+      if (sb) {
+        const bodyH = Math.max(0.001, sb.mx.y - Math.min(0, sb.mn.y));
+        top = sb.mx.y + bodyH * this.silhouettePad;
+        bottom = Math.min(0, sb.mn.y) - bodyH * 0.04;
+        halfW = Math.max(Math.abs(sb.mn.x), Math.abs(sb.mx.x)) * 1.08;
+      }
     }
     this.centerY = (top + bottom) / 2;
     this.fitH = ((top - bottom) / 2) * 1.04;

@@ -193,7 +193,9 @@ const RBHero: React.FC<{ clip?: string; className?: string; url?: string }> = ({
       try {
         const { PortraitStage } = await import('./letterRaceStage');
         if (dead || !ref.current) return;
-        const st = new PortraitStage(ref.current, url, false, 1, clip, 0, 0.6);
+        // frame from the real posed skin (last arg) so every fighter stands at
+        // the same distance — their bind-pose boxes differ wildly per model
+        const st = new PortraitStage(ref.current, url, false, 1, clip, 0, 0.6, 0.44);
         stage = st;
         await st.init();
       } catch { /* hero is decorative — never block the game on it */ }
