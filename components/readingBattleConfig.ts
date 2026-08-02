@@ -185,13 +185,40 @@ export const RB_HEROES = [
 export const RB_GUN = { url: '/rb/gun.glb?v=1', ...RB_HEROES[0].gun };
 
 /** Selectable weapons (lobby picker). All Tripo rifles are normalized to the
- *  same 1-unit length, so every one shares RB_GUN's hand transform + muzzle. */
+ *  same 1-unit length, so every one shares RB_GUN's hand transform + muzzle.
+ *
+ *  Stats are studied from the real guns the models depict:
+ *  - damage      per bullet
+ *  - fireRateMs  ms between shots (hold to autofire)
+ *  - range       arena units a bullet flies before dying (arena is 100)
+ *  - spread      radians of random scatter per shot — 0 = laser focus
+ *  Damage-per-second is deliberately near-equal (~60) so every gun is a
+ *  playstyle, not an upgrade: the magazine and ammo pickups stay shared. */
 export const RB_GUNS = [
-  { key: 'tech',   name: 'Tech',   url: '/rb/gun.glb?v=1',  thumb: '/rb/guns/tech.png' },
-  { key: 'falcon', name: 'Falcon', url: '/rb/gun2.glb?v=1', thumb: '/rb/guns/falcon.png' },
-  { key: 'storm',  name: 'Storm',  url: '/rb/gun3.glb?v=1', thumb: '/rb/guns/storm.png' },
-  { key: 'viper',  name: 'Viper',  url: '/rb/gun4.glb?v=1', thumb: '/rb/guns/viper.png' },
+  {
+    key: 'tech', name: 'Honey Badger', class: 'PDW',
+    url: '/rb/gun.glb?v=1', thumb: '/rb/guns/tech.png',
+    stats: { damage: 7, fireRateMs: 110, range: 45, spread: 0.035 },
+  },
+  {
+    key: 'falcon', name: 'AK-47', class: 'Battle rifle',
+    url: '/rb/gun2.glb?v=1', thumb: '/rb/guns/falcon.png',
+    stats: { damage: 14, fireRateMs: 240, range: 60, spread: 0.055 },
+  },
+  {
+    key: 'storm', name: 'M4A1', class: 'Assault rifle',
+    url: '/rb/gun3.glb?v=1', thumb: '/rb/guns/storm.png',
+    stats: { damage: 10, fireRateMs: 165, range: 60, spread: 0.02 },
+  },
+  {
+    key: 'viper', name: 'M240', class: 'Machine gun',
+    url: '/rb/gun4.glb?v=1', thumb: '/rb/guns/viper.png',
+    stats: { damage: 12, fireRateMs: 200, range: 80, spread: 0.09 },
+  },
 ];
+export type RBGunStats = (typeof RB_GUNS)[number]['stats'];
+/** A player's gun stats with a safe fallback. */
+export const gunStats = (i: number): RBGunStats => (RB_GUNS[i] ?? RB_GUNS[0]).stats;
 
 /** Where fire leaves the gun (user-tuned on the /gun-tune bench).
  *  forward = arena units ahead of the player along the aim,

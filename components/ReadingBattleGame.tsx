@@ -24,7 +24,7 @@ import {
   RB_CHARACTERS, RB_SOUNDS, BALANCE, WALLS, CENTER_SQUARE, SPAWNS, MAX_PLAYERS,
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
   STORM_RINGS, STORM_PAD,
-  RB_FIRE, RB_GUNS, RB_HEROES,
+  RB_FIRE, RB_GUNS, RB_HEROES, gunStats,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -678,21 +678,25 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const hostFire = (pl: RBPlayer, aimDist = 14) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
     if (pl.upgrades < 3 || pl.ammo <= 0) return;
+    const gs = gunStats(pl.gun);
     const now = performance.now();
-    if (now - pl.lastFireAt < BALANCE.ak.fireRateMs) return;
+    if (now - pl.lastFireAt < gs.fireRateMs) return;
     pl.lastFireAt = now;
     pl.ammo--;
     playSfx('shot', 0.55);
     const b = bulletsRef.current.find(b => !b.on) ?? bulletsRef.current[0];
     const rad = (pl.h * Math.PI) / 180;
+    // per-gun focus: the muzzle stays put, the bullet's PATH scatters
+    // (triangular distribution — most shots near the aim, tails rare)
+    const dir = rad + (Math.random() + Math.random() - 1) * gs.spread;
     b.on = true; b.owner = pl.gid;
     // spawn at the fire origin: forward along the aim + toward the gun hand
     b.x = pl.x + Math.sin(rad) * RB_FIRE.forward + Math.cos(rad) * RB_FIRE.side;
     b.y = pl.y - Math.cos(rad) * RB_FIRE.forward + Math.sin(rad) * RB_FIRE.side;
-    b.dx = Math.sin(rad); b.dy = -Math.cos(rad);
+    b.dx = Math.sin(dir); b.dy = -Math.cos(dir);
     [b.vx, b.vy] = muzzleVisOffset(pl.gid, b.x, b.y);
     b.spx = b.x; b.spy = b.y; b.decay = Math.max(2, aimDist);
-    b.left = BALANCE.ak.bulletRange;
+    b.left = gs.range;
   };
   const hostNade = (pl: RBPlayer, tx?: number, ty?: number) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
@@ -1055,7 +1059,8 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             if (!q.alive || !q.fighting || q.gid === b.owner) continue;
             if (Math.hypot(q.x - b.x, q.y - b.y) <= BALANCE.playerRadius + 0.8) {
               b.on = false;
-              applyDamage(q, BALANCE.ak.damage, g.players.find(pp => pp.gid === b.owner) ?? null);
+              const shooter = g.players.find(pp => pp.gid === b.owner) ?? null;
+              applyDamage(q, gunStats(shooter?.gun ?? 0).damage, shooter);
               break;
             }
           }
@@ -1401,7 +1406,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     if (!isGuest) { if (gun) hostFire(p, aimDistance()); else hostMelee(p); return; }
     const now = performance.now();
     if (gun) {
-      if (now - p.lastFireAt < BALANCE.ak.fireRateMs) return;
+      if (now - p.lastFireAt < gunStats(p.gun).fireRateMs) return;
       p.lastFireAt = now;
       actsRef.current.fire++;
       playSfx('shot', 0.55);
@@ -1696,10 +1701,41 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
                         : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
                       <img src={g.thumb} alt={g.name} className={`w-full max-w-[96px] h-10 sm:h-12 object-contain transition-transform duration-150 ${myGun === i ? 'scale-110' : 'group-hover:scale-105'}`} />
                       <span className={`text-[11px] font-bold mt-1.5 ${myGun === i ? 'text-emerald-300' : 'text-white/70'}`}>{g.name}</span>
-                      <span className={`text-[9px] font-bold tracking-widest ${myGun === i ? 'text-emerald-400/90' : 'text-transparent'}`}>EQUIPPED</span>
+                      <span className={`text-[9px] font-bold tracking-widest ${myGun === i ? 'text-emerald-400/90' : 'text-white/35'}`}>{myGun === i ? 'EQUIPPED' : g.class.toUpperCase()}</span>
                     </button>
                   ))}
                 </div>
+                {/* the selected weapon's card: stats bars, same numbers the battle runs on */}
+                {(() => {
+                  const g = RB_GUNS[myGun] ?? RB_GUNS[0];
+                  const s = g.stats;
+                  const rows = [
+                    { label: 'Damage', frac: s.damage / 15, hint: `${s.damage} per hit` },
+                    { label: 'Fire rate', frac: (1000 / s.fireRateMs) / 9.5, hint: `${(1000 / s.fireRateMs).toFixed(1)} shots/s` },
+                    { label: 'Focus', frac: Math.max(0.06, 1 - s.spread / 0.1), hint: s.spread <= 0.025 ? 'laser-tight' : s.spread <= 0.06 ? 'steady' : 'sprays wide' },
+                    { label: 'Range', frac: s.range / 85, hint: `${s.range}m` },
+                  ];
+                  return (
+                    <div className="mt-3 bg-white/[0.06] border border-white/10 rounded-2xl px-4 py-3">
+                      <div className="flex items-baseline justify-between mb-2">
+                        <span className="text-sm font-extrabold text-white">{g.name}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300/90">{g.class}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {rows.map(r => (
+                          <div key={r.label} className="flex items-center gap-2">
+                            <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/55">{r.label}</span>
+                            <div className="flex-1 h-2 rounded-full bg-black/35 overflow-hidden">
+                              <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+                                style={{ width: `${Math.round(clamp(r.frac, 0, 1) * 100)}%` }} />
+                            </div>
+                            <span className="w-20 shrink-0 text-right text-[10px] font-semibold text-white/65">{r.hint}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
