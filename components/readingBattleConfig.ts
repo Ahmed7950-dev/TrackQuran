@@ -178,6 +178,16 @@ export const RB_HEROES = [
     key: 'titan', name: 'Titan', url: '/rb/titan.glb?v=7',
     gun: { bone: 'mixamorigRightHand', s: 34, x: -7.7, y: 10.3, z: 3, rx: 3.1416, ry: 0, rz: -1.5708, muzzle: [0.5, 0.4, 0] as [number, number, number] },
   },
+  {
+    // Auto-Rig Pro skeleton (not mixamorig) — its own clip library, baked in
+    // place. Its hand bone is 'hand.r'; three.js strips the dot on load, the
+    // same way it strips the colon from 'mixamorig:RightHand'
+    // metre-scale bones (no 0.01 armature scale) so s is ~100x smaller than the
+    // Mixamo heroes', and the hand's axes differ, so the rotation was solved by
+    // aligning the barrel to the character's forward rather than hand-tuned
+    key: 'mecha', name: 'Mecha', url: '/rb/mecha.glb?v=1',
+    gun: { bone: 'handr', s: 0.32, x: 0, y: 0, z: 0, rx: -0.2039, ry: 0.249, rz: 2.5295, muzzle: [0.5, 0.4, 0] as [number, number, number] },
+  },
 ];
 
 /** Back-compat alias: the Soldier's gun attachment (must stay BELOW RB_HEROES
