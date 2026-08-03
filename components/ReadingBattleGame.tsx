@@ -169,7 +169,10 @@ function synthBuffer(ac: AudioContext, key: string): AudioBuffer {
 /* ── verse pool (fetched from the app's existing Uthmani source) ──────────── */
 async function fetchVersePool(): Promise<string[]> {
   const words: string[] = [];
-  for (const surah of VERSE_SURAHS) {
+  // host-only pool (guests receive cut segments over the wire), so a per-game
+  // shuffle is safe — each battle opens in a different surah
+  const surahs = [...VERSE_SURAHS].sort(() => Math.random() - 0.5);
+  for (const surah of surahs) {
     try {
       const res = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surah}`);
       const json = await res.json();
