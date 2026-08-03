@@ -25,6 +25,7 @@ import {
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
   STORM_RINGS, STORM_PAD,
   RB_FIRE, RB_GUNS, RB_HEROES, gunStats,
+  ZOMBIE_GLB, ZOMBIE_MODELS, ZOMBIES, PICKUPS, PICKUP_RULES,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -53,6 +54,16 @@ interface Bullet {
   spx: number; spy: number; // ground spawn point (visual decay reference)
   decay: number;            // ground distance over which the muzzle offset fades to 0 (≈ aim distance)
 }
+/** Host-simulated horde member. Guests mirror these from snapshots. */
+interface Zombie {
+  on: boolean; x: number; y: number; h: number;
+  hp: number; hpMax: number; sp: number;      // sp = this one's top speed (grows per wave)
+  mode: 0 | 1 | 2;                            // 0 walk to centre · 1 chase · 2 swing
+  atkAt: number;                              // last punch (ms)
+}
+/** A crate waiting on the floor. kind indexes PICKUPS. */
+interface Pickup { on: boolean; kind: number; x: number; y: number }
+
 interface Nade   { on: boolean; x: number; y: number; sx: number; sy: number; tx: number; ty: number; t0: number; owner: string }
 interface Fx     { on: boolean; kind: 'boom' | 'poof' | 'hit'; x: number; y: number; t0: number }
 
@@ -62,6 +73,10 @@ interface Snapshot {
     x: number; y: number; h: number; hp: number; ar: number; am: number; gr: number; al: number; fz: number; k: number; d: number; wp: number; hr: number }>;
   rd: { tg: string; tEnd: number; seg: string; evT: string; evN: number; done: number };
   bt: { st: number; zn: number; bl: Array<[number, number, number]>; gn: Array<[number, number, number]> };
+  zm: number;   // 1 = zombie survival (co-op) instead of battle royale
+  wv: number;   // wave number reached
+  zb: Array<[number, number, number, number, number]>;  // x, y, heading, hp%, mode
+  pk: Array<[number, number, number]>;                  // x, y, kind
   wn: string;
   pz: number;   // 1 = battle paused (ESC) — everyone freezes together
   now: number;
@@ -263,6 +278,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const myGunRef = useRef(0);
   const [myHero, setMyHero] = useState(0);
   const myHeroRef = useRef(0);
+  const [zombieMode, setZombieMode] = useState(false);   // host's lobby choice
+  const zombieModeRef = useRef(false);
+  const [waveNo, setWaveNo] = useState(0);               // HUD (throttled with the rest)
   const [joined, setJoined] = useState(false);        // guest pressed Join
   const [gotSnap, setGotSnap] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -281,8 +299,16 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     players: [] as RBPlayer[],
     rd: { turnGid: '', tEnd: 0, seg: '', evT: '', evN: 0, done: 0, ptr: 0 },
     bt: { startedAt: 0, zoneOn: false },
+    zombie: false,        // mode for the CURRENT battle (locked in at start)
+    wave: 0,
+    waveAt: 0,            // next wave lands at this ms
+    dropAt: 0,            // next crate drops at this ms
     winner: '',
   });
+  const zombiesRef = useRef<Zombie[]>(Array.from({ length: ZOMBIES.maxAlive }, () => (
+    { on: false, x: 0, y: 0, h: 180, hp: 0, hpMax: 1, sp: ZOMBIES.speedWalk, mode: 0 as 0, atkAt: 0 })));
+  const pickupsRef = useRef<Pickup[]>(Array.from({ length: PICKUP_RULES.maxOnMap }, () => (
+    { on: false, kind: 0, x: 0, y: 0 })));
   const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0, spx: 0, spy: 0, decay: 14 })));
   const nadesRef   = useRef<Nade[]>(Array.from({ length: 12 }, () => ({ on: false, x: 0, y: 0, sx: 0, sy: 0, tx: 0, ty: 0, t0: 0, owner: '' })));
   const fxRef      = useRef<Fx[]>(Array.from({ length: 24 }, () => ({ on: false, kind: 'hit', x: 0, y: 0, t0: 0 })));
@@ -300,7 +326,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const me = () => world.current.players.find(p => p.gid === myGid);
   // DEV-only inspection hook for the browser test harness.
   useEffect(() => {
-    if ((import.meta as any).env?.DEV) { (window as any).__rbWorld = world; (window as any).__rbPhase = () => phaseRef.current; }
+    if ((import.meta as any).env?.DEV) {
+      (window as any).__rbWorld = world;
+      (window as any).__rbPhase = () => phaseRef.current;
+      (window as any).__rbHorde = () => ({ zombies: zombiesRef.current.filter(z => z.on), pickups: pickupsRef.current.filter(p => p.on) });
+    }
   }, []);
 
   /* ── audio (pre-decoded, Letter Race pattern) ───────────────────────────── */
@@ -466,6 +496,15 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           k: p.kills, d: Math.round(p.dmg), wp: p.gun, hr: p.hero,
         })),
         rd: { tg: g.rd.turnGid, tEnd: g.rd.tEnd, seg: g.rd.seg, evT: g.rd.evT, evN: g.rd.evN, done: g.rd.done },
+        zm: g.zombie ? 1 : 0,
+        wv: g.wave,
+        zb: zombiesRef.current.filter(z => z.on).map(z => [
+          Math.round(z.x * 10) / 10, Math.round(z.y * 10) / 10, Math.round(z.h),
+          Math.round((z.hp / z.hpMax) * 100), z.mode,
+        ] as [number, number, number, number, number]),
+        pk: pickupsRef.current.filter(p => p.on).map(p => [
+          Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.kind,
+        ] as [number, number, number]),
         bt: {
           st: g.bt.startedAt, zn: g.bt.zoneOn ? 1 : 0,
           bl: bulletsRef.current.filter(b => b.on).map(b => [Math.round(b.x * 10) / 10, Math.round(b.y * 10) / 10, Math.max(0, g.players.findIndex(q => q.gid === b.owner))] as [number, number, number]),
@@ -527,6 +566,27 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       }
       world.current.rd = { ...world.current.rd, turnGid: s.rd.tg, tEnd: s.rd.tEnd, seg: s.rd.seg, evT: s.rd.evT, evN: s.rd.evN, done: s.rd.done };
       world.current.bt.startedAt = s.bt.st; world.current.bt.zoneOn = !!s.bt.zn;
+      world.current.zombie = !!s.zm;
+      // the wave number is HUD state too — mirror it into React on change only
+      // (snapshots land 25x a second; re-rendering on every one would thrash)
+      const wv = s.wv ?? 0;
+      if (wv !== world.current.wave) setWaveNo(wv);
+      world.current.wave = wv;
+      // horde + crates are pure mirrors: the host owns every decision
+      const zs = zombiesRef.current;
+      (s.zb ?? []).forEach((z, i) => {
+        if (i >= zs.length) return;
+        const t = zs[i];
+        t.on = true; t.x = z[0]; t.y = z[1]; t.h = z[2];
+        t.hp = z[3]; t.hpMax = 100; t.mode = z[4] as 0 | 1 | 2;
+      });
+      for (let i = (s.zb ?? []).length; i < zs.length; i++) zs[i].on = false;
+      const ps = pickupsRef.current;
+      (s.pk ?? []).forEach((p, i) => {
+        if (i >= ps.length) return;
+        ps[i].on = true; ps[i].x = p[0]; ps[i].y = p[1]; ps[i].kind = p[2];
+      });
+      for (let i = (s.pk ?? []).length; i < ps.length; i++) ps[i].on = false;
       world.current.winner = s.wn;
       if (!!s.pz !== pausedRef.current) { pausedRef.current = !!s.pz; setPaused(!!s.pz); }
       // mirror projectiles for rendering
@@ -638,12 +698,133 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const hostCheckWin = () => {
     if (phaseRef.current !== 'battle') return;
     const alive = world.current.players.filter(p => p.fighting && p.alive);
+    if (world.current.zombie) {
+      // co-op: it is over when the last survivor falls — the score is the wave
+      if (alive.length === 0) {
+        world.current.winner = '';
+        setPhase('victory');
+        playSfx('win');
+      }
+      return;
+    }
     if (alive.length <= 1) {
       world.current.winner = alive[0]?.gid ?? '';
       setPhase('victory');
       playSfx('win');
     }
   };
+  /* ── zombie mode: waves, chase, punch, crates (host only) ─────────────── */
+  /** A free spot just outside the arena on a random edge. */
+  const hordeSpawnPoint = (): [number, number] => {
+    const m = ZOMBIES.spawnMargin;
+    const t = Math.random() * 100;
+    switch (Math.floor(Math.random() * 4)) {
+      case 0:  return [t, -m];
+      case 1:  return [t, 100 + m];
+      case 2:  return [-m, t];
+      default: return [100 + m, t];
+    }
+  };
+  const hostSpawnWave = () => {
+    const g = world.current;
+    g.wave++;
+    setWaveNo(g.wave);
+    const want = ZOMBIES.countBase + g.wave * ZOMBIES.countPerWave;
+    const hp = ZOMBIES.hpBase + g.wave * ZOMBIES.hpPerWave;
+    const sp = Math.min(ZOMBIES.speedMax, ZOMBIES.speedChase + g.wave * ZOMBIES.speedPerWave);
+    let spawned = 0;
+    for (const z of zombiesRef.current) {
+      if (spawned >= want) break;
+      if (z.on) continue;
+      const [x, y] = hordeSpawnPoint();
+      z.on = true; z.x = x; z.y = y; z.h = 180;
+      z.hp = hp; z.hpMax = hp; z.sp = sp; z.mode = 0; z.atkAt = 0;
+      spawned++;
+    }
+  };
+  /** Damage a zombie; returns true if this blow killed it. */
+  const hitZombie = (z: Zombie, dmg: number, attacker: RBPlayer | null): boolean => {
+    z.hp -= dmg;
+    if (attacker) attacker.dmg += dmg;
+    spawnFx('hit', z.x, z.y);
+    if (z.hp > 0) return false;
+    z.on = false;
+    if (attacker) attacker.kills++;
+    spawnFx('poof', z.x, z.y);
+    playSfx('poof', 0.5);
+    return true;
+  };
+  const hostDropPickup = () => {
+    const slot = pickupsRef.current.find(p => !p.on);
+    if (!slot) return;
+    for (let tries = 0; tries < 40; tries++) {
+      const x = 6 + Math.random() * 88, y = 6 + Math.random() * 88;
+      const [cx, cy] = collideWalls(x, y, BALANCE.playerRadius);
+      if (Math.hypot(cx - x, cy - y) > 0.01) continue;   // landed in a block
+      slot.on = true; slot.kind = Math.floor(Math.random() * PICKUPS.length);
+      slot.x = x; slot.y = y;
+      return;
+    }
+  };
+  /** Give a crate to whoever walked into it. */
+  const hostCollect = (p: RBPlayer, pk: Pickup) => {
+    const def = PICKUPS[pk.kind];
+    if (def.key === 'ammo') p.ammo += def.amount;
+    else if (def.key === 'health') p.hp = Math.min(BALANCE.health, p.hp + def.amount);
+    else p.grenades += def.amount;
+    pk.on = false;
+    if (p.gid === myGid) playSfx('upgrade', 0.5);
+  };
+  const hostHordeTick = (dt: number, nowMs: number) => {
+    const g = world.current;
+    if (nowMs >= g.waveAt) {
+      hostSpawnWave();
+      g.waveAt = nowMs + ZOMBIES.waveGapMs;
+    }
+    if (nowMs >= g.dropAt) {
+      hostDropPickup();
+      g.dropAt = nowMs + PICKUP_RULES.everyMs;
+    }
+    const targets = g.players.filter(p => p.fighting && p.alive);
+    for (const z of zombiesRef.current) {
+      if (!z.on) continue;
+      // nearest living player, if any is close enough to notice
+      let best: RBPlayer | null = null, bestD = Infinity;
+      for (const p of targets) {
+        const d = Math.hypot(p.x - z.x, p.y - z.y);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      const hunting = !!best && bestD <= ZOMBIES.sightRange;
+      const tx = hunting ? best!.x : 50;
+      const ty = hunting ? best!.y : 50;
+      const dx = tx - z.x, dy = ty - z.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (hunting && bestD <= ZOMBIES.attackRange) {
+        z.mode = 2;
+        if (nowMs - z.atkAt >= ZOMBIES.attackCooldownMs) {
+          z.atkAt = nowMs;
+          applyDamage(best!, ZOMBIES.attackDamage, null);
+        }
+      } else {
+        z.mode = hunting ? 1 : 0;
+        const speed = hunting ? z.sp : ZOMBIES.speedWalk;
+        const nx = z.x + (dx / d) * speed * dt;
+        const ny = z.y + (dy / d) * speed * dt;
+        // they shamble in from off-map, so only collide once inside the arena
+        [z.x, z.y] = (nx > 1 && nx < 99 && ny > 1 && ny < 99)
+          ? collideWalls(nx, ny, BALANCE.playerRadius)
+          : [nx, ny];
+      }
+      z.h = (Math.atan2(dx, -dy) * 180) / Math.PI;
+    }
+    for (const pk of pickupsRef.current) {
+      if (!pk.on) continue;
+      for (const p of targets) {
+        if (Math.hypot(p.x - pk.x, p.y - pk.y) <= PICKUP_RULES.pickRadius) { hostCollect(p, pk); break; }
+      }
+    }
+  };
+
   const hostMelee = (pl: RBPlayer) => {
     if (!pl.alive || phaseRef.current !== 'battle') return;
     const now = performance.now();
@@ -654,15 +835,19 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     playSfx('melee', 0.5);
     const rad = (pl.h * Math.PI) / 180;
     const fx = Math.sin(rad), fy = -Math.cos(rad);
-    for (const q of world.current.players) {
-      if (q === pl || !q.alive || !q.fighting) continue;
+    // co-op: the blade lands on zombies only — never on the squad
+    const marks: Array<{ x: number; y: number; hit: (d: number) => void }> = world.current.zombie
+      ? zombiesRef.current.filter(z => z.on).map(z => ({ x: z.x, y: z.y, hit: (d: number) => hitZombie(z, d, pl) }))
+      : world.current.players.filter(q => q !== pl && q.alive && q.fighting)
+          .map(q => ({ x: q.x, y: q.y, hit: (d: number) => applyDamage(q, d, pl) }));
+    for (const q of marks) {
       const dx = q.x - pl.x, dy = q.y - pl.y;
       const d = Math.hypot(dx, dy);
       if (d > spec.range + BALANCE.playerRadius) continue;
       const dot = d > 0.01 ? (dx * fx + dy * fy) / d : 1;
       if (dot < 0.25) continue; // roughly a forward cone
       if (segmentHitsWall(pl.x, pl.y, q.x, q.y)) continue; // no punching through walls
-      applyDamage(q, spec.damage, pl);
+      q.hit(spec.damage);
     }
   };
   /** Screen offset (arena units) from a ground point to a player's LIVE gun
@@ -786,6 +971,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   };
   const hostStartBattle = () => {
     const g = world.current;
+    g.zombie = zombieModeRef.current;
     const fighters = g.players.filter(p => p.fighting);
     const spawns = [...SPAWNS].sort(() => Math.random() - 0.5);
     fighters.forEach((p, i) => {
@@ -797,13 +983,27 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       p.ammo = (up >= 3 ? BALANCE.ak.magazine : 0) + (up >= 4 ? BALANCE.ak.extraAmmo : 0) + p.bonusAmmo;
       p.grenades = up >= 5 ? BALANCE.grenade.count : 0;
       p.alive = true; p.kills = 0; p.dmg = 0; p.frozenUntil = 0;
-      const s = spawns[i % spawns.length];
-      p.x = s.x; p.y = s.y; p.h = 180;
+      if (g.zombie) {
+        // co-op: the squad starts together in the centre courtyard
+        const ring = (i / Math.max(1, fighters.length)) * Math.PI * 2;
+        p.x = CENTER_SQUARE.x + CENTER_SQUARE.w / 2 + Math.cos(ring) * 4;
+        p.y = CENTER_SQUARE.y + CENTER_SQUARE.h / 2 + Math.sin(ring) * 4;
+        p.h = 180;
+      } else {
+        const s = spawns[i % spawns.length];
+        p.x = s.x; p.y = s.y; p.h = 180;
+      }
     });
     // referee-only tutor: not on the field
     g.players.forEach(p => { if (!p.fighting) p.alive = false; });
     g.bt.startedAt = Date.now() + BALANCE.battleCountdownMs;
     g.bt.zoneOn = false;
+    g.wave = 0;
+    g.waveAt = g.bt.startedAt + ZOMBIES.firstWaveMs;
+    g.dropAt = g.bt.startedAt + PICKUP_RULES.everyMs;
+    zombiesRef.current.forEach(z => { z.on = false; });
+    pickupsRef.current.forEach(p => { p.on = false; });
+    setWaveNo(0);
     g.winner = '';
     pausedRef.current = false; setPaused(false);
     bulletsRef.current.forEach(b => { b.on = false; });
@@ -852,6 +1052,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const bgImgRef = useRef<HTMLImageElement | null>(null);
   const blockImgRef = useRef<HTMLImageElement | null>(null);
   const cloudCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pickupImgsRef = useRef<Array<HTMLImageElement | null>>(PICKUPS.map(() => null));
   const stormSfxAtRef = useRef(0);   // rate-limits the in-cloud hurt cry
   useEffect(() => {
     if (ARENA_BG_IMAGE) {
@@ -864,6 +1065,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       img.onload = () => { blockImgRef.current = img; };
       img.src = BLOCK_SPRITE;
     }
+    PICKUPS.forEach((p, i) => {
+      const img = new Image();
+      img.onload = () => { pickupImgsRef.current[i] = img; };
+      img.src = p.sprite;
+    });
     // the bat-cloud (Lottie) renders into an offscreen canvas the painter
     // tiles over the storm area — one animation feeds every tile
     let cloudAnim: { destroy(): void } | null = null;
@@ -919,6 +1125,11 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             prop: { ...heroDef.gun, url: RB_GUNS[pl?.gun ?? 0]?.url ?? RB_GUNS[0].url },
           };
         });
+        // the horde rides on the same stage: fixed extra slots, each a zombie
+        // GLB. A null pose hides an unused slot, so the count is free to swing.
+        for (let i = 0; i < ZOMBIE_MODELS; i++) {
+          models.push({ url: ZOMBIE_GLB, scale: 1, pinOrigin: true, glow: '#7f1d1d' });
+        }
         const st = new RunnerStage(canvas, () => {
           const v = viewRef.current;
           const W = canvas.clientWidth || 1;
@@ -944,7 +1155,19 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               speed: rec.sp * 0.13,           // RunnerStage normalizes against 0.13
               anim: (rec.sp > 0.12 ? 'run' : 'idle') as 'run' | 'idle',
             };
-          });
+          }).concat(
+            // horde slots — walk shambles ('idle'), chase runs, contact swings
+            zombiesRef.current.slice(0, ZOMBIE_MODELS).map(z => {
+              if (!z.on || !world.current.zombie) return null;
+              return {
+                x: ((v.ox + z.x * v.scale) / v.dpr / W) * 100,
+                y: ((v.oy + z.y * v.scale) / v.dpr / H) * 100,
+                heading: z.h,
+                speed: z.mode === 1 ? 0.13 : z.mode === 0 ? 0.05 : 0,
+                anim: (z.mode === 2 ? 'tackle' : z.mode === 1 ? 'run' : 'idle') as 'run' | 'idle' | 'tackle',
+              };
+            }),
+          );
         }, models, {
           size: () => (viewRef.current.scale / viewRef.current.dpr) * 13,
           // block footprints in CSS px — the stage turns them into depth-only
@@ -986,7 +1209,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         if (ph === 'reading' && Date.now() >= g.rd.tEnd) hostNextReader();
         if (ph === 'preBattle' && Date.now() >= g.bt.startedAt) setPhase('battle');
         if (ph === 'battle' && !pausedRef.current) {
-          const rings = stormRings(Date.now(), g.bt.startedAt);
+          if (g.zombie) hostHordeTick(dt, Date.now());
+          // the closing cloud is a battle-royale device — co-op has the horde
+          const rings = g.zombie ? 0 : stormRings(Date.now(), g.bt.startedAt);
           g.bt.zoneOn = rings > 0; // wire-compat flag (banner on guests)
           if (rings > 0) {
             for (const p of g.players) {
@@ -1060,13 +1285,24 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
           if (segmentHitsWall(b.x, b.y, nx, ny)) { b.on = false; continue; }
           b.x = nx; b.y = ny; b.left -= step;
           if (b.left <= 0) { b.on = false; continue; }
-          for (const q of g.players) {
-            if (!q.alive || !q.fighting || q.gid === b.owner) continue;
-            if (Math.hypot(q.x - b.x, q.y - b.y) <= BALANCE.playerRadius + 0.8) {
-              b.on = false;
-              const shooter = g.players.find(pp => pp.gid === b.owner) ?? null;
-              applyDamage(q, gunStats(shooter?.gun ?? 0).damage, shooter);
-              break;
+          const shooter = g.players.find(pp => pp.gid === b.owner) ?? null;
+          if (g.zombie) {
+            for (const z of zombiesRef.current) {
+              if (!z.on) continue;
+              if (Math.hypot(z.x - b.x, z.y - b.y) <= BALANCE.playerRadius + 0.8) {
+                b.on = false;
+                hitZombie(z, gunStats(shooter?.gun ?? 0).damage, shooter);
+                break;
+              }
+            }
+          } else {
+            for (const q of g.players) {
+              if (!q.alive || !q.fighting || q.gid === b.owner) continue;
+              if (Math.hypot(q.x - b.x, q.y - b.y) <= BALANCE.playerRadius + 0.8) {
+                b.on = false;
+                applyDamage(q, gunStats(shooter?.gun ?? 0).damage, shooter);
+                break;
+              }
             }
           }
         }
@@ -1081,12 +1317,23 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
             spawnFx('boom', n.x, n.y);
             playSfx('boom');
             const R = BALANCE.grenade.radius;
-            for (const q of g.players) {
-              if (!q.alive || !q.fighting) continue;
-              const d = Math.hypot(q.x - n.x, q.y - n.y);
-              if (d > R) continue;
-              const dmg = BALANCE.grenade.damageEdge + (BALANCE.grenade.damageCenter - BALANCE.grenade.damageEdge) * (1 - d / R);
-              applyDamage(q, Math.round(dmg), g.players.find(pp => pp.gid === n.owner) ?? null);
+            const blast = (d: number) =>
+              Math.round(BALANCE.grenade.damageEdge
+                + (BALANCE.grenade.damageCenter - BALANCE.grenade.damageEdge) * (1 - d / R));
+            const thrower = g.players.find(pp => pp.gid === n.owner) ?? null;
+            if (g.zombie) {
+              for (const z of zombiesRef.current) {
+                if (!z.on) continue;
+                const d = Math.hypot(z.x - n.x, z.y - n.y);
+                if (d <= R) hitZombie(z, blast(d), thrower);
+              }
+            } else {
+              for (const q of g.players) {
+                if (!q.alive || !q.fighting) continue;
+                const d = Math.hypot(q.x - n.x, q.y - n.y);
+                if (d > R) continue;
+                applyDamage(q, blast(d), thrower);
+              }
             }
           }
         }
@@ -1302,6 +1549,41 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         ctx.strokeStyle = `rgba(248,113,113,${1 - t})`;
         ctx.lineWidth = 3 * dpr;
         ctx.beginPath(); ctx.arc(px(f.x), py(f.y), 6 * dpr * t, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // ── zombie mode: crates on the floor, then a marker per horde member ──
+    if (ph === 'battle' && g.zombie) {
+      for (const pk of pickupsRef.current) {
+        if (!pk.on) continue;
+        const img = pickupImgsRef.current[pk.kind];
+        const s = PICKUP_RULES.size * scale;
+        const bob = Math.sin(performance.now() / 320 + pk.x) * 0.35 * scale;
+        // soft glow so a crate reads against the sand at a glance
+        ctx.beginPath();
+        ctx.fillStyle = PICKUPS[pk.kind].color + '55';
+        ctx.arc(px(pk.x), py(pk.y), s * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (img) ctx.drawImage(img, px(pk.x) - s / 2, py(pk.y) - s * 0.85 + bob, s, s);
+      }
+      for (const z of zombiesRef.current) {
+        if (!z.on) continue;
+        const zx = px(z.x), zy = py(z.y);
+        const r = BALANCE.playerRadius * scale;
+        // ground ring (the 3D body sits on top; markers keep far ones readable)
+        ctx.beginPath();
+        ctx.strokeStyle = z.mode === 2 ? 'rgba(248,113,113,0.95)' : 'rgba(127,29,29,0.75)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.ellipse(zx, zy, r, r * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        const frac = clamp(z.hp / Math.max(1, z.hpMax), 0, 1);
+        if (frac < 1) {
+          const bw = r * 2.2;
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(zx - bw / 2, zy - r * 2.6, bw, 3 * dpr);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(zx - bw / 2, zy - r * 2.6, bw * frac, 3 * dpr);
+        }
       }
     }
 
@@ -1639,6 +1921,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         {phase === 'battle' && world.current.bt.zoneOn && (
           <span className="text-red-300 text-xs font-bold animate-pulse">☁️ The cloud is closing — run to the centre!</span>
         )}
+        {phase === 'battle' && world.current.zombie && (
+          <span className="text-red-300 text-xs font-extrabold animate-pulse">🧟 Wave {waveNo}</span>
+        )}
         <span className="ml-auto flex items-center gap-1">
           {fighters.map(p => (
             <span key={p.gid} title={p.name}
@@ -1677,6 +1962,28 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
                 <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="relative w-[240px] h-[330px] sm:w-[300px] sm:h-[410px] xl:w-[340px] xl:h-[470px]" />
                 <p className="text-white/45 text-[11px] font-semibold -mt-2">Your soldier — uniform colours are assigned automatically</p>
               </div>
+
+              {/* game mode — the tutor picks what the battle turns into */}
+              {!isGuest && (
+                <div className="mt-4 w-full max-w-xl">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Game mode</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { on: false, icon: '⚔️', name: 'Battle Royale', sub: 'Last fighter standing' },
+                      { on: true,  icon: '🧟', name: 'Zombie Survival', sub: 'Co-op — hold off the waves' },
+                    ].map(m => (
+                      <button key={m.name} onClick={() => { setZombieMode(m.on); zombieModeRef.current = m.on; }}
+                        className={`rounded-2xl px-3 py-3 border text-center transition-all duration-150 ${zombieMode === m.on
+                          ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)]'
+                          : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
+                        <div className="text-2xl leading-none">{m.icon}</div>
+                        <div className={`text-sm font-extrabold mt-1 ${zombieMode === m.on ? 'text-emerald-300' : 'text-white/80'}`}>{m.name}</div>
+                        <div className="text-[10px] text-white/50 mt-0.5">{m.sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* character choice */}
               <div className="mt-4 w-full max-w-xl">
@@ -2043,11 +2350,20 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       {phase === 'victory' && (
         <div className="absolute inset-0 z-40 flex items-center justify-center px-4" style={{ background: 'rgba(4,20,10,0.82)' }}>
           <div className="w-full max-w-md text-center space-y-4">
-            <div className="text-7xl">🏆</div>
+            <div className="text-7xl">{world.current.zombie ? '🧟' : '🏆'}</div>
             <h2 className="text-3xl font-extrabold text-white">
-              {winner ? `${winner.name} wins!` : 'Battle over!'}
+              {world.current.zombie
+                ? `The squad fell on wave ${waveNo}`
+                : winner ? `${winner.name} wins!` : 'Battle over!'}
             </h2>
-            {winner && (
+            {world.current.zombie && (
+              <div className="inline-flex items-center gap-2 bg-red-500/15 border border-red-400/30 rounded-full px-4 py-2">
+                <span className="text-red-200 font-extrabold">
+                  🧟 {Math.max(0, waveNo - 1)} wave{waveNo - 1 === 1 ? '' : 's'} survived
+                </span>
+              </div>
+            )}
+            {winner && !world.current.zombie && (
               <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
                 <span className="w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-white" style={{ background: charOf(winner.charKey).color }}>{(winner.name || '?').charAt(0).toUpperCase()}</span>
                 <span className="text-white font-bold">Champion 🎖️</span>

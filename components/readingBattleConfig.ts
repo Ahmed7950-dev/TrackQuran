@@ -194,6 +194,48 @@ export const RB_HEROES = [
  *  — an alias above the declaration builds fine but breaks at runtime). */
 export const RB_GUN = { url: '/rb/gun.glb?v=1', ...RB_HEROES[0].gun };
 
+// ── Zombie mode ──────────────────────────────────────────────────────────────
+/** The horde model. Its punch clip is named 'tackle' so it slots straight into
+ *  the stage's existing anim union — no renderer change needed. */
+export const ZOMBIE_GLB = '/rb/zombie.glb?v=1';
+/** How many zombies get a real 3D body. Beyond this the horde still fights and
+ *  is drawn on the 2D canvas — this only caps skinned meshes on screen. */
+export const ZOMBIE_MODELS = 14;
+
+export const ZOMBIES = {
+  firstWaveMs: 5_000,      // grace after the countdown before wave 1 walks in
+  waveGapMs: 16_000,       // next wave regardless of how the last one went
+  countBase: 2,            // wave N spawns countBase + N*countPerWave (wave 1 = 4)
+  countPerWave: 2,
+  maxAlive: 34,
+  hpBase: 40,              // wave N zombie has hpBase + N*hpPerWave
+  hpPerWave: 14,
+  speedWalk: 5,            // arena units/s while heading for the centre
+  speedChase: 8,           // once it has seen a player (player runs at 15)
+  speedPerWave: 0.4,       // both speeds grow a little each wave
+  speedMax: 13.5,          // never faster than a sprinting player
+  sightRange: 24,
+  attackRange: 3.4,
+  // a swarm stacks: four in contact is already ~29 dps, so keep the single
+  // bite modest — players are meant to lose ground slowly, not evaporate
+  attackDamage: 8,
+  attackCooldownMs: 1100,
+  spawnMargin: 3,          // how far outside the arena edge they walk in from
+};
+
+/** Crates that drop around the map in zombie mode. `amount` is per pickup. */
+export const PICKUPS = [
+  { key: 'ammo',    name: 'Ammo',    sprite: '/rb/pickups/ammo.png',    amount: 30, color: '#f59e0b' },
+  { key: 'health',  name: 'Health',  sprite: '/rb/pickups/health.png',  amount: 40, color: '#ef4444' },
+  { key: 'grenade', name: 'Grenade', sprite: '/rb/pickups/grenade.png', amount: 2,  color: '#84cc16' },
+];
+export const PICKUP_RULES = {
+  everyMs: 9_000,     // one crate drops this often…
+  maxOnMap: 7,        // …until this many are waiting
+  pickRadius: 3.2,    // walk this close to take it
+  size: 5,            // arena units drawn on the floor
+};
+
 /** Selectable weapons (lobby picker). All Tripo rifles are normalized to the
  *  same 1-unit length, so every one shares RB_GUN's hand transform + muzzle.
  *
