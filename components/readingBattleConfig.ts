@@ -200,14 +200,16 @@ export const RB_GUN = { url: '/rb/gun.glb?v=1', ...RB_HEROES[0].gun };
 export const ZOMBIE_GLB = '/rb/zombie.glb?v=1';
 /** How many zombies get a real 3D body. Beyond this the horde still fights and
  *  is drawn on the 2D canvas — this only caps skinned meshes on screen. */
-export const ZOMBIE_MODELS = 14;
+// MUST stay >= ZOMBIES.maxAlive: the 2D painter rings every living zombie, so
+// any that outnumber the 3D slots showed up as a ring with no body.
+export const ZOMBIE_MODELS = 18;
 
 export const ZOMBIES = {
   firstWaveMs: 5_000,      // grace after the countdown before wave 1 walks in
   waveGapMs: 16_000,       // next wave regardless of how the last one went
   countBase: 2,            // wave N spawns countBase + N*countPerWave (wave 1 = 4)
   countPerWave: 2,
-  maxAlive: 34,
+  maxAlive: 18,            // one 3D body each — keep in step with ZOMBIE_MODELS
   // they should drop fast: an M4A1 burst (10 a shot) kills a wave-1 zombie in
   // 3 rounds and a wave-5 one in 6 — the threat is the crowd, not any one body
   hpBase: 22,              // wave N zombie has hpBase + N*hpPerWave
@@ -231,7 +233,7 @@ export const ZOMBIES = {
  *  `weight` is how often that kind comes up in the drop roll — ammo is what
  *  players actually run out of, so it lands about half the time. */
 export const PICKUPS = [
-  { key: 'ammo',    name: 'Ammo',    sprite: '/rb/pickups/ammo.png',    amount: 30, color: '#f59e0b', weight: 5 },
+  { key: 'ammo',    name: 'Ammo',    sprite: '/rb/pickups/ammo.png',    amount: 30, color: '#f59e0b', weight: 9 },
   { key: 'health',  name: 'Health',  sprite: '/rb/pickups/health.png',  amount: 40, color: '#ef4444', weight: 3 },
   { key: 'grenade', name: 'Grenade', sprite: '/rb/pickups/grenade.png', amount: 2,  color: '#84cc16', weight: 2 },
 ];
@@ -246,8 +248,11 @@ export const rollPickupKind = (): number => {
   return 0;
 };
 export const PICKUP_RULES = {
-  everyMs: 9_000,     // one crate drops this often…
-  maxOnMap: 7,        // …until this many are waiting
+  // Ammo lands twice as often as before: crates drop 1.5x faster AND ammo
+  // takes a bigger share (~6.4 ammo/min vs 3.3). Health and grenades come up
+  // at the same rate they always did — only the ammo stream doubled.
+  everyMs: 6_000,     // one crate drops this often…
+  maxOnMap: 8,        // …until this many are waiting
   pickRadius: 3.2,    // walk this close to take it
   size: 2,            // arena units drawn on the floor (user-tuned on /zombie-tune)
 };
