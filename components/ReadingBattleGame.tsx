@@ -25,7 +25,7 @@ import {
   ARENA_BG_IMAGE, BLOCK_SPRITE, BLOCK_ASPECT, TILE, WALL_TILE_LIST,
   STORM_RINGS, STORM_PAD,
   RB_FIRE, RB_GUNS, RB_HEROES, gunStats,
-  ZOMBIE_GLB, ZOMBIE_MODELS, ZOMBIES, PICKUPS, PICKUP_RULES,
+  ZOMBIE_GLB, ZOMBIE_MODELS, ZOMBIES, PICKUPS, PICKUP_RULES, rollPickupKind,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -761,7 +761,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       const x = 6 + Math.random() * 88, y = 6 + Math.random() * 88;
       const [cx, cy] = collideWalls(x, y, BALANCE.playerRadius);
       if (Math.hypot(cx - x, cy - y) > 0.01) continue;   // landed in a block
-      slot.on = true; slot.kind = Math.floor(Math.random() * PICKUPS.length);
+      slot.on = true; slot.kind = rollPickupKind();
       slot.x = x; slot.y = y;
       return;
     }

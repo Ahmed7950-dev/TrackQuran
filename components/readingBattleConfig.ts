@@ -208,10 +208,12 @@ export const ZOMBIES = {
   countBase: 2,            // wave N spawns countBase + N*countPerWave (wave 1 = 4)
   countPerWave: 2,
   maxAlive: 34,
-  hpBase: 40,              // wave N zombie has hpBase + N*hpPerWave
-  hpPerWave: 14,
-  /** Body height relative to a player. Tune live on /zombie-tune. */
-  scale: 1,
+  // they should drop fast: an M4A1 burst (10 a shot) kills a wave-1 zombie in
+  // 3 rounds and a wave-5 one in 6 — the threat is the crowd, not any one body
+  hpBase: 22,              // wave N zombie has hpBase + N*hpPerWave
+  hpPerWave: 7,
+  /** Body height relative to a player (user-tuned on /zombie-tune). */
+  scale: 0.6,
   speedWalk: 3.2,          // arena units/s while heading for the centre
   speedChase: 6,           // once it has seen a player (player runs at 15)
   speedPerWave: 0.3,       // both speeds grow a little each wave
@@ -225,17 +227,29 @@ export const ZOMBIES = {
   spawnMargin: 3,          // how far outside the arena edge they walk in from
 };
 
-/** Crates that drop around the map in zombie mode. `amount` is per pickup. */
+/** Crates that drop around the map in zombie mode. `amount` is per pickup;
+ *  `weight` is how often that kind comes up in the drop roll — ammo is what
+ *  players actually run out of, so it lands about half the time. */
 export const PICKUPS = [
-  { key: 'ammo',    name: 'Ammo',    sprite: '/rb/pickups/ammo.png',    amount: 30, color: '#f59e0b' },
-  { key: 'health',  name: 'Health',  sprite: '/rb/pickups/health.png',  amount: 40, color: '#ef4444' },
-  { key: 'grenade', name: 'Grenade', sprite: '/rb/pickups/grenade.png', amount: 2,  color: '#84cc16' },
+  { key: 'ammo',    name: 'Ammo',    sprite: '/rb/pickups/ammo.png',    amount: 30, color: '#f59e0b', weight: 5 },
+  { key: 'health',  name: 'Health',  sprite: '/rb/pickups/health.png',  amount: 40, color: '#ef4444', weight: 3 },
+  { key: 'grenade', name: 'Grenade', sprite: '/rb/pickups/grenade.png', amount: 2,  color: '#84cc16', weight: 2 },
 ];
+/** Weighted crate roll — index into PICKUPS. */
+export const rollPickupKind = (): number => {
+  const total = PICKUPS.reduce((s, p) => s + p.weight, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < PICKUPS.length; i++) {
+    r -= PICKUPS[i].weight;
+    if (r <= 0) return i;
+  }
+  return 0;
+};
 export const PICKUP_RULES = {
   everyMs: 9_000,     // one crate drops this often…
   maxOnMap: 7,        // …until this many are waiting
   pickRadius: 3.2,    // walk this close to take it
-  size: 3,            // arena units drawn on the floor — tune on /zombie-tune
+  size: 2,            // arena units drawn on the floor (user-tuned on /zombie-tune)
 };
 
 /** Selectable weapons (lobby picker). All Tripo rifles are normalized to the
