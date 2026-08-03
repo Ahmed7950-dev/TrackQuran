@@ -210,10 +210,12 @@ export const ZOMBIES = {
   maxAlive: 34,
   hpBase: 40,              // wave N zombie has hpBase + N*hpPerWave
   hpPerWave: 14,
-  speedWalk: 5,            // arena units/s while heading for the centre
-  speedChase: 8,           // once it has seen a player (player runs at 15)
-  speedPerWave: 0.4,       // both speeds grow a little each wave
-  speedMax: 13.5,          // never faster than a sprinting player
+  /** Body height relative to a player. Tune live on /zombie-tune. */
+  scale: 1,
+  speedWalk: 3.2,          // arena units/s while heading for the centre
+  speedChase: 6,           // once it has seen a player (player runs at 15)
+  speedPerWave: 0.3,       // both speeds grow a little each wave
+  speedMax: 10,            // never close to a sprinting player
   sightRange: 24,
   attackRange: 3.4,
   // a swarm stacks: four in contact is already ~29 dps, so keep the single
@@ -233,7 +235,7 @@ export const PICKUP_RULES = {
   everyMs: 9_000,     // one crate drops this often…
   maxOnMap: 7,        // …until this many are waiting
   pickRadius: 3.2,    // walk this close to take it
-  size: 5,            // arena units drawn on the floor
+  size: 3,            // arena units drawn on the floor — tune on /zombie-tune
 };
 
 /** Selectable weapons (lobby picker). All Tripo rifles are normalized to the

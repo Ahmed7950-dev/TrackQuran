@@ -1128,7 +1128,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         // the horde rides on the same stage: fixed extra slots, each a zombie
         // GLB. A null pose hides an unused slot, so the count is free to swing.
         for (let i = 0; i < ZOMBIE_MODELS; i++) {
-          models.push({ url: ZOMBIE_GLB, scale: 1, pinOrigin: true, glow: '#7f1d1d' });
+          models.push({ url: ZOMBIE_GLB, scale: ZOMBIES.scale, pinOrigin: true, glow: '#7f1d1d' });
         }
         const st = new RunnerStage(canvas, () => {
           const v = viewRef.current;
@@ -1156,15 +1156,17 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
               anim: (rec.sp > 0.12 ? 'run' : 'idle') as 'run' | 'idle',
             };
           }).concat(
-            // horde slots — walk shambles ('idle'), chase runs, contact swings
+            // horde slots. The walk-in uses the SAME run clip, just played
+            // slower — 'idle' is a single frozen keyframe, so using it here
+            // slid them to the centre like statues.
             zombiesRef.current.slice(0, ZOMBIE_MODELS).map(z => {
               if (!z.on || !world.current.zombie) return null;
               return {
                 x: ((v.ox + z.x * v.scale) / v.dpr / W) * 100,
                 y: ((v.oy + z.y * v.scale) / v.dpr / H) * 100,
                 heading: z.h,
-                speed: z.mode === 1 ? 0.13 : z.mode === 0 ? 0.05 : 0,
-                anim: (z.mode === 2 ? 'tackle' : z.mode === 1 ? 'run' : 'idle') as 'run' | 'idle' | 'tackle',
+                speed: z.mode === 1 ? 0.13 : z.mode === 0 ? 0.06 : 0,
+                anim: (z.mode === 2 ? 'tackle' : 'run') as 'run' | 'tackle',
               };
             }),
           );
@@ -1267,7 +1269,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
       // repeat. Every client decides this locally (the storm is a pure
       // function of the battle clock), so guests hear it without extra data —
       // their per-snapshot hp drop is far too small to trip the hit detector.
-      if (ph === 'battle' && !pausedRef.current && p && p.alive && p.fighting) {
+      if (ph === 'battle' && !pausedRef.current && !g.zombie && p && p.alive && p.fighting) {
         const nowMs = Date.now() + (isGuest ? clockSkewRef.current : 0);
         const rings = stormRings(nowMs, g.bt.startedAt);
         if (rings > 0 && !stormSafe(p.x, p.y, rings) && now - stormSfxAtRef.current > 1100) {
@@ -1588,7 +1590,9 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     }
 
     // ── the bat-cloud storm: rings of tile clouds, no backdrop ──
-    if (ph === 'battle') {
+    // (battle royale only — co-op has the horde instead, and the host skips
+    // the storm damage there, so drawing it would be a lie)
+    if (ph === 'battle' && !g.zombie) {
       const nowMs = Date.now() + (isGuest ? clockSkewRef.current : 0);
       const rings = stormRings(nowMs, g.bt.startedAt);
       const cc = cloudCanvasRef.current;
