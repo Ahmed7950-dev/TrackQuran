@@ -62,10 +62,15 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
 
   const maxRatio = Math.max(0.5, Math.ceil(Math.max(...dataPoints.map(d => d.ratio)) * 1.3 * 10) / 10);
 
-  const width = 800, height = 300;
-  const margin = { top: 26, right: 20, bottom: 40, left: 50 };
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
+  // Every entry gets its own dated tick, so the canvas grows with the log and
+  // the wrapper scrolls sideways instead of cramming labels on top of a fixed
+  // 800px board.
+  const PER_POINT = 58;
+  const margin = { top: 26, right: 24, bottom: 66, left: 50 };
+  const chartWidth = Math.max(700, (dataPoints.length - 1) * PER_POINT);
+  const chartHeight = 234;
+  const width = chartWidth + margin.left + margin.right;
+  const height = chartHeight + margin.top + margin.bottom;
 
   const firstDate = dataPoints[0].date;
   const lastDate = dataPoints[dataPoints.length - 1].date;
@@ -79,16 +84,17 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
     value: Math.round(maxRatio * p * 10) / 10,
     y: yScale(maxRatio * p),
   }));
-  const numXTicks = Math.min(dataPoints.length, 6);
-  const xTicks = Array.from({ length: numXTicks }).map((_, i) => {
-    const index = numXTicks === 1 ? 0 : Math.floor(i * (dataPoints.length - 1) / (numXTicks - 1));
-    const d = dataPoints[index];
-    return { value: d.date.toLocaleDateString(language, { month: 'short', day: 'numeric' }), x: xScale(d.date) };
-  });
+  // one tick per logged date — tilted so they never collide
+  const xTicks = dataPoints.map(d => ({
+    value: d.date.toLocaleDateString(language, { month: 'short', day: 'numeric' }),
+    x: xScale(d.date),
+  }));
 
   return (
     <div className="w-full overflow-x-auto p-2 bg-slate-50 dark:bg-gray-900/50 rounded-lg">
-      <svg viewBox={`0 0 ${width} ${height}`} className="font-sans min-w-[600px]">
+      {/* full width, never squeezed: a long log scrolls sideways in the wrapper
+          instead of shrinking every label into illegibility */}
+      <svg viewBox={`0 0 ${width} ${height}`} className="font-sans" style={{ minWidth: width }}>
         <defs>
           <linearGradient id="gradient-mistakes" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="var(--gradient-from)" stopOpacity="0.4" />
@@ -113,9 +119,9 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
             <g key={`dot-${i}`}>
               <circle cx={xScale(d.date)} cy={yScale(d.ratio)} r="4"
                 className="fill-rose-500 dark:fill-rose-400 stroke-slate-50 dark:stroke-gray-900/50" strokeWidth="2" />
-              {/* the exact ratio, printed above every dot */}
-              <text x={xScale(d.date)} y={yScale(d.ratio) - 9} textAnchor="middle"
-                className="fill-rose-600 dark:fill-rose-300" fontSize="10" fontWeight="700">
+              {/* the exact ratio, printed small above every dot */}
+              <text x={xScale(d.date)} y={yScale(d.ratio) - 8} textAnchor="middle"
+                className="fill-rose-600 dark:fill-rose-300" fontSize="7.5" fontWeight="700">
                 {d.ratio.toFixed(2)}
               </text>
             </g>
@@ -132,11 +138,14 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
               className="font-semibold fill-rose-600 dark:fill-rose-300">Mistakes ratio</text>
           </g>
 
-          <g className="text-xs fill-slate-500 dark:fill-slate-400">
+          <g className="fill-slate-500 dark:fill-slate-400">
             {xTicks.map(tick => (
-              <text key={`tx-${tick.x}`} x={tick.x} y={chartHeight + 15} textAnchor="middle">{tick.value}</text>
+              <text key={`tx-${tick.x}`} x={tick.x} y={chartHeight + 12} fontSize="9"
+                textAnchor="end" transform={`rotate(-45, ${tick.x}, ${chartHeight + 12})`}>
+                {tick.value}
+              </text>
             ))}
-            <text x={chartWidth / 2} y={chartHeight + 35} textAnchor="middle"
+            <text x={chartWidth / 2} y={chartHeight + 58} textAnchor="middle" fontSize="12"
               className="font-semibold fill-slate-600 dark:fill-slate-300">{t('modals.addAchievement.date')}</text>
           </g>
         </g>
