@@ -54,9 +54,9 @@ const MistakeSessionGrid: React.FC<{ student: Student }> = ({ student }) => {
       hit.get(day)!.add(label);
     }
 
-    // Rows: every fixed type always (so a clean type still shows its green
-    // streak), then one row per letter this student has actually confused, then
-    // their own free-text mistakes.
+    // Rows: only mistakes this student actually made in the window. A type they
+    // never made would be a row of pure green — true, but it buries the rows
+    // that matter under the full taxonomy.
     const rows: Row[] = [];
     for (const area of MISTAKE_AREAS) {
       if (area.name === 'recognition') continue;   // expanded per letter below
@@ -76,7 +76,12 @@ const MistakeSessionGrid: React.FC<{ student: Student }> = ({ student }) => {
       });
     [...customSeen].sort().forEach(label => rows.push({ label, group: 'Own notes', color: '#94a3b8' }));
 
-    return { sessions, rows, hit };
+    // drop every row that has no red cell in this window
+    const madeInWindow = new Set<string>();
+    hit.forEach(set => set.forEach(label => madeInWindow.add(label)));
+    const kept = rows.filter(r => madeInWindow.has(r.label));
+
+    return { sessions, rows: kept, hit };
   }, [student]);
 
   if (sessions.length === 0 || rows.length === 0) return null;
@@ -98,7 +103,8 @@ const MistakeSessionGrid: React.FC<{ student: Student }> = ({ student }) => {
         </div>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-        Last {sessions.length} session{sessions.length === 1 ? '' : 's'} · newest on the right
+        Last {sessions.length} session{sessions.length === 1 ? '' : 's'} · newest on the right ·
+        only mistakes actually made in this window are listed
       </p>
 
       <div className="overflow-x-auto">
