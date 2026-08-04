@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Student } from '../types';
 import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
+import MistakeSessionGrid from './MistakeSessionGrid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mistakes Study — a read-only analysis of everything the tutor has logged for
@@ -73,6 +74,9 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm flex justify-center">
             <MistakeRing readOnly counts={data.counts} customCounts={data.customCounts} permFlags={data.permFlags} />
           </div>
+
+          {/* Which mistake happened in which session */}
+          <MistakeSessionGrid student={student} />
 
           {/* Per-area breakdowns */}
           <div className="grid sm:grid-cols-2 gap-4">

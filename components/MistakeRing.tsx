@@ -61,6 +61,14 @@ export const TRANSLIT: Record<string, string> = {
   'ن': 'noon', 'ه': 'ha', 'و': 'waw', 'ي': 'ya', 'ى': 'ya', 'ئ': 'hamza', 'ؤ': 'hamza',
   'ء': 'hamza', 'ة': 'ta marbuta',
 };
+/** translit → the base Arabic glyph (first spelling wins, so alif is ا not آ).
+ *  Lets a report show the letter itself next to the transliteration. */
+export const ARABIC_LETTER_OF: Record<string, string> = Object.entries(TRANSLIT)
+  .reduce((acc, [glyph, translit]) => {
+    if (!(translit in acc)) acc[translit] = glyph;
+    return acc;
+  }, {} as Record<string, string>);
+
 export const translitOf = (glyph: string): string => {
   for (const ch of glyph) { const t = TRANSLIT[ch]; if (t) return t; }
   return glyph.replace(/[ً-ٰٟۖ-ۭ‍]/g, '') || glyph;
@@ -85,34 +93,51 @@ export interface RingData {
 /** Shared history → ring-data folding. Case-insensitive against the fixed
  *  labels, aliases fold in (Stretch → Long), bare letter names count as
  *  Letter recognition, green tajweed-mode logs are excluded. */
+const FIXED_BY_LC = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
+const ALIASES: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin', 'tanwin': 'Tanween', 'tanveen': 'Tanween', 'tanwīn': 'Tanween' };
+
+/** What one logged mistake counts as. null = not counted at all (green tajweed
+ *  log, highlight-only mark, or a pre-cutoff free-text note).
+ *  Single source of truth for the ring AND the session table — they must never
+ *  disagree about what a mistake is. */
+export type MistakeClass =
+  | { kind: 'fixed'; label: string }
+  | { kind: 'letter'; letter: string }
+  | { kind: 'custom'; label: string };
+
+export const classifyMistake = (m: Mistake): MistakeClass | null => {
+  if (m.errorType === 'tajweed') return null;   // green logs stay out
+  const raw = m.errorText?.trim();
+  if (!raw) return null;                        // highlight-only mark
+  const lc = raw.toLowerCase();
+  const recogMatch = lc.match(/^letter recognition\s*\(?\s*([^)]*)/);
+  if (recogMatch || LETTER_NAMES.has(lc)) {
+    return { kind: 'letter', letter: (recogMatch ? recogMatch[1].trim() : lc) || 'unknown' };
+  }
+  if (FIXED_BY_LC.has(lc)) return { kind: 'fixed', label: FIXED_BY_LC.get(lc)! };
+  if (ALIASES[lc]) return { kind: 'fixed', label: ALIASES[lc] };
+  // Free-text: only from the cutoff on (older ones are ignored entirely).
+  const t = m.date ? Date.parse(m.date) : NaN;
+  if (!isNaN(t) && t >= CUSTOM_MISTAKES_SINCE) return { kind: 'custom', label: raw };
+  return null;
+};
+
 export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: string | null): RingData => {
-  const fixedByLc = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
-  const aliases: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin', 'tanwin': 'Tanween', 'tanveen': 'Tanween', 'tanwīn': 'Tanween' };
   const counts: Record<string, number> = {};
   const custom = new Map<string, number>();
   const confusions = new Map<string, number>();
   for (const [k, m] of Object.entries(mistakes)) {
     if (!isLetterMistakeKey(k)) continue;
     if (excludeKey && k === excludeKey) continue;   // the letter being edited right now
-    if (m.errorType === 'tajweed') continue;     // green logs stay out of the ring
-    const raw = m.errorText?.trim();
-    if (!raw) continue;      // highlight-only mark: no ring segment, not counted
-    const lc = raw.toLowerCase();
-    const recogMatch = lc.match(/^letter recognition\s*\(?\s*([^)]*)/);
-    if (recogMatch || LETTER_NAMES.has(lc)) {
+    const cls = classifyMistake(m);
+    if (!cls) continue;
+    if (cls.kind === 'letter') {
       counts['Letter recognition'] = (counts['Letter recognition'] ?? 0) + 1;
-      const letter = (recogMatch ? recogMatch[1].trim() : lc) || 'unknown';
-      confusions.set(letter, (confusions.get(letter) ?? 0) + 1);
-    } else if (fixedByLc.has(lc)) {
-      const canon = fixedByLc.get(lc)!;
-      counts[canon] = (counts[canon] ?? 0) + 1;
-    } else if (aliases[lc]) {
-      counts[aliases[lc]] = (counts[aliases[lc]] ?? 0) + 1;
+      confusions.set(cls.letter, (confusions.get(cls.letter) ?? 0) + 1);
+    } else if (cls.kind === 'fixed') {
+      counts[cls.label] = (counts[cls.label] ?? 0) + 1;
     } else {
-      // Free-text mistake: only from the cutoff on (older ones are ignored
-      // entirely — they don't show in the ring and don't count in the total).
-      const t = m.date ? Date.parse(m.date) : NaN;
-      if (!isNaN(t) && t >= CUSTOM_MISTAKES_SINCE) custom.set(raw, (custom.get(raw) ?? 0) + 1);
+      custom.set(cls.label, (custom.get(cls.label) ?? 0) + 1);
     }
   }
   const customAll = [...custom.entries()].sort((a, b) => b[1] - a[1]);
