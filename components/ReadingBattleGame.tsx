@@ -2461,14 +2461,10 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
  * game: dark panel, the actual error text (so it can be reported), and a way
  * back in without hunting for the link again.
  */
-class RBErrorBoundary extends React.Component<
-  { onExit: () => void },
-  { err: Error | null }
-> {
-  constructor(props: { onExit: () => void }) {
-    super(props);
-    this.state = { err: null };
-  }
+type RBBoundaryProps = { onExit: () => void; children?: React.ReactNode };
+class RBErrorBoundary extends React.Component<RBBoundaryProps, { err: Error | null }> {
+  declare props: RBBoundaryProps;
+  state: { err: Error | null } = { err: null };
   static getDerivedStateFromError(err: Error) { return { err }; }
   componentDidCatch(err: Error, info: React.ErrorInfo) {
     console.error('[Reading Battle] render crash:', err, info.componentStack);
