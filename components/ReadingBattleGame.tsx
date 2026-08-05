@@ -1960,196 +1960,207 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
         )}
       </div>
 
-      {/* ══ LOBBY — full-screen showcase ══ */}
+      {/* ══ LOBBY — one screen, three columns, no page scroll ══ */}
       {phase === 'lobby' && (
-        <div className="absolute inset-0 z-20 overflow-y-auto">
+        <div className="absolute inset-0 z-20 overflow-y-auto lg:overflow-hidden">
           {/* ambient glows */}
-          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(1100px 520px at 30% -8%, rgba(16,185,129,0.16), transparent 60%), radial-gradient(900px 520px at 92% 108%, rgba(245,158,11,0.12), transparent 60%)' }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(1100px 520px at 20% -10%, rgba(16,185,129,0.18), transparent 60%), radial-gradient(900px 520px at 95% 110%, rgba(245,158,11,0.13), transparent 60%)' }} />
 
-          <div className="relative min-h-full max-w-[1500px] mx-auto flex flex-col lg:flex-row lg:items-stretch gap-6 px-4 sm:px-10 pt-14 pb-8">
+          <div className="relative min-h-full lg:h-full max-w-[1700px] mx-auto flex flex-col px-3 sm:px-5 pt-12 pb-3 gap-2">
 
-            {/* ── left: the soldier showcase ── */}
-            <div className="flex-1 flex flex-col items-center justify-center py-2">
-              <h1 className="text-3xl sm:text-4xl xl:text-5xl font-extrabold text-white text-center tracking-tight">
+            {/* ── headline strip ── */}
+            <div className="flex-shrink-0 text-center">
+              <h1 className="text-xl sm:text-2xl xl:text-3xl font-extrabold text-white tracking-tight leading-tight">
                 📖 Read <span className="text-emerald-300">→</span> earn gear <span className="text-emerald-300">→</span> ⚔️ battle!
               </h1>
-              <p className="text-emerald-200/80 text-sm sm:text-base mt-2 mb-2 text-center">Up to {MAX_PLAYERS} fighters · the tutor referees the reading</p>
+              <p className="text-emerald-200/70 text-[11px] sm:text-xs">Up to {MAX_PLAYERS} fighters · the tutor referees the reading</p>
+            </div>
 
-              {/* pedestal + big soldier */}
-              <div className="relative flex flex-col items-center">
-                <div className="absolute bottom-10 w-64 h-24 rounded-full pointer-events-none" style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,0.35), transparent 70%)', filter: 'blur(8px)' }} />
-                <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="relative w-[240px] h-[330px] sm:w-[300px] sm:h-[410px] xl:w-[340px] xl:h-[470px]" />
-                <p className="text-white/45 text-[11px] font-semibold -mt-2">Your soldier — uniform colours are assigned automatically</p>
+            {/* ── three columns, filling everything left over ── */}
+            <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(250px,300px)_1fr_minmax(290px,360px)] gap-3">
+
+              {/* phones get a short hero instead of the tall showcase */}
+              <div className="lg:hidden flex justify-center">
+                <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="w-[190px] h-[240px]" />
               </div>
 
-              {/* game mode — the tutor picks what the battle turns into */}
-              {!isGuest && (
-                <div className="mt-4 w-full max-w-xl">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Game mode</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { on: false, icon: '⚔️', name: 'Battle Royale', sub: 'Last fighter standing' },
-                      { on: true,  icon: '🧟', name: 'Zombie Survival', sub: 'Co-op — hold off the waves' },
-                    ].map(m => (
-                      <button key={m.name} onClick={() => { setZombieMode(m.on); zombieModeRef.current = m.on; }}
-                        className={`rounded-2xl px-3 py-3 border text-center transition-all duration-150 ${zombieMode === m.on
-                          ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)]'
-                          : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
-                        <div className="text-2xl leading-none">{m.icon}</div>
-                        <div className={`text-sm font-extrabold mt-1 ${zombieMode === m.on ? 'text-emerald-300' : 'text-white/80'}`}>{m.name}</div>
-                        <div className="text-[10px] text-white/50 mt-0.5">{m.sub}</div>
+              {/* ══ left: loadout ══ */}
+              <div className="min-h-0 flex flex-col gap-2 lg:overflow-y-auto pr-0.5">
+
+                {/* game mode — the tutor picks what the battle turns into */}
+                {!isGuest && (
+                  <div className="bg-white/[0.05] border border-white/10 rounded-2xl p-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300 mb-1.5">Game mode</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { on: false, icon: '⚔️', name: 'Battle Royale', sub: 'Last one standing' },
+                        { on: true,  icon: '🧟', name: 'Zombie Survival', sub: 'Co-op vs waves' },
+                      ].map(m => (
+                        <button key={m.name} onClick={() => { setZombieMode(m.on); zombieModeRef.current = m.on; }}
+                          className={`rounded-xl px-2 py-2.5 border text-center transition-all duration-150 ${zombieMode === m.on
+                            ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_20px_rgba(52,211,153,0.22)]'
+                            : 'border-white/10 bg-white/[0.05] hover:bg-white/10 hover:border-white/25'}`}>
+                          <div className="text-xl leading-none">{m.icon}</div>
+                          <div className={`text-[11px] font-extrabold mt-1 leading-tight ${zombieMode === m.on ? 'text-emerald-300' : 'text-white/80'}`}>{m.name}</div>
+                          <div className="text-[9px] text-white/45 leading-tight">{m.sub}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* fighter choice */}
+                <div className="bg-white/[0.05] border border-white/10 rounded-2xl p-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300 mb-1.5">Choose your fighter</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {RB_HEROES.map((h, i) => (
+                      <button key={h.key} onClick={() => pickHero(i)}
+                        className={`rounded-xl px-1 pt-1.5 pb-1 flex flex-col items-center border transition-all duration-150 ${myHero === i
+                          ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_20px_rgba(52,211,153,0.22)]'
+                          : 'border-white/10 bg-white/[0.05] hover:bg-white/10 hover:border-white/25'}`}>
+                        <RBHero clip="idle" url={h.url} className="w-full h-[clamp(40px,8.5vh,68px)]" />
+                        <span className={`text-[10px] font-bold ${myHero === i ? 'text-emerald-300' : 'text-white/70'}`}>{h.name}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* character choice */}
-              <div className="mt-4 w-full max-w-xl">
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Choose your fighter</p>
-                <div className="flex gap-3 justify-center">
-                  {RB_HEROES.map((h, i) => (
-                    <button key={h.key} onClick={() => pickHero(i)}
-                      className={`rounded-2xl px-4 py-2 flex flex-col items-center border transition-all duration-150 ${myHero === i
-                        ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)]'
-                        : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
-                      <RBHero clip="idle" url={h.url} className="w-20 h-28" />
-                      <span className={`text-[11px] font-bold mt-1 ${myHero === i ? 'text-emerald-300' : 'text-white/70'}`}>{h.name}</span>
-                      <span className={`text-[9px] font-bold tracking-widest ${myHero === i ? 'text-emerald-400/90' : 'text-transparent'}`}>SELECTED</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* weapon rack */}
-              <div className="mt-4 w-full max-w-xl">
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300 mb-2 text-center">Choose your weapon</p>
-                <div className="grid grid-cols-4 gap-2 sm:gap-3">
-                  {RB_GUNS.map((g, i) => (
-                    <button key={g.key} onClick={() => pickGun(i)}
-                      className={`group rounded-2xl px-2 pt-3 pb-2 flex flex-col items-center border transition-all duration-150 ${myGun === i
-                        ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_24px_rgba(52,211,153,0.25)] scale-[1.03]'
-                        : 'border-white/10 bg-white/[0.06] hover:bg-white/10 hover:border-white/25'}`}>
-                      <img src={g.thumb} alt={g.name} className={`w-full max-w-[96px] h-10 sm:h-12 object-contain transition-transform duration-150 ${myGun === i ? 'scale-110' : 'group-hover:scale-105'}`} />
-                      <span className={`text-[11px] font-bold mt-1.5 ${myGun === i ? 'text-emerald-300' : 'text-white/70'}`}>{g.name}</span>
-                      <span className={`text-[9px] font-bold tracking-widest ${myGun === i ? 'text-emerald-400/90' : 'text-white/35'}`}>{myGun === i ? 'EQUIPPED' : g.class.toUpperCase()}</span>
-                    </button>
-                  ))}
-                </div>
-                {/* the selected weapon's card: stats bars, same numbers the battle runs on */}
-                {(() => {
-                  const g = RB_GUNS[myGun] ?? RB_GUNS[0];
-                  const s = g.stats;
-                  const rows = [
-                    { label: 'Damage', frac: s.damage / 15, hint: `${s.damage} per hit` },
-                    { label: 'Fire rate', frac: (1000 / s.fireRateMs) / 9.5, hint: `${(1000 / s.fireRateMs).toFixed(1)} shots/s` },
-                    { label: 'Focus', frac: Math.max(0.06, 1 - s.spread / 0.1), hint: s.spread <= 0.025 ? 'laser-tight' : s.spread <= 0.06 ? 'steady' : 'sprays wide' },
-                    { label: 'Range', frac: s.range / 85, hint: `${s.range}m` },
-                  ];
-                  return (
-                    <div className="mt-3 bg-white/[0.06] border border-white/10 rounded-2xl px-4 py-3">
-                      <div className="flex items-baseline justify-between mb-2">
-                        <span className="text-sm font-extrabold text-white">{g.name}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300/90">{g.class}</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {rows.map(r => (
-                          <div key={r.label} className="flex items-center gap-2">
-                            <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/55">{r.label}</span>
-                            <div className="flex-1 h-2 rounded-full bg-black/35 overflow-hidden">
-                              <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
-                                style={{ width: `${Math.round(clamp(r.frac, 0, 1) * 100)}%` }} />
+                {/* weapon rack + the equipped gun's stats */}
+                <div className="bg-white/[0.05] border border-white/10 rounded-2xl p-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300 mb-1.5">Choose your weapon</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {RB_GUNS.map((g, i) => (
+                      <button key={g.key} onClick={() => pickGun(i)}
+                        className={`group rounded-xl px-1.5 pt-1.5 pb-1 flex flex-col items-center border transition-all duration-150 ${myGun === i
+                          ? 'border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_20px_rgba(52,211,153,0.22)]'
+                          : 'border-white/10 bg-white/[0.05] hover:bg-white/10 hover:border-white/25'}`}>
+                        <img src={g.thumb} alt={g.name} className={`w-full max-w-[84px] h-[clamp(20px,4.2vh,32px)] object-contain transition-transform duration-150 ${myGun === i ? 'scale-110' : 'group-hover:scale-105'}`} />
+                        <span className={`text-[10px] font-bold leading-tight ${myGun === i ? 'text-emerald-300' : 'text-white/70'}`}>{g.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const g = RB_GUNS[myGun] ?? RB_GUNS[0];
+                    const s = g.stats;
+                    const rows = [
+                      { label: 'Damage', frac: s.damage / 15, hint: `${s.damage}` },
+                      { label: 'Rate', frac: (1000 / s.fireRateMs) / 9.5, hint: `${(1000 / s.fireRateMs).toFixed(1)}/s` },
+                      { label: 'Focus', frac: Math.max(0.06, 1 - s.spread / 0.1), hint: s.spread <= 0.025 ? 'tight' : s.spread <= 0.06 ? 'steady' : 'wide' },
+                      { label: 'Range', frac: s.range / 85, hint: `${s.range}m` },
+                    ];
+                    return (
+                      <div className="mt-2 pt-2 border-t border-white/10">
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-xs font-extrabold text-white">{g.name}</span>
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-300/90">{g.class}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {rows.map(r => (
+                            <div key={r.label} className="flex items-center gap-1.5">
+                              <span className="w-11 shrink-0 text-[9px] font-bold uppercase tracking-wider text-white/50">{r.label}</span>
+                              <div className="flex-1 h-1.5 rounded-full bg-black/35 overflow-hidden">
+                                <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+                                  style={{ width: `${Math.round(clamp(r.frac, 0, 1) * 100)}%` }} />
+                              </div>
+                              <span className="w-9 shrink-0 text-right text-[9px] font-semibold text-white/60">{r.hint}</span>
                             </div>
-                            <span className="w-20 shrink-0 text-right text-[10px] font-semibold text-white/65">{r.hint}</span>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* ══ centre: the fighter, as big as the screen allows ══ */}
+              <div className="min-h-0 hidden lg:flex flex-col items-center justify-end relative">
+                <div className="absolute bottom-12 w-72 h-28 rounded-full pointer-events-none"
+                  style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,0.38), transparent 70%)', filter: 'blur(10px)' }} />
+                <RBHero clip="stretch" url={RB_HEROES[myHero]?.url} className="relative w-full flex-1 min-h-0" />
+                <p className="text-white/40 text-[10px] font-semibold pb-1">Your fighter — uniform colours are assigned automatically</p>
+              </div>
+
+              {/* ══ right: the session ══ */}
+              <div className="min-h-0 flex flex-col gap-2.5">
+
+                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-2xl p-3.5 space-y-2.5 flex-shrink-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">{isGuest ? 'Fighter' : 'Referee'}</p>
+                  <input
+                    value={myName}
+                    onChange={e => setMyName(e.target.value.slice(0, 14))}
+                    placeholder={isGuest ? 'Your name…' : 'Your name (tutor)…'}
+                    className="w-full px-3 py-2.5 rounded-xl bg-black/25 border border-white/15 text-white text-base placeholder:text-white/35 font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  {!isGuest && (
+                    <label className="flex items-center gap-2.5 text-white/90 text-xs font-semibold cursor-pointer bg-black/20 rounded-xl px-3 py-2 border border-white/10">
+                      <input type="checkbox" checked={tutorPlays} onChange={e => {
+                        setTutorPlays(e.target.checked);
+                        const t = world.current.players.find(p => p.gid === 'host');
+                        if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; }
+                      }} className="w-4 h-4 rounded accent-emerald-500" />
+                      I'm playing too <span className="text-white/50 font-medium">(referee + fighter)</span>
+                    </label>
+                  )}
+                </div>
+
+                {!isGuest ? (
+                  <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-2xl p-3.5 space-y-2 flex-shrink-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Invite students</p>
+                    <div className="flex items-center gap-1.5">
+                      <input readOnly value={shareLink} className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-black/30 border border-white/10 text-emerald-100 text-[11px] font-mono" />
+                      <button onClick={() => { try { navigator.clipboard?.writeText(shareLink); } catch { /* */ } setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1500); }}
+                        className="px-2.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white text-[11px] font-bold whitespace-nowrap transition-colors">{linkCopied ? '✓' : 'Copy'}</button>
+                      <button onClick={() => setQrOpen(true)} className="px-2.5 py-2 rounded-lg bg-white hover:bg-emerald-50 text-slate-800 text-[11px] font-bold transition-colors">QR</button>
                     </div>
-                  );
-                })()}
-              </div>
-            </div>
-
-            {/* ── right: control panel ── */}
-            <div className="w-full lg:w-[400px] flex flex-col gap-4 justify-center pb-4">
-
-              <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5 space-y-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">{isGuest ? 'Fighter' : 'Referee'}</p>
-                <input
-                  value={myName}
-                  onChange={e => setMyName(e.target.value.slice(0, 14))}
-                  placeholder={isGuest ? 'Your name…' : 'Your name (tutor)…'}
-                  className="w-full px-4 py-3.5 rounded-2xl bg-black/25 border border-white/15 text-white text-lg placeholder:text-white/35 font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-                {!isGuest && (
-                  <label className="flex items-center gap-3 text-white/90 text-sm font-semibold cursor-pointer bg-black/20 rounded-2xl px-4 py-3 border border-white/10">
-                    <input type="checkbox" checked={tutorPlays} onChange={e => {
-                      setTutorPlays(e.target.checked);
-                      const t = world.current.players.find(p => p.gid === 'host');
-                      if (t) { t.fighting = e.target.checked; t.name = myName || 'Tutor'; }
-                    }} className="w-5 h-5 rounded accent-emerald-500" />
-                    I'm playing too <span className="text-white/50 font-medium">(referee + fighter)</span>
-                  </label>
+                  </div>
+                ) : (
+                  !joined && (
+                    <button
+                      onClick={() => { ensureAc().resume?.(); setJoined(true); }}
+                      disabled={!myName.trim()}
+                      style={{ ...btnBase, width: '100%', padding: '15px 30px', background: myName.trim() ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#47556988', cursor: myName.trim() ? 'pointer' : 'default', boxShadow: myName.trim() ? '0 8px 30px rgba(249,115,22,0.35)' : 'none' }}>
+                      🔗 Join the battle!
+                    </button>
+                  )
                 )}
-              </div>
+                {isGuest && joined && (
+                  <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-2xl px-4 py-3 text-center text-emerald-200 text-xs font-semibold flex-shrink-0">
+                    {gotSnap ? '✅ Connected — waiting for the tutor to start…' : '⏳ Joining…'}
+                  </div>
+                )}
 
-              {!isGuest ? (
-                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5 space-y-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">Invite students</p>
-                  <div className="flex items-center gap-2">
-                    <input readOnly value={shareLink} className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-emerald-100 text-xs font-mono" />
-                    <button onClick={() => { try { navigator.clipboard?.writeText(shareLink); } catch { /* */ } setLinkCopied(true); window.setTimeout(() => setLinkCopied(false), 1500); }}
-                      className="px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold whitespace-nowrap transition-colors">{linkCopied ? '✓ Copied' : 'Copy link'}</button>
-                    <button onClick={() => setQrOpen(true)} className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-slate-800 text-xs font-bold transition-colors">QR</button>
+                {/* roster — the one panel allowed to grow and scroll */}
+                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-2xl p-3.5 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Players</p>
+                    <span className="text-[11px] font-extrabold text-white/80 bg-black/30 border border-white/10 rounded-full px-2 py-0.5">{fighters.length}/{MAX_PLAYERS}</span>
+                  </div>
+                  {players.length === 0 && <p className="text-white/40 text-xs">Share the link — students appear here…</p>}
+                  <div className="space-y-1.5 overflow-y-auto min-h-0">
+                    {players.map(p => (
+                      <div key={p.gid} className="flex items-center gap-2 text-white text-xs font-semibold bg-black/20 border border-white/5 rounded-xl px-2.5 py-1.5">
+                        <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold text-white shadow-inner flex-shrink-0" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
+                        <span className="flex-1 truncate">{p.gid === 'host' ? (myName || 'Tutor') : p.name}</span>
+                        {p.isTutor
+                          ? <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-400/25 text-amber-200 font-bold whitespace-nowrap">{p.fighting ? 'REF + FIGHTER' : 'REFEREE'}</span>
+                          : <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 font-bold whitespace-nowrap">{RB_GUNS[p.gun]?.name?.toUpperCase() ?? ''}</span>}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ) : (
-                !joined && (
-                  <button
-                    onClick={() => { ensureAc().resume?.(); setJoined(true); }}
-                    disabled={!myName.trim()}
-                    style={{ ...btnBase, width: '100%', padding: '16px 30px', background: myName.trim() ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#47556988', cursor: myName.trim() ? 'pointer' : 'default', boxShadow: myName.trim() ? '0 8px 30px rgba(249,115,22,0.35)' : 'none' }}>
-                    🔗 Join the battle!
+
+                {!isGuest && (
+                  <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.fighting = tutorPlays; } setPhase('levels'); }}
+                    disabled={!canStart}
+                    style={{ ...btnBase, width: '100%', padding: '15px 26px', fontSize: 16, flexShrink: 0, background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default', boxShadow: canStart ? '0 8px 30px rgba(22,163,74,0.35)' : 'none' }}>
+                    {assetsReady && wordsRef.current.length > 0
+                      ? (fighters.length >= MIN_FIGHTERS
+                          ? (fighters.length === 1 ? 'Start — solo test ▶' : 'Start — set levels ▶')
+                          : 'Waiting for a fighter…')
+                      : '⏳ Loading sounds & verses…'}
                   </button>
-                )
-              )}
-              {isGuest && joined && (
-                <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl px-5 py-4 text-center text-emerald-200 text-sm font-semibold">
-                  {gotSnap ? '✅ Connected — waiting for the tutor to start…' : '⏳ Joining…'}
-                </div>
-              )}
-
-              {/* roster */}
-              <div className="bg-white/[0.07] backdrop-blur border border-white/10 rounded-3xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">Players</p>
-                  <span className="text-xs font-extrabold text-white/80 bg-black/30 border border-white/10 rounded-full px-2.5 py-0.5">{fighters.length}/{MAX_PLAYERS}</span>
-                </div>
-                {players.length === 0 && <p className="text-white/40 text-sm">Share the link — students appear here…</p>}
-                <div className="space-y-2">
-                  {players.map(p => (
-                    <div key={p.gid} className="flex items-center gap-3 text-white text-sm font-semibold bg-black/20 border border-white/5 rounded-2xl px-3 py-2">
-                      <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold text-white shadow-inner" style={{ background: charOf(p.charKey).color }}>{(p.name || '?').charAt(0).toUpperCase()}</span>
-                      <span className="flex-1 truncate">{p.gid === 'host' ? (myName || 'Tutor') : p.name}</span>
-                      {p.isTutor
-                        ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/25 text-amber-200 font-bold">{p.fighting ? 'REFEREE + FIGHTER' : 'REFEREE'}</span>
-                        : <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 font-bold">{RB_GUNS[p.gun]?.name?.toUpperCase() ?? ''}</span>}
-                    </div>
-                  ))}
-                </div>
+                )}
               </div>
-
-              {!isGuest && (
-                <button onClick={() => { ensureAc().resume?.(); playSfx('countdown', 0.4); const t = world.current.players.find(p => p.gid === 'host'); if (t) { t.name = myName || 'Tutor'; t.fighting = tutorPlays; } setPhase('levels'); }}
-                  disabled={!canStart}
-                  style={{ ...btnBase, width: '100%', padding: '17px 30px', fontSize: 17, background: canStart ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', cursor: canStart ? 'pointer' : 'default', boxShadow: canStart ? '0 8px 30px rgba(22,163,74,0.35)' : 'none' }}>
-                  {assetsReady && wordsRef.current.length > 0
-                    ? (fighters.length >= MIN_FIGHTERS
-                        ? (fighters.length === 1 ? 'Start — solo test ▶' : 'Start — set levels ▶')
-                        : 'Waiting for a fighter…')
-                    : '⏳ Loading sounds & verses…'}
-                </button>
-              )}
             </div>
           </div>
         </div>
