@@ -12,11 +12,20 @@ export const BONUS_AMMO_PER_EXTRA = 10;  // each Correct beyond 5 (needs the AK)
 /** Surahs drawn on for reading segments. Fetched at lobby time from the same
  *  Uthmani source the rest of the app uses (api.quran.com v4), so the text is
  *  never re-typed here. Edit freely — content, not code.
- *  MIDDLE-of-the-Quran surahs on purpose: Al-Fatiha and the short end surahs
- *  are recited from memory, which defeats a READING challenge — these force
- *  the student to actually read. The host shuffles the order per game, so each
- *  battle opens in a different surah. */
-export const VERSE_SURAHS: number[] = [12, 16, 21, 23, 25, 27, 29, 31, 35, 42];
+ *
+ *  MOSTLY the last juz: 78–92, which is most of Juz 'Amma but stops short of
+ *  the very short closing surahs (93–114) that every student recites from
+ *  memory — a memorized line defeats a READING challenge.
+ *  The rest of the time a mid-Quran surah comes up instead, so segments are
+ *  not always from familiar ground. */
+export const VERSE_SURAHS_MAIN: number[] = [
+  78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92,
+];
+export const VERSE_SURAHS_OTHER: number[] = [12, 16, 21, 23, 25, 27, 29, 31, 35, 42];
+/** Share of segments taken from the last-juz pool. */
+export const MAIN_POOL_SHARE = 0.75;
+/** Everything to fetch (both pools). */
+export const VERSE_SURAHS: number[] = [...VERSE_SURAHS_MAIN, ...VERSE_SURAHS_OTHER];
 
 // ── Characters (placeholder capsules — swap via this registry only) ──────────
 // `sprite` may later point to an image; the renderer uses it when present and

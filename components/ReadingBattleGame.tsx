@@ -26,6 +26,7 @@ import {
   STORM_RINGS, STORM_PAD,
   RB_FIRE, RB_GUNS, RB_HEROES, gunStats,
   ZOMBIE_GLB, ZOMBIE_MODELS, ZOMBIES, PICKUPS, PICKUP_RULES, rollPickupKind,
+  VERSE_SURAHS_MAIN, MAIN_POOL_SHARE,
 } from './readingBattleConfig';
 
 const ONLINE_SITE_URL = 'https://www.lisanquran.com';
@@ -182,22 +183,26 @@ function synthBuffer(ac: AudioContext, key: string): AudioBuffer {
 }
 
 /* ── verse pool (fetched from the app's existing Uthmani source) ──────────── */
-async function fetchVersePool(): Promise<string[]> {
-  const words: string[] = [];
-  // host-only pool (guests receive cut segments over the wire), so a per-game
-  // shuffle is safe — each battle opens in a different surah
-  const surahs = [...VERSE_SURAHS].sort(() => Math.random() - 0.5);
-  for (const surah of surahs) {
+/** One ayah, kept whole. Segments are cut INSIDE a single verse, never across
+ *  the end of one into the next. */
+interface PoolVerse { surah: number; ayah: number; words: string[]; main: boolean }
+
+async function fetchVersePool(): Promise<PoolVerse[]> {
+  const pool: PoolVerse[] = [];
+  const mainSet = new Set(VERSE_SURAHS_MAIN);
+  for (const surah of VERSE_SURAHS) {
     try {
       const res = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surah}`);
       const json = await res.json();
       for (const v of json.verses ?? []) {
-        const t = (v.text_uthmani ?? '').trim();
-        if (t) words.push(...t.split(/\s+/));
+        const words = (v.text_uthmani ?? '').trim().split(/\s+/).filter(Boolean);
+        if (words.length < 2) continue;   // one-word ayahs make no segment
+        const ayah = Number(String(v.verse_key ?? '').split(':')[1]) || 0;
+        pool.push({ surah, ayah, words, main: mainSet.has(surah) });
       }
     } catch { /* skip an unreachable surah; the pool just gets shorter */ }
   }
-  return words;
+  return pool;
 }
 
 // ── The hero character (Mixamo soldier) — live 3D on DOM screens.
@@ -297,7 +302,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   // ── world (mutable, read by loops) ────────────────────────────────────────
   const world = useRef({
     players: [] as RBPlayer[],
-    rd: { turnGid: '', tEnd: 0, seg: '', evT: '', evN: 0, done: 0, ptr: 0 },
+    rd: { turnGid: '', tEnd: 0, seg: '', evT: '', evN: 0, done: 0 },
     bt: { startedAt: 0, zoneOn: false },
     zombie: false,        // mode for the CURRENT battle (locked in at start)
     wave: 0,
@@ -312,7 +317,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
   const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0, spx: 0, spy: 0, decay: 14 })));
   const nadesRef   = useRef<Nade[]>(Array.from({ length: 12 }, () => ({ on: false, x: 0, y: 0, sx: 0, sy: 0, tx: 0, ty: 0, t0: 0, owner: '' })));
   const fxRef      = useRef<Fx[]>(Array.from({ length: 24 }, () => ({ on: false, kind: 'hit', x: 0, y: 0, t0: 0 })));
-  const wordsRef   = useRef<string[]>([]);
+  const wordsRef   = useRef<PoolVerse[]>([]);   // whole ayahs; segments cut inside one
   const evSeenRef  = useRef(0);
 
   // host-side per-guest bookkeeping
@@ -917,7 +922,7 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const g = world.current;
     const order = readingOrder();
     if (order.length === 0) { hostStartBattle(); return; }
-    g.rd.done = 0; g.rd.ptr = 0;
+    g.rd.done = 0;
     g.rd.turnGid = order[0];
     hostDealSegment();
     g.rd.tEnd = Date.now() + READ_SECONDS * 1000 + 3400; // 3-2-1 + the reading turn
@@ -927,12 +932,22 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     const g = world.current;
     const reader = g.players.find(p => p.gid === g.rd.turnGid);
     const n = clamp(reader?.level ?? 3, 1, 5);
-    const words = wordsRef.current;
-    if (!words.length) { g.rd.seg = '…'; return; }
-    const seg: string[] = [];
-    for (let i = 0; i < n; i++) seg.push(words[(g.rd.ptr + i) % words.length]);
-    g.rd.ptr = (g.rd.ptr + n) % words.length;
-    g.rd.seg = seg.join(' ');
+    const pool = wordsRef.current;
+    if (!pool.length) { g.rd.seg = '…'; return; }
+    // Pick a fresh verse every turn — a different surah and a different place
+    // in it — weighted toward the last-juz pool. Then cut the window INSIDE
+    // that one verse, so a segment never runs past an ayah's end.
+    const wantMain = Math.random() < MAIN_POOL_SHARE;
+    const side = pool.filter(v => v.main === wantMain);
+    const from = side.length ? side : pool;
+    // prefer a verse long enough for the level; fall back to the longest we
+    // have rather than padding across verses
+    const roomy = from.filter(v => v.words.length >= n);
+    const bag = roomy.length ? roomy : from;
+    const verse = bag[Math.floor(Math.random() * bag.length)];
+    const take = Math.min(n, verse.words.length);
+    const start = Math.floor(Math.random() * (verse.words.length - take + 1));
+    g.rd.seg = verse.words.slice(start, start + take).join(' ');
   };
   const hostCorrect = () => {
     const g = world.current;
