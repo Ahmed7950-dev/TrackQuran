@@ -167,6 +167,7 @@ export class RunnerStage {
   private canvas: HTMLCanvasElement;
   private getPoses: () => (RunnerPose | null)[] | null;
   private disposed = false;
+  private ctxLost = false;
   private THREE: any = null;
   private models: RunnerModel[];
   private opts: { size?: () => number; occluders?: () => StageOccluder[] };
@@ -215,6 +216,19 @@ export class RunnerStage {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, prCap));
     this.renderer.setClearColor(0x000000, 0);
+    // A phone can drop the GL context under memory pressure. Without this the
+    // frame loop keeps calling into a dead context and throws forever; the 2D
+    // arena and the HUD below stay perfectly playable, so just stand down and
+    // pick back up if the browser restores it.
+    this.canvas.addEventListener('webglcontextlost', e => {
+      e.preventDefault();
+      this.ctxLost = true;
+      console.warn('[stage] WebGL context lost — 3D characters paused');
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.ctxLost = false;
+      console.warn('[stage] WebGL context restored');
+    });
 
     const unique = [...new Set(this.models.map(m => m.url))];
     const loaded = new Map<string, any>();
@@ -659,7 +673,7 @@ export class RunnerStage {
   private draw(dt: number) {
     const poses = this.getPoses();
     const r = this.renderer;
-    if (!poses || !r) return;
+    if (!poses || !r || this.ctxLost) return;
     const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
     if (W === 0 || H === 0) return;
     if (this.canvas.width !== Math.floor(W * r.getPixelRatio()) || this.canvas.height !== Math.floor(H * r.getPixelRatio())) {

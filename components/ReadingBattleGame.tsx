@@ -267,7 +267,7 @@ interface Props {
   onExit: () => void;
 }
 
-const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
+const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
   const isGuest = !!roomId;
   const gidRef = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `g${Math.random()}`);
   const myGid = isGuest ? gidRef.current : 'host';
@@ -1573,12 +1573,13 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     if (ph === 'battle' && g.zombie) {
       for (const pk of pickupsRef.current) {
         if (!pk.on) continue;
+        const def = PICKUPS[pk.kind] ?? PICKUPS[0];   // snapshot-driven index
         const img = pickupImgsRef.current[pk.kind];
         const s = PICKUP_RULES.size * scale;
         const bob = Math.sin(performance.now() / 320 + pk.x) * 0.35 * scale;
         // soft glow so a crate reads against the sand at a glance
         ctx.beginPath();
-        ctx.fillStyle = PICKUPS[pk.kind].color + '55';
+        ctx.fillStyle = def.color + '55';
         ctx.arc(px(pk.x), py(pk.y), s * 0.5, 0, Math.PI * 2);
         ctx.fill();
         if (img) ctx.drawImage(img, px(pk.x) - s / 2, py(pk.y) - s * 0.85 + bob, s, s);
@@ -2452,5 +2453,58 @@ const ReadingBattleGame: React.FC<Props> = ({ roomId, onExit }) => {
     </div>
   );
 };
+
+/**
+ * A render crash used to unmount the whole game and leave the student staring
+ * at a blank page mid-lesson — they stayed in the tutor's roster, so from the
+ * outside they were "still in the game". This keeps the failure inside the
+ * game: dark panel, the actual error text (so it can be reported), and a way
+ * back in without hunting for the link again.
+ */
+class RBErrorBoundary extends React.Component<
+  { onExit: () => void },
+  { err: Error | null }
+> {
+  constructor(props: { onExit: () => void }) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  componentDidCatch(err: Error, info: React.ErrorInfo) {
+    console.error('[Reading Battle] render crash:', err, info.componentStack);
+  }
+  render() {
+    if (!this.state.err) return this.props.children as React.ReactElement;
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6 text-center"
+        style={{ background: 'linear-gradient(160deg,#071a10 0%,#0d2b1a 60%,#123a22 100%)' }}>
+        <div className="max-w-md space-y-4">
+          <div className="text-5xl">🎮</div>
+          <h2 className="text-2xl font-extrabold text-white">The game hit a snag</h2>
+          <p className="text-emerald-200/80 text-sm">
+            Rejoin and you will drop straight back into the room — the tutor keeps the session running.
+          </p>
+          <p className="text-white/40 text-[11px] font-mono break-words">{this.state.err.message}</p>
+          <div className="flex gap-3 justify-center pt-1">
+            <button onClick={() => window.location.reload()}
+              className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold">
+              ↻ Rejoin
+            </button>
+            <button onClick={this.props.onExit}
+              className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold">
+              Leave
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+const ReadingBattleGame: React.FC<Props> = props => (
+  <RBErrorBoundary onExit={props.onExit}>
+    <ReadingBattleGameInner {...props} />
+  </RBErrorBoundary>
+);
 
 export default ReadingBattleGame;
