@@ -205,3 +205,92 @@ export async function deleteQaedahWord(id: string): Promise<boolean> {
   if (error) console.error('deleteQaedahWord:', error);
   return !error;
 }
+
+// ─── Practice history ─────────────────────────────────────────────────────────
+// Every Correct/Wrong tap during a challenge is one attempt; finishing a
+// challenge writes one completion, which is what the progress calendar shows.
+// Both tables are anon-writable — the student portal has no auth session.
+
+export interface QaedahAttempt {
+  wordId: string;
+  correct: boolean;
+  at: string;
+}
+
+export interface QaedahCompletion {
+  id: string;
+  topicId: string;
+  topicTitle: string;
+  wordsCount: number;
+  correctCount: number;
+  wrongCount: number;
+  completedAt: string;
+}
+
+/** Fire-and-forget: a wrong answer restarts the queue, so this must not block. */
+export async function logQaedahAttempt(
+  studentId: string,
+  topicId: string,
+  wordId: string,
+  correct: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('qaedah_attempts')
+    .insert({ student_id: studentId, topic_id: topicId, word_id: wordId, correct });
+  if (error) console.error('logQaedahAttempt:', error.message);
+}
+
+/** Attempts for one lesson, oldest first — the order the squares are drawn in. */
+export async function listQaedahAttempts(
+  studentId: string,
+  topicId: string,
+): Promise<QaedahAttempt[]> {
+  const { data, error } = await supabase
+    .from('qaedah_attempts')
+    .select('word_id, correct, created_at')
+    .eq('student_id', studentId)
+    .eq('topic_id', topicId)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('listQaedahAttempts:', error.message); return []; }
+  return (data ?? []).map((r: { word_id: string; correct: boolean; created_at: string }) =>
+    ({ wordId: r.word_id, correct: r.correct, at: r.created_at }));
+}
+
+export async function logQaedahCompletion(input: {
+  studentId: string;
+  topicId: string;
+  topicTitle: string;
+  wordsCount: number;
+  correctCount: number;
+  wrongCount: number;
+}): Promise<void> {
+  const { error } = await supabase.from('qaedah_completions').insert({
+    student_id:    input.studentId,
+    topic_id:      input.topicId,
+    topic_title:   input.topicTitle,
+    words_count:   input.wordsCount,
+    correct_count: input.correctCount,
+    wrong_count:   input.wrongCount,
+  });
+  if (error) console.error('logQaedahCompletion:', error.message);
+}
+
+/** Finished challenges for a student — one calendar badge each. */
+export async function listQaedahCompletions(studentId: string): Promise<QaedahCompletion[]> {
+  const { data, error } = await supabase
+    .from('qaedah_completions')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('completed_at', { ascending: true });
+  if (error) { console.error('listQaedahCompletions:', error.message); return []; }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => ({
+    id:           r.id,
+    topicId:      r.topic_id,
+    topicTitle:   r.topic_title,
+    wordsCount:   r.words_count,
+    correctCount: r.correct_count,
+    wrongCount:   r.wrong_count,
+    completedAt:  r.completed_at,
+  }));
+}

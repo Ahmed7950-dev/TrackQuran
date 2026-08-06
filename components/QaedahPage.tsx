@@ -4,9 +4,14 @@ import CraneBuilderGame from './CraneBuilderGame';
 import {
   QaedahTopic,
   QaedahWord,
+  QaedahAttempt,
   listQaedahTopics,
   listQaedahWords,
+  listQaedahAttempts,
+  logQaedahAttempt,
+  logQaedahCompletion,
 } from '../services/qaedahService';
+import { qaedahLessonNote } from '../services/qaedahLessons';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,7 +42,16 @@ function shuffle<T>(arr: T[]): T[] {
 
 type View = 'list' | 'words' | 'challenge' | 'win';
 
-const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = false }) => {
+/** Arabic letter count — drives the per-word font size so any word fits one line. */
+const letterCount = (w: string): number =>
+  [...w].filter(c => { const x = c.charCodeAt(0); return x >= 0x0621 && x <= 0x064A; }).length;
+
+const QaedahPage: React.FC<{
+  isStudentView?: boolean;
+  /** Whose practice this is. Without it nothing is recorded — the page still works. */
+  studentId?: string;
+  studentName?: string;
+}> = ({ isStudentView = false, studentId, studentName }) => {
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [topics,       setTopics]       = useState<QaedahTopic[]>([]);
@@ -50,11 +64,16 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   const [view,        setView]        = useState<View>('list');
   const [childMode,   setChildMode]   = useState(false);
   const [levelFilter, setLevelFilter] = useState<'all' | 1 | 2 | 3>('all');
+  // Hand-picked words. Non-empty ⇒ the challenge runs on exactly these,
+  // ignoring the level filter.
+  const [picked,      setPicked]      = useState<Set<string>>(new Set());
+  // word id → this student's history for the open lesson, oldest first.
+  const [attempts,    setAttempts]    = useState<Map<string, QaedahAttempt[]>>(new Map());
   const [showCrane,   setShowCrane]   = useState(false);
   const [craneRoomId, setCraneRoomId] = useState<string | null>(null); // set ⇒ live session (tutor spectates)
 
   // ── Challenge state ───────────────────────────────────────────────────────
-  const [queue,       setQueue]      = useState<string[]>([]);
+  const [queue,       setQueue]      = useState<QaedahWord[]>([]);
   const [pos,         setPos]        = useState(0);
   const [restartMsg,  setRestartMsg] = useState('');
   const [celebrating, setCelebrating] = useState(false);
@@ -65,6 +84,8 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
 
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);
+  // Tally for the completion record written when the challenge is finished.
+  const runTally           = useRef({ correct: 0, wrong: 0 });
 
   // Enemy soldiers: in the student portal they spawn automatically at random
   // intervals; on the tutor side they're sent via the hidden "R" shortcut.
@@ -123,11 +144,32 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
     setSelectedTopic(topic);
     setWordsLoading(true);
     setLevelFilter('all');
+    setPicked(new Set());
+    setAttempts(new Map());
     const w = await listQaedahWords(topic.id);
     setWords(w);
     setWordsLoading(false);
     setView('words');
+    if (studentId) {
+      const rows = await listQaedahAttempts(studentId, topic.id);
+      const byWord = new Map<string, QaedahAttempt[]>();
+      for (const a of rows) {
+        if (!byWord.has(a.wordId)) byWord.set(a.wordId, []);
+        byWord.get(a.wordId)!.push(a);
+      }
+      setAttempts(byWord);
+    }
   };
+
+  /** Record one tap locally (instant squares) and in the DB. */
+  const recordAttempt = useCallback((w: QaedahWord, correct: boolean) => {
+    setAttempts(prev => {
+      const next = new Map<string, QaedahAttempt[]>(prev);
+      next.set(w.id, [...(next.get(w.id) ?? []), { wordId: w.id, correct, at: new Date().toISOString() }]);
+      return next;
+    });
+    if (studentId) void logQaedahAttempt(studentId, w.topicId, w.id, correct);
+  }, [studentId]);
 
   // ── Confetti ─────────────────────────────────────────────────────────────
   const launchConfetti = useCallback((count: number) => {
@@ -168,20 +210,42 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   const advance = useCallback(() => {
     setPos(prev => {
       const next = prev + 1;
-      if (next >= queue.length) { if (childMode) launchConfetti(120); setView('win'); }
+      if (next >= queue.length) {
+        if (childMode) launchConfetti(120);
+        setView('win');
+        // Finishing the lesson is the achievement — it lands on the student's
+        // progress calendar on the main page.
+        if (studentId && selectedTopic && queue.length > 0) {
+          void logQaedahCompletion({
+            studentId,
+            topicId:      selectedTopic.id,
+            topicTitle:   selectedTopic.titleEn,
+            wordsCount:   queue.length,
+            correctCount: runTally.current.correct,
+            wrongCount:   runTally.current.wrong,
+          });
+        }
+      }
       return next;
     });
-  }, [queue.length, childMode, launchConfetti]);
+  }, [queue.length, childMode, launchConfetti, studentId, selectedTopic]);
 
   // ── Start challenge ───────────────────────────────────────────────────────
+  /** The words a challenge would run on right now: the hand-picked ones if any,
+   *  otherwise everything at the selected level. */
+  const challengeWords = (): QaedahWord[] => picked.size > 0
+    ? words.filter(w => picked.has(w.id))
+    : (levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter));
+
   const handleStart = () => {
-    const filtered = levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter);
+    const filtered = challengeWords();
     if (filtered.length === 0) return;
-    const q = shuffle(filtered.map(w => w.word));
+    const q = shuffle(filtered);
     setQueue(q);
     setPos(0);
     setRestartMsg('');
     consecutiveCorrect.current = 0;
+    runTally.current = { correct: 0, wrong: 0 };
     gameRef.current?.setStreak(0);
     gameRef.current?.reset();
     setView('challenge');
@@ -191,6 +255,8 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   const handleCorrect = () => {
     if (celebrating) return;
     setRestartMsg('');
+    const cur = queue[pos];
+    if (cur) { recordAttempt(cur, true); runTally.current.correct += 1; }
     consecutiveCorrect.current += 1;
     const streak = consecutiveCorrect.current;
     if (streak >= 6) {
@@ -215,6 +281,8 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   // ── Wrong answer ──────────────────────────────────────────────────────────
   const handleWrong = () => {
     if (celebrating) return;
+    const cur = queue[pos];
+    if (cur) { recordAttempt(cur, false); runTally.current.wrong += 1; }
     consecutiveCorrect.current = 0;
     gameRef.current?.spawnEnemySoldier();
     gameRef.current?.setStreak(0);
@@ -234,7 +302,7 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
   };
 
   const pct    = queue.length > 0 ? Math.round((pos / queue.length) * 100) : 0;
-  const word   = queue[pos] ?? '';
+  const word   = queue[pos]?.word ?? '';
 
   // ── Praise popup overlay ──────────────────────────────────────────────────
   const praiseOverlay = popup.phase !== 'hidden' && (
@@ -329,6 +397,40 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
         </div>
       </div>
 
+      {/* What this lesson teaches — English + Arabic, before the words. */}
+      {(() => {
+        const idx  = topics.findIndex(t => t.id === selectedTopic?.id);
+        const note = selectedTopic ? qaedahLessonNote(idx + 1, selectedTopic.titleEn) : null;
+        if (!note) return null;
+        return (
+          <div className="mb-5 rounded-2xl border border-teal-100 dark:border-teal-900/50 bg-teal-50/60 dark:bg-teal-900/20 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 pt-3.5 pb-2">
+              <span className="text-2xl leading-none text-teal-700 dark:text-teal-300" style={HAFS}>{note.emoji}</span>
+              <p className="text-[11px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">About this lesson</p>
+            </div>
+            <div className="px-4 pb-4 space-y-3">
+              {([
+                { k: 'what',  en: note.en,      ar: note.ar,      icon: '📘' },
+                { k: 'sound', en: note.soundEn, ar: note.soundAr, icon: '🔊' },
+                { k: 'watch', en: note.watchEn, ar: note.watchAr, icon: '⚠️' },
+              ] as const).map(row => (
+                <div key={row.k} className="flex gap-2.5">
+                  <span className="text-sm leading-6 flex-shrink-0">{row.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{row.en}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-loose mt-0.5" dir="rtl" style={HAFS}>{row.ar}</p>
+                  </div>
+                </div>
+              ))}
+              <div className="rounded-xl bg-white/70 dark:bg-gray-800/60 border border-teal-100 dark:border-teal-900/50 px-3 py-2 text-center"
+                   dir="rtl" style={{ ...HAFS, fontSize: '1.6rem', lineHeight: 1.9 }}>
+                {note.example}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {wordsLoading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">Loading words…</div>
       ) : words.length === 0 ? (
@@ -370,24 +472,74 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
             );
           })()}
 
-          {/* Word grid — Hafs font, large */}
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-8">
-            {words.map(w => (
-              <div
-                key={w.id}
-                className="flex items-center justify-center bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 py-3 px-1 shadow-sm"
-                style={{ ...HAFS, fontSize: 'clamp(1.4rem, 5vw, 2rem)', lineHeight: 1.4, direction: 'rtl' }}
-              >
-                {w.word}
-              </div>
-            ))}
+          {/* Pick-words hint */}
+          <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+            {picked.size > 0
+              ? <>Practising <b className="text-teal-600 dark:text-teal-400">{picked.size} chosen word{picked.size === 1 ? '' : 's'}</b> — tap to add or remove.</>
+              : <>Tap words to choose exactly which ones to practise, or leave them all and use the level filter.</>}
+            {studentId && <> Squares under a word are {studentName ? `${studentName}'s` : 'this student\u2019s'} past reads.</>}
+          </p>
+
+          {/* Word grid — Hafs font, each word on ONE line (size scales with
+              letter count), with this student's read history underneath. */}
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-6">
+            {(levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter)).map(w => {
+              const isPicked = picked.has(w.id);
+              const hist = attempts.get(w.id) ?? [];
+              const shown = hist.slice(-10);
+              const n = Math.max(1, letterCount(w.word));
+              // ~7.4rem of card width / n letters, clamped so short words don't
+              // balloon and long ones stay legible.
+              const size = Math.max(0.85, Math.min(2, 7.4 / n));
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => setPicked(prev => {
+                    const next = new Set(prev);
+                    if (next.has(w.id)) next.delete(w.id); else next.add(w.id);
+                    return next;
+                  })}
+                  title={hist.length > 0
+                    ? `${hist.filter(a => a.correct).length} correct · ${hist.filter(a => !a.correct).length} wrong`
+                    : 'Not practised yet'}
+                  className={`flex flex-col items-center justify-center rounded-xl border py-2.5 px-1 shadow-sm transition-all active:scale-95 ${
+                    isPicked
+                      ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-400 dark:border-teal-500 ring-2 ring-teal-400/50'
+                      : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 hover:border-teal-300'
+                  }`}
+                >
+                  <span style={{ ...HAFS, fontSize: `${size}rem`, lineHeight: 1.5, direction: 'rtl', whiteSpace: 'nowrap' }}>
+                    {w.word}
+                  </span>
+                  {/* Read history — green = read it right, red = got it wrong */}
+                  <span className="flex items-center gap-[2px] mt-1 h-[6px]">
+                    {shown.map((a, i) => (
+                      <i key={i}
+                        className={`inline-block w-[5px] h-[5px] rounded-[1px] ${a.correct ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    ))}
+                    {hist.length > shown.length && (
+                      <i className="text-[7px] leading-none text-slate-400 not-italic">+{hist.length - shown.length}</i>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Start button */}
           {(() => {
-            const count = levelFilter === 'all' ? words.length : words.filter(w => w.level === levelFilter).length;
+            const count = challengeWords().length;
             return (
               <div className="flex justify-center gap-3 flex-wrap">
+                {picked.size > 0 && (
+                  <button
+                    onClick={() => setPicked(new Set())}
+                    className="px-4 py-3 rounded-2xl font-bold text-sm border border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-500 transition-colors"
+                  >
+                    Clear selection
+                  </button>
+                )}
                 <button
                   onClick={handleStart}
                   disabled={count === 0}
@@ -397,7 +549,7 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
                       : 'bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
                   }`}
                 >
-                  ⚔️ Start Challenge — {count} word{count !== 1 ? 's' : ''}
+                  ⚔️ Start Challenge — {count} {picked.size > 0 ? 'chosen ' : ''}word{count !== 1 ? 's' : ''}
                 </button>
                 <button
                   onClick={() => { setCraneRoomId(null); setShowCrane(true); }}
@@ -632,7 +784,7 @@ const QaedahPage: React.FC<{ isStudentView?: boolean }> = ({ isStudentView = fal
 
       {showCrane && (
         <CraneBuilderGame
-          words={(levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter)).map(w => w.word)}
+          words={challengeWords().map(w => w.word)}
           topicTitle={selectedTopic?.titleEn}
           roomId={craneRoomId ?? undefined}
           role={craneRoomId ? 'spectator' : 'host'}

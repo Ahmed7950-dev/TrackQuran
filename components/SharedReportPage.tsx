@@ -959,7 +959,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             )}
             {activeTab === 'qaedah' && (
               <GameInviteContext.Provider value={inviteIdentity}>
-                <QaedahPage isStudentView={true} />
+                <QaedahPage isStudentView={true} studentId={report.student_id ?? undefined} studentName={report.student_name} />
               </GameInviteContext.Provider>
             )}
             {activeTab === 'alphabetTrainer' && (

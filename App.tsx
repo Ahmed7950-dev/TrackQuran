@@ -1876,7 +1876,12 @@ const App: React.FC = () => {
           </GameInviteContext.Provider>
         ) : activeTab === 'qaedah' ? (
           <GameInviteContext.Provider value={tutorInviteIdentity}>
-            <QaedahPage />
+            {/* Practice is recorded against whichever student is open — the one
+                in a live session first, otherwise the one selected. */}
+            <QaedahPage
+              studentId={(sessionStudent ?? selectedStudent)?.id}
+              studentName={(sessionStudent ?? selectedStudent)?.name}
+            />
           </GameInviteContext.Provider>
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />

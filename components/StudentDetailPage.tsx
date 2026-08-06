@@ -1,6 +1,7 @@
 import React, { useState, useMemo, Fragment, useEffect } from 'react';
 import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion, Mistake } from '../types';
 import { getStudentCompletions } from '../services/tajweedService';
+import { listQaedahCompletions, QaedahCompletion } from '../services/qaedahService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import LottieIcon from './LottieIcon';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -539,10 +540,19 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
     // ── Rich Progress Calendar ───────────────────────────────────────────────
     type CalDayEntry = {
-        type: 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafsir';
+        type: 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafsir' | 'qaedah';
         label: string;
         badgeCls: string;
     };
+
+    // Finished Qaedah reading challenges — they belong on the calendar next to
+    // the recitation and hifz achievements.
+    const [qaedahDone, setQaedahDone] = useState<QaedahCompletion[]>([]);
+    useEffect(() => {
+        let alive = true;
+        listQaedahCompletions(student.id).then(rows => { if (alive) setQaedahDone(rows); });
+        return () => { alive = false; };
+    }, [student.id]);
 
     const calEntriesMap = useMemo(() => {
         type RawSeg = { startSurah: number; startAyah: number; endSurah: number; endAyah: number };
@@ -592,6 +602,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             'hifz':             'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
             'hifz-revision':    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300',
             'tafsir':           'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+            'qaedah':           'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300',
         };
         const TYPE_ORDER: CalDayEntry['type'][] = ['reading', 'reading-revision', 'hifz', 'hifz-revision', 'tafsir'];
 
@@ -635,8 +646,21 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             if (entries.length) map.set(dateStr, entries);
         });
 
+        // Qaedah challenges carry their own label (the lesson name), so they
+        // are appended after the merge rather than going through it.
+        qaedahDone.forEach(c => {
+            const dateStr = new Date(c.completedAt).toDateString();
+            const list = map.get(dateStr) ?? [];
+            list.push({
+                type: 'qaedah',
+                label: `${c.topicTitle}${c.wordsCount ? ` · ${c.wordsCount}w` : ''}`,
+                badgeCls: BADGE_CLS['qaedah'],
+            });
+            map.set(dateStr, list);
+        });
+
         return map;
-    }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata]);
+    }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata, qaedahDone]);
 
     const calAttendanceMap = useMemo(
         () => new Map(student.attendance.map(a => [new Date(a.date).toDateString(), a.status])),
@@ -655,6 +679,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             'hifz': '🧠',
             'hifz-revision': '↩️',
             'tafsir': '📚',
+            'qaedah': '🔤',
         };
 
         const cells: React.ReactNode[] = [];
@@ -774,6 +799,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         { icon: '🧠', label: 'Hifz',              cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
                         { icon: '↩️', label: 'Hifz Revision',    cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' },
                         { icon: '📚', label: 'Tafsir',            cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+                        { icon: '🔤', label: 'Qaedah',            cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' },
                     ].map(l => (
                         <span key={l.label} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${l.cls}`}>
                             {l.icon} {l.label}
