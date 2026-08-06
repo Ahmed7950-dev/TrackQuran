@@ -130,8 +130,14 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [versePlays, setVersePlays] = useState<{ [verseKey: string]: number }>({});
   const [quranHomework, setQuranHomework] = useState<QuranHomework[]>([]);
   const [homeworkModal, setHomeworkModal] = useState<QuranHomework | null>(null);
-  // Verse key to jump to when student opens homework ("surah:ayah")
-  const [homeworkJumpKey, setHomeworkJumpKey] = useState<string | null>(null);
+  // Where to send the Quran view next ("surah:ayah"), plus a nonce so asking for
+  // the SAME verse twice still navigates — tapping one homework item, scrolling
+  // away and tapping it again used to do nothing, because the key never changed.
+  // Homework taps and tutor letter-focus both write here: last one wins.
+  const [quranJump, setQuranJump] = useState<{ key: string; n: number } | null>(null);
+  const jumpToVerse = useCallback((key: string) => {
+    setQuranJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
+  }, []);
   // Whether the floating note panel is visible
   const [noteVisible, setNoteVisible] = useState(false);
   // Whether to show the completed homework history tab
@@ -141,8 +147,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [buzzTrigger, setBuzzTrigger] = useState(0);
   // Set each time the tutor long-presses a letter — scrolls student to that letter.
   const [focusedLetterKey, setFocusedLetterKey] = useState<string | null>(null);
-  // Set alongside focusedLetterKey to trigger surah/page navigation before the scroll.
-  const [letterJumpKey, setLetterJumpKey] = useState<string | null>(null);
   // Real-time cursor position broadcast by the tutor (C key mode).
   const [cursorLetterKey, setCursorLetterKey] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
@@ -248,7 +252,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
         setFocusedLetterKey(lk);
         // Extract surah:ayah to trigger navigation even if in a different surah/page
         const parts = lk.split(':');
-        if (parts.length >= 2) setLetterJumpKey(`${parts[0]}:${parts[1]}`);
+        if (parts.length >= 2) jumpToVerse(`${parts[0]}:${parts[1]}`);
       })
       // Tutor moved cursor (C key mode active) → show orange dot on that letter
       .on('broadcast', { event: 'cursor_move' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -748,7 +752,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 <button
                   onClick={() => {
                     setHomeworkModal(firstHw);
-                    setHomeworkJumpKey(`${firstHw.startSurah}:${firstHw.startAyah}`);
+                    jumpToVerse(`${firstHw.startSurah}:${firstHw.startAyah}`);
                     setShowHistory(false);
                     setNoteVisible(true);
                   }}
@@ -799,7 +803,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     onLogTafseerRange={noop}
                     onRemoveTafseerRange={noop}
                     onGoBack={noop}
-                    jumpToVerseKey={letterJumpKey ?? homeworkJumpKey}
+                    jumpToVerseKey={quranJump?.key ?? null}
+                    jumpNonce={quranJump?.n ?? 0}
                     nameCardExtra={homeworkBadge}
                     homeworkRanges={activeHwList}
                   />
@@ -901,7 +906,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                           key={hw.id}
                                           onClick={() => {
                                             setHomeworkModal(hw);
-                                            setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
+                                            jumpToVerse(`${hw.startSurah}:${hw.startAyah}`);
                                           }}
                                           className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
                                             homeworkModal?.id === hw.id
@@ -926,7 +931,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                         const remaining = activeHwList.filter(hw => hw.id !== homeworkModal.id);
                                         if (remaining.length > 0) {
                                           setHomeworkModal(remaining[0]);
-                                          setHomeworkJumpKey(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
+                                          jumpToVerse(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
                                         } else {
                                           setHomeworkModal(null);
                                           // Keep panel open so they can see the 🎉 message and history
@@ -1032,7 +1037,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                 <button
                                   onClick={() => {
                                     setHomeworkModal(hw);
-                                    setHomeworkJumpKey(`${hw.startSurah}:${hw.startAyah}`);
+                                    jumpToVerse(`${hw.startSurah}:${hw.startAyah}`);
                                     setShowHistory(false);
                                     setNoteVisible(true);
                                     changeTab('quran');
@@ -1047,7 +1052,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                     const remaining = activeHw.filter(h => h.id !== hw.id);
                                     if (remaining.length > 0 && homeworkModal?.id === hw.id) {
                                       setHomeworkModal(remaining[0]);
-                                      setHomeworkJumpKey(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
+                                      jumpToVerse(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
                                     } else if (remaining.length === 0) {
                                       setHomeworkModal(null);
                                       setNoteVisible(false);

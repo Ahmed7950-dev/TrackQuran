@@ -1,12 +1,13 @@
 import React, { useMemo } from 'react';
 import { Student } from '../types';
-import MistakeRing, { computeRingData, MISTAKE_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
-import MistakeSessionGrid from './MistakeSessionGrid';
+import MistakeRing, { computeRingData, MISTAKE_AREAS, TAJWEED_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
+import MistakeMap from './MistakeSessionGrid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mistakes Study — a read-only analysis of everything the tutor has logged for
-// this student: the ring as an overview, then per-area breakdowns, the letters
-// the student confuses (Letter ?), their own custom mistakes, and habits.
+// this student: both rings as an overview, the session map (reading | tajweed),
+// then per-area breakdowns, the letters the student confuses (Letter ?), the
+// tajweed rules they slip on, their own custom notes, and habits.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ARABIC_BY_TRANSLIT: Record<string, string> = {
@@ -34,6 +35,15 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
   const worst = [...areaTotals].sort((a, b) => b.total - a.total)[0];
   const confusionMax = Math.max(1, ...data.letterConfusions.map(([, c]) => c));
 
+  // Tajweed rules, worst first — the mirror of the reading breakdown.
+  const tajweedRows = TAJWEED_AREAS
+    .map(a => ({ area: a, label: a.subs[0], count: data.tajweedCounts[a.subs[0]] ?? 0 }))
+    .sort((a, b) => b.count - a.count);
+  const tajweedMax = Math.max(1, ...tajweedRows.map(r => r.count), ...data.tajweedCustomAll.map(([, c]) => c));
+  const worstTajweed = tajweedRows[0];
+
+  const nothingLogged = data.total === 0 && data.tajweedTotal === 0 && data.permFlags.length === 0;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -42,8 +52,9 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
           <div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mistakes Study</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              {student.name} · {data.total} logged mistake{data.total === 1 ? '' : 's'}
+              {student.name} · {data.total} reading · {data.tajweedTotal} tajweed
               {worst && worst.total > 0 && <> · biggest challenge: <span className="font-bold" style={{ color: worst.area.color }}>{worst.area.subs[0]}{worst.area.subs.length > 1 ? ` / ${worst.area.subs[1]}` : ''}</span></>}
+              {worstTajweed && worstTajweed.count > 0 && <> · weakest rule: <span className="font-bold" style={{ color: worstTajweed.area.color }}>{worstTajweed.label}</span></>}
             </p>
           </div>
           {/* Permanent habits */}
@@ -62,7 +73,7 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
         </div>
       </div>
 
-      {data.total === 0 && data.permFlags.length === 0 ? (
+      {nothingLogged ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 text-center shadow-sm">
           <p className="text-4xl mb-2">🌱</p>
           <p className="text-slate-600 dark:text-slate-300 font-semibold">No mistakes logged yet.</p>
@@ -70,13 +81,20 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
         </div>
       ) : (
         <>
-          {/* The ring, as a read-only overview */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm flex justify-center">
-            <MistakeRing readOnly counts={data.counts} customCounts={data.customCounts} permFlags={data.permFlags} />
+          {/* Both rings, as a read-only overview */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm flex flex-col items-center">
+              <p className="text-[11px] font-black uppercase tracking-wider text-rose-500 mb-2 self-start">Reading mistakes</p>
+              <MistakeRing readOnly counts={data.counts} permFlags={data.permFlags} />
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-6 shadow-sm flex flex-col items-center">
+              <p className="text-[11px] font-black uppercase tracking-wider text-emerald-600 mb-2 self-start">Tajweed mistakes</p>
+              <MistakeRing readOnly mode="tajweed" areas={TAJWEED_AREAS} counts={data.tajweedCounts} permFlags={data.permFlags} />
+            </div>
           </div>
 
-          {/* Which mistake happened in which session */}
-          <MistakeSessionGrid student={student} />
+          {/* Which mistake happened in which session — reading | tajweed */}
+          <MistakeMap student={student} />
 
           {/* Per-area breakdowns */}
           <div className="grid sm:grid-cols-2 gap-4">
@@ -123,6 +141,38 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
             ))}
           </div>
 
+          {/* Tajweed breakdown — same shape as the reading areas, one card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" />
+              <p className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">Tajweed rules</p>
+              <span className="ms-auto text-xs font-bold text-slate-400">{data.tajweedTotal}× total</span>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+              {tajweedRows.map(({ area, label, count }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <span className={`w-36 flex-shrink-0 text-xs font-semibold ${count > 0 ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-500'}`}>
+                    {label}
+                  </span>
+                  <Bar value={count} max={tajweedMax} color={area.color} />
+                  <span className="w-7 text-end text-xs font-bold text-slate-500 dark:text-slate-400">{count || '—'}</span>
+                </div>
+              ))}
+              {data.tajweedCustomAll.map(([label, c]) => (
+                <div key={`c-${label}`} className="flex items-center gap-2.5">
+                  <span className="w-36 flex-shrink-0 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate" title={label}>{label}</span>
+                  <Bar value={c} max={tajweedMax} color="#94a3b8" />
+                  <span className="w-7 text-end text-xs font-bold text-slate-500 dark:text-slate-400">{c}</span>
+                </div>
+              ))}
+            </div>
+            {data.tajweedTotal === 0 && (
+              <p className="text-xs text-slate-400 italic mt-2">
+                Nothing logged yet. During live reading press <b>t</b>, then tap a letter to log a tajweed mistake.
+              </p>
+            )}
+          </div>
+
           {/* Custom mistakes */}
           {data.customAll.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
@@ -139,7 +189,6 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
                   );
                 })}
               </div>
-              <p className="text-[11px] text-slate-400 mt-3">Tip: during live logging, the ⇄ Merge button in the ring folds custom mistakes into a fixed category.</p>
             </div>
           )}
         </>

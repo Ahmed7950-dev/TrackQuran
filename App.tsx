@@ -5,7 +5,7 @@ import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 import MistakesStudyPage from './components/MistakesStudyPage';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo } from './services/dataService';
+import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
 import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
@@ -117,7 +117,7 @@ const QURANIC_FONTS = [
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
 ] as const;
 
-const useQuranicFont = () => {
+const useQuranicFont = (teacherId?: string) => {
   const [font, setFont] = useState<string>(() => {
     const f = localStorage.getItem('quranicFont') || 'Hafs';
     return QURANIC_FONTS.some(o => o.name === f) ? f : 'Hafs'; // guard removed fonts
@@ -128,6 +128,18 @@ const useQuranicFont = () => {
     root.style.setProperty('--quranic-font', font);
     localStorage.setItem('quranicFont', font);
   }, [font]);
+
+  // Students read the muṣḥaf from report_data.quranicFont, so a font change has
+  // to reach their links too — otherwise the tutor and the student are looking
+  // at two different typefaces (most visible on the tall waqf signs). Debounced,
+  // so flipping through the picker doesn't write once per option.
+  useEffect(() => {
+    if (!teacherId) return;
+    const id = setTimeout(() => {
+      syncQuranicFontToReports(teacherId, font).catch(() => { /* offline: next report write stamps it */ });
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [font, teacherId]);
 
   return { currentFont: font, setFont, fonts: QURANIC_FONTS };
 };
@@ -492,12 +504,13 @@ const App: React.FC = () => {
   // Tracks homework updates made by the student so they persist within the session
   // without needing to expose setCurrentUser from AuthProvider.
   const [studentHomeworkUpdates, setStudentHomeworkUpdates] = useState<QuranHomework[] | null>(null);
-  // Verse key the tutor's Quran view should jump to (homework "go to" button)
-  const [quranHomeworkJump, setQuranHomeworkJump] = useState<string | null>(null);
+  // Verse key the tutor's Quran view should jump to (homework "go to" button),
+  // with a nonce so tapping the same homework twice still navigates.
+  const [quranHomeworkJump, setQuranHomeworkJump] = useState<{ key: string; n: number } | null>(null);
   const [sessionStudentId, setSessionStudentId] = useState<string | null>(null);
   const [tajweedRules, setTajweedRules] = useState<string[]>([]);
   const { currentTheme, toggleTheme } = useTheme();
-  const { currentFont, setFont, fonts } = useQuranicFont();
+  const { currentFont, setFont, fonts } = useQuranicFont(currentUser?.role === 'teacher' ? currentUser.id : undefined);
   const { t, language } = useI18n();
 
   // ── Subject mode: 'quran' | 'arabic' | null (null = show selector) ─────────
@@ -1901,13 +1914,16 @@ const App: React.FC = () => {
               supabase.channel(`report-plays-${reportId}`).send({ type: 'broadcast', event: 'homework_assigned', payload: { quranHomework: updated } });
             }
           };
-          // Open the Quran view at this homework's verses.
+          // Open the Quran view at this homework's verses. The key used to be
+          // cleared after 800ms so a repeat tap would re-fire — but when this
+          // also had to MOUNT the Quran page, the verse fetch regularly outlasted
+          // that window and the page resumed to the last logged verse instead.
+          // The nonce makes repeat taps work without any timer.
           const goToHomework = (hw: QuranHomework) => {
             if (!sessionStudent) setSessionStudentId(hw_student.id);
             setActiveTab('main');
             const key = `${hw.startSurah}:${hw.startAyah}`;
-            setQuranHomeworkJump(key);
-            setTimeout(() => setQuranHomeworkJump(null), 800); // reset so repeat taps re-fire
+            setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
           };
           return (
             <div className="max-w-2xl mx-auto space-y-8 py-2">
@@ -2009,7 +2025,8 @@ const App: React.FC = () => {
           <StudentProgressPage
             student={sessionStudent}
             students={students}
-            jumpToVerseKey={quranHomeworkJump}
+            jumpToVerseKey={quranHomeworkJump?.key ?? null}
+            jumpNonce={quranHomeworkJump?.n ?? 0}
             notesStudentId={sessionStudent.id}
             studentProgress={progress[sessionStudent.id]}
             studentMistakes={sessionStudent.mistakes || {}}

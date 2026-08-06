@@ -3,15 +3,16 @@ import { Mistake } from '../types';
 import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MistakeRing — the letter-click mistake logger as a three-ring donut chart.
+// MistakeRing — the letter-click mistake logger as a two-ring donut chart.
 //
 //   OUTER ring  — 4 permanent habits (toggles; on/off, not per-occurrence).
-//   MIDDLE ring — 8 fixed mistake areas, each ONE slice in its own hue with
-//                 its variants stacked as concentric layers (Stop over No stop).
-//   INNER ring  — custom mistakes from the student's history; tap re-logs.
-//                 The center ⇄ button starts merge mode: select customs, then
-//                 tap a middle layer to fold them into that fixed mistake.
+//   MIDDLE ring — the mistake areas for the ACTIVE mode, each ONE slice in its
+//                 own hue with its variants stacked as concentric layers.
 //   CENTER      — free-text box + cancel (or a summary in readOnly mode).
+//
+// Two sets of areas share the same ring: MISTAKE_AREAS (reading errors, the "r"
+// key) and TAJWEED_AREAS (tajweed errors, the "t" key). Which one is drawn is
+// purely the `areas` prop — everything else about the component is identical.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface MistakeArea {
@@ -28,14 +29,14 @@ export interface MistakeArea {
 export const EMPTY_MISTAKE_LABEL = '(No comment)';
 
 /** Custom (free-text) mistakes only count from this moment on — the tutor asked
- *  for a clean inner ring, since years of old free-text notes were noise. Notes
- *  that map onto a FIXED label (Fatha, sukoon → Sakin, letter names, …) are
+ *  for a clean ring, since years of old free-text notes were noise. Notes that
+ *  map onto a FIXED label (Fatha, sukoon → Sakin, letter names, …) are
  *  unaffected and still fold in from all of history. Clear this constant to
  *  bring the old custom notes back. */
 export const CUSTOM_MISTAKES_SINCE = Date.parse('2026-07-30T18:00:00Z');
 
-// Fixed areas in the tutor's required order. The logged text = sub label
-// (Letter recognition logs "Letter recognition (<translit>)" — see onPick).
+// Fixed areas in the tutor's required order. Letter recognition logs the bare
+// transliteration of the letter ("meem"), not a sentence — see onPick.
 export const MISTAKE_AREAS: MistakeArea[] = [
   { name: 'length',   title: 'Length',        color: '#0ea5a4', subs: ['Short', 'Long'] },
   { name: 'hold',     title: 'Hold',          color: '#7c86f8', subs: ['Hold', 'No Hold'] },
@@ -49,6 +50,26 @@ export const MISTAKE_AREAS: MistakeArea[] = [
   { name: 'recognition', title: 'Letter recognition', color: '#f59a63', subs: ['Letter recognition'] },
 ];
 export const FIXED_MISTAKE_LABELS = new Set(MISTAKE_AREAS.flatMap(a => a.subs));
+
+// ── Tajweed areas (the "t" mode) ─────────────────────────────────────────────
+// One slice per rule. Colours are lifted from the QPC tajweed palette used by
+// the on-screen colouring (services/tajweedColorService), so a rule looks the
+// same in the ring as it does in the verse. Izhar and oral izhar have no QPC
+// colour (they are the "pronounce it plainly" rules) — they get neutral hues.
+export const TAJWEED_AREAS: MistakeArea[] = [
+  { name: 'ghunnah',      title: 'Ghunnah',          color: '#FF7E1E', subs: ['Ghunnah'] },
+  { name: 'qalqalah',     title: 'Qalqalah',         color: '#DD0008', subs: ['Qalqalah'] },
+  { name: 'madd',         title: 'Madd',             color: '#537FFF', subs: ['Madd'] },
+  { name: 'izhar',        title: 'Izhar',            color: '#0e9488', subs: ['Izhar'] },
+  { name: 'idghamGh',     title: 'Idgham w/ ghunnah', color: '#169777', subs: ['Idgham with ghunnah'] },
+  { name: 'idghamNoGh',   title: 'Idgham w/o ghunnah', color: '#169200', subs: ['Idgham without ghunnah'] },
+  { name: 'ikhfa',        title: 'Ikhfa',            color: '#9400A8', subs: ['Ikhfa'] },
+  { name: 'iqlab',        title: 'Iqlab',            color: '#26BFFD', subs: ['Iqlab'] },
+  { name: 'oralIzhar',    title: 'Oral izhar',       color: '#8b5cf6', subs: ['Oral izhar'] },
+  { name: 'oralIdgham',   title: 'Oral idgham',      color: '#58B800', subs: ['Oral idgham'] },
+  { name: 'oralIkhfa',    title: 'Oral ikhfa',       color: '#D500B7', subs: ['Oral ikhfa'] },
+];
+export const TAJWEED_MISTAKE_LABELS = new Set(TAJWEED_AREAS.flatMap(a => a.subs));
 
 export const PERMANENT_MISTAKES = ['Fast reading', 'Choppy reading', 'Breaking up words', 'Articulation points'];
 
@@ -71,7 +92,7 @@ export const ARABIC_LETTER_OF: Record<string, string> = Object.entries(TRANSLIT)
 
 export const translitOf = (glyph: string): string => {
   for (const ch of glyph) { const t = TRANSLIT[ch]; if (t) return t; }
-  return glyph.replace(/[ً-ٰٟۖ-ۭ‍]/g, '') || glyph;
+  return glyph.replace(/[ً-ٰٟۖ-ۭ‍]/g, '') || glyph;
 };
 
 const LETTER_NAMES = new Set([
@@ -82,34 +103,61 @@ const LETTER_NAMES = new Set([
 ]);
 
 export interface RingData {
-  counts: Record<string, number>;              // fixed label → count
-  customCounts: Array<[string, number]>;       // top customs for the inner ring
-  customAll: Array<[string, number]>;          // every custom (study page)
+  counts: Record<string, number>;              // fixed reading label → count
+  customAll: Array<[string, number]>;          // every reading custom (study page)
   permFlags: string[];
   letterConfusions: Array<[string, number]>;   // translit → count (Letter ?)
-  total: number;                               // all counted ring mistakes
+  total: number;                               // all counted reading mistakes
+  tajweedCounts: Record<string, number>;       // fixed tajweed label → count
+  tajweedCustomAll: Array<[string, number]>;   // free-text tajweed notes
+  tajweedTotal: number;                        // all counted tajweed mistakes
 }
 
 /** Shared history → ring-data folding. Case-insensitive against the fixed
  *  labels, aliases fold in (Stretch → Long), bare letter names count as
- *  Letter recognition, green tajweed-mode logs are excluded. */
+ *  Letter recognition, green tajweed-mode logs go to the tajweed ring. */
 const FIXED_BY_LC = new Map([...FIXED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
 const ALIASES: Record<string, string> = { 'stretch': 'Long', 'sukoon': 'Sakin', 'saakin': 'Sakin', 'sukun': 'Sakin', 'sakinah': 'Sakin', 'tanwin': 'Tanween', 'tanveen': 'Tanween', 'tanwīn': 'Tanween' };
 
+const TAJWEED_BY_LC = new Map([...TAJWEED_MISTAKE_LABELS].map(l => [l.toLowerCase(), l] as const));
+/** Older / shorthand spellings that fold onto a fixed tajweed label. */
+const TAJWEED_ALIASES: Record<string, string> = {
+  'ikhafa': 'Ikhfa', 'ikhfaa': 'Ikhfa', 'ekhfa': 'Ikhfa',
+  'qalaqah': 'Qalqalah', 'qalqala': 'Qalqalah',
+  'madd tabee': 'Madd', 'mad': 'Madd', 'madda': 'Madd',
+  'idgham': 'Idgham with ghunnah',
+  'idgham bighunnah': 'Idgham with ghunnah', 'idgham with ghunna': 'Idgham with ghunnah',
+  'idgham bila ghunnah': 'Idgham without ghunnah', 'idgham without ghunna': 'Idgham without ghunnah',
+  'idgham shafawi': 'Oral idgham', 'shafawi idgham': 'Oral idgham',
+  'ikhfa shafawi': 'Oral ikhfa', 'ikhafa shafawi': 'Oral ikhfa', 'shafawi ikhfa': 'Oral ikhfa',
+  'izhar shafawi': 'Oral izhar', 'shafawi izhar': 'Oral izhar',
+  'idhar': 'Izhar', 'izhaar': 'Izhar',
+  'iklab': 'Iqlab', 'qalb': 'Iqlab',
+  'ghunna': 'Ghunnah', 'ghunnah': 'Ghunnah',
+};
+
 /** What one logged mistake counts as. null = not counted at all (green tajweed
  *  log, highlight-only mark, or a pre-cutoff free-text note).
- *  Single source of truth for the ring AND the session table — they must never
- *  disagree about what a mistake is. */
+ *  Single source of truth for the reading ring AND the session table — they
+ *  must never disagree about what a mistake is. */
 export type MistakeClass =
   | { kind: 'fixed'; label: string }
   | { kind: 'letter'; letter: string }
   | { kind: 'custom'; label: string };
 
+/** A free-text note only counts once it is recent enough — see CUSTOM_MISTAKES_SINCE. */
+const customIsRecent = (m: Mistake): boolean => {
+  const t = m.date ? Date.parse(m.date) : NaN;
+  return !isNaN(t) && t >= CUSTOM_MISTAKES_SINCE;
+};
+
 export const classifyMistake = (m: Mistake): MistakeClass | null => {
-  if (m.errorType === 'tajweed') return null;   // green logs stay out
+  if (m.errorType === 'tajweed') return null;   // green logs go to classifyTajweed
   const raw = m.errorText?.trim();
   if (!raw) return null;                        // highlight-only mark
   const lc = raw.toLowerCase();
+  // "Letter recognition (meem)" is the pre-2026-08 format; a bare letter name
+  // ("meem") is what the ring logs now. Both land on the same letter row.
   const recogMatch = lc.match(/^letter recognition\s*\(?\s*([^)]*)/);
   if (recogMatch || LETTER_NAMES.has(lc)) {
     return { kind: 'letter', letter: (recogMatch ? recogMatch[1].trim() : lc) || 'unknown' };
@@ -117,18 +165,39 @@ export const classifyMistake = (m: Mistake): MistakeClass | null => {
   if (FIXED_BY_LC.has(lc)) return { kind: 'fixed', label: FIXED_BY_LC.get(lc)! };
   if (ALIASES[lc]) return { kind: 'fixed', label: ALIASES[lc] };
   // Free-text: only from the cutoff on (older ones are ignored entirely).
-  const t = m.date ? Date.parse(m.date) : NaN;
-  if (!isNaN(t) && t >= CUSTOM_MISTAKES_SINCE) return { kind: 'custom', label: raw };
-  return null;
+  return customIsRecent(m) ? { kind: 'custom', label: raw } : null;
+};
+
+/** Tajweed counterpart: only green (errorType 'tajweed') logs, folded onto the
+ *  eleven fixed rules, with anything else kept as a recent free-text note. */
+export type TajweedClass = { kind: 'fixed'; label: string } | { kind: 'custom'; label: string };
+
+export const classifyTajweed = (m: Mistake): TajweedClass | null => {
+  if (m.errorType !== 'tajweed') return null;
+  const raw = m.errorText?.trim();
+  if (!raw) return null;                        // highlight-only green mark
+  const lc = raw.toLowerCase();
+  if (TAJWEED_BY_LC.has(lc)) return { kind: 'fixed', label: TAJWEED_BY_LC.get(lc)! };
+  if (TAJWEED_ALIASES[lc]) return { kind: 'fixed', label: TAJWEED_ALIASES[lc] };
+  return customIsRecent(m) ? { kind: 'custom', label: raw } : null;
 };
 
 export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: string | null): RingData => {
   const counts: Record<string, number> = {};
   const custom = new Map<string, number>();
   const confusions = new Map<string, number>();
+  const tajweedCounts: Record<string, number> = {};
+  const tajweedCustom = new Map<string, number>();
   for (const [k, m] of Object.entries(mistakes)) {
     if (!isLetterMistakeKey(k)) continue;
     if (excludeKey && k === excludeKey) continue;   // the letter being edited right now
+    if (m.errorType === 'tajweed') {
+      const tj = classifyTajweed(m);
+      if (!tj) continue;
+      if (tj.kind === 'fixed') tajweedCounts[tj.label] = (tajweedCounts[tj.label] ?? 0) + 1;
+      else tajweedCustom.set(tj.label, (tajweedCustom.get(tj.label) ?? 0) + 1);
+      continue;
+    }
     const cls = classifyMistake(m);
     if (!cls) continue;
     if (cls.kind === 'letter') {
@@ -141,15 +210,20 @@ export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: 
     }
   }
   const customAll = [...custom.entries()].sort((a, b) => b[1] - a[1]);
+  const tajweedCustomAll = [...tajweedCustom.entries()].sort((a, b) => b[1] - a[1]);
   const permFlags = mistakes[PERM_MISTAKE_FLAGS_KEY]?.errorText?.split('|').filter(Boolean) ?? [];
   const total = Object.values(counts).reduce((a, b) => a + b, 0) + customAll.reduce((a, [, c]) => a + c, 0);
+  const tajweedTotal = Object.values(tajweedCounts).reduce((a, b) => a + b, 0)
+    + tajweedCustomAll.reduce((a, [, c]) => a + c, 0);
   return {
     counts,
-    customCounts: customAll.slice(0, 6),
     customAll,
     permFlags,
     letterConfusions: [...confusions.entries()].sort((a, b) => b[1] - a[1]),
     total,
+    tajweedCounts,
+    tajweedCustomAll,
+    tajweedTotal,
   };
 };
 
@@ -158,13 +232,20 @@ const DISPLAY: Record<string, string> = {
   'No Hold': 'No hold', 'Not Silent': 'Not silent', 'Change to Alif': 'To Alif',
   'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
 };
+/** Labels too long for a single arc get stacked on two arcs inside their layer. */
+const DISPLAY_2LINE: Record<string, [string, string]> = {
+  'Idgham with ghunnah': ['Idgham', 'with ghunnah'],
+  'Idgham without ghunnah': ['Idgham', 'no ghunnah'],
+};
 const FLAG_DISPLAY: Record<string, string> = {
   'Fast reading': 'Fast', 'Choppy reading': 'Choppy',
   'Breaking up words': 'Breaks words', 'Articulation points': 'Articulation',
 };
 
 const CX = 215, CY = 215;
-const R_HOLE = 64, R_IN0 = 68, R_IN1 = 96, R_MID0 = 112, R_MID1 = 176, R_OUT0 = 192, R_OUT1 = 212;
+// Two rings only. The middle band reaches almost to the centre hole now that the
+// custom-mistake inner ring is gone, so every label gets a fatter arc to sit on.
+const R_HOLE = 78, R_MID0 = 86, R_MID1 = 176, R_OUT0 = 192, R_OUT1 = 212;
 
 const pt = (r: number, aDeg: number): [number, number] => {
   const a = ((aDeg - 90) * Math.PI) / 180;
@@ -203,8 +284,11 @@ const ArcText: React.FC<{ id: string; r: number; a0: number; a1: number; text: s
 
 interface MistakeRingProps {
   counts: Record<string, number>;
-  customCounts: Array<[string, number]>;
   permFlags: string[];
+  /** Which set of areas the middle ring draws. Defaults to reading mistakes. */
+  areas?: MistakeArea[];
+  /** Only changes the wording/tint — the ring itself is mode-agnostic. */
+  mode?: 'reading' | 'tajweed';
   translit?: string;
   errorText?: string;
   readOnly?: boolean;                          // study view: no logging, summary center
@@ -213,21 +297,21 @@ interface MistakeRingProps {
   onToggleFlag?: (flag: string) => void;
   onSubmitText?: () => void;
   onCancel?: () => void;
-  /** Merge mode: fold the selected custom mistakes into a fixed label. */
-  onReassign?: (customLabels: string[], toFixedLabel: string) => void;
 }
 
 const GAP = 1.4;   // degrees between slices
 const RGAP = 2;    // radial gap between stacked layers
 
 const MistakeRing: React.FC<MistakeRingProps> = ({
-  counts, customCounts, permFlags, translit = '', errorText = '', readOnly = false,
-  onTextChange, onPick, onToggleFlag, onSubmitText, onCancel, onReassign,
+  counts, permFlags, areas = MISTAKE_AREAS, mode = 'reading', translit = '',
+  errorText = '', readOnly = false, onTextChange, onPick, onToggleFlag, onSubmitText, onCancel,
 }) => {
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const [selectMode, setSelectMode] = React.useState(false);
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
-  React.useEffect(() => { if (!readOnly) inputRef.current?.focus(); }, [readOnly]);
+  // <textPath href="#id"> resolves against the whole document, so two rings on
+  // one page (the study view shows reading + tajweed side by side) would share
+  // arcs and print their labels on top of each other. Namespace every id.
+  const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  React.useEffect(() => { if (!readOnly) inputRef.current?.focus({ preventScroll: true }); }, [readOnly]);
   React.useEffect(() => {
     if (readOnly) return;
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel?.(); };
@@ -236,42 +320,20 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly]);
 
-  const totalFixed = MISTAKE_AREAS.reduce((s, a) => s + a.subs.reduce((x, l) => x + (counts[l] ?? 0), 0), 0);
+  const totalFixed = areas.reduce((s, a) => s + a.subs.reduce((x, l) => x + (counts[l] ?? 0), 0), 0);
 
   const areaWeight = (a: MistakeArea) => {
     const c = a.subs.reduce((x, l) => x + (counts[l] ?? 0), 0);
     return totalFixed === 0 ? 1 : 0.55 + 3.2 * (c / totalFixed);
   };
-  const weights = MISTAKE_AREAS.map(areaWeight);
+  const weights = areas.map(areaWeight);
   const wSum = weights.reduce((a, b) => a + b, 0);
-
-  const pickMiddle = (label: string) => {
-    if (readOnly) return;
-    if (selectMode && selected.size > 0) {
-      onReassign?.([...selected], label);
-      setSelectMode(false);
-      setSelected(new Set());
-      return;
-    }
-    onPick?.(label);
-  };
-  const pickInner = (label: string) => {
-    if (readOnly) return;
-    if (selectMode) {
-      setSelected(prev => {
-        const next = new Set(prev);
-        if (next.has(label)) next.delete(label); else next.add(label);
-        return next;
-      });
-      return;
-    }
-    onPick?.(label);
-  };
+  const isTajweed = mode === 'tajweed';
 
   // Middle ring: one slice per area, subs stacked as concentric layers.
   const middle: React.ReactNode[] = [];
   let angle = 0;
-  MISTAKE_AREAS.forEach((area, ai) => {
+  areas.forEach((area, ai) => {
     const span = (weights[ai] / wSum) * 360;
     const a0 = angle + GAP / 2, a1 = angle + span - GAP / 2;
     const n = area.subs.length;
@@ -281,13 +343,29 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
       const r0 = r1 - layerH;
       const on = (counts[label] ?? 0) > 0;
       const display = DISPLAY[label] ?? label;
+      const twoLine = layerH >= 44 ? DISPLAY_2LINE[label] : undefined;
+      const ink = on ? '#ffffff' : '#3f4c5e';
       middle.push(
-        <g key={`m-${label}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => pickMiddle(label)}>
+        <g key={`m-${label}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => { if (!readOnly) onPick?.(label); }}>
+          <title>{label}{(counts[label] ?? 0) > 0 ? ` · ${counts[label]}×` : ''}</title>
           <path d={sector(r0, r1, a0, a1)}
             fill={on ? area.color : '#ffffff'} fillOpacity={on ? 0.92 - si * 0.16 : 0.92}
             stroke={on ? '#ffffff' : '#dbe2ea'} strokeOpacity={0.9} strokeWidth={1.5} />
-          <ArcText id={`mr-m-${ai}-${si}`} r={(r0 + r1) / 2} a0={a0} a1={a1}
-            text={display} fill={on ? '#ffffff' : '#3f4c5e'} size={11} />
+          {twoLine ? (() => {
+            // On the bottom half of the ring a LARGER radius sits lower on
+            // screen, so the two lines have to swap to keep reading top-down.
+            const mid = (a0 + a1) / 2;
+            const flip = mid > 90 && mid < 270;
+            const far = r0 + layerH * 0.68, near = r0 + layerH * 0.30;
+            return (
+              <>
+                <ArcText id={`mr-${uid}-m-${ai}-${si}a`} r={flip ? near : far} a0={a0} a1={a1} text={twoLine[0]} fill={ink} size={12} />
+                <ArcText id={`mr-${uid}-m-${ai}-${si}b`} r={flip ? far : near} a0={a0} a1={a1} text={twoLine[1]} fill={ink} size={10} />
+              </>
+            );
+          })() : (
+            <ArcText id={`mr-${uid}-m-${ai}-${si}`} r={(r0 + r1) / 2} a0={a0} a1={a1} text={display} fill={ink} size={11} />
+          )}
         </g>
       );
     });
@@ -300,67 +378,42 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
     const on = permFlags.includes(flag);
     return (
       <g key={`o-${flag}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => { if (!readOnly) onToggleFlag?.(flag); }}>
+        <title>{flag}</title>
         <path d={sector(R_OUT0, R_OUT1, a0 + GAP / 2, a1 - GAP / 2)}
           fill={on ? '#10b981' : '#ffffff'} fillOpacity={on ? 0.9 : 0.88}
           stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5} />
-        <ArcText id={`mr-o-${i}`} r={(R_OUT0 + R_OUT1) / 2} a0={a0 + GAP / 2} a1={a1 - GAP / 2}
+        <ArcText id={`mr-${uid}-o-${i}`} r={(R_OUT0 + R_OUT1) / 2} a0={a0 + GAP / 2} a1={a1 - GAP / 2}
           text={`${on ? '✓ ' : ''}${FLAG_DISPLAY[flag]}`} fill={on ? '#ffffff' : '#475569'} size={11} />
       </g>
     );
   });
 
-  // Inner ring — customs, sized by count. In merge mode they toggle selection.
-  const customTotal = customCounts.reduce((s, [, c]) => s + c, 0);
-  let ia = 0;
-  const inner = customCounts.map(([label, c], i) => {
-    const span = (c / customTotal) * 360;
-    const colors = ['#8296ab', '#b48ef5', '#3ec3d5', '#ef8080', '#e2b93d', '#63c584'];
-    const col = colors[i % colors.length];
-    const isSel = selected.has(label);
-    const el = (
-      <g key={`i-${label}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => pickInner(label)}>
-        <path d={sector(R_IN0, R_IN1, ia + GAP / 2, ia + span - GAP / 2)}
-          fill={col} fillOpacity={isSel ? 1 : 0.82}
-          stroke={isSel ? '#0f172a' : '#ffffff'} strokeOpacity={0.95} strokeWidth={isSel ? 2.5 : 1.5} />
-        {span > 20 && (
-          <ArcText id={`mr-i-${i}`} r={(R_IN0 + R_IN1) / 2} a0={ia + GAP / 2} a1={ia + span - GAP / 2}
-            text={`${isSel ? '✓ ' : ''}${label.length > 16 ? label.slice(0, 15) + '…' : label}`} fill="#ffffff" size={9.5} />
-        )}
-      </g>
-    );
-    ia += span;
-    return el;
-  });
-
   return (
     <div dir="ltr" className="relative pointer-events-auto" style={{ width: 'min(88vw, 78vh, 560px)', height: 'min(88vw, 78vh, 560px)' }}>
       <svg viewBox="0 0 430 430" className="w-full h-full" style={{ filter: 'drop-shadow(0 10px 24px rgba(15,23,42,0.30))' }}>
-        <circle cx={CX} cy={CY} r={R_OUT1 + 3} fill="#f6f8fb" fillOpacity={0.72} />
-        <circle cx={CX} cy={CY} r={(R_IN1 + R_MID0) / 2} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={2} />
+        <circle cx={CX} cy={CY} r={R_OUT1 + 3} fill={isTajweed ? '#f0fdf4' : '#f6f8fb'} fillOpacity={0.75} />
         <circle cx={CX} cy={CY} r={(R_MID1 + R_OUT0) / 2} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={2} />
-        <circle cx={CX} cy={CY} r={R_HOLE} fill="#ffffff" fillOpacity={0.97} stroke="#e2e8f0" />
+        <circle cx={CX} cy={CY} r={R_HOLE} fill="#ffffff" fillOpacity={0.97}
+          stroke={isTajweed ? '#86efac' : '#e2e8f0'} strokeWidth={isTajweed ? 2.5 : 1} />
         {!readOnly && <style>{`.mr-seg { cursor: pointer; } .mr-seg:hover path { filter: brightness(0.92) saturate(1.35); }`}</style>}
         {outer}
         {middle}
-        {customCounts.length > 0 && inner}
       </svg>
       {/* Center hole */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="pointer-events-auto flex flex-col items-center gap-1 text-center" style={{ width: '26%' }}>
+        <div className="pointer-events-auto flex flex-col items-center gap-1 text-center" style={{ width: '31%' }}>
           {readOnly ? (
             <>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 leading-none">Mistakes</p>
-              <p className="text-2xl font-black text-slate-700 leading-none">{totalFixed + customTotal}</p>
-            </>
-          ) : selectMode ? (
-            <>
-              <p className="text-[10px] font-bold text-teal-600 leading-tight">Select below, then tap a mistake in the middle ring</p>
-              <p className="text-[10px] text-slate-400 leading-none">{selected.size} selected</p>
-              <button type="button" onClick={() => { setSelectMode(false); setSelected(new Set()); }}
-                className="mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 hover:bg-slate-300">Stop</button>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 leading-none">
+                {isTajweed ? 'Tajweed' : 'Mistakes'}
+              </p>
+              <p className="text-2xl font-black text-slate-700 leading-none">{totalFixed}</p>
             </>
           ) : (
             <>
+              <p className={`text-[9px] font-black uppercase tracking-wide leading-none ${isTajweed ? 'text-emerald-600' : 'text-rose-500'}`}>
+                {isTajweed ? 'Tajweed' : 'Reading'}
+              </p>
               <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 leading-none">{translit}</p>
               <input
                 ref={inputRef}
@@ -377,7 +430,7 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
                   else if (e.key === 'Escape') { e.preventDefault(); onCancel?.(); }
                 }}
                 placeholder="Other…"
-                className="w-full text-center text-[11px] bg-transparent text-slate-900 placeholder-slate-400 focus:outline-none border-b border-slate-200 focus:border-teal-400 pb-0.5"
+                className={`w-full text-center text-[11px] bg-transparent text-slate-900 placeholder-slate-400 focus:outline-none border-b border-slate-200 pb-0.5 ${isTajweed ? 'focus:border-emerald-400' : 'focus:border-teal-400'}`}
               />
               <div className="flex items-center gap-1 mt-0.5 flex-wrap justify-center">
                 {errorText.trim() && (
@@ -386,11 +439,6 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
                 )}
                 <button type="button" onClick={() => onCancel?.()}
                   className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 hover:bg-slate-300">Cancel</button>
-                {customCounts.length > 0 && onReassign && (
-                  <button type="button" title="Merge custom mistakes into a fixed one"
-                    onClick={() => setSelectMode(true)}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 hover:bg-indigo-200">⇄ Merge</button>
-                )}
               </div>
             </>
           )}

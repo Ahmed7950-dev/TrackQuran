@@ -11,8 +11,8 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
-import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL } from './MistakeRing';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, hasIqlabHighMeem, highMeemTopEm, HIGH_MEEM } from '../utils/quranicMarks';
+import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -46,6 +46,12 @@ interface StudentProgressPageProps {
    * Useful for jumping to homework verses from outside the component.
    */
   jumpToVerseKey?: string | null;
+  /**
+   * Bumped every time the parent asks for a jump, so asking for the SAME verse
+   * twice still navigates. Without it, tapping one homework item, scrolling
+   * away, then tapping it again did nothing (the key never changed).
+   */
+  jumpNonce?: number;
   /**
    * Extra content rendered inside the student name card, next to the student name.
    * Used by the shared report page to inject a homework badge.
@@ -142,14 +148,8 @@ const SpinnerIcon = () => (
 // the bundled Quranic fonts position this pair correctly \u2014 the meem glyph is
 // drawn on top of the tanween, overlapping it. When a letter cluster contains
 // both, we strip the meem from the inline text (so the tanween renders cleanly)
-// and draw the meem ourselves in an absolutely-positioned overlay above it.
-
-const IQLAB_HIGH_MEEM = '\u06e2';
-const hasIqlabMeem = (text: string): boolean =>
-    text.includes(IQLAB_HIGH_MEEM) && (text.includes('\u064b') || text.includes('\u064c'));
-
-// Iqlab high meem overlay: anchored to the horizontal centre of the unit (above
-// the tanween), width-independent. See the render site in LetterWithError.
+// and draw the meem ourselves in an absolutely-positioned overlay above it, at
+// the per-unit, per-font clearance measured in utils/quranicMarks.
 
 
 
@@ -245,10 +245,10 @@ const LetterWithError: React.FC<{
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
     ringCounts?: Record<string, number>;             // fixed mistake label → count (whole student)
-    ringCustomCounts?: Array<[string, number]>;      // custom mistake label → count
     ringPermFlags?: string[];                        // permanent habit flags
+    /** 'reading' (r key) draws the reading ring, 'tajweed' (t key) the tajweed one. */
+    ringMode?: 'reading' | 'tajweed';
     onToggleFlag?: (flag: string) => void;
-    onReassign?: (fromLabels: string[], toLabel: string) => void;
 }> = ({
     letter,
     letterKey,
@@ -270,10 +270,9 @@ const LetterWithError: React.FC<{
     markLineHeight = 2.6,
     focusMode,
     ringCounts = {},
-    ringCustomCounts = [],
     ringPermFlags = [],
+    ringMode = 'reading',
     onToggleFlag,
-    onReassign,
 }) => {
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
@@ -328,8 +327,9 @@ const LetterWithError: React.FC<{
                 <div className="fixed inset-0 z-[9999] grid place-items-center pointer-events-none">
                     <MistakeRing
                         counts={ringCounts}
-                        customCounts={ringCustomCounts}
                         permFlags={ringPermFlags}
+                        areas={ringMode === 'tajweed' ? TAJWEED_AREAS : MISTAKE_AREAS}
+                        mode={ringMode}
                         translit={translitOf(letter)}
                         errorText={errorText}
                         onTextChange={onTextChange}
@@ -337,12 +337,12 @@ const LetterWithError: React.FC<{
                             // "No comment" logs an EMPTY note — the letter stays
                             // highlighted with no text attached.
                             if (label === EMPTY_MISTAKE_LABEL) { onTextSubmit(letterKey, ''); return; }
-                            const text = label === 'Letter recognition' ? `Letter recognition (${translitOf(letter)})` : label;
+                            // "Letter ?" logs the letter itself, nothing else.
+                            const text = label === 'Letter recognition' ? translitOf(letter) : label;
                             const cur = errorText.trim();
                             onTextSubmit(letterKey, cur ? `${cur} ${text}` : text);
                         }}
                         onToggleFlag={(f) => onToggleFlag?.(f)}
-                        onReassign={onReassign}
                         onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
                         onCancel={onTextCancel}
                     />
@@ -405,7 +405,7 @@ const LetterWithError: React.FC<{
                     // overprint it onto the kasratan, so it is stripped from the text
                     // and re-drawn below the unit at a measured per-unit clearance.
                     renderLowMeemUnit((joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : ''), letter, markLineHeight)
-                ) : hasIqlabMeem(letter) ? (
+                ) : hasIqlabHighMeem(letter) ? (
                     // Iqlab meem overlay. We strip the U+06E2 from the inline text (so the
                     // tanween renders cleanly) and re-draw it ourselves above the tanween.
                     // The tanween is a combining mark, so it always renders centred above its
@@ -417,7 +417,7 @@ const LetterWithError: React.FC<{
                     // RTL), and top raises it just above the tanween.
                     <span style={{ position: 'relative', display: 'inline' }}>
                         {(joinLead ? ZWJ : '') + letter.replace(/ۢ/g, '') + (joinTrail ? ZWJ : '')}
-                        <span style={{ position: 'absolute', top: '-0.34em', left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: 'inherit' }}>{IQLAB_HIGH_MEEM}</span>
+                        <span style={{ position: 'absolute', top: `${highMeemTopEm(letter)}em`, left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: 'inherit' }}>{HIGH_MEEM}</span>
                     </span>
                 ) : (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '')}
             </span>
@@ -605,7 +605,7 @@ const LogOption: React.FC<{ src: string; label: string; sub?: string; color: 'or
     );
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -650,13 +650,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [homeworkNote, setHomeworkNote] = useState<string>('');
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
-    const [selectedSurahId, setSelectedSurahId] = useState<number>(studentProgress?.surah || 1);
+    // Where this tutor/student was last reading. Restored ahead of the
+    // last-logged verse so leaving the Quran tab and coming back reopens the
+    // same page, not wherever the last achievement happened to end.
+    const viewKey = `quranful:quranView:${student.id}`;
+    const readSavedView = (): { surah: number; verse: string } | null => {
+        try {
+            const raw = localStorage.getItem(`quranful:quranView:${student.id}`);
+            if (!raw) return null;
+            const v = JSON.parse(raw);
+            return (typeof v?.surah === 'number' && typeof v?.verse === 'string') ? v : null;
+        } catch { return null; }
+    };
+    const savedViewOnMount = useRef(readSavedView()).current;
+    const [selectedSurahId, setSelectedSurahId] = useState<number>(savedViewOnMount?.surah || studentProgress?.surah || 1);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
-    const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null);
+    const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(
+        savedViewOnMount?.verse ?? (studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null));
     const didResumeRef = useRef(false); // resume to the last-log position only once, on first open
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
@@ -677,11 +691,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
-
-    const handleReassign = useCallback((fromLabels: string[], toLabel: string) => {
-        if (readOnly || !onReassignMistakes) return;
-        onReassignMistakes(student.id, fromLabels, toLabel);
-    }, [readOnly, onReassignMistakes, student.id]);
 
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
@@ -976,15 +985,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => { isAutoScrollingRef.current = isAutoScrolling; }, [isAutoScrolling]);
     useEffect(() => { scrollSpeedRef.current = scrollSpeed; }, [scrollSpeed]);
 
-    // External jump — navigate to a specific verse when jumpToVerseKey changes
+    // External jump — navigate to a specific verse whenever the parent asks.
+    // Keyed on the nonce as well as the verse so a repeat request to the SAME
+    // verse still moves the view.
     useEffect(() => {
         if (!jumpToVerseKey) return;
         const [surahNum] = jumpToVerseKey.split(':').map(Number);
         if (surahNum && !isNaN(surahNum)) {
+            didResumeRef.current = true;   // an explicit jump outranks resuming
             setSelectedSurahId(surahNum);
             setScrollToVerseKey(jumpToVerseKey);
         }
-    }, [jumpToVerseKey]);
+    }, [jumpToVerseKey, jumpNonce]);
 
     // Navigate carousel to the first word of a given ayah
     const scrollToAyah = useCallback((targetAyah: number) => {
@@ -1544,14 +1556,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // useState may have been empty if the resume point loaded after this mounted.
     // Guarded so it never yanks the user away after they start navigating/logging.
     useEffect(() => {
-        if (didResumeRef.current || !studentProgress) return;
-        didResumeRef.current = true;
+        if (didResumeRef.current) return;
         // An explicit navigation (e.g. "Go to homework" via jumpToVerseKey) takes
-        // precedence over resuming to the last log — don't clobber it.
-        if (jumpToVerseKey) return;
+        // precedence over resuming — don't clobber it.
+        if (jumpToVerseKey) { didResumeRef.current = true; return; }
+        // Where they actually left off wins over the last logged verse.
+        const saved = readSavedView();
+        if (saved) {
+            didResumeRef.current = true;
+            setSelectedSurahId(saved.surah);
+            setScrollToVerseKey(saved.verse);
+            return;
+        }
+        if (!studentProgress) return;
+        didResumeRef.current = true;
         setSelectedSurahId(studentProgress.surah);
         setScrollToVerseKey(`${studentProgress.surah}:${studentProgress.ayah}`);
-    }, [studentProgress]);
+    }, [studentProgress, jumpToVerseKey]);
 
     useEffect(() => {
         if (scrollToVerseKey && verses.length > 0) {
@@ -1570,14 +1591,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const newEnd = Math.min(604, newStart + 4);
             setCurrentPageRange({ start: newStart, end: newEnd });
             
-            // Scroll to verse after a short delay to allow rendering
+            // Scroll to verse after a short delay to allow rendering. The key is
+            // cleared either way — leaving it set meant every later verse fetch
+            // yanked the reader back to it.
+            const target = scrollToVerseKey;
             setTimeout(() => {
-                const element = document.getElementById(`verse-container-${scrollToVerseKey}`);
-                if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setScrollToVerseKey(null);
-                }
-            }, 100);
+                document.getElementById(`verse-container-${target}`)
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setScrollToVerseKey(prev => (prev === target ? null : prev));
+            }, 120);
         }
     }, [verses, scrollToVerseKey]);
     
@@ -1605,6 +1627,39 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         onScroll();
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
+
+    // ── Remember where they were reading ──────────────────────────────────
+    // The top-most verse still on screen is saved as they scroll (and once more
+    // on unmount), so switching tabs and coming back reopens this exact spot.
+    // Reads the surah through a ref so the listener is installed only once.
+    const selectedSurahIdRef = useRef(selectedSurahId);
+    useEffect(() => { selectedSurahIdRef.current = selectedSurahId; }, [selectedSurahId]);
+    useEffect(() => {
+        let timer: number | null = null;
+        const save = () => {
+            timer = null;
+            const els = document.querySelectorAll('[id^="verse-container-"]');
+            let topVerse: string | null = null;
+            for (let i = 0; i < els.length; i++) {
+                // First verse whose body is still below the sticky toolbar.
+                if (els[i].getBoundingClientRect().bottom > 160) {
+                    topVerse = els[i].id.slice('verse-container-'.length);
+                    break;
+                }
+            }
+            if (!topVerse) return;
+            try {
+                localStorage.setItem(viewKey, JSON.stringify({ surah: selectedSurahIdRef.current, verse: topVerse }));
+            } catch { /* private mode / quota */ }
+        };
+        const onScroll = () => { if (timer === null) timer = window.setTimeout(save, 400); };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            window.removeEventListener('scroll', onScroll);
+            if (timer !== null) window.clearTimeout(timer);
+            save();
+        };
+    }, [viewKey]);
 
     const showToast = useCallback((message: string) => {
         setToastMessage(message);
@@ -2179,20 +2234,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setSelectionStart(null);
     };
 
-    const confirmLog = () => {
+    const confirmLog = (quality: number = logQuality) => {
         if (!pendingLogRange || !selectedLogType) return;
         if (selectedLogType === 'reading') {
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, false);
+            onLogRecitationRange(student.id, pendingLogRange, quality, false);
             showToast(t('liveSession.rangeSaved'));
         } else if (selectedLogType === 'reading-revision') {
-            onLogRecitationRange(student.id, pendingLogRange, logQuality, true);
+            onLogRecitationRange(student.id, pendingLogRange, quality, true);
             showToast('Reading revision saved');
         } else if (selectedLogType === 'hifz') {
             // hifz implies reading — the memorization handler logs BOTH atomically
-            onLogMemorizationRange(student.id, pendingLogRange, logQuality, false);
+            onLogMemorizationRange(student.id, pendingLogRange, quality, false);
             showToast(t('liveSession.memorizationRangeSaved'));
         } else if (selectedLogType === 'hifz-revision') {
-            onLogMemorizationRange(student.id, pendingLogRange, logQuality, true);
+            onLogMemorizationRange(student.id, pendingLogRange, quality, true);
             showToast('Hifz revision saved');
         } else if (selectedLogType === 'tafseer') {
             onLogTafseerRange(student.id, pendingLogRange);
@@ -2334,16 +2389,33 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
     }, [studentMistakes, student.id, onClearMistake, onCycleMistakeLevel, errorType]);
     
+    /** Pin the window scroll across a state change that closes the ring. The
+     *  ring lives in a portal on document.body; tearing it down while its input
+     *  is focused let the page drift (most visibly: Enter-to-log jumped the
+     *  reader down the page). Re-asserting the offset for a few frames is
+     *  cheap and holds regardless of which teardown step caused the move. */
+    const keepScroll = useCallback(() => {
+        const y = window.scrollY;
+        let frames = 0;
+        const hold = () => {
+            if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+            if (++frames < 4) requestAnimationFrame(hold);
+        };
+        requestAnimationFrame(hold);
+    }, []);
+
     const handleLetterTextSubmit = useCallback((letterKey: string, text: string) => {
+        keepScroll();
         const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
         letterClickStates.current[letterKey] = 2; // Mark as completed
         setEditingLetterKey(null);
         setErrorTextInput('');
         // Add the mistake with error type and text
         onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, errorType, text);
-    }, [errorType, student.id, onCycleMistakeLevel, studentMistakes]);
+    }, [errorType, student.id, onCycleMistakeLevel, studentMistakes, keepScroll]);
 
     const handleLetterTextCancel = useCallback(() => {
+        keepScroll();
         if (editingLetterKey) {
             letterClickStates.current[editingLetterKey] = 0;
             // The first click pre-marks the letter before the ring opens; a
@@ -2356,7 +2428,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
         setEditingLetterKey(null);
         setErrorTextInput('');
-    }, [editingLetterKey, studentMistakes, onClearMistake, student.id]);
+    }, [editingLetterKey, studentMistakes, onClearMistake, student.id, keepScroll]);
 
     const handleVerseContainerClick = (e: React.MouseEvent<HTMLSpanElement>, surahNum: number, ayahNum: number) => {
         // If a long press was just completed, reset and ignore this click
@@ -2526,11 +2598,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onLetterClick={readOnly ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
-                                    ringCounts={ringData.counts}
-                                    ringCustomCounts={ringData.customCounts}
+                                    ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
                                     ringPermFlags={ringPermFlags}
+                                    ringMode={errorType}
                                     onToggleFlag={handleToggleFlag}
-                                    onReassign={handleReassign}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
                                     markLineHeight={showTranslation ? 2.8 : 2.6}
@@ -3209,11 +3280,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onLetterClick={readOnly ? () => {} : handleLetterClick}
                                                                             onTextChange={setErrorTextInput}
                                                                             onTextSubmit={handleLetterTextSubmit}
-                                    ringCounts={ringData.counts}
-                                    ringCustomCounts={ringData.customCounts}
-                                    ringPermFlags={ringPermFlags}
-                                    onToggleFlag={handleToggleFlag}
-                                    onReassign={handleReassign}
+                                                                            ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
+                                                                            ringPermFlags={ringPermFlags}
+                                                                            ringMode={errorType}
+                                                                            onToggleFlag={handleToggleFlag}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
                                                                             markLineHeight={2.2}
@@ -3461,7 +3531,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 />
                                 <div className="flex gap-3">
                                     <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
-                                    <button onClick={confirmLog} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>
+                                    <button onClick={() => confirmLog()} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>
                                 </div>
                             </>
                         ) : (
@@ -3471,19 +3541,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                      selectedLogType === 'reading-revision' ? 'Reading Revision Quality' :
                                      selectedLogType === 'hifz' ? 'Hifz Quality' : 'Hifz Revision Quality'}
                                 </h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Rate the quality (1–10)</p>
-                                <div className="flex items-center gap-4 mb-6">
-                                    <input
-                                        type="range" min={1} max={10} value={logQuality}
-                                        onChange={e => setLogQuality(Number(e.target.value))}
-                                        className="flex-1 accent-teal-600"
-                                    />
-                                    <span className="text-3xl font-bold text-teal-700 dark:text-teal-300 w-8 text-center">{logQuality}</span>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Tap the score (1–10)</p>
+                                {/* One tap = logged. Ten circles beat a slider on a touchscreen:
+                                    no dragging, no reading a number off the end of a track. */}
+                                <div className="grid grid-cols-5 gap-2 mb-5">
+                                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                                        <button
+                                            key={n}
+                                            onClick={() => { setLogQuality(n); confirmLog(n); }}
+                                            aria-label={`Score ${n} out of 10`}
+                                            className={`aspect-square rounded-full text-lg font-black transition-all active:scale-90 border-2 ${
+                                                n <= 4
+                                                    ? 'border-rose-200 text-rose-600 hover:bg-rose-500 hover:text-white hover:border-rose-500 dark:border-rose-900 dark:text-rose-400'
+                                                    : n <= 7
+                                                        ? 'border-amber-200 text-amber-600 hover:bg-amber-500 hover:text-white hover:border-amber-500 dark:border-amber-900 dark:text-amber-400'
+                                                        : 'border-teal-200 text-teal-600 hover:bg-teal-600 hover:text-white hover:border-teal-600 dark:border-teal-900 dark:text-teal-400'
+                                            }`}
+                                        >
+                                            {n}
+                                        </button>
+                                    ))}
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
-                                    <button onClick={confirmLog} className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors">Save</button>
-                                </div>
+                                <button onClick={() => setLogTypeStep('type')} className="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
                             </>
                         )}
                     </div>

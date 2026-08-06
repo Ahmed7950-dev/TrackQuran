@@ -505,6 +505,15 @@ export const createOrUpdateSharedReport = async (
       merged = { ...existing.report_data, ...reportData } as SharedReportData;
     }
   }
+  // Always stamp the tutor's CURRENT Quran font. The student portal renders the
+  // muṣḥaf in report_data.quranicFont, so a report written before the tutor last
+  // changed fonts would show them a different typeface — and the tall waqf signs
+  // (ﷺ صلى / قلى) are exactly where two fonts differ most visibly. Stamping here,
+  // after the merge, means every write keeps teacher and student identical.
+  try {
+    const f = typeof localStorage !== 'undefined' ? localStorage.getItem('quranicFont') : null;
+    if (f) merged.quranicFont = f;
+  } catch { /* private mode */ }
   // Always stamp the student's timezone so the public portal calendar can show
   // their local lesson times (the portal can't read the students table directly).
   try {
@@ -615,9 +624,12 @@ export const syncStudentDataInReport = async (
   if (fetchErr || !data) return;
 
   const existing = data.report_data as SharedReportData;
+  let currentFont: string | null = null;
+  try { currentFont = typeof localStorage !== 'undefined' ? localStorage.getItem('quranicFont') : null; } catch { /* private mode */ }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updated: SharedReportData = {
     ...existing,
+    quranicFont: currentFont ?? existing.quranicFont,
     studentName: student.name,
     generatedAt: new Date().toISOString(),
     mistakes: student.mistakes as SharedReportData['mistakes'],
@@ -643,6 +655,26 @@ export const syncStudentDataInReport = async (
     .update({ report_data: updated, student_name: student.name })
     .eq('id', reportId);
   if (error) console.error('syncStudentDataInReport:', error.message);
+};
+
+/**
+ * Push the tutor's Quran font onto every one of their shared reports, so the
+ * students' links repaint in the same typeface the tutor is looking at. Called
+ * (debounced) when the font picker changes — every other report write already
+ * stamps the font itself.
+ */
+export const syncQuranicFontToReports = async (teacherId: string, font: string): Promise<number> => {
+  const { data, error } = await supabase
+    .from('shared_reports')
+    .select('id, report_data')
+    .eq('teacher_id', teacherId);
+  if (error || !data) { if (error) console.error('syncQuranicFontToReports:', error.message); return 0; }
+  const stale = data.filter(r => (r.report_data as SharedReportData)?.quranicFont !== font);
+  await Promise.all(stale.map(r => supabase
+    .from('shared_reports')
+    .update({ report_data: { ...(r.report_data as SharedReportData), quranicFont: font } })
+    .eq('id', r.id)));
+  return stale.length;
 };
 
 // ============================================================
