@@ -40,14 +40,12 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
   const [speed,   setSpeed]     = useState(1);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [loaded,   setLoaded]   = useState(false);
   const [error,    setError]    = useState(false);
 
   useEffect(() => {
     setPlaying(false);
     setProgress(0);
     setDuration(0);
-    setLoaded(false);
     setError(false);
     if (audioRef.current) audioRef.current.load();
   }, [surah, ayah]);
@@ -59,7 +57,13 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
       audio.pause();
       setPlaying(false);
     } else {
-      audio.play().then(() => setPlaying(true)).catch(() => setError(true));
+      // play() must be the first thing this gesture does — Safari refuses a
+      // play that is not directly inside the tap.
+      audio.play().then(() => setPlaying(true)).catch((err: DOMException) => {
+        if (err?.name === 'AbortError') return;
+        console.warn('[recitation] play() rejected:', err?.name, err?.message);
+        setError(true);
+      });
     }
   };
 
@@ -69,10 +73,7 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
     setProgress((audio.currentTime / audio.duration) * 100);
   };
 
-  const handleLoaded = () => {
-    setLoaded(true);
-    setDuration(audioRef.current?.duration ?? 0);
-  };
+  const handleLoaded = () => setDuration(audioRef.current?.duration ?? 0);
 
   const handleEnded = () => { setPlaying(false); setProgress(0); onEnded?.(); };
 
@@ -86,7 +87,9 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
 
   const changeSpeed = (s: number) => {
     setSpeed(s);
-    if (audioRef.current) audioRef.current.playbackRate = s;
+    // Safari throws if the media has not loaded yet, and resets the rate on
+    // every new source — so it is re-applied on 'playing' as well.
+    if (audioRef.current) { try { audioRef.current.playbackRate = s; } catch { /* not loaded */ } }
   };
 
   const fmt = (sec: number) => {
@@ -104,9 +107,16 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
         src={audioUrl(surah, ayah)}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoaded}
+        onPlaying={() => {
+          setPlaying(true);
+          if (audioRef.current) { try { audioRef.current.playbackRate = speed; } catch { /* ignore */ } }
+        }}
         onEnded={handleEnded}
         onError={() => setError(true)}
-        preload="none"
+        // "none" meant loadedmetadata never fired, so `loaded` stayed false and
+        // the play button below was disabled forever — the player could not be
+        // started at all on any browser that honours it.
+        preload="metadata"
       />
       {error ? (
         <p className="text-xs text-red-500 text-center">Could not load audio. Check your connection.</p>
@@ -115,7 +125,6 @@ const VerseAudioPlayer: React.FC<Props> = ({ surah, ayah, onEnded }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={togglePlay}
-              disabled={!loaded && !playing}
               className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-teal-600 text-white hover:bg-teal-700 disabled:bg-slate-300 transition"
               aria-label={playing ? 'Pause' : 'Play'}
             >

@@ -617,24 +617,87 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // that ayah to the end (vs a single-verse play from tapping the verse text).
     const readOnlySeqRef = useRef(false);
 
-    /** Start/stop sequential recitation from an ayah number (student portal). */
-    const handleAyahNumberRecite = (surah: number, ayah: number) => {
+    /** Newest playback request — lets a superseded load's rejection be ignored. */
+    const audioReqRef = useRef(0);
+    const audioUnlockedRef = useRef(false);
+    const [audioFailed, setAudioFailed] = useState(false);
+
+    // ── Recitation playback (student portal) ──────────────────────────────
+    // iPad Safari is stricter here than any desktop browser, and every failure
+    // used to disappear into a bare `.catch(() => {})` — the student tapped an
+    // ayah and simply nothing happened. Three separate things bite:
+    //   1. `playbackRate` assigned to a not-yet-loaded element can THROW on
+    //      Safari, which took the `play()` call on the next line down with it,
+    //      so the tap never even attempted playback. It is applied on 'playing'
+    //      now, after the media is running.
+    //   2. A fresh `src` with preload="none" needs an explicit `load()` before
+    //      `play()`, or Safari sometimes never starts fetching.
+    //   3. Safari only lets an element play programmatically once it has been
+    //      started inside a real user gesture — which is why the end-of-ayah
+    //      chain could die halfway through a surah. See the unlock effect.
+    const playVerse = useCallback((surah: number, ayah: number, sequential: boolean) => {
         const audio = readOnlyAudioRef.current;
         if (!audio) return;
-        // A tap while anything is playing simply stops it.
-        if (readOnlyAudioVerse) {
-            audio.pause();
+        const req = ++audioReqRef.current;
+        readOnlySeqRef.current = sequential;
+        setAudioFailed(false);
+        setReadOnlyAudioVerse({ surah, ayah });
+        try { audio.pause(); } catch { /* Safari can throw mid-load */ }
+        audio.src = audioUrl(surah, ayah);
+        try { audio.load(); } catch { /* ignore */ }
+        audio.play().catch((err: DOMException) => {
+            if (req !== audioReqRef.current) return;   // a newer tap replaced this one
+            if (err?.name === 'AbortError') return;    // load superseded, not a failure
+            console.warn('[recitation] play() rejected:', err?.name, err?.message);
             readOnlySeqRef.current = false;
             setReadOnlyAudioVerse(null);
-            return;
-        }
-        // Otherwise start playing from this ayah and continue to the surah's end.
-        readOnlySeqRef.current = true;
-        audio.pause();
-        audio.src = audioUrl(surah, ayah);
-        audio.playbackRate = readOnlySpeed;
-        audio.play().catch(() => {});
-        setReadOnlyAudioVerse({ surah, ayah });
+            setAudioFailed(true);
+        });
+    }, []);
+
+    const stopVerse = useCallback(() => {
+        audioReqRef.current++;
+        readOnlySeqRef.current = false;
+        try { readOnlyAudioRef.current?.pause(); } catch { /* ignore */ }
+        setReadOnlyAudioVerse(null);
+    }, []);
+
+    // Safari marks an <audio> element as user-activated the first time play() is
+    // called on it inside a gesture. Do that once, on the first touch anywhere,
+    // against a silent zero-length clip — so later programmatic plays (the
+    // ayah-to-ayah chain) are already allowed.
+    const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+    useEffect(() => {
+        if (!readOnly) return;
+        const unlock = () => {
+            const a = readOnlyAudioRef.current;
+            if (!a || audioUnlockedRef.current) return;
+            audioUnlockedRef.current = true;
+            if (a.src) return;                  // already playing something real
+            a.src = SILENT_WAV;
+            a.play().then(() => { try { a.pause(); } catch { /* ignore */ } }).catch(() => { /* fine */ });
+        };
+        window.addEventListener('touchend', unlock, { passive: true });
+        window.addEventListener('mousedown', unlock);
+        return () => {
+            window.removeEventListener('touchend', unlock);
+            window.removeEventListener('mousedown', unlock);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [readOnly]);
+
+    // Clear the failure notice after a few seconds.
+    useEffect(() => {
+        if (!audioFailed) return;
+        const t = setTimeout(() => setAudioFailed(false), 5000);
+        return () => clearTimeout(t);
+    }, [audioFailed]);
+
+    /** Start/stop sequential recitation from an ayah number (student portal). */
+    const handleAyahNumberRecite = (surah: number, ayah: number) => {
+        // A tap while anything is playing simply stops it.
+        if (readOnlyAudioVerse) { stopVerse(); return; }
+        playVerse(surah, ayah, true);
     };
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
     const [tadabburMode, setTadabburMode] = useState(false);
@@ -816,7 +879,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── ReadOnly hidden audio: update playback rate live ─────────────────────
     useEffect(() => {
         if (readOnlyAudioRef.current) {
-            readOnlyAudioRef.current.playbackRate = readOnlySpeed;
+            try { readOnlyAudioRef.current.playbackRate = readOnlySpeed; } catch { /* Safari: not loaded yet */ }
         }
     }, [readOnlySpeed]);
 
@@ -2636,20 +2699,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         if (!audio) return;
                         const isSame = readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
                         if (isSame) {
-                            if (audio.paused) {
-                                audio.play().catch(() => {});
-                            } else {
-                                audio.pause();
-                                setReadOnlyAudioVerse(null);
-                            }
+                            if (audio.paused) audio.play().catch(() => setAudioFailed(true));
+                            else stopVerse();
                             return;
                         }
-                        readOnlySeqRef.current = false; // verse-text tap = single ayah only
-                        audio.pause();
-                        audio.src = audioUrl(surahNum, ayahNum);
-                        audio.playbackRate = readOnlySpeed;
-                        audio.play().catch(() => {});
-                        setReadOnlyAudioVerse({ surah: surahNum, ayah: ayahNum });
+                        playVerse(surahNum, ayahNum, false);   // verse text = this ayah only
                     } : undefined}
                     onClick={!readOnly ? (e) => handleVerseContainerClick(e, surahNum, ayahNum) : undefined}
                     onMouseEnter={!readOnly ? () => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; } : undefined}
@@ -3569,6 +3623,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
             )}
 
+            {/* A failed play() used to be completely silent — the student tapped
+                and nothing happened, with nothing to tell them to try again. */}
+            {readOnly && audioFailed && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-2xl bg-slate-900/90 text-white text-sm font-semibold shadow-xl flex items-center gap-2">
+                    <span>🔇</span>
+                    <span>Couldn&apos;t start the recitation — tap the verse again.</span>
+                </div>
+            )}
+
             {/* ── ReadOnly hidden audio element ───────────────────────────── */}
             {readOnly && (
                 <audio
@@ -3579,19 +3642,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         if (readOnlySeqRef.current && readOnlyAudioVerse) {
                             const { surah, ayah } = readOnlyAudioVerse;
                             if (ayah < versesInSurah(surah)) {
-                                const next = ayah + 1;
-                                const audio = readOnlyAudioRef.current;
-                                if (audio) {
-                                    audio.src = audioUrl(surah, next);
-                                    audio.playbackRate = readOnlySpeed;
-                                    audio.play().catch(() => {});
-                                }
-                                setReadOnlyAudioVerse({ surah, ayah: next });
+                                playVerse(surah, ayah + 1, true);
                                 return;
                             }
                         }
                         readOnlySeqRef.current = false;
                         setReadOnlyAudioVerse(null);
+                    }}
+                    // Safari resets playbackRate when a new source loads, so it is
+                    // (re)applied once the media is actually running.
+                    onPlaying={() => {
+                        const a = readOnlyAudioRef.current;
+                        if (a) { try { a.playbackRate = readOnlySpeed; } catch { /* ignore */ } }
+                    }}
+                    onError={() => {
+                        // A 404/network error on the CDN never rejects play(), so it
+                        // has to be caught here or the verse just sits silent.
+                        if (!readOnlyAudioRef.current?.src?.startsWith('data:')) {
+                            readOnlySeqRef.current = false;
+                            setReadOnlyAudioVerse(null);
+                            setAudioFailed(true);
+                        }
                     }}
                     preload="none"
                     style={{ display: 'none' }}
