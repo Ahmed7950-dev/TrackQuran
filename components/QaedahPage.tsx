@@ -86,6 +86,10 @@ const QaedahPage: React.FC<{
   const consecutiveCorrect = useRef(0);
   // Tally for the completion record written when the challenge is finished.
   const runTally           = useRef({ correct: 0, wrong: 0 });
+  // Synchronous re-entry guard. `celebrating` is state, so it is still false in
+  // the handler's closure when a second tap lands in the same tick — which used
+  // to be harmless (a wrong answer just reset twice) but now skips a word.
+  const busy               = useRef(false);
 
   // Enemy soldiers: in the student portal they spawn automatically at random
   // intervals; on the tutor side they're sent via the hidden "R" shortcut.
@@ -246,6 +250,7 @@ const QaedahPage: React.FC<{
     setRestartMsg('');
     consecutiveCorrect.current = 0;
     runTally.current = { correct: 0, wrong: 0 };
+    busy.current = false;
     gameRef.current?.setStreak(0);
     gameRef.current?.reset();
     setView('challenge');
@@ -253,7 +258,8 @@ const QaedahPage: React.FC<{
 
   // ── Correct answer ────────────────────────────────────────────────────────
   const handleCorrect = () => {
-    if (celebrating) return;
+    if (busy.current || celebrating) return;
+    busy.current = true;
     setRestartMsg('');
     const cur = queue[pos];
     if (cur) { recordAttempt(cur, true); runTally.current.correct += 1; }
@@ -272,32 +278,40 @@ const QaedahPage: React.FC<{
     }
     if (childMode) {
       setCelebrating(true);
-      celebrate(() => { setCelebrating(false); advance(); });
+      celebrate(() => { setCelebrating(false); busy.current = false; advance(); });
     } else {
+      busy.current = false;
       advance();
     }
   };
 
   // ── Wrong answer ──────────────────────────────────────────────────────────
   const handleWrong = () => {
-    if (celebrating) return;
+    if (busy.current || celebrating) return;
+    busy.current = true;
     const cur = queue[pos];
     if (cur) { recordAttempt(cur, false); runTally.current.wrong += 1; }
     consecutiveCorrect.current = 0;
     gameRef.current?.spawnEnemySoldier();
     gameRef.current?.setStreak(0);
+    // A miss costs the streak (and sends an enemy), but the run carries on to
+    // the next word. It used to reshuffle and jump back to the first word,
+    // throwing away the whole lesson's progress over one slip.
     if (childMode) {
       setShaking(true);
-      setRestartMsg('Try again! 💪');
+      setCelebrating(true);          // locks both buttons during the shake
+      setRestartMsg('Keep going! 💪');
       setTimeout(() => {
         setShaking(false);
-        setPos(0);
-        setQueue(q => shuffle([...q]));
+        setCelebrating(false);
+        setRestartMsg('');
+        busy.current = false;
+        advance();
       }, 500);
     } else {
-      setRestartMsg('Reshuffled — try again!');
-      setPos(0);
-      setQueue(q => shuffle([...q]));
+      busy.current = false;
+      setRestartMsg('');
+      advance();
     }
   };
 
