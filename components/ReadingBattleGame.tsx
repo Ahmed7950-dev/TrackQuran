@@ -1043,6 +1043,11 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
 
   /* ── simulation + render loop ───────────────────────────────────────────── */
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Chrome 117+ fires contextlost/contextrestored on 2D canvases too — when the
+  // GPU process dies (common on low-memory Android) every draw call silently
+  // becomes a no-op, so the arena stops repainting while the game keeps running.
+  const ctx2dLostRef = useRef(false);
   const lastPaintRef = useRef(0);
   const keysRef = useRef<Set<string>>(new Set());
   const touchJoyRef = useRef({ active: false, dx: 0, dy: 0, mag: 0 });
@@ -1381,6 +1386,91 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGuest]);
 
+  /* ── blank-screen recovery ───────────────────────────────────────────────
+     One student (Xiaomi / Android Chrome) intermittently ends up with an
+     all-white screen while still controlling his character — i.e. the game
+     loop, input and netcode are all alive and only PAINT has stopped. Nothing
+     this component draws is white (the root is a dark gradient, the arena floor
+     is orange), so the pixels are not coming from us: either the 2D context was
+     lost, or Android's compositor dropped the layer for this fixed full-screen
+     element and never re-rasterised it.
+
+     `kickRepaint` addresses both: it drops the canvas backing stores (forcing a
+     full redraw next frame) and nudges the root so the compositor has to
+     re-raster. It is wired to the things a stuck player naturally does anyway —
+     switching apps and back, rotating the phone, leaving fullscreen — plus a
+     three-finger tap, which no game control uses, as a deliberate escape.
+     A watchdog fires it automatically if the painter goes quiet mid-battle. */
+  const lastGoodPaintRef = useRef(0);
+  const kickRepaint = useCallback((why: string) => {
+    console.warn('[Reading Battle] forcing a repaint —', why);
+    const cv = canvasRef.current;
+    // width assignment allocates a fresh backing store, so drop the lost flag
+    // with it — otherwise a `contextlost` whose `contextrestored` never arrives
+    // would keep the painter switched off forever. isContextLost() is still
+    // checked every frame, so if it really is dead we simply bail again.
+    if (cv) { cv.width = 0; ctx2dLostRef.current = false; }
+    const sc = stageCanvasRef.current;
+    if (sc) { sc.style.opacity = '0.999'; requestAnimationFrame(() => { if (sc) sc.style.opacity = ''; }); }
+    const root = rootRef.current;
+    if (root) {
+      root.style.transform = 'translateZ(0)';
+      requestAnimationFrame(() => { if (rootRef.current) rootRef.current.style.transform = ''; });
+    }
+    lastGoodPaintRef.current = performance.now();
+  }, []);
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const onLost = (e: Event) => {
+      e.preventDefault();               // ask Chrome to give it back
+      ctx2dLostRef.current = true;
+      console.warn('[Reading Battle] 2D canvas context lost');
+    };
+    const onRestored = () => {
+      ctx2dLostRef.current = false;
+      kickRepaint('2d context restored');
+    };
+    cv.addEventListener('contextlost', onLost);
+    cv.addEventListener('contextrestored', onRestored);
+
+    const onVisible = () => { if (document.visibilityState === 'visible') kickRepaint('tab visible'); };
+    const onOrient  = () => kickRepaint('orientation / resize');
+    const onFs      = () => kickRepaint('fullscreen change');
+    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('fullscreenchange', onFs);
+    window.addEventListener('orientationchange', onOrient);
+    window.addEventListener('resize', onOrient);
+    window.addEventListener('pageshow', onVisible);
+
+    // Three fingers down = "I can't see anything". No control uses three.
+    const onTouch = (e: TouchEvent) => { if (e.touches.length >= 3) kickRepaint('three-finger tap'); };
+    window.addEventListener('touchstart', onTouch, { passive: true });
+
+    // Watchdog: in a battle phase the painter runs every frame. If it has not
+    // recorded a paint for two seconds, something ate it — kick.
+    const watchdog = window.setInterval(() => {
+      const ph = phaseRef.current;
+      if (ph !== 'battle' && ph !== 'preBattle') return;
+      if (document.visibilityState !== 'visible') return;
+      const quiet = performance.now() - lastGoodPaintRef.current;
+      if (lastGoodPaintRef.current > 0 && quiet > 2000) kickRepaint(`painter quiet ${Math.round(quiet)}ms`);
+    }, 2000);
+
+    return () => {
+      cv.removeEventListener('contextlost', onLost);
+      cv.removeEventListener('contextrestored', onRestored);
+      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('fullscreenchange', onFs);
+      window.removeEventListener('orientationchange', onOrient);
+      window.removeEventListener('resize', onOrient);
+      window.removeEventListener('pageshow', onVisible);
+      window.removeEventListener('touchstart', onTouch);
+      window.clearInterval(watchdog);
+    };
+  }, [kickRepaint]);
+
   /* ── canvas painter (pseudo-3D walls; bodies live on the 3D overlay) ────── */
   const drawArena = (dt: number) => {
     const cv = canvasRef.current;
@@ -1392,6 +1482,10 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     const ctx = cv.getContext('2d');
     if (!ctx) return;
+    // A lost context accepts every call and draws nothing — bail so the
+    // watchdog below can see we are not painting.
+    if (ctx2dLostRef.current || (ctx as { isContextLost?: () => boolean }).isContextLost?.()) return;
+    lastGoodPaintRef.current = performance.now();
 
     // camera: follow me alive, else spectate cycle target, else centre
     const g = world.current;
@@ -1895,7 +1989,6 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
   }, [isTouch]);
 
   // scroll lock (same iOS handling as Letter Race)
-  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
