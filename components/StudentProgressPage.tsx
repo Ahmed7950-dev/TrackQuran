@@ -612,6 +612,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
     const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
     const surahNavScrollRef = useRef<HTMLDivElement | null>(null);
+    // Phone-only vertical surah picker. The horizontal pill strip needs width
+    // to be usable — on a phone it shows two or three names and fights the
+    // pinned first/last pills and both arrows for space. Small screens get a
+    // single current-surah button that opens a vertical list instead, opened
+    // centred on the current surah so its neighbours are visible above/below.
+    const [surahPickerOpen, setSurahPickerOpen] = useState(false);
     const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
     // true while a tap on an ayah number is playing the surah sequentially from
     // that ayah to the end (vs a single-verse play from tapping the verse text).
@@ -1487,6 +1493,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (surahHasTafsir(surahId))   return 'bg-blue-300 dark:bg-blue-700';
         return 'bg-slate-300 dark:bg-gray-600';
     };
+
+    useEffect(() => {
+        if (!surahPickerOpen) return;
+        // Instant, not smooth — smooth from list-top to surah 90 takes seconds.
+        const t = setTimeout(() => {
+            document.getElementById(`surah-pick-${selectedSurahId}`)
+                ?.scrollIntoView({ block: 'center' });
+        }, 30);
+        return () => clearTimeout(t);
+    }, [surahPickerOpen, selectedSurahId]);
 
     const toEasternArabicNumerals = (num: number): string => {
         const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -3053,8 +3069,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </div>
                         </div>
                         )}
-                        {/* ── Middle: surah pills — first & last pinned, middle scrolls ── */}
-                        <div className="flex-1 flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
+                        {/* ── Middle (phones): current surah button → vertical picker ── */}
+                        <button
+                            onClick={() => setSurahPickerOpen(true)}
+                            className="sm:hidden flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
+                            aria-label="Choose surah"
+                        >
+                            <span className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-mono text-xs opacity-80 flex-shrink-0">{selectedSurahId}</span>
+                                <span className="truncate tracking-wide">
+                                    {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
+                                </span>
+                            </span>
+                            <svg className="w-3.5 h-3.5 flex-shrink-0 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+                            </svg>
+                        </button>
+
+                        {/* ── Middle (sm+): surah pills — first & last pinned, middle scrolls ── */}
+                        <div className="hidden flex-1 sm:flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
                             {/* First surah (Al-Fatihah) — pinned */}
                             {surahStatuses[0] && (
                                 <button
@@ -3646,6 +3679,40 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-2xl bg-slate-900/90 text-white text-sm font-semibold shadow-xl flex items-center gap-2">
                     <span>🔇</span>
                     <span>Couldn&apos;t start the recitation — tap the verse again.</span>
+                </div>
+            )}
+
+            {/* ── Phone surah picker: vertical list, same colours as the pills ── */}
+            {surahPickerOpen && (
+                <div className="fixed inset-0 z-[200] flex items-end bg-black/50" onClick={() => setSurahPickerOpen(false)}>
+                    <div
+                        className="w-full max-h-[78vh] bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100 dark:border-gray-700">
+                            <p className="font-black text-slate-800 dark:text-slate-100">Surahs</p>
+                            <button
+                                onClick={() => setSurahPickerOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 font-bold"
+                                aria-label="Close surah picker"
+                            >✕</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2 space-y-1">
+                            {surahStatuses.map(({ id, name, transliteratedName, status, memStatus }) => (
+                                <button
+                                    key={id}
+                                    id={`surah-pick-${id}`}
+                                    onClick={() => { handleSurahSelection(id); setSurahPickerOpen(false); }}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${getSurahNavButtonClass(id, status, memStatus)}`}
+                                >
+                                    <span className="font-mono text-xs w-7 text-start flex-shrink-0">{id}</span>
+                                    <div className={`w-px h-4 flex-shrink-0 ${getDividerClass(id, status, memStatus)}`} />
+                                    <span className="tracking-wide truncate">{transliteratedName}</span>
+                                    <span className="ms-auto font-quranic text-lg leading-none flex-shrink-0" dir="rtl">{name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
 
