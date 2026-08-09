@@ -122,7 +122,7 @@ const standingOf = (rows: FluencyResult[]): StudentStanding => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Phase = 'ladder' | 'countdown' | 'running' | 'result';
+type Phase = 'ladder' | 'challenge' | 'countdown' | 'running' | 'result';
 
 const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ student, students }) => {
   const [allRows, setAllRows] = useState<FluencyResult[]>([]);
@@ -257,7 +257,7 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     setTimeout(() => setShaking(false), 420);
   };
 
-  const exitTest = () => { setPhase('ladder'); };
+  const exitTest = () => { setPhase('challenge'); };
 
   // ── ladder chips ─────────────────────────────────────────────────────────
   /** Vertical position of a score inside a level block: passed sits at the
@@ -350,7 +350,7 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                 <button onClick={() => startTest(level.n)} className="px-6 py-2.5 rounded-2xl font-bold text-white transition-transform active:scale-95" style={{ background: level.color }}>
                   ↻ Try again
                 </button>
-                <button onClick={exitTest} className="px-6 py-2.5 rounded-2xl font-bold bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">
+                <button onClick={() => setPhase('ladder')} className="px-6 py-2.5 rounded-2xl font-bold bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">
                   Back to levels
                 </button>
               </div>
@@ -384,10 +384,90 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     );
   }
 
-  // ─── LADDER ──────────────────────────────────────────────────────────────
+  // ─── CHALLENGE PAGE — where a ladder click lands ─────────────────────────
+  if (phase === 'challenge' && level) {
+    const isPassed = myStanding.passed(level.n);
+    const best = myStanding.bestAt(level.n);
+    const recent = [...myStanding.attempts(level.n)].reverse().slice(0, 6);
+    return (
+      <div className="max-w-xl mx-auto">
+        <button onClick={() => setPhase('ladder')}
+          className="mb-4 px-4 py-2 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-sm font-bold text-slate-600 dark:text-slate-300 shadow-sm hover:border-slate-400 transition-colors">
+          ← All levels
+        </button>
+        <div className="bg-white dark:bg-gray-800 rounded-3xl border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="px-6 py-7 text-white"
+            style={{ background: `linear-gradient(135deg, ${level.color}, color-mix(in srgb, ${level.color} 70%, black))` }}>
+            <div className="flex items-center gap-4">
+              <span className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center font-black text-3xl">{level.n}</span>
+              <div>
+                <h3 className="font-black text-2xl leading-tight">Level {level.n}{isPassed && ' · passed ✓'}</h3>
+                <p className="text-sm font-semibold opacity-90 mt-0.5">
+                  10 segments of ~{level.letters} letters · ideal time {fmtTime(level.idealMs)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-slate-50 dark:bg-gray-700/50 border border-slate-100 dark:border-gray-700 p-3 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Best time</p>
+                <p className={`text-2xl font-black ${best !== null && best <= level.idealMs ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>
+                  {best !== null ? fmtTime(best) : '—'}
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-gray-700/50 border border-slate-100 dark:border-gray-700 p-3 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">To pass</p>
+                <p className="text-2xl font-black text-slate-700 dark:text-slate-200">≤ {fmtTime(level.idealMs)}</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => startTest(level.n)}
+              disabled={loadingItems}
+              className="mt-5 w-full py-4 rounded-2xl font-black text-lg text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-60"
+              style={{ background: level.color }}
+            >
+              {loadingItems ? 'Picking verses…' : '▶ Start test'}
+            </button>
+            <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-3">
+              The student reads each segment aloud — press <b className="text-emerald-600">Passed</b> to move on,
+              <b className="text-red-500"> Buzz</b> on a stumble. The clock never stops.
+            </p>
+
+            {recent.length > 0 && (
+              <div className="mt-6">
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Recent attempts</p>
+                <div className="space-y-1.5">
+                  {recent.map(a => (
+                    <div key={a.id} className="flex items-center gap-2 text-sm rounded-lg bg-slate-50 dark:bg-gray-700/40 px-3 py-1.5">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.passed ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                      <span className="font-bold text-slate-700 dark:text-slate-200 tabular-nums">{fmtTime(a.timeMs)}</span>
+                      {a.buzzes > 0 && <span className="text-amber-500 text-xs font-bold">⚡{a.buzzes}</span>}
+                      <span className="ms-auto text-xs text-slate-400">
+                        {new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── LADDER — a thermometer column: each level is an ideal-time "gate" on
+  // top of its colored block; score diamonds point at where a run landed
+  // (on the gate = beat the ideal, below it = how far past). ────────────────
+  const GATE_H = 48, BLOCK_H = 96;   // px — marker anchors are computed from these
   const allDone = myStanding.currentLevel === 11;
+  const diamondLabel = (ms: number): string => ms < 100_000 ? (ms / 1000).toFixed(2) : fmtTime(ms);
+
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-2xl mx-auto">
       {/* header */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm mb-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -407,129 +487,75 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[380px_1fr] gap-5 items-start">
-        {/* ── the ladder — level 10 on top ── */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
-          {allDone && (
-            <div className="text-center pb-2 text-3xl" title="All levels passed">🏆</div>
-          )}
-          <div className="space-y-1.5">
-            {[...FLUENCY_LEVELS].reverse().map(lv => {
-              const isPassed = myStanding.passed(lv.n);
-              const isSelected = selectedLevel === lv.n;
-              const chips = chipsFor(lv);
-              return (
-                <button
-                  key={lv.n}
-                  onClick={() => setSelectedLevel(lv.n)}
-                  className={`relative w-full h-[68px] rounded-xl text-left transition-all overflow-hidden ${isSelected ? 'ring-4 ring-offset-1 ring-slate-400 dark:ring-slate-300 dark:ring-offset-gray-800' : 'hover:brightness-95 dark:hover:brightness-110'}`}
-                  style={{ background: isPassed ? 'linear-gradient(135deg,#cbd5e1,#94a3b8)' : `linear-gradient(135deg, ${lv.color}, ${lv.color}cc)` }}
-                >
-                  <div className="absolute inset-y-0 left-0 flex items-center gap-2.5 px-3">
-                    <span className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-lg ${isPassed ? 'bg-white/60 text-slate-600' : 'bg-white/25 text-white'}`}>
-                      {isPassed ? '✓' : lv.n}
-                    </span>
-                    <span className={isPassed ? 'text-slate-600' : 'text-white'}>
-                      <span className="block text-sm font-black leading-tight">Level {lv.n}</span>
-                      <span className="block text-[11px] font-semibold opacity-85 leading-tight">
-                        10 × ~{lv.letters} letters · {fmtTime(lv.idealMs)}
-                      </span>
-                    </span>
-                  </div>
-                  {/* score chips — head = made the ideal, lower = further past it */}
-                  <div className="absolute inset-y-0 right-1.5 w-[46%]">
-                    {chips.map((c, i) => (
-                      <span key={`${c.name}-${i}`}
-                        className={`absolute rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap shadow-sm max-w-full truncate ${
-                          c.isMe ? 'bg-white text-slate-800' : 'bg-slate-900/70 text-white'}`}
-                        style={{ top: `${4 + c.topPct * 0.66}%`, right: `${(i % 3) * 33}%` }}>
-                        {showAll ? `${c.name.split(' ')[0]} ` : ''}{c.timeMs !== null ? fmtTime(c.timeMs) : '·'}
-                      </span>
-                    ))}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">
-            Grey = passed (tap to retake). A score at the <b>top edge</b> of a level beat its ideal time;
-            the further below the edge, the further past the ideal it finished.
-          </p>
-        </div>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-8 shadow-sm overflow-x-auto">
+        {allDone && <div className="text-center pb-3 text-4xl" title="All levels passed">🏆</div>}
 
-        {/* ── level detail / start panel ── */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm lg:sticky lg:top-24">
-          {level === null ? (
-            <div className="text-center py-16 text-slate-400 dark:text-slate-500">
-              <p className="text-4xl mb-3">👈</p>
-              <p className="font-semibold">Pick a level to see its test.</p>
-              <p className="text-sm mt-2 max-w-sm mx-auto leading-relaxed">
-                Each test is 10 random Quran segments. The student reads; you press
-                <b className="text-emerald-600"> Passed</b> to move on or <b className="text-red-500">Buzz</b> on a stumble.
-                Finish all 10 inside the ideal time to pass the level.
-              </p>
-            </div>
-          ) : (() => {
-            const isPassed = myStanding.passed(level.n);
-            const best = myStanding.bestAt(level.n);
-            const recent = [...myStanding.attempts(level.n)].reverse().slice(0, 6);
+        {/* The column. Centered; diamonds hang off the right side. */}
+        <div className="w-44 mx-auto">
+          {[...FLUENCY_LEVELS].reverse().map(lv => {
+            const isPassed = myStanding.passed(lv.n);
+            const chips = chipsFor(lv).slice(0, 3);
             return (
-              <>
-                <div className="flex items-center gap-3">
-                  <span className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow" style={{ background: level.color }}>
-                    {level.n}
-                  </span>
-                  <div>
-                    <h3 className="font-black text-lg text-slate-800 dark:text-slate-100">Level {level.n}{isPassed && ' · passed ✓'}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      10 segments of ~{level.letters} letters · ideal time <b>{fmtTime(level.idealMs)}</b>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mt-5">
-                  <div className="rounded-xl bg-slate-50 dark:bg-gray-700/50 border border-slate-100 dark:border-gray-700 p-3 text-center">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Best time</p>
-                    <p className={`text-2xl font-black ${best !== null && best <= level.idealMs ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200'}`}>
-                      {best !== null ? fmtTime(best) : '—'}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 dark:bg-gray-700/50 border border-slate-100 dark:border-gray-700 p-3 text-center">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">To pass</p>
-                    <p className="text-2xl font-black text-slate-700 dark:text-slate-200">≤ {fmtTime(level.idealMs)}</p>
-                  </div>
-                </div>
-
+              <div key={lv.n} className="relative">
                 <button
-                  onClick={() => startTest(level.n)}
-                  disabled={loadingItems}
-                  className="mt-5 w-full py-4 rounded-2xl font-black text-lg text-white shadow-lg transition-all active:scale-[0.98] disabled:opacity-60"
-                  style={{ background: level.color }}
+                  onClick={() => { setSelectedLevel(lv.n); setPhase('challenge'); }}
+                  className="block w-full group"
+                  aria-label={`Level ${lv.n} — open challenge`}
                 >
-                  {loadingItems ? 'Picking verses…' : '▶ Start test'}
+                  {/* gate: this level's ideal time — the bar a run must beat */}
+                  <div
+                    className="relative z-10 mx-auto w-44 flex items-center justify-center rounded-lg text-white font-black text-lg transition-transform group-hover:scale-[1.04] group-active:scale-95"
+                    style={{
+                      height: GATE_H,
+                      background: `color-mix(in srgb, ${lv.color} 82%, white)`,
+                      border: `6px solid color-mix(in srgb, ${lv.color} 62%, black)`,
+                    }}
+                  >
+                    {Math.round(lv.idealMs / 1000)} s
+                  </div>
+                  {/* body: grey once passed, colored otherwise */}
+                  <div
+                    className="mx-auto w-36 flex items-center justify-center text-white font-black text-4xl transition-all group-hover:brightness-95"
+                    style={{ height: BLOCK_H, background: isPassed ? '#9ca3af' : lv.color }}
+                  >
+                    {isPassed ? '✓' : lv.n}
+                  </div>
                 </button>
 
-                {recent.length > 0 && (
-                  <div className="mt-6">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Recent attempts</p>
-                    <div className="space-y-1.5">
-                      {recent.map(a => (
-                        <div key={a.id} className="flex items-center gap-2 text-sm rounded-lg bg-slate-50 dark:bg-gray-700/40 px-3 py-1.5">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.passed ? 'bg-emerald-500' : 'bg-red-400'}`} />
-                          <span className="font-bold text-slate-700 dark:text-slate-200 tabular-nums">{fmtTime(a.timeMs)}</span>
-                          {a.buzzes > 0 && <span className="text-amber-500 text-xs font-bold">⚡{a.buzzes}</span>}
-                          <span className="ms-auto text-xs text-slate-400">
-                            {new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                {/* score diamonds — connector line into the column */}
+                {chips.map((c, i) => {
+                  const topPx = c.timeMs !== null && c.timeMs <= lv.idealMs
+                    ? GATE_H / 2
+                    : GATE_H + 8 + (c.topPct / 100) * (BLOCK_H - 22);
+                  return (
+                    <div key={`${c.name}-${i}`} className="absolute flex items-center z-20 pointer-events-none"
+                      style={{ top: topPx, left: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginLeft: i * 62 }}>
+                      <div className="h-1.5 w-6 rounded bg-slate-400 dark:bg-slate-500" style={{ opacity: i === 0 ? 1 : 0 }} />
+                      <div className="relative -ml-0.5">
+                        <div className={`w-12 h-12 rotate-45 rounded-md shadow-md flex items-center justify-center ${
+                          c.isMe ? 'bg-slate-700 dark:bg-slate-600' : 'bg-white dark:bg-gray-700 border-2 border-slate-300 dark:border-gray-500'}`}>
+                          <span className={`-rotate-45 text-[11px] font-black tabular-nums ${c.isMe ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                            {c.timeMs !== null ? diamondLabel(c.timeMs) : '—'}
                           </span>
                         </div>
-                      ))}
+                        {showAll && (
+                          <p className="absolute top-full left-1/2 -translate-x-1/2 mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap max-w-[80px] truncate">
+                            {c.name.split(' ')[0]}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </>
+                  );
+                })}
+              </div>
             );
-          })()}
+          })}
         </div>
+
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-6 text-center px-6 leading-relaxed">
+          Tap a level to open its challenge. Grey = passed (tap to retake).
+          A diamond on the <b>gate</b> beat that level's ideal time; below it, the further down, the further past the ideal it finished.
+        </p>
       </div>
     </div>
   );
