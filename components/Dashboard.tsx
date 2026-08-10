@@ -488,15 +488,23 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   // here too: cancelled events disappear from the fetch, and rescheduled events
   // bring their new time. The linked-session map only resolves which student an
   // event belongs to and supplies the Meet URL.
-  type NextLesson = { date: Date; student: Student; meetUrl?: string; sessionId?: string; title?: string };
-  const [nextLesson, setNextLesson] = useState<NextLesson | null>(null);
+  type NextLesson = { date: Date; end: Date; student: Student; meetUrl?: string; sessionId?: string; title?: string };
+  // ALL upcoming/running candidates, sorted — the banner pick is derived from a
+  // ticking clock so it can flip to "in progress" at start and vanish 10 min
+  // before the end without refetching Google Calendar.
+  const [nextLessons, setNextLessons] = useState<NextLesson[]>([]);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const [meetGenerating, setMeetGenerating] = useState(false);
   const [meetCopied, setMeetCopied] = useState(false);
 
   useEffect(() => {
-    if (!teacherId) { setNextLesson(null); return; }
+    if (!teacherId) { setNextLessons([]); return; }
     const token = getStoredToken();
-    if (!token) { setNextLesson(null); return; }
+    if (!token) { setNextLessons([]); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -513,27 +521,39 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           sessionMap = await getSessionsListByGcalId(teacherId);
         }
         if (cancelled) return;
-        let best: NextLesson | null = null;
+        const list: NextLesson[] = [];
         for (const ev of events) {
           const startStr = ev.start.dateTime ?? ev.start.date;
           if (!startStr) continue;
           const d = new Date(startStr);
-          if (d <= now) continue;
+          const endStr = ev.end?.dateTime ?? ev.end?.date;
+          const end = endStr ? new Date(endStr) : new Date(d.getTime() + 60 * 60_000);
+          // Keep RUNNING lessons too — the banner shows them as "in progress"
+          // until 10 minutes before they finish.
+          if (end.getTime() - 10 * 60_000 <= now.getTime()) continue;
           for (const session of sessionMap[ev.id] ?? []) {
             const student = students.find(s => s.id === session.studentId);
             if (!student) continue; // not a Quran student (Arabic sessions ignored)
-            if (!best || d < best.date) {
-              best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: ev.summary };
-            }
+            list.push({ date: d, end, student, meetUrl: session.meetUrl, sessionId: session.id, title: ev.summary });
           }
         }
-        setNextLesson(best);
+        list.sort((a, b) => a.date.getTime() - b.date.getTime());
+        setNextLessons(list);
       } catch (err) {
-        if (!cancelled) { console.error('[Dashboard] next-lesson load failed:', err); setNextLesson(null); }
+        if (!cancelled) { console.error('[Dashboard] next-lesson load failed:', err); setNextLessons([]); }
       }
     })();
     return () => { cancelled = true; };
   }, [teacherId, students]);
+
+  // The banner's lesson: earliest whose "last 10 minutes" hasn't begun. A
+  // running lesson has the earliest start, so it naturally holds the banner —
+  // as "in progress" — until end−10min, then the following lesson takes over.
+  const nextLesson = useMemo(
+    () => nextLessons.find(l => l.end.getTime() - 10 * 60_000 > nowTick) ?? null,
+    [nextLessons, nowTick],
+  );
+  const lessonInProgress = !!nextLesson && nowTick >= nextLesson.date.getTime();
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
 
@@ -553,7 +573,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
       if (nextLesson.sessionId) {
         await updateSessionMeetUrl(nextLesson.sessionId, url);
-        setNextLesson(prev => prev ? { ...prev, meetUrl: url } : prev);
+        setNextLessons(prev => prev.map(l => l.sessionId === nextLesson.sessionId ? { ...l, meetUrl: url } : l));
       }
     } finally {
       setMeetGenerating(false);
@@ -570,7 +590,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   async function handleClearMeetLink() {
     if (!nextLesson?.sessionId) return;
     await updateSessionMeetUrl(nextLesson.sessionId, null);
-    setNextLesson(prev => prev ? { ...prev, meetUrl: undefined } : prev);
+    setNextLessons(prev => prev.map(l => l.sessionId === nextLesson.sessionId ? { ...l, meetUrl: undefined } : l));
   }
 
   // Self-registered students awaiting this tutor's confirmation.
@@ -676,16 +696,33 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
       {/* ── Upcoming Lesson banner (linked Google Calendar events) ──────────── */}
       {nextLesson && (
-        <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className={`mb-6 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 border bg-gradient-to-r ${lessonInProgress
+          ? 'from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700'
+          : 'from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-700'}`}>
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 ${lessonInProgress ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-amber-100 dark:bg-amber-900/50'}`}>
+              {lessonInProgress ? '🎥' : '📅'}
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              {lessonInProgress ? (
+                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" /> Lesson in progress
+                </p>
+              ) : (
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              )}
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                You have a lesson with{' '}
-                <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
-                {' '}on{' '}
-                <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+                {lessonInProgress ? (<>
+                  Your lesson with{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                  {' '}is on now · ends at{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </>) : (<>
+                  You have a lesson with{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                  {' '}on{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+                </>)}
               </p>
               {nextLesson.title && (
                 <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.title}</p>

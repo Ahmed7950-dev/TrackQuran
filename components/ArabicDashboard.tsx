@@ -121,11 +121,24 @@ const ArabicDashboard: React.FC<Props> = ({
       .catch(console.error);
   }, [teacherId]);
 
-  // ── next lesson from sessions + bookings ─────────────────────────────────
+  // 30s clock so the banner flips to "in progress" at start and disappears
+  // 10 minutes before the lesson ends, without refetching anything.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── next / current lesson from sessions + bookings ────────────────────────
+  // A lesson qualifies while `now < end − 10min`; a RUNNING lesson has the
+  // earliest start so it holds the banner (as "in progress") until its last
+  // ten minutes, then the following lesson takes over.
   const nextLesson = useMemo(() => {
-    const now = new Date();
+    const now = nowTick;
+    const CUTOFF = 10 * 60_000;
     let best: {
       date: Date;
+      end: Date;
       student: ArabicStudent;
       meetUrl?: string;
       sessionId?: string;
@@ -136,11 +149,12 @@ const ArabicDashboard: React.FC<Props> = ({
     // From GCal-linked sessions
     for (const session of sessions) {
       const d = new Date(session.startAt);
-      if (d <= now) continue;
+      const end = session.endAt ? new Date(session.endAt) : new Date(d.getTime() + 60 * 60_000);
+      if (end.getTime() - CUTOFF <= now) continue;
       const student = students.find(s => s.id === session.studentId);
       if (!student) continue;
       if (!best || d < best.date) {
-        best = { date: d, student, meetUrl: session.meetUrl, sessionId: session.id, title: session.title };
+        best = { date: d, end, student, meetUrl: session.meetUrl, sessionId: session.id, title: session.title };
       }
     }
 
@@ -149,29 +163,33 @@ const ArabicDashboard: React.FC<Props> = ({
       if (booking.status !== 'confirmed' || booking.portalType !== 'arabic') continue;
       const student = students.find(s => s.shareToken === booking.studentId);
       if (!student) continue;
-      // Next occurrence
-      const now2 = new Date();
-      let nextDate: Date | null = null;
+      const hh = String(booking.hour).padStart(2, '0'), mm = String(booking.minute).padStart(2, '0');
+      let occ: { start: Date; end: Date } | null = null;
       if (booking.bookingType === 'single' && booking.specificDate) {
-        const d = new Date(`${booking.specificDate}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`);
-        if (d > now2) nextDate = d;
+        const d = new Date(`${booking.specificDate}T${hh}:${mm}:00+03:00`);
+        const end = new Date(d.getTime() + booking.durationMinutes * 60_000);
+        if (end.getTime() - CUTOFF > now) occ = { start: d, end };
       } else if (booking.bookingType === 'weekly') {
-        for (let i = 0; i <= 7; i++) {
-          const c = new Date(now2); c.setDate(c.getDate() + i);
+        // -1 catches an in-progress lesson that crossed Istanbul midnight.
+        for (let i = -1; i <= 7; i++) {
+          const c = new Date(now + i * 86_400_000);
           const jsDay = c.getDay(); const monDay = jsDay === 0 ? 6 : jsDay - 1;
           if (monDay !== booking.dayOfWeek) continue;
-          const iso = `${c.toISOString().slice(0,10)}T${String(booking.hour).padStart(2,'0')}:${String(booking.minute).padStart(2,'0')}:00+03:00`;
-          const d = new Date(iso); if (d > now2) { nextDate = d; break; }
+          const d = new Date(`${c.toISOString().slice(0, 10)}T${hh}:${mm}:00+03:00`);
+          const end = new Date(d.getTime() + booking.durationMinutes * 60_000);
+          if (end.getTime() - CUTOFF > now) { occ = { start: d, end }; break; }
         }
       }
-      if (!nextDate) continue;
-      if (!best || nextDate < best.date) {
-        best = { date: nextDate, student, meetUrl: booking.meetUrl, bookingId: booking.id };
+      if (!occ) continue;
+      if (!best || occ.start < best.date) {
+        best = { date: occ.start, end: occ.end, student, meetUrl: booking.meetUrl, bookingId: booking.id };
       }
     }
 
     return best;
-  }, [sessions, bookings, students]);
+  }, [sessions, bookings, students, nowTick]);
+
+  const lessonInProgress = !!nextLesson && nowTick >= nextLesson.date.getTime();
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
 
@@ -321,16 +339,33 @@ const ArabicDashboard: React.FC<Props> = ({
 
       {/* ── Next Lesson Banner ──────────────────────────────────────────────── */}
       {nextLesson && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className={`rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 border bg-gradient-to-r ${lessonInProgress
+          ? 'from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700'
+          : 'from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-700'}`}>
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-2xl flex-shrink-0">📅</div>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 ${lessonInProgress ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-amber-100 dark:bg-amber-900/50'}`}>
+              {lessonInProgress ? '🎥' : '📅'}
+            </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              {lessonInProgress ? (
+                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" /> Lesson in progress
+                </p>
+              ) : (
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Upcoming Lesson</p>
+              )}
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                You have a lesson with{' '}
-                <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
-                {' '}on{' '}
-                <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+                {lessonInProgress ? (<>
+                  Your lesson with{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                  {' '}is on now · ends at{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </>) : (<>
+                  You have a lesson with{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{nextLesson.student.name}</span>
+                  {' '}on{' '}
+                  <span className="font-bold text-slate-900 dark:text-white">{formatSessionDate(nextLesson.date.toISOString())}</span>
+                </>)}
               </p>
               {nextLesson.title && (
                 <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{nextLesson.title}</p>
