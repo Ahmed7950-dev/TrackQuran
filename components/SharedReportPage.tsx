@@ -480,17 +480,12 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
           <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
 
-          {/* Student name badge */}
-          <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0 min-w-0">
-            {report_data.profileIcon ? (
-              <>
-                <span className="hidden sm:block"><StudentProfileIcon src={report_data.profileIcon} size={44} mode="always" /></span>
-                <span className="sm:hidden text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
-              </>
-            ) : (
-              <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
-            )}
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[52px] sm:max-w-none">
+          {/* Student name badge — hidden on phones (it was the widest item) */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0 min-w-0">
+            {report_data.profileIcon
+              ? <StudentProfileIcon src={report_data.profileIcon} size={44} mode="always" />
+              : <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>}
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate">
               {student_name}
             </span>
           </div>
