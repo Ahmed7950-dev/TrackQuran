@@ -13,6 +13,7 @@ import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorized
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, hasIqlabHighMeem, highMeemTopEm, HIGH_MEEM } from '../utils/quranicMarks';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
+import { RECITERS, ReciterKey, reciterOf, binHumaidSurahUrl, getBinHumaidTimings, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -628,6 +629,22 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const audioUnlockedRef = useRef(false);
     const [audioFailed, setAudioFailed] = useState(false);
 
+    // ── Reciter choice (student portal). Minshawi = per-ayah files; bin Humaid
+    // has NO per-ayah source anywhere, so he plays from mp3quran's per-surah
+    // files using their official ayat-timing API: seek to the ayah's start_time
+    // and pause at its end_time. Remembered per browser. ──────────────────────
+    const [reciter, setReciter] = useState<ReciterKey>(() => {
+        try { return reciterOf(localStorage.getItem('quranReciter')).key; } catch { return 'minshawi'; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('quranReciter', reciter); } catch { /* private mode */ }
+    }, [reciter]);
+    const [reciterMenuOpen, setReciterMenuOpen] = useState(false);
+    /** Active timed-playback plan (bin Humaid only). null while on Minshawi. */
+    const timedRef = useRef<{ surah: number; stopAtMs: number; seq: boolean; timings: AyahTiming[] } | null>(null);
+    /** Which surah's file is currently loaded in the element (bin Humaid). */
+    const loadedSurahRef = useRef(0);
+
     // ── Recitation playback (student portal) ──────────────────────────────
     // iPad Safari is stricter here than any desktop browser, and every failure
     // used to disappear into a bare `.catch(() => {})` — the student tapped an
@@ -649,24 +666,91 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setAudioFailed(false);
         setReadOnlyAudioVerse({ surah, ayah });
         try { audio.pause(); } catch { /* Safari can throw mid-load */ }
-        audio.src = audioUrl(surah, ayah);
-        try { audio.load(); } catch { /* ignore */ }
-        audio.play().catch((err: DOMException) => {
+
+        const fail = (err?: DOMException | Error) => {
             if (req !== audioReqRef.current) return;   // a newer tap replaced this one
-            if (err?.name === 'AbortError') return;    // load superseded, not a failure
-            console.warn('[recitation] play() rejected:', err?.name, err?.message);
+            if ((err as DOMException)?.name === 'AbortError') return;   // superseded load
+            console.warn('[recitation] failed:', (err as Error)?.name, (err as Error)?.message);
             readOnlySeqRef.current = false;
+            timedRef.current = null;
             setReadOnlyAudioVerse(null);
             setAudioFailed(true);
-        });
-    }, []);
+        };
+
+        if (reciter === 'binhumaid') {
+            getBinHumaidTimings(surah).then(timings => {
+                if (req !== audioReqRef.current) return;
+                const t = timings.find(x => x.ayah === ayah);
+                if (!t) { fail(new Error(`no timing for ${surah}:${ayah}`)); return; }
+                timedRef.current = {
+                    surah, seq: sequential, timings,
+                    // sequential = run to the surah's end; single = this ayah only
+                    stopAtMs: sequential ? timings[timings.length - 1].endMs : t.endMs,
+                };
+                const seekAndPlay = () => {
+                    if (req !== audioReqRef.current) return;
+                    try { audio.currentTime = t.startMs / 1000; } catch { /* set again on metadata */ }
+                    audio.play().catch(fail);
+                };
+                if (loadedSurahRef.current !== surah || !audio.src.includes('mp3quran')) {
+                    loadedSurahRef.current = surah;
+                    audio.src = binHumaidSurahUrl(surah);
+                    try { audio.load(); } catch { /* ignore */ }
+                    // Safari ignores currentTime before metadata is in.
+                    audio.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+                } else {
+                    seekAndPlay();
+                }
+            }).catch(fail);
+            return;
+        }
+
+        timedRef.current = null;
+        loadedSurahRef.current = 0;
+        audio.src = audioUrl(surah, ayah);
+        try { audio.load(); } catch { /* ignore */ }
+        audio.play().catch(fail);
+    }, [reciter]);
 
     const stopVerse = useCallback(() => {
         audioReqRef.current++;
         readOnlySeqRef.current = false;
+        timedRef.current = null;
         try { readOnlyAudioRef.current?.pause(); } catch { /* ignore */ }
         setReadOnlyAudioVerse(null);
     }, []);
+
+    // Timed-playback watcher (bin Humaid): pause exactly at the ayah's end in
+    // single-verse mode; in sequential mode move the highlight as the timings
+    // pass. rAF gives ~16ms precision where timeupdate's ~250ms would bleed a
+    // syllable of the next ayah into every single-verse play.
+    useEffect(() => {
+        if (!readOnly) return;
+        let raf = 0;
+        const tick = () => {
+            raf = requestAnimationFrame(tick);
+            const a = readOnlyAudioRef.current, plan = timedRef.current;
+            if (!a || !plan || a.paused) return;
+            const ms = a.currentTime * 1000;
+            if (ms >= plan.stopAtMs - 15) {
+                timedRef.current = null;
+                readOnlySeqRef.current = false;
+                try { a.pause(); } catch { /* ignore */ }
+                setReadOnlyAudioVerse(null);
+                return;
+            }
+            if (plan.seq) {
+                const cur = plan.timings.find(x => ms >= x.startMs && ms < x.endMs);
+                if (cur) {
+                    setReadOnlyAudioVerse(prev =>
+                        prev && prev.surah === plan.surah && prev.ayah === cur.ayah
+                            ? prev : { surah: plan.surah, ayah: cur.ayah });
+                }
+            }
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [readOnly]);
 
     // Safari marks an <audio> element as user-activated the first time play() is
     // called on it inside a gesture. Do that once, on the first touch anywhere,
@@ -3037,6 +3121,36 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     </div>
                                 </>
                             )}
+                            {/* Reciter picker — same circle-button pattern as speed */}
+                            <button
+                                onClick={() => setReciterMenuOpen(o => !o)}
+                                title="Reciter"
+                                aria-label="Choose reciter"
+                                className="ml-2 w-9 h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                            >
+                                🎙️
+                            </button>
+                            {reciterMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-30" onClick={() => setReciterMenuOpen(false)} />
+                                    <div className="absolute top-full left-0 mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1 min-w-[220px]">
+                                        <span className="px-2 pt-0.5 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
+                                        {RECITERS.map(r => (
+                                            <button
+                                                key={r.key}
+                                                onClick={() => {
+                                                    if (r.key !== reciter) { stopVerse(); loadedSurahRef.current = 0; setReciter(r.key); }
+                                                    setReciterMenuOpen(false);
+                                                }}
+                                                className={`px-3 py-2 rounded-lg text-xs font-bold text-start flex items-center justify-between gap-3 transition-colors ${reciter === r.key ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                            >
+                                                <span>{r.name}</span>
+                                                <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                         </div>
                         ) : (
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -3721,6 +3835,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <audio
                     ref={readOnlyAudioRef}
                     onEnded={() => {
+                        // bin Humaid plays one file per surah — its end IS the surah's
+                        // end, never a per-ayah boundary to chain across.
+                        if (timedRef.current) {
+                            timedRef.current = null;
+                            readOnlySeqRef.current = false;
+                            setReadOnlyAudioVerse(null);
+                            return;
+                        }
                         // Sequential mode (started from an ayah number): advance to the
                         // next ayah until the surah ends, then stop.
                         if (readOnlySeqRef.current && readOnlyAudioVerse) {
