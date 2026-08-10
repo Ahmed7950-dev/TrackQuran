@@ -11,7 +11,9 @@ import { FluencyResult, listFluencyResults, saveFluencyResult } from '../service
 // passes the level.
 //
 //   Level N = 10 segments of ~3·N base letters each (whole words, spaces and
-//   diacritics not counted), ideal time 15·N + 5 seconds.
+//   diacritics not counted). Ideal time gives 1.5s per letter across the ten
+//   segments — 10 · 3N · 1.5 = 45·N seconds (level 5: 10×15 letters → 225s) —
+//   except level 1, which the tutor keeps at a tight 20s for single words.
 //
 // Segments render exactly like the live logging page: font-quranic (so the
 // hand-patched fonts and the U+06DF sukoon fix apply) plus renderWordWithMarks
@@ -27,7 +29,8 @@ export interface FluencyLevel { n: number; letters: number; idealMs: number; col
 export const FLUENCY_LEVELS: FluencyLevel[] = Array.from({ length: 10 }, (_, i) => ({
   n: i + 1,
   letters: (i + 1) * 3,
-  idealMs: (i + 1) * 15_000 + 5_000,   // 20s, 35s, 50s … (user loosened by 5s)
+  // 1.5s per letter × 10 segments = 45·N s (level 1 stays at its tuned 20s)
+  idealMs: i === 0 ? 20_000 : (i + 1) * 45_000,
   color: LEVEL_COLORS[i],
 }));
 
