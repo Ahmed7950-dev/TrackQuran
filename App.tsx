@@ -1363,7 +1363,7 @@ const App: React.FC = () => {
     return (
       <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
         {/* Arabic header */}
-        <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
+        <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
             <button onClick={() => { setSelectedArabicStudentId(null); }} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to Arabic dashboard">
               <Logo />
@@ -1569,7 +1569,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
-      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print">
+      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
             <button
                 onClick={() => {

@@ -3779,7 +3779,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 aria-label="Close surah picker"
                             >✕</button>
                         </div>
-                        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2 space-y-1">
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pt-2 space-y-1" style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}>
                             {surahStatuses.map(({ id, name, transliteratedName, status, memStatus }) => (
                                 <button
                                     key={id}

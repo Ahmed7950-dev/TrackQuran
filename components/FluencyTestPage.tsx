@@ -308,7 +308,7 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     return (
       <div className="fixed inset-0 z-[120] flex flex-col" style={{ background: 'linear-gradient(165deg,#0f172a 0%,#1e293b 100%)' }}>
         {/* top bar: exit · level · timer · progress */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-4 pb-3" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}>
           <button onClick={exitTest} className="px-3 py-1.5 rounded-xl bg-white/10 text-white/80 text-sm font-bold hover:bg-white/20 transition-colors">✕ Exit</button>
           <span className="px-3 py-1.5 rounded-xl text-sm font-black text-white" style={{ background: level.color }}>
             Level {level.n}

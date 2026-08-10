@@ -342,7 +342,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* ── Header ── */}
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr">
+      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
 
           {/* Back to family button — only shown when opened from a family link */}

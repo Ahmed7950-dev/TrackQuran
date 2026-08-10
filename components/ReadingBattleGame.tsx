@@ -2073,7 +2073,7 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
       <canvas ref={stageCanvasRef} className="absolute inset-0 w-full h-full" style={{ display: inBattle ? 'block' : 'none', pointerEvents: 'none', zIndex: 5 }} />
 
       {/* ── top bar ── */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-2 px-3 py-2" style={{ background: 'linear-gradient(rgba(4,20,10,0.7), rgba(4,20,10,0))' }}>
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-2 px-3 pb-2" style={{ background: 'linear-gradient(rgba(4,20,10,0.7), rgba(4,20,10,0))', paddingTop: 'calc(0.5rem + env(safe-area-inset-top))' }}>
         <button onClick={onExit} style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: 10, padding: '7px 12px', fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>✕ Exit</button>
         <span className="text-white font-extrabold text-sm sm:text-base">📖⚔️ Reading Battle</span>
         {phase === 'battle' && world.current.bt.zoneOn && (
