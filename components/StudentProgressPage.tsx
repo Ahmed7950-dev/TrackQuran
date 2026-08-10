@@ -2590,7 +2590,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // stops growing — it pinned at 31px however large the verses got.
     const verseMarkerStyle: React.CSSProperties = {
         verticalAlign: 'middle',
-        fontSize: 'clamp(12px, 0.6em, 22px)',   // em here = the Quran text size
+        // em = the Quran text size; the vw term caps the circle on narrow
+        // phone screens (375px → ~9.75px numeral, ~23px circle) without
+        // touching tablets/desktop, where 0.6em/22px governs.
+        fontSize: 'clamp(9px, min(0.6em, 2.6vw), 22px)',
         width: '2.35em',                        // em here = the line above
         height: '2.35em',
         margin: '0 0.45em',
