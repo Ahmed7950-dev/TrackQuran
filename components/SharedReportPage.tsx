@@ -119,17 +119,20 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
-  const headerRef = useRef<HTMLElement>(null);
+  // Callback ref, NOT a plain ref: the page's first render is a loading screen
+  // with no <header>, so a mount-once effect would try to observe null and
+  // never measure — the toolbar then sticks at the 156px fallback and floats a
+  // visible gap below the (slimmer) real header.
+  const [headerEl, setHeaderEl] = useState<HTMLElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState(156);
   useEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const measure = () => setHeaderHeight(el.getBoundingClientRect().height);
+    if (!headerEl) return;
+    const measure = () => setHeaderHeight(headerEl.getBoundingClientRect().height);
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(headerEl);
     measure();
     return () => ro.disconnect();
-  }, []);
+  }, [headerEl]);
 
   const [quranicFont, setQuranicFont] = useState<string>(() => {
     const f = localStorage.getItem('quranicFont') || 'Hafs';
@@ -360,7 +363,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
       )}
 
       {/* ── Header ── */}
-      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header ref={setHeaderEl} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex items-center gap-2 sm:gap-3">
 
           {/* Back to family button — only shown when opened from a family link */}
