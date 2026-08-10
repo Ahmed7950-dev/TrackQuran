@@ -219,17 +219,17 @@ export const ZOMBIES = {
   countBase: 2,            // wave N spawns countBase + N*countPerWave (wave 1 = 4)
   countPerWave: 2,
   maxAlive: 18,            // one 3D body each — keep in step with ZOMBIE_MODELS
-  // Waves get BIGGER, never tougher: a zombie on wave 12 has exactly the same
-  // health, speed and bite as one on wave 1. The difficulty is the crowd, and
-  // a player's weapon never stops being able to drop them in a burst.
+  // Waves get bigger AND faster, never tankier: health and bite stay flat so a
+  // player's weapon never stops dropping a zombie in a burst — the pressure
+  // comes from the crowd and the closing speed.
   hpBase: 22,              // an M4A1 burst (10 a shot) kills one in 3 rounds
   hpPerWave: 0,
   /** Body height relative to a player (user-tuned on /zombie-tune). */
   scale: 0.6,
-  speedWalk: 3.2,          // arena units/s while heading for the centre
-  speedChase: 6,           // once it has seen a player (player runs at 15)
-  speedPerWave: 0,         // flat — see hpPerWave
-  speedMax: 10,            // never close to a sprinting player
+  speedWalk: 3.2,          // arena units/s beyond sight range (scales with sp)
+  speedChase: 6,           // once within sight of a player (player runs at 15)
+  speedPerWave: 0.35,      // later waves close faster…
+  speedMax: 10,            // …but never close to a sprinting player
   sightRange: 24,
   attackRange: 3.4,
   // a swarm stacks: four in contact is already ~29 dps, so keep the single

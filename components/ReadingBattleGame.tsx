@@ -59,8 +59,9 @@ interface Bullet {
 interface Zombie {
   on: boolean; x: number; y: number; h: number;
   hp: number; hpMax: number; sp: number;      // sp = this one's top speed (grows per wave)
-  mode: 0 | 1 | 2;                            // 0 walk to centre · 1 chase · 2 swing
+  mode: 0 | 1 | 2;                            // 0 lumber toward a far player · 1 chase · 2 swing
   atkAt: number;                              // last punch (ms)
+  av: number;                                 // wall-avoid turn side (-1/0/1, host-only)
 }
 /** A crate waiting on the floor. kind indexes PICKUPS. */
 interface Pickup { on: boolean; kind: number; x: number; y: number }
@@ -311,7 +312,7 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
     winner: '',
   });
   const zombiesRef = useRef<Zombie[]>(Array.from({ length: ZOMBIES.maxAlive }, () => (
-    { on: false, x: 0, y: 0, h: 180, hp: 0, hpMax: 1, sp: ZOMBIES.speedWalk, mode: 0 as 0, atkAt: 0 })));
+    { on: false, x: 0, y: 0, h: 180, hp: 0, hpMax: 1, sp: ZOMBIES.speedWalk, mode: 0 as 0, atkAt: 0, av: 0 })));
   const pickupsRef = useRef<Pickup[]>(Array.from({ length: PICKUP_RULES.maxOnMap }, () => (
     { on: false, kind: 0, x: 0, y: 0 })));
   const bulletsRef = useRef<Bullet[]>(Array.from({ length: 48 }, () => ({ on: false, x: 0, y: 0, dx: 0, dy: 0, left: 0, owner: '', vx: 0, vy: 0, spx: 0, spy: 0, decay: 14 })));
@@ -743,7 +744,7 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
       if (z.on) continue;
       const [x, y] = hordeSpawnPoint();
       z.on = true; z.x = x; z.y = y; z.h = 180;
-      z.hp = hp; z.hpMax = hp; z.sp = sp; z.mode = 0; z.atkAt = 0;
+      z.hp = hp; z.hpMax = hp; z.sp = sp; z.mode = 0; z.atkAt = 0; z.av = 0;
       spawned++;
     }
   };
@@ -791,36 +792,80 @@ const ReadingBattleGameInner: React.FC<Props> = ({ roomId, onExit }) => {
       g.dropAt = nowMs + PICKUP_RULES.everyMs;
     }
     const targets = g.players.filter(p => p.fighting && p.alive);
-    for (const z of zombiesRef.current) {
+    const horde = zombiesRef.current;
+    for (const z of horde) {
       if (!z.on) continue;
-      // nearest living player, if any is close enough to notice
+      // ALWAYS hunt the nearest living player — no drifting to the centre.
+      // (They used to pile up at 50,50 whenever nobody was inside sightRange.)
       let best: RBPlayer | null = null, bestD = Infinity;
       for (const p of targets) {
         const d = Math.hypot(p.x - z.x, p.y - z.y);
         if (d < bestD) { bestD = d; best = p; }
       }
-      const hunting = !!best && bestD <= ZOMBIES.sightRange;
-      const tx = hunting ? best!.x : 50;
-      const ty = hunting ? best!.y : 50;
-      const dx = tx - z.x, dy = ty - z.y;
+      if (!best) { z.mode = 0; continue; }   // nobody left standing
+      const dx = best.x - z.x, dy = best.y - z.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (hunting && bestD <= ZOMBIES.attackRange) {
+
+      if (bestD <= ZOMBIES.attackRange) {
         z.mode = 2;
+        z.h = (Math.atan2(dx, -dy) * 180) / Math.PI;   // face the victim
         if (nowMs - z.atkAt >= ZOMBIES.attackCooldownMs) {
           z.atkAt = nowMs;
-          applyDamage(best!, ZOMBIES.attackDamage, null);
+          applyDamage(best, ZOMBIES.attackDamage, null);
         }
-      } else {
-        z.mode = hunting ? 1 : 0;
-        const speed = hunting ? z.sp : ZOMBIES.speedWalk;
-        const nx = z.x + (dx / d) * speed * dt;
-        const ny = z.y + (dy / d) * speed * dt;
-        // they shamble in from off-map, so only collide once inside the arena
-        [z.x, z.y] = (nx > 1 && nx < 99 && ny > 1 && ny < 99)
-          ? collideWalls(nx, ny, BALANCE.playerRadius)
-          : [nx, ny];
+        continue;
       }
-      z.h = (Math.atan2(dx, -dy) * 180) / Math.PI;
+
+      const hunting = bestD <= ZOMBIES.sightRange;
+      z.mode = hunting ? 1 : 0;
+      // Far away they lumber, close they sprint — BOTH scale with the wave
+      // (walk keeps its ratio to the chase speed instead of staying flat).
+      const speed = hunting ? z.sp : z.sp * (ZOMBIES.speedWalk / ZOMBIES.speedChase);
+
+      // Light separation: a nudge away from packmates within 2.4 units, so the
+      // horde arrives as a spread crowd instead of a single-file stack.
+      let sx = 0, sy = 0;
+      for (const o of horde) {
+        if (o === z || !o.on) continue;
+        const ox = z.x - o.x, oy = z.y - o.y;
+        const od = Math.hypot(ox, oy);
+        if (od > 0.01 && od < 2.4) { sx += (ox / od) * (2.4 - od); sy += (oy / od) * (2.4 - od); }
+      }
+      let wx = dx / d + sx * 0.5, wy = dy / d + sy * 0.5;
+      const wd = Math.hypot(wx, wy) || 1;
+      wx /= wd; wy /= wd;
+
+      // Wall avoidance: probe a body-length ahead; if the desired direction is
+      // blocked, swing off at widening angles — preferring the side this zombie
+      // already committed to (z.av), so it hugs one edge around an obstacle
+      // instead of jittering left-right against it. Only inside the arena:
+      // they spawn off-map, where collideWalls' clamp would call everything
+      // blocked. If every probe fails it's boxed in — grind forward.
+      let mx = wx, my = wy;
+      const inArena = z.x > 1 && z.x < 99 && z.y > 1 && z.y < 99;
+      if (inArena) {
+        const probeD = Math.max(1.4, speed * dt * 4);
+        const free = (ux: number, uy: number): boolean => {
+          const ix = z.x + ux * probeD, iy = z.y + uy * probeD;
+          const [cx, cy] = collideWalls(ix, iy, BALANCE.playerRadius);
+          return Math.hypot(cx - ix, cy - iy) < probeD * 0.3;
+        };
+        const base = Math.atan2(wy, wx);
+        const prefer = z.av || 1;
+        let chosen = 0;
+        for (const t of [0, 0.6 * prefer, -0.6 * prefer, 1.2 * prefer, -1.2 * prefer, 1.9 * prefer, -1.9 * prefer]) {
+          const ux = Math.cos(base + t), uy = Math.sin(base + t);
+          if (free(ux, uy)) { mx = ux; my = uy; chosen = Math.sign(t); break; }
+        }
+        z.av = chosen;
+      }
+
+      const nx = z.x + mx * speed * dt;
+      const ny = z.y + my * speed * dt;
+      [z.x, z.y] = (nx > 1 && nx < 99 && ny > 1 && ny < 99)
+        ? collideWalls(nx, ny, BALANCE.playerRadius)
+        : [nx, ny];
+      z.h = (Math.atan2(mx, -my) * 180) / Math.PI;   // face where it walks
     }
     for (const pk of pickupsRef.current) {
       if (!pk.on) continue;
