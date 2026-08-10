@@ -11,7 +11,7 @@ import { FluencyResult, listFluencyResults, saveFluencyResult } from '../service
 // passes the level.
 //
 //   Level N = 10 segments of ~3·N base letters each (whole words, spaces and
-//   diacritics not counted), ideal time 15·N seconds.
+//   diacritics not counted), ideal time 15·N + 5 seconds.
 //
 // Segments render exactly like the live logging page: font-quranic (so the
 // hand-patched fonts and the U+06DF sukoon fix apply) plus renderWordWithMarks
@@ -27,7 +27,7 @@ export interface FluencyLevel { n: number; letters: number; idealMs: number; col
 export const FLUENCY_LEVELS: FluencyLevel[] = Array.from({ length: 10 }, (_, i) => ({
   n: i + 1,
   letters: (i + 1) * 3,
-  idealMs: (i + 1) * 15_000,
+  idealMs: (i + 1) * 15_000 + 5_000,   // 20s, 35s, 50s … (user loosened by 5s)
   color: LEVEL_COLORS[i],
 }));
 
@@ -106,7 +106,9 @@ const standingOf = (rows: FluencyResult[]): StudentStanding => {
     if (!byLevel.has(r.level)) byLevel.set(r.level, []);
     byLevel.get(r.level)!.push(r);
   }
-  const passed = (l: number) => (byLevel.get(l) ?? []).some(r => r.passed);
+  // Judged against the CURRENT ideal, not the stored passed flag — when the
+  // tutor loosens a level's time, runs that fit the new bar count as passes.
+  const passed = (l: number) => (byLevel.get(l) ?? []).some(r => r.timeMs <= FLUENCY_LEVELS[l - 1].idealMs);
   let current = 1;
   while (current <= 10 && passed(current)) current++;
   return {
