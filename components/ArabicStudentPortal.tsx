@@ -13,6 +13,7 @@ import { ArabicStudent, LessonSession } from '../types';
 import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
 import { getStudentUpcomingSessions, getStudentUnifiedLessons, type UnifiedLesson } from '../services/lessonSessionService';
+import LessonJoinPopup from './LessonJoinPopup';
 import NotificationCenter from './NotificationCenter';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
@@ -134,8 +135,11 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
+      {/* "Your lesson is on" — pops while a Meet-linked lesson runs */}
+      <LessonJoinPopup studentId={student.id} bookingKey={student.shareToken ?? undefined} bookingPortal="arabic" />
+
       {/* ── Header ── */}
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
+      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {/* ── Top bar: logo + student badge ── */}
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
           {/* Back to family button — only shown when opened from a family link */}

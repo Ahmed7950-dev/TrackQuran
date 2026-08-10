@@ -12,6 +12,7 @@ import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
+import LessonJoinPopup from './LessonJoinPopup';
 import { LessonSession } from '../types';
 import LottieIcon from './LottieIcon';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -341,6 +342,11 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-gray-900 font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      {/* "Your lesson is on" — pops on any tab while a Meet-linked lesson runs */}
+      {report?.student_id && (
+        <LessonJoinPopup studentId={report.student_id} bookingKey={report.student_id} bookingPortal="quran" />
+      )}
+
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">

@@ -363,6 +363,23 @@ export async function updateBookingMeetUrl(bookingId: string, meetUrl: string | 
 }
 
 /** Get all confirmed Arabic portal bookings for a student (by their share token) */
+/** Confirmed bookings for one student key, either portal. The key is what the
+ *  portal stores in lesson_bookings.student_id: the Arabic portal writes the
+ *  student's SHARE TOKEN, the Quran portal writes the student id. */
+export async function getConfirmedBookingsFor(
+  studentKey: string,
+  portal: BookingPortal,
+): Promise<LessonBooking[]> {
+  const { data, error } = await supabase
+    .from('lesson_bookings')
+    .select('*')
+    .eq('student_id', studentKey)
+    .eq('portal_type', portal)
+    .eq('status', 'confirmed');
+  if (error) throw error;
+  return (data as BookingRow[]).map(rowToBooking);
+}
+
 export async function getConfirmedArabicBookingsByToken(shareToken: string): Promise<LessonBooking[]> {
   const { data, error } = await supabase
     .from('lesson_bookings')
