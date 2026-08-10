@@ -364,7 +364,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
       {/* ── Header ── */}
       <header ref={setHeaderEl} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex items-center gap-2 sm:gap-3">
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
 
           {/* Back to family button — only shown when opened from a family link */}
           {backUrl && (
@@ -435,13 +435,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
           <div className="flex-1 md:hidden" />
 
+          {/* phones: break here — controls form their own compact second row */}
+          <div className="basis-full h-0 sm:hidden" />
+
           {/* Language switcher */}
           <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 dark:bg-gray-700 rounded-lg flex-shrink-0" dir="ltr">
             {(['en', 'ar', 'tr'] as const).map(lng => (
               <button
                 key={lng}
                 onClick={() => setLanguage(lng)}
-                className={`px-2 py-1 text-[11px] rounded-md font-bold transition-colors ${language === lng ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-400 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                className={`px-1.5 sm:px-2 py-1 text-[11px] rounded-md font-bold transition-colors ${language === lng ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-400 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                 aria-label={`Switch language to ${lng.toUpperCase()}`}
               >
                 {lng.toUpperCase()}
@@ -452,11 +455,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
 
           {/* Student name badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
-            {report_data.profileIcon
-              ? <StudentProfileIcon src={report_data.profileIcon} size={44} mode="always" />
-              : <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>}
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[100px] sm:max-w-none">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0 min-w-0">
+            {report_data.profileIcon ? (
+              <>
+                <span className="hidden sm:block"><StudentProfileIcon src={report_data.profileIcon} size={44} mode="always" /></span>
+                <span className="sm:hidden text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
+              </>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
+            )}
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[72px] sm:max-w-none">
               {student_name}
             </span>
           </div>
@@ -465,7 +473,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <button
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+            className="p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
           >
             {theme === 'dark' ? (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -486,7 +494,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setIsFontMenuOpen(o => !o)}
-              className="sr-font-btn p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+              className="sr-font-btn p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
               aria-label="Select Quranic font"
             >
               <span style={{ fontFamily: 'Amiri Regular', fontSize: '1.25rem' }}>ع</span>

@@ -141,7 +141,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {/* ── Top bar: logo + student badge ── */}
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
           {/* Back to family button — only shown when opened from a family link */}
           {backUrl && (
             <a
