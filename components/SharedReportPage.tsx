@@ -119,6 +119,18 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(156);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+
   const [quranicFont, setQuranicFont] = useState<string>(() => {
     const f = localStorage.getItem('quranicFont') || 'Hafs';
     return QURANIC_FONTS.some(o => o.name === f) ? f : 'Hafs'; // guard removed fonts
@@ -348,8 +360,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
       )}
 
       {/* ── Header ── */}
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex items-center gap-2 sm:gap-3">
 
           {/* Back to family button — only shown when opened from a family link */}
           {backUrl && (
@@ -523,7 +535,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             <div className="container mx-auto px-3 sm:px-4 flex sm:justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
               <button
                 onClick={() => changeTab('progress')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'progress'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -538,7 +550,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('calendar')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'calendar'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -552,7 +564,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               {/* Quran — primary tab: a green glowing flat pill with an animated icon */}
               <button
                 onClick={() => changeTab('quran')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1 mx-1 rounded-none text-sm font-bold transition-all whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-3 py-1.5 text-xs sm:px-4 sm:py-2 sm:text-sm my-1 mx-1 rounded-none font-bold transition-all whitespace-nowrap ${
                   activeTab === 'quran'
                     ? 'bg-green-500 text-white'
                     : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50'
@@ -563,7 +575,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('homework')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'homework'
                     ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -584,7 +596,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('tajweed')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'tajweed'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -597,7 +609,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('qaedah')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'qaedah'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -610,7 +622,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('alphabetTrainer')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'alphabetTrainer'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -623,7 +635,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </button>
               <button
                 onClick={() => changeTab('lettersTrainer')}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'lettersTrainer'
                     ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -791,7 +803,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     externalBuzzTrigger={buzzTrigger}
                     focusedLetterKey={focusedLetterKey}
                     cursorLetterKey={cursorLetterKey}
-                    toolbarStickyTop={156}
+                    toolbarStickyTop={headerHeight}
                     notesStudentId={report.student_id}
                     student={quranFakeStudent}
                     students={[quranFakeStudent]}

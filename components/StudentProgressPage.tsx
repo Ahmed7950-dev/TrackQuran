@@ -3052,18 +3052,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
 
             <div className="space-y-6">
-                <div className="p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
+                <div className="px-2 py-2 sm:p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls.
                         Wraps on narrow screens so the right-side controls stay reachable. */}
                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
-                        <div className="relative flex-shrink-0" dir="ltr">
+                        <div className="relative flex items-center gap-1.5 flex-shrink-0" dir="ltr">
                             {/* Speed: a single circle showing the current rate; click to pick. */}
                             <button
                                 onClick={() => setSpeedMenuOpen(o => !o)}
                                 title="Recitation speed"
-                                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
                             >
                                 {readOnlySpeed}×
                             </button>
@@ -3089,7 +3089,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 onClick={() => setReciterMenuOpen(o => !o)}
                                 title="Reciter"
                                 aria-label="Choose reciter"
-                                className="ml-2 w-9 h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
                             >
                                 🎙️
                             </button>
@@ -3221,18 +3221,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             )}
                         </div>
 
-                        {/* ── Right: tool controls (always visible) ── */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* ── Right: tool controls. On phones this is its own full-width
+                            row under the surah button, everything compact; from sm it goes
+                            back to the inline cluster. ── */}
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-2 flex-shrink-0 w-full sm:w-auto min-w-0">
                             {/* Font size */}
-                            <div className="flex items-center gap-1 bg-slate-200 dark:bg-gray-700 rounded-lg p-1">
-                                <button onClick={handleDecreaseFontSize} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
-                                <span className="text-slate-600 dark:text-slate-300 font-semibold w-7 text-center text-sm">A</span>
-                                <button onClick={handleIncreaseFontSize} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
+                            <div className="flex items-center bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 sm:gap-1">
+                                <button onClick={handleDecreaseFontSize} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
+                                <span className="text-slate-600 dark:text-slate-300 font-semibold w-5 sm:w-7 text-center text-sm">A</span>
+                                <button onClick={handleIncreaseFontSize} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
                             </div>
 
                             {/* Auto-scroll */}
-                            <div className={`flex items-center gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'w-32' : 'w-auto'}`}>
-                                <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
+                            <div className={`flex items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'w-auto sm:w-32' : 'w-auto'}`}>
+                                <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                     {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                                 </button>
                                 {isAutoScrolling && (<div className="flex items-center justify-center gap-1 flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
@@ -3312,15 +3314,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </div>
 
                             {/* Search — with instant typeahead (pages, verses, surah names) */}
-                            <div className="relative">
-                                <form onSubmit={handleSearch} className="flex gap-2 items-center">
+                            <div className="relative flex-1 sm:flex-none min-w-0">
+                                <form onSubmit={handleSearch} className="flex gap-1 sm:gap-2 items-center">
                                     <input type="text" value={searchInput}
                                         onChange={e => { setSearchInput(e.target.value); setShowSearchSuggestions(true); }}
                                         onFocus={() => { if (searchInput.trim()) setShowSearchSuggestions(true); }}
                                         onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
                                         onKeyDown={e => { if (e.key === 'Escape') setShowSearchSuggestions(false); }}
-                                        placeholder={t('liveSession.searchPlaceholder')} className="w-24 sm:w-36 px-2 py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
-                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600" aria-label={t('liveSession.search')}>
+                                        placeholder={t('liveSession.searchPlaceholder')} className="w-full sm:w-36 min-w-0 px-2 py-1.5 sm:py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
+                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2 sm:p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600 flex-shrink-0" aria-label={t('liveSession.search')}>
                                         {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
                                     </button>
                                 </form>
