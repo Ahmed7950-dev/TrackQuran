@@ -153,7 +153,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       <button
         onClick={() => setOpen(o => !o)}
         aria-label="Notifications"
-        className="relative p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+        className="relative p-1.5 sm:p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

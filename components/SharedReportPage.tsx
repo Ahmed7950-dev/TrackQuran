@@ -119,6 +119,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);      // phone 🌐 dropdown
+  const [navMenuOpen, setNavMenuOpen] = useState(false);        // phone ☰ dropdown
   // Callback ref, NOT a plain ref: the page's first render is a loading screen
   // with no <header>, so a mount-once effect would try to observe null and
   // never measure — the toolbar then sticks at the 156px fallback and floats a
@@ -364,7 +366,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
       {/* ── Header ── */}
       <header ref={setHeaderEl} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" dir="ltr" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
+        <div className="container mx-auto px-2 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-1 gap-y-1 sm:gap-3">
 
           {/* Back to family button — only shown when opened from a family link */}
           {backUrl && (
@@ -381,7 +383,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           )}
 
           {/* Logo — clicking goes back to content */}
-          <button onClick={() => setPortalTab('content')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0" aria-label="Go to portal">
+          <button onClick={() => setPortalTab('content')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 [&_img]:h-7 sm:[&_img]:h-[85px]" aria-label="Go to portal">
             <Logo />
           </button>
 
@@ -435,21 +437,45 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
           <div className="flex-1 md:hidden" />
 
-          {/* phones: break here — controls form their own compact second row */}
-          <div className="basis-full h-0 sm:hidden" />
-
-          {/* Language switcher */}
-          <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 dark:bg-gray-700 rounded-lg flex-shrink-0" dir="ltr">
+          {/* Language switcher — pill on sm+, a single 🌐 dropdown on phones */}
+          <div className="hidden sm:flex items-center gap-0.5 p-0.5 bg-slate-100 dark:bg-gray-700 rounded-lg flex-shrink-0" dir="ltr">
             {(['en', 'ar', 'tr'] as const).map(lng => (
               <button
                 key={lng}
                 onClick={() => setLanguage(lng)}
-                className={`px-1.5 sm:px-2 py-1 text-[11px] rounded-md font-bold transition-colors ${language === lng ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-400 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                className={`px-2 py-1 text-[11px] rounded-md font-bold transition-colors ${language === lng ? 'bg-white dark:bg-gray-800 text-teal-600 dark:text-orange-400 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                 aria-label={`Switch language to ${lng.toUpperCase()}`}
               >
                 {lng.toUpperCase()}
               </button>
             ))}
+          </div>
+          <div className="relative sm:hidden flex-shrink-0">
+            <button
+              onClick={() => setLangMenuOpen(o => !o)}
+              aria-label="Choose language"
+              className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3 7.5 7.03 7.5 12s2.015 9 4.5 9Zm-8.716-6h17.432M3.284 9h17.432" />
+              </svg>
+            </button>
+            {langMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setLangMenuOpen(false)} />
+                <div className="absolute start-0 top-full mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1 min-w-[110px]">
+                  {(['en', 'ar', 'tr'] as const).map(lng => (
+                    <button
+                      key={lng}
+                      onClick={() => { setLanguage(lng); setLangMenuOpen(false); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold text-start transition-colors ${language === lng ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                    >
+                      {lng === 'en' ? 'English' : lng === 'ar' ? 'العربية' : 'Türkçe'}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <NotificationCenter teacherId={report?.teacher_id ?? ''} recipient="student" studentId={report?.student_id ?? ''} />
@@ -464,7 +490,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             ) : (
               <span className="text-emerald-600 dark:text-emerald-400 text-sm">📖</span>
             )}
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[72px] sm:max-w-none">
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 truncate max-w-[52px] sm:max-w-none">
               {student_name}
             </span>
           </div>
@@ -473,7 +499,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <button
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+            className="p-1 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
           >
             {theme === 'dark' ? (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -494,7 +520,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setIsFontMenuOpen(o => !o)}
-              className="sr-font-btn p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
+              className="sr-font-btn p-1 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
               aria-label="Select Quranic font"
             >
               <span style={{ fontFamily: 'Amiri Regular', fontSize: '1.25rem' }}>ع</span>
@@ -526,17 +552,36 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             )}
           </div>
 
-          {/* Mobile nav links */}
-          <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+          {/* Mobile nav — one ☰ button holding About / Contact / Support */}
+          <div className="relative md:hidden flex-shrink-0">
             <button
-              onClick={() => setPortalTab(p => p === 'about' ? 'content' : 'about')}
-              className={`text-xs font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-400'}`}
+              onClick={() => setNavMenuOpen(o => !o)}
+              aria-label="Open menu"
+              className="p-1 sm:p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
             >
-              {t('header.aboutUs')}
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
             </button>
-            <a href="#" className="text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-2.5 py-1 rounded-full">
-              {t('header.supportUs')}
-            </a>
+            {navMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setNavMenuOpen(false)} />
+                <div className="absolute end-0 top-full mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1 min-w-[150px]">
+                  <button
+                    onClick={() => { setPortalTab(p => p === 'about' ? 'content' : 'about'); setNavMenuOpen(false); }}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold text-start transition-colors ${portalTab === 'about' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                  >
+                    {t('header.aboutUs')}
+                  </button>
+                  <a href="#" onClick={() => setNavMenuOpen(false)} className="px-3 py-2 rounded-lg text-xs font-semibold text-start text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+                    {t('header.contactUs')}
+                  </a>
+                  <a href="#" onClick={() => setNavMenuOpen(false)} className="px-3 py-2 rounded-lg text-xs font-semibold text-start text-teal-700 dark:text-orange-400 hover:bg-teal-50 dark:hover:bg-gray-700 transition-colors">
+                    {t('header.supportUs')}
+                  </a>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
