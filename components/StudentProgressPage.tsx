@@ -13,7 +13,7 @@ import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorized
 import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, hasIqlabHighMeem, highMeemTopEm, HIGH_MEEM } from '../utils/quranicMarks';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
-import { RECITERS, ReciterKey, reciterOf, binHumaidSurahUrl } from '../services/recitersService';
+import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -630,10 +630,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [audioFailed, setAudioFailed] = useState(false);
 
     // ── Reciter choice (student portal). Minshawi = per-ayah files with the
-    // tap-a-verse player. Bin Humaid has NO per-ayah source anywhere and the
-    // mp3quran ayat timings proved inaccurate against his audio in real use,
-    // so he is FULL-SURAH only: any tap in a surah plays the whole surah from
-    // the beginning; tapping again stops. Remembered per browser. ────────────
+    // tap-a-verse player. Al-Dukhain = surah files + mp3quran ayat timings
+    // (measured accurate for his read): seek to the tapped verse, an rAF
+    // watcher stops or walks the highlight at boundaries. Bin Humaid and
+    // Al-Nufais have no per-ayah source and no trustworthy timings, so they
+    // are FULL-SURAH only: any tap plays the whole surah from the beginning;
+    // tapping again stops. Remembered per browser. ────────────────────────────
     const [reciter, setReciter] = useState<ReciterKey>(() => {
         try { return reciterOf(localStorage.getItem('quranReciter')).key; } catch { return 'minshawi'; }
     });
@@ -644,8 +646,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** True while a whole surah (bin Humaid) is loaded/playing — its `ended`
      *  must not fall into the per-ayah chain. */
     const fullSurahRef = useRef(false);
-    /** Which surah's file is currently loaded in the element (bin Humaid). */
+    /** Which surah's file is currently loaded in the element (surah-file modes). */
     const loadedSurahRef = useRef(0);
+    /** Active timed-surah playback (Al-Dukhain): timing table + where to stop. */
+    const timedRef = useRef<{ surah: number; timings: AyahTiming[]; stopAtMs: number; sequential: boolean } | null>(null);
+    const timedRafRef = useRef(0);
+
+    /** rAF watcher for timed-surah playback: stops at the bound and, in
+     *  sequential mode, moves the verse highlight as boundaries pass. */
+    const watchTimed = useCallback((req: number) => {
+        cancelAnimationFrame(timedRafRef.current);
+        const step = () => {
+            const audio = readOnlyAudioRef.current;
+            const td = timedRef.current;
+            if (!audio || !td || req !== audioReqRef.current) return;
+            const ms = audio.currentTime * 1000;
+            if (ms >= td.stopAtMs - 20) {
+                try { audio.pause(); } catch { /* ignore */ }
+                timedRef.current = null;
+                setReadOnlyAudioVerse(null);
+                return;
+            }
+            if (td.sequential) {
+                const cur = td.timings.find(t => ms >= t.startMs && ms < t.endMs);
+                if (cur) {
+                    setReadOnlyAudioVerse(v =>
+                        v && v.surah === td.surah && v.ayah === cur.ayah ? v : { surah: td.surah, ayah: cur.ayah });
+                }
+            }
+            timedRafRef.current = requestAnimationFrame(step);
+        };
+        timedRafRef.current = requestAnimationFrame(step);
+    }, []);
 
     // ── Recitation playback (student portal) ──────────────────────────────
     // iPad Safari is stricter here than any desktop browser, and every failure
@@ -675,21 +707,26 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             console.warn('[recitation] failed:', (err as Error)?.name, (err as Error)?.message);
             readOnlySeqRef.current = false;
             fullSurahRef.current = false;
+            timedRef.current = null;
             setReadOnlyAudioVerse(null);
             setAudioFailed(true);
         };
 
-        if (reciter === 'binhumaid') {
+        const rec = reciterOf(reciter);
+
+        if (rec.mode === 'fullSurah') {
             // Whole surah from the start, whatever was tapped. The sentinel
             // ayah 0 marks "surah playing": it can never equal a real verse, so
             // no per-verse ring lights up, while the tap-to-stop toggle and the
             // playing state still work.
             fullSurahRef.current = true;
+            timedRef.current = null;
             readOnlySeqRef.current = false;
             setReadOnlyAudioVerse({ surah, ayah: 0 });
-            if (loadedSurahRef.current !== surah || !audio.src.includes('mp3quran')) {
+            const url = fullSurahUrl(rec.key, surah);
+            if (audio.src !== url) {
                 loadedSurahRef.current = surah;
-                audio.src = binHumaidSurahUrl(surah);
+                audio.src = url;
                 try { audio.load(); } catch { /* ignore */ }
             } else {
                 try { audio.currentTime = 0; } catch { /* not loaded yet */ }
@@ -698,17 +735,52 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             return;
         }
 
+        if (rec.mode === 'timedSurah') {
+            // Al-Dukhain: one file per surah + a per-ayah timing table. Seek to
+            // the tapped verse; the rAF watcher stops at its end (verse tap) or
+            // walks the highlight to the end of the surah (ayah-number tap).
+            // The per-ayah `ended` chain must never fire for this mode.
+            fullSurahRef.current = false;
+            readOnlySeqRef.current = false;
+            dukhainTimings(surah).then(timings => {
+                if (req !== audioReqRef.current) return;
+                const row = timings.find(t => t.ayah === ayah) ?? timings[0];
+                const last = timings[timings.length - 1];
+                timedRef.current = { surah, timings, stopAtMs: sequential ? last.endMs : row.endMs, sequential };
+                const seekPlay = () => {
+                    try { audio.currentTime = row.startMs / 1000; } catch { /* pre-metadata */ }
+                    audio.play().then(() => { if (req === audioReqRef.current) watchTimed(req); }).catch(fail);
+                };
+                const url = dukhainSurahUrl(surah);
+                // Safari ignores currentTime before loadedmetadata, so a fresh
+                // file seeks inside that event, not right after load().
+                if (audio.src === url && audio.readyState >= 1) { seekPlay(); return; }
+                loadedSurahRef.current = surah;
+                audio.src = url;
+                const onMeta = () => {
+                    audio.removeEventListener('loadedmetadata', onMeta);
+                    if (req === audioReqRef.current) seekPlay();
+                };
+                audio.addEventListener('loadedmetadata', onMeta);
+                try { audio.load(); } catch { /* ignore */ }
+            }).catch(fail);
+            return;
+        }
+
         fullSurahRef.current = false;
+        timedRef.current = null;
         loadedSurahRef.current = 0;
         audio.src = audioUrl(surah, ayah);
         try { audio.load(); } catch { /* ignore */ }
         audio.play().catch(fail);
-    }, [reciter]);
+    }, [reciter, watchTimed]);
 
     const stopVerse = useCallback(() => {
         audioReqRef.current++;
         readOnlySeqRef.current = false;
         fullSurahRef.current = false;
+        timedRef.current = null;
+        cancelAnimationFrame(timedRafRef.current);
         try { readOnlyAudioRef.current?.pause(); } catch { /* ignore */ }
         setReadOnlyAudioVerse(null);
     }, []);
@@ -3113,7 +3185,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                 <span>
                                                     {r.name}
                                                     <span className={`block text-[9px] font-semibold ${reciter === r.key ? 'text-white/70' : 'text-slate-400'}`}>
-                                                        {r.mode === 'perAyah' ? 'verse by verse' : 'full surah'}
+                                                        {r.mode === 'fullSurah' ? 'full surah' : 'verse by verse'}
                                                     </span>
                                                 </span>
                                                 <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
@@ -3812,6 +3884,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         // end, never a per-ayah boundary to chain across.
                         if (fullSurahRef.current) {
                             fullSurahRef.current = false;
+                            readOnlySeqRef.current = false;
+                            setReadOnlyAudioVerse(null);
+                            return;
+                        }
+                        // Timed-surah (Al-Dukhain): the file ran out before the
+                        // watcher's stop bound — end of playback, nothing to chain.
+                        if (timedRef.current) {
+                            timedRef.current = null;
                             readOnlySeqRef.current = false;
                             setReadOnlyAudioVerse(null);
                             return;
