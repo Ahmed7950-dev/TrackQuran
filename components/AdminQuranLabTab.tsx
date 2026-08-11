@@ -184,6 +184,12 @@ const AdminQuranLabTab: React.FC = () => {
   micIdRef.current = micId;
   /** Label of the device ACTUALLY feeding the recorder (from the live track). */
   const [activeMicLabel, setActiveMicLabel] = useState('');
+  const [echoLevel, setEchoLevel] = useState<number>(() => {
+    try { const v = parseInt(localStorage.getItem('qlabEchoLevel') ?? '50', 10); return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 50; } catch { return 50; }
+  });
+  const echoLevelRef = useRef(echoLevel);
+  echoLevelRef.current = echoLevel;
+  useEffect(() => { try { localStorage.setItem('qlabEchoLevel', String(echoLevel)); } catch { /* private mode */ } }, [echoLevel]);
   const meterFillRef = useRef<HTMLDivElement | null>(null);
   const monitorCtxRef = useRef<AudioContext | null>(null);
   const monitorRafRef = useRef(0);
@@ -327,7 +333,7 @@ const AdminQuranLabTab: React.FC = () => {
       const raw = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
       const key = `${surah}:${ayah}`;
       setProcessing(p => new Set(p).add(key));
-      masterTake(raw)
+      masterTake(raw, { echoLevel: echoLevelRef.current })
         .then(async ({ blob, durMs }) => {
           const ok = await uploadRecitationVerse(surah, ayah, blob);
           if (!ok) throw new Error('upload failed');
@@ -585,6 +591,17 @@ const AdminQuranLabTab: React.FC = () => {
                 </button>
               )}
             </span>
+          )}
+          {recMode === 'record' && (
+            <label className="flex items-center gap-1.5" title="Echo on new recordings: 0% = none, 50% = light (default)">
+              <span>Echo</span>
+              <input
+                type="range" min={0} max={100} step={5} value={echoLevel}
+                onChange={e => setEchoLevel(+e.target.value)}
+                className="w-24 accent-teal-600"
+              />
+              <span className="tabular-nums font-semibold w-8">{echoLevel === 0 ? 'off' : `${echoLevel}%`}</span>
+            </label>
           )}
           {micError && <span className="text-red-600 font-semibold">{micError}</span>}
         </div>

@@ -43,7 +43,13 @@ const makeImpulseResponse = (ctx: OfflineAudioContext): AudioBuffer => {
 
 export interface MasteredTake { blob: Blob; durMs: number }
 
-export async function masterTake(raw: Blob): Promise<MasteredTake> {
+export interface MasterOptions {
+  /** Echo amount 0–100. 0 disables the echo entirely; 50 is the default
+   *  "light echo"; 100 doubles it. The reverb tail is unaffected. */
+  echoLevel?: number;
+}
+
+export async function masterTake(raw: Blob, opts: MasterOptions = {}): Promise<MasteredTake> {
   const arrayBuf = await raw.arrayBuffer();
   const decoded = await decodeCtx().decodeAudioData(arrayBuf);
 
@@ -69,20 +75,24 @@ export async function masterTake(raw: Blob): Promise<MasteredTake> {
   const verb = off.createConvolver(); verb.buffer = makeImpulseResponse(off);
   const wet = off.createGain(); wet.gain.value = 0.16;
 
-  // Light echo: darkened 300ms repeats with gentle feedback — the audible
-  // "beautiful echo" of professional recitations (the reverb alone is only
-  // diffuse space; this adds the discrete repeats).
-  const echo = off.createDelay(1.0); echo.delayTime.value = 0.3;
-  const echoTone = off.createBiquadFilter();
-  echoTone.type = 'lowpass'; echoTone.frequency.value = 3200;
-  const echoFb = off.createGain(); echoFb.gain.value = 0.28;
-  const echoWet = off.createGain(); echoWet.gain.value = 0.16;
-
   src.connect(hpf); hpf.connect(presence); presence.connect(deEss); deEss.connect(comp);
   comp.connect(dry); dry.connect(off.destination);
   comp.connect(verb); verb.connect(wet); wet.connect(off.destination);
-  comp.connect(echo); echo.connect(echoTone); echoTone.connect(echoFb); echoFb.connect(echo);
-  echoTone.connect(echoWet); echoWet.connect(off.destination);
+
+  // Light echo: darkened 300ms repeats with gentle feedback — the audible
+  // "beautiful echo" of professional recitations (the reverb alone is only
+  // diffuse space; this adds the discrete repeats). The tutor's slider scales
+  // it: 0 = none (nodes skipped), 50 = the shipped default, 100 = double.
+  const echoAmt = Math.max(0, Math.min(100, opts.echoLevel ?? 50)) / 100;
+  if (echoAmt > 0) {
+    const echo = off.createDelay(1.0); echo.delayTime.value = 0.3;
+    const echoTone = off.createBiquadFilter();
+    echoTone.type = 'lowpass'; echoTone.frequency.value = 3200;
+    const echoFb = off.createGain(); echoFb.gain.value = 0.28;
+    const echoWet = off.createGain(); echoWet.gain.value = 0.32 * echoAmt;
+    comp.connect(echo); echo.connect(echoTone); echoTone.connect(echoFb); echoFb.connect(echo);
+    echoTone.connect(echoWet); echoWet.connect(off.destination);
+  }
 
   src.start();
   const rendered = await off.startRendering();
