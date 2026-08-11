@@ -178,6 +178,15 @@ const AdminQuranLabTab: React.FC = () => {
   const [phase, setPhase] = useState<RecPhase>({ kind: 'idle' });
   const [processing, setProcessing] = useState<Set<string>>(new Set());
   const [micError, setMicError] = useState<string | null>(null);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [micId, setMicId] = useState<string>(() => { try { return localStorage.getItem('qlabMicId') || ''; } catch { return ''; } });
+  const micIdRef = useRef(micId);
+  micIdRef.current = micId;
+  /** Label of the device ACTUALLY feeding the recorder (from the live track). */
+  const [activeMicLabel, setActiveMicLabel] = useState('');
+  const meterFillRef = useRef<HTMLDivElement | null>(null);
+  const monitorCtxRef = useRef<AudioContext | null>(null);
+  const monitorRafRef = useRef(0);
   const [playingAyah, setPlayingAyah] = useState<number | null>(null);
   const [playSeq, setPlaySeq] = useState(false);
   const [recTick, setRecTick] = useState(0); // elapsed-seconds display while recording
@@ -205,18 +214,73 @@ const AdminQuranLabTab: React.FC = () => {
 
   const versesInThisSurah = QURAN_METADATA[surah - 1]?.numberOfAyahs ?? verses.length;
 
+  const stopMeter = () => {
+    cancelAnimationFrame(monitorRafRef.current);
+    monitorCtxRef.current?.close().catch(() => { /* already closed */ });
+    monitorCtxRef.current = null;
+    if (meterFillRef.current) meterFillRef.current.style.width = '0%';
+  };
+
+  /** Live input level bar — the visible proof of WHICH mic is picking up. */
+  const startMeter = (stream: MediaStream) => {
+    stopMeter();
+    try {
+      const ctx = new AudioContext();
+      monitorCtxRef.current = ctx;
+      const an = ctx.createAnalyser();
+      an.fftSize = 512;
+      ctx.createMediaStreamSource(stream).connect(an); // analyser only — never the speakers
+      const buf = new Uint8Array(an.fftSize);
+      const step = () => {
+        an.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i] - 128) / 128; if (v > peak) peak = v; }
+        if (meterFillRef.current) meterFillRef.current.style.width = `${Math.min(100, Math.round(peak * 140))}%`;
+        monitorRafRef.current = requestAnimationFrame(step);
+      };
+      monitorRafRef.current = requestAnimationFrame(step);
+    } catch { /* meter is best-effort */ }
+  };
+
+  const refreshMics = useCallback(async () => {
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      setMics(devs.filter(d => d.kind === 'audioinput'));
+    } catch { /* unsupported */ }
+  }, []);
+
+  // Keep the device list fresh (plugging in a DJI mic fires this).
+  useEffect(() => {
+    refreshMics();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refreshMics);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshMics);
+  }, [refreshMics]);
+
   const ensureMic = async (): Promise<MediaStream | null> => {
     if (streamRef.current?.active) return streamRef.current;
+    const base = {
+      echoCancellation: false,   // nothing plays during a take; EC dulls recitation
+      noiseSuppression: true,    // capture-side speech noise removal
+      autoGainControl: true,
+      channelCount: 1,
+    };
+    const wanted = micIdRef.current;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,   // nothing plays during a take; EC dulls recitation
-          noiseSuppression: true,    // capture-side speech noise removal
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: wanted ? { ...base, deviceId: { exact: wanted } } : base,
+        });
+      } catch (e) {
+        // The chosen device is gone/unavailable — fall back to the default so
+        // recording still works; the active-label line shows what's really used.
+        if (wanted) stream = await navigator.mediaDevices.getUserMedia({ audio: base });
+        else throw e;
+      }
       streamRef.current = stream;
+      setActiveMicLabel(stream.getAudioTracks()[0]?.label || 'Microphone');
+      startMeter(stream);
+      refreshMics(); // labels become available once permission is granted
       setMicError(null);
       return stream;
     } catch {
@@ -226,8 +290,18 @@ const AdminQuranLabTab: React.FC = () => {
   };
 
   const stopMic = () => {
+    stopMeter();
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    setActiveMicLabel('');
+  };
+
+  const onPickMic = async (id: string) => {
+    setMicId(id);
+    try { localStorage.setItem('qlabMicId', id); } catch { /* private mode */ }
+    const cur = phaseRef.current;
+    if (cur.kind !== 'idle') return; // never yank the device mid-take
+    if (streamRef.current) { stopMic(); micIdRef.current = id; await ensureMic(); }
   };
 
   // Release the mic when leaving the tool / unmounting.
@@ -481,6 +555,36 @@ const AdminQuranLabTab: React.FC = () => {
             >
               {manifest.published ? '✓ Published — students can pick it' : 'Publish to reciter picker'}
             </button>
+          )}
+          {recMode === 'record' && (
+            <span className="flex items-center gap-2 w-full sm:w-auto">
+              <span>🎤</span>
+              <select
+                value={micId}
+                onChange={e => onPickMic(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs font-semibold text-slate-700 dark:text-slate-200 max-w-[220px]"
+                title="Which microphone to record with"
+              >
+                <option value="">Default microphone</option>
+                {mics.map(m => (
+                  <option key={m.deviceId} value={m.deviceId}>{m.label || 'Microphone'}</option>
+                ))}
+              </select>
+              {activeMicLabel ? (
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-20 h-2 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden flex-shrink-0">
+                    <div ref={meterFillRef} className="h-full bg-emerald-500 transition-[width] duration-75" style={{ width: '0%' }} />
+                  </span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate max-w-[160px]" title={activeMicLabel}>
+                    ● {activeMicLabel}
+                  </span>
+                </span>
+              ) : (
+                <button onClick={() => ensureMic()} className="px-2.5 py-1 rounded-full text-xs font-bold text-white bg-teal-600 hover:bg-teal-700">
+                  Test mic
+                </button>
+              )}
+            </span>
           )}
           {micError && <span className="text-red-600 font-semibold">{micError}</span>}
         </div>
