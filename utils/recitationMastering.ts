@@ -9,8 +9,9 @@
 //   presence +1.5 dB @ 3.2k intelligibility lift
 //   high-shelf −3 dB @ 7.8k tames the sibilance cheap mics exaggerate (س ص ش)
 //   compressor 3:1          the even, "close" studio voice
-//   convolution reverb 12%  a short generated room tail — the polish on
-//                           studio recitations (added, never recorded)
+//   convolution reverb      a room tail — the polish on studio recitations
+//   echo delay 300ms        the light repeating echo of professional
+//                           recitations (dark, feeding back gently)
 //   silence trim            tight per-verse files that chain cleanly
 //   loudness normalization  every verse lands at the same level
 //   mp3 96 kbps mono        ~12 KB/s — the whole muṣḥaf fits in ~1 GB
@@ -29,13 +30,13 @@ const decodeCtx = (): AudioContext => {
 /** Short synthetic room impulse response: pre-delay + exponentially decaying
  *  noise. Convolving with this is what "subtle studio reverb" is. */
 const makeImpulseResponse = (ctx: OfflineAudioContext): AudioBuffer => {
-  const seconds = 1.3;
+  const seconds = 1.8;
   const preDelay = Math.floor(0.02 * SR);
   const ir = ctx.createBuffer(1, Math.floor(seconds * SR), SR);
   const d = ir.getChannelData(0);
   for (let i = preDelay; i < d.length; i++) {
     const t = (i - preDelay) / SR;
-    d[i] = (Math.random() * 2 - 1) * Math.exp(-4.2 * t);
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-3.5 * t);
   }
   return ir;
 };
@@ -47,7 +48,7 @@ export async function masterTake(raw: Blob): Promise<MasteredTake> {
   const decoded = await decodeCtx().decodeAudioData(arrayBuf);
 
   // ── Offline processing graph (mono) ────────────────────────────────────────
-  const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * SR) + SR, SR);
+  const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * SR) + Math.ceil(2.5 * SR), SR);
   const src = off.createBufferSource();
   src.buffer = decoded;
 
@@ -66,11 +67,22 @@ export async function masterTake(raw: Blob): Promise<MasteredTake> {
 
   const dry = off.createGain(); dry.gain.value = 1.0;
   const verb = off.createConvolver(); verb.buffer = makeImpulseResponse(off);
-  const wet = off.createGain(); wet.gain.value = 0.12;
+  const wet = off.createGain(); wet.gain.value = 0.16;
+
+  // Light echo: darkened 300ms repeats with gentle feedback — the audible
+  // "beautiful echo" of professional recitations (the reverb alone is only
+  // diffuse space; this adds the discrete repeats).
+  const echo = off.createDelay(1.0); echo.delayTime.value = 0.3;
+  const echoTone = off.createBiquadFilter();
+  echoTone.type = 'lowpass'; echoTone.frequency.value = 3200;
+  const echoFb = off.createGain(); echoFb.gain.value = 0.28;
+  const echoWet = off.createGain(); echoWet.gain.value = 0.16;
 
   src.connect(hpf); hpf.connect(presence); presence.connect(deEss); deEss.connect(comp);
   comp.connect(dry); dry.connect(off.destination);
   comp.connect(verb); verb.connect(wet); wet.connect(off.destination);
+  comp.connect(echo); echo.connect(echoTone); echoTone.connect(echoFb); echoFb.connect(echo);
+  echoTone.connect(echoWet); echoWet.connect(off.destination);
 
   src.start();
   const rendered = await off.startRendering();
@@ -94,7 +106,7 @@ export async function masterTake(raw: Blob): Promise<MasteredTake> {
       const gate = Math.max(peakRms * 0.03, 0.003); // ≈ −30 dB rel, −50 dBFS abs
       let fw = 0; while (fw < nWin && rmsW[fw] < gate) fw++;
       let lw = nWin - 1; while (lw > fw && rmsW[lw] < gate) lw--;
-      const padIn = Math.floor(0.12 * SR), padOut = Math.floor(0.35 * SR);
+      const padIn = Math.floor(0.12 * SR), padOut = Math.floor(0.6 * SR);
       data = data.slice(Math.max(0, fw * win - padIn), Math.min(data.length, (lw + 1) * win + padOut));
     }
   }

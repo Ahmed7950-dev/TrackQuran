@@ -287,13 +287,13 @@ const AdminQuranLabTab: React.FC = () => {
     }
   }, [beginTake, versesInThisSurah]);
 
-  // Space = next verse, Escape = finish, while recording.
+  // Space = next verse, Enter/Escape = finish & save, while recording.
   useEffect(() => {
     if (tool !== 'recording') return;
     const onKey = (e: KeyboardEvent) => {
       if (phaseRef.current.kind !== 'recording') return;
-      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); finishTake(true); }
-      if (e.key === 'Escape') { e.preventDefault(); finishTake(false); }
+      if (e.key === ' ') { e.preventDefault(); finishTake(true); }
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); finishTake(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -469,7 +469,7 @@ const AdminQuranLabTab: React.FC = () => {
       ) : (
         <div className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
           {recMode === 'record' ? (
-            <span>Tap a <b>verse</b> to record it · tap an <b>ayah number</b> to chain from there (Space/tap = next verse, Esc = stop).</span>
+            <span>Tap a <b>verse</b> to record it · tap an <b>ayah number</b> to chain from there (Space/tap = next verse, Enter = finish &amp; save).</span>
           ) : (
             <span>Tap a <b>verse</b> to hear it · tap an <b>ayah number</b> to play on through the recorded verses.</span>
           )}
@@ -551,7 +551,7 @@ const AdminQuranLabTab: React.FC = () => {
                 </button>
               )}
               <button onClick={() => finishTake(false)} className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-bold">
-                ■ Finish (Esc)
+                ■ Finish (Enter)
               </button>
             </>
           )}
