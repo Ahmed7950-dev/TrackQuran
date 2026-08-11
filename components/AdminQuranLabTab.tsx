@@ -65,6 +65,18 @@ const FONTS = ['Hafs', 'Amiri Regular', 'Elgharib KFGQPCHafs V10', 'Elgharib HAF
 
 const TOTAL_AYAHS = 6236;
 
+// ── Mastering effect levels (0–100, 50 = shipped default; 0 = stage off) ─────
+interface FxLevels { echo: number; reverb: number; clarity: number; softness: number; compression: number; loudness: number }
+const FX_DEFAULTS: FxLevels = { echo: 50, reverb: 50, clarity: 50, softness: 50, compression: 50, loudness: 50 };
+const FX_CONTROLS: Array<{ key: keyof FxLevels; label: string; hint: string }> = [
+  { key: 'echo',        label: 'Echo',     hint: 'Repeating echo — 0 = none, 50 = light, 100 = strong' },
+  { key: 'reverb',      label: 'Reverb',   hint: 'Room space around the voice — 0 = dry, 100 = big hall' },
+  { key: 'clarity',     label: 'Clarity',  hint: 'Presence lift that helps intelligibility' },
+  { key: 'softness',    label: 'Softness', hint: 'Tames sharp س / ص / ش sibilance' },
+  { key: 'compression', label: 'Evenness', hint: 'Steady studio volume — 0 keeps your natural dynamics' },
+  { key: 'loudness',    label: 'Loudness', hint: 'Final level of the saved file' },
+];
+
 interface Verse { verse_key: string; text_uthmani: string }
 
 type Tool = 'vowels' | 'recording';
@@ -184,12 +196,19 @@ const AdminQuranLabTab: React.FC = () => {
   micIdRef.current = micId;
   /** Label of the device ACTUALLY feeding the recorder (from the live track). */
   const [activeMicLabel, setActiveMicLabel] = useState('');
-  const [echoLevel, setEchoLevel] = useState<number>(() => {
-    try { const v = parseInt(localStorage.getItem('qlabEchoLevel') ?? '50', 10); return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 50; } catch { return 50; }
+  const [fx, setFx] = useState<FxLevels>(() => {
+    try {
+      const raw = localStorage.getItem('qlabMasterFx');
+      if (raw) return { ...FX_DEFAULTS, ...JSON.parse(raw) };
+      // Migrate the old echo-only setting.
+      const legacy = parseInt(localStorage.getItem('qlabEchoLevel') ?? '', 10);
+      return Number.isFinite(legacy) ? { ...FX_DEFAULTS, echo: Math.max(0, Math.min(100, legacy)) } : FX_DEFAULTS;
+    } catch { return FX_DEFAULTS; }
   });
-  const echoLevelRef = useRef(echoLevel);
-  echoLevelRef.current = echoLevel;
-  useEffect(() => { try { localStorage.setItem('qlabEchoLevel', String(echoLevel)); } catch { /* private mode */ } }, [echoLevel]);
+  const fxRef = useRef(fx);
+  fxRef.current = fx;
+  useEffect(() => { try { localStorage.setItem('qlabMasterFx', JSON.stringify(fx)); } catch { /* private mode */ } }, [fx]);
+  const [fxOpen, setFxOpen] = useState(false);
   const meterFillRef = useRef<HTMLDivElement | null>(null);
   const monitorCtxRef = useRef<AudioContext | null>(null);
   const monitorRafRef = useRef(0);
@@ -333,7 +352,11 @@ const AdminQuranLabTab: React.FC = () => {
       const raw = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
       const key = `${surah}:${ayah}`;
       setProcessing(p => new Set(p).add(key));
-      masterTake(raw, { echoLevel: echoLevelRef.current })
+      masterTake(raw, {
+        echoLevel: fxRef.current.echo, reverbLevel: fxRef.current.reverb,
+        clarityLevel: fxRef.current.clarity, softnessLevel: fxRef.current.softness,
+        compressionLevel: fxRef.current.compression, loudnessLevel: fxRef.current.loudness,
+      })
         .then(async ({ blob, durMs }) => {
           const ok = await uploadRecitationVerse(surah, ayah, blob);
           if (!ok) throw new Error('upload failed');
@@ -593,17 +616,47 @@ const AdminQuranLabTab: React.FC = () => {
             </span>
           )}
           {recMode === 'record' && (
-            <label className="flex items-center gap-1.5" title="Echo on new recordings: 0% = none, 50% = light (default)">
-              <span>Echo</span>
-              <input
-                type="range" min={0} max={100} step={5} value={echoLevel}
-                onChange={e => setEchoLevel(+e.target.value)}
-                className="w-24 accent-teal-600"
-              />
-              <span className="tabular-nums font-semibold w-8">{echoLevel === 0 ? 'off' : `${echoLevel}%`}</span>
-            </label>
+            <button
+              onClick={() => setFxOpen(o => !o)}
+              className={`px-3 py-1 rounded-full font-bold border transition-colors ${fxOpen ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-teal-400'}`}
+              title="Adjust the sound of new recordings"
+            >
+              🎛️ Effects{JSON.stringify(fx) !== JSON.stringify(FX_DEFAULTS) ? ' •' : ''}
+            </button>
           )}
           {micError && <span className="text-red-600 font-semibold">{micError}</span>}
+        </div>
+      )}
+
+      {/* ── Effects panel ── */}
+      {tool === 'recording' && recMode === 'record' && fxOpen && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+            {FX_CONTROLS.map(c => (
+              <label key={c.key} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300" title={c.hint}>
+                <span className="w-20 font-bold flex-shrink-0">{c.label}</span>
+                <input
+                  type="range" min={0} max={100} step={5} value={fx[c.key]}
+                  onChange={e => setFx(f => ({ ...f, [c.key]: +e.target.value }))}
+                  className="flex-1 accent-teal-600"
+                />
+                <span className="tabular-nums font-semibold w-9 text-end flex-shrink-0">
+                  {fx[c.key] === 0 && c.key !== 'loudness' ? 'off' : `${fx[c.key]}%`}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+              50% = the standard studio sound. Changes apply to NEW recordings — re-record a verse to give it the new sound.
+            </p>
+            <button
+              onClick={() => setFx(FX_DEFAULTS)}
+              className="px-3 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-teal-600 border border-slate-200 dark:border-gray-600 flex-shrink-0 ms-3"
+            >
+              Reset to defaults
+            </button>
+          </div>
         </div>
       )}
 
