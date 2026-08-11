@@ -25,11 +25,12 @@ const LEVEL_COLORS = [
 ];
 
 export interface FluencyLevel { n: number; letters: number; idealMs: number; color: string }
+// Ideal times hand-picked by the tutor (2026-08-11).
+const IDEAL_SECONDS = [40, 50, 65, 70, 75, 80, 85, 90, 95, 100];
 export const FLUENCY_LEVELS: FluencyLevel[] = Array.from({ length: 10 }, (_, i) => ({
   n: i + 1,
   letters: (i + 1) * 3,
-  idealMs: (i + 1) * 20_000,   // 20s per level: 20, 40, 60 … 200
-
+  idealMs: IDEAL_SECONDS[i] * 1000,
   color: LEVEL_COLORS[i],
 }));
 
