@@ -446,16 +446,16 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
           <p className="text-center text-sm mb-3 font-extrabold text-indigo-600 tracking-wide">
             🎮 Pick your game!
           </p>
-          <div className="flex gap-3 justify-center">
+          <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
             {/* Castle Battle */}
             {(() => {
               const active = gameChoice === 'tower';
               return (
                 <button
                   onClick={() => setGameChoice('tower')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#6366f1' : '#e0e7ff',
                     background: active
                       ? 'linear-gradient(160deg,#6366f1 0%,#4f46e5 100%)'
@@ -497,9 +497,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
               return (
                 <button
                   onClick={() => setGameChoice('airplane')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#06b6d4' : '#cffafe',
                     background: active
                       ? 'linear-gradient(160deg,#0891b2 0%,#0e7490 100%)'
@@ -541,9 +541,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
               return (
                 <button
                   onClick={() => setGameChoice('race')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#10b981' : '#d1fae5',
                     background: active
                       ? 'linear-gradient(160deg,#059669 0%,#047857 100%)'
@@ -585,9 +585,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
               return (
                 <button
                   onClick={() => setGameChoice('battle')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#8b5cf6' : '#ede9fe',
                     background: active
                       ? 'linear-gradient(160deg,#7c3aed 0%,#6d28d9 100%)'
@@ -629,9 +629,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
               return (
                 <button
                   onClick={() => setGameChoice('flappy')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#f59e0b' : '#fde68a',
                     background: active
                       ? 'linear-gradient(160deg,#d97706 0%,#b45309 100%)'
@@ -673,9 +673,9 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
               return (
                 <button
                   onClick={() => setGameChoice('oddletter')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden"
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
                   style={{
-                    width: 132, minWidth: 0,
+                    minWidth: 0,
                     borderColor: active ? '#0d9488' : '#99f6e4',
                     background: active ? 'linear-gradient(160deg,#0d9488 0%,#0f766e 100%)' : 'linear-gradient(160deg,#f0fdfa 0%,#ccfbf1 100%)',
                     boxShadow: active ? '0 8px 24px rgba(13,148,136,0.45), 0 2px 8px rgba(13,148,136,0.3)' : '0 2px 8px rgba(13,148,136,0.1)',

@@ -3532,7 +3532,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {renderSurahContent()}
                         {/* Colour legend (left) + pagination controls (right) */}
                         {!isLoading && !error && verses.length > 0 && (
-                            <div dir="ltr" className="flex flex-wrap justify-between items-center gap-x-4 gap-y-3 py-6 px-4 border-t border-slate-200 dark:border-gray-700">
+                            <div dir="ltr" className="flex flex-wrap justify-between items-center gap-x-3 gap-y-2 sm:gap-x-4 sm:gap-y-3 py-4 px-2 sm:py-6 sm:px-4 border-t border-slate-200 dark:border-gray-700">
                                 {/* Legend */}
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" />Read &amp; memorized</span>
@@ -3541,14 +3541,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 dark:bg-blue-700" />Tafsir</span>
                                 </div>
                                 {/* Pager — only when the surah spans more than one window */}
-                                <div className="flex items-center gap-3 ms-auto">
+                                <div className="flex items-center gap-1.5 sm:gap-3 ms-auto">
                                     {/* Left: previous 5 pages within the surah, else jump to the previous surah */}
                                     {hasPreviousPages() ? (
                                         <button
                                             onClick={handlePreviousPages}
-                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                            className="group flex items-center gap-1 sm:gap-1.5 ps-2.5 pe-3 py-1.5 text-xs sm:ps-3 sm:pe-4 sm:py-2.5 sm:text-sm rounded-full font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:-translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                                             </svg>
                                             <span>Previous</span>
@@ -3556,9 +3556,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ) : selectedSurahId > 1 ? (
                                         <button
                                             onClick={() => handleSurahSelection(selectedSurahId - 1)}
-                                            className="group flex items-center gap-1.5 ps-3 pe-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                            className="group flex items-center gap-1 sm:gap-1.5 ps-2.5 pe-3 py-1.5 text-xs sm:ps-3 sm:pe-4 sm:py-2.5 sm:text-sm rounded-full font-semibold shadow-sm transition-all duration-200 border bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-300 border-teal-200 dark:border-orange-900/50 hover:bg-teal-50 dark:hover:bg-orange-900/20 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:-translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                                             </svg>
                                             <span>Previous Surah</span>
@@ -3566,7 +3566,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ) : null}
 
                                     {(hasPreviousPages() || hasMorePages()) && (
-                                        <span className="px-3.5 py-1.5 rounded-full bg-teal-600 dark:bg-orange-600 text-white text-xs font-bold shadow-sm whitespace-nowrap">
+                                        <span className="px-2.5 py-1 text-[10px] sm:px-3.5 sm:py-1.5 sm:text-xs rounded-full bg-teal-600 dark:bg-orange-600 text-white font-bold shadow-sm whitespace-nowrap">
                                             {t('liveSession.page')} {toEasternArabicNumerals(currentPageRange.start)}–{toEasternArabicNumerals(currentPageRange.end)}
                                         </span>
                                     )}
@@ -3575,20 +3575,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     {hasMorePages() ? (
                                         <button
                                             onClick={handleNextPages}
-                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                            className="group flex items-center gap-1 sm:gap-1.5 ps-3 pe-2.5 py-1.5 text-xs sm:ps-4 sm:pe-3 sm:py-2.5 sm:text-sm rounded-full font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
                                             <span>Next</span>
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                                             </svg>
                                         </button>
                                     ) : selectedSurahId < 114 ? (
                                         <button
                                             onClick={() => handleSurahSelection(selectedSurahId + 1)}
-                                            className="group flex items-center gap-1.5 ps-4 pe-3 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
+                                            className="group flex items-center gap-1 sm:gap-1.5 ps-3 pe-2.5 py-1.5 text-xs sm:ps-4 sm:pe-3 sm:py-2.5 sm:text-sm rounded-full font-semibold shadow-sm transition-all duration-200 border bg-teal-600 dark:bg-orange-600 text-white border-teal-600 dark:border-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                                         >
                                             <span>Next Surah</span>
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 transition-transform group-hover:translate-x-0.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:translate-x-0.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                                             </svg>
                                         </button>

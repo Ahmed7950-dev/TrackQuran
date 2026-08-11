@@ -955,6 +955,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   /*  Navigation                                                        */
   /* ---------------------------------------------------------------- */
 
+  // Tailwind can't reach the grid's inline gridTemplateColumns, so track
+  // phone width here: narrower time gutter + day columns on small screens.
+  const [isPhoneGrid, setIsPhoneGrid] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const onChange = () => setIsPhoneGrid(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const weekGridCols = `${showDualTZ ? (isPhoneGrid ? 46 : 64) : (isPhoneGrid ? 38 : 56)}px repeat(7, minmax(${isPhoneGrid ? 52 : 76}px, 1fr))`;
+
   const weekDays: Date[] = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const today            = new Date();
 
@@ -1227,7 +1238,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         {/* Day header row */}
         <div
           className="grid sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700"
-          style={{ gridTemplateColumns: showDualTZ ? '64px repeat(7, minmax(76px, 1fr))' : '56px repeat(7, minmax(76px, 1fr))' }}
+          style={{ gridTemplateColumns: weekGridCols }}
         >
           {/* Corner: timezone label */}
           <div className="border-e border-slate-200 dark:border-gray-700 flex flex-col items-end justify-end pb-1 pe-1.5">
@@ -1241,11 +1252,11 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           {weekDays.map((day, i) => {
             const isToday = isSameDay(day, today);
             return (
-              <div key={i} className={`py-3 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
-                <p className={`text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              <div key={i} className={`py-1.5 sm:py-3 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
+                <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>
                   {DAYS[i]}
                 </p>
-                <p className={`text-lg font-bold mt-0.5 ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                <p className={`text-sm sm:text-lg font-bold mt-0.5 ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-700 dark:text-slate-200'}`}>
                   {formatHeaderDate(day)}
                 </p>
               </div>
@@ -1256,7 +1267,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         {/* Time grid body */}
         <div
           className="grid"
-          style={{ gridTemplateColumns: showDualTZ ? '64px repeat(7, minmax(76px, 1fr))' : '56px repeat(7, minmax(76px, 1fr))' }}
+          style={{ gridTemplateColumns: weekGridCols }}
         >
           {/* Time labels column */}
           <div className="border-e border-slate-200 dark:border-gray-700 relative">

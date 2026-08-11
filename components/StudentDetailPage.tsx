@@ -684,7 +684,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
         const cells: React.ReactNode[] = [];
         for (let i = 0; i < firstDay; i++) {
-            cells.push(<div key={`e-${i}`} className="min-h-[100px]" />);
+            cells.push(<div key={`e-${i}`} className="min-h-[56px] sm:min-h-[100px]" />);
         }
         for (let day = 1; day <= daysInMonth; day++) {
             const date   = new Date(year, month, day);
@@ -706,7 +706,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             }
 
             cells.push(
-                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[100px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
+                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[56px] sm:min-h-[100px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
                     {/* Day number strip */}
                     <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
                         <span className="text-xs font-bold leading-none">{day}</span>
@@ -750,7 +750,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
         return (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-2.5 sm:p-5">
                 {/* Title + nav */}
                 <div className="flex items-center justify-between mb-4">
                     <button onClick={() => setCalendarDate(new Date(year, month - 1))}
@@ -758,11 +758,11 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         ‹
                     </button>
                     <div className="text-center">
-                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base">
                             {calendarDate.toLocaleString(language === 'ar' ? 'ar' : language === 'tr' ? 'tr' : 'en', { month: 'long', year: 'numeric' })}
                         </h3>
                         {/* Status legend */}
-                        <div className="flex items-center justify-center gap-3 mt-1.5">
+                        <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 sm:gap-3 mt-1 sm:mt-1.5">
                             {[
                                 { cls: 'bg-emerald-400', label: t('studentDetail.progressPresent') },
                                 { cls: 'bg-red-400',     label: t('studentDetail.absent') },
