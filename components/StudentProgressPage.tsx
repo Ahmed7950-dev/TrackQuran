@@ -11,7 +11,8 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, hasIqlabHighMeem, highMeemTopEm, HIGH_MEEM } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont } from '../utils/quranicMarks';
+import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
@@ -244,6 +245,7 @@ const LetterWithError: React.FC<{
     joinLead?: boolean;
     joinTrail?: boolean;
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
+    vowelAdj?: Record<string, VowelAdjustment>; // admin vowel-position corrections for this unit
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
     ringCounts?: Record<string, number>;             // fixed mistake label → count (whole student)
     ringPermFlags?: string[];                        // permanent habit flags
@@ -269,6 +271,7 @@ const LetterWithError: React.FC<{
     joinLead,
     joinTrail,
     markLineHeight = 2.6,
+    vowelAdj,
     focusMode,
     ringCounts = {},
     ringPermFlags = [],
@@ -401,26 +404,15 @@ const LetterWithError: React.FC<{
                 // box-decoration-break:clone keeps the highlight painting if a letter wraps.
                 style={{ display: 'inline', fontFamily: 'inherit', letterSpacing: '0', pointerEvents: 'auto', WebkitBoxDecorationBreak: 'clone', boxDecorationBreak: 'clone', ...getLetterStyle(), ...(isFocused ? { backgroundColor: 'rgba(139,92,246,0.30)', borderRadius: '4px', outline: '2.5px solid rgba(139,92,246,0.9)', outlineOffset: '2px' } : {}) }}
             >
-                {hasLowMeem(letter) ? (
-                    // Iqlab LOW meem (U+06ED, kasratan iqlab — e.g. 104:9): the fonts
-                    // overprint it onto the kasratan, so it is stripped from the text
-                    // and re-drawn below the unit at a measured per-unit clearance.
-                    renderLowMeemUnit((joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : ''), letter, markLineHeight)
-                ) : hasIqlabHighMeem(letter) ? (
-                    // Iqlab meem overlay. We strip the U+06E2 from the inline text (so the
-                    // tanween renders cleanly) and re-draw it ourselves above the tanween.
-                    // The tanween is a combining mark, so it always renders centred above its
-                    // base letter — i.e. at the HORIZONTAL CENTRE of this unit, regardless of
-                    // how wide the base letter is. So we anchor the meem to the centre with
-                    // left:0/right:0 + text-align:center (width-independent) rather than a
-                    // percentage offset (which only lands right for one specific letter width).
-                    // The small translateX nudges it slightly "after" the tanween (leftward in
-                    // RTL), and top raises it just above the tanween.
-                    <span style={{ position: 'relative', display: 'inline' }}>
-                        {(joinLead ? ZWJ : '') + letter.replace(/ۢ/g, '') + (joinTrail ? ZWJ : '')}
-                        <span style={{ position: 'absolute', top: `${highMeemTopEm(letter)}em`, left: 0, right: 0, textAlign: 'center', transform: 'translateX(-0.06em)', fontSize: '1em', lineHeight: 1, pointerEvents: 'none', fontFamily: 'inherit' }}>{HIGH_MEEM}</span>
-                    </span>
-                ) : (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '')}
+                {(() => {
+                    // Overlay marks: the iqlab meems (stripped from the inline
+                    // text and re-drawn at their measured positions — the fonts
+                    // overprint them otherwise) plus any admin vowel-position
+                    // corrections for this exact unit in the current font.
+                    const text = (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+                    const overlays = unitOverlayPlan(letter, markLineHeight, vowelAdj);
+                    return overlays ? renderUnitOverlays(text, overlays) : text;
+                })()}
             </span>
         </span>
     );
@@ -643,6 +635,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         try { localStorage.setItem('quranReciter', reciter); } catch { /* private mode */ }
     }, [reciter]);
     const [reciterMenuOpen, setReciterMenuOpen] = useState(false);
+
+    // ── Admin vowel-position corrections (Quran Lab) ──────────────────────────
+    // One small JSON in storage; applied per font + letter unit while rendering.
+    const [vowelAdjMap, setVowelAdjMap] = useState<VowelAdjMap | null>(null);
+    useEffect(() => { loadVowelAdjustments().then(setVowelAdjMap).catch(() => { /* offline */ }); }, []);
+
+    // ── Tutor recitation (Quran Lab) ─────────────────────────────────────────
+    // The 🎙️ picker only offers "Ustadh Ahmed" once the lab's manifest says
+    // published; sequential playback walks the RECORDED verses and skips gaps.
+    const [recManifest, setRecManifest] = useState<RecitationManifest | null>(null);
+    useEffect(() => { loadRecitationManifest().then(setRecManifest).catch(() => { /* offline */ }); }, []);
+    useEffect(() => {
+        if (reciter === 'ustadh' && recManifest && !recManifest.published) setReciter('minshawi');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recManifest, reciter]);
     /** True while a whole surah (bin Humaid) is loaded/playing — its `ended`
      *  must not fall into the per-ayah chain. */
     const fullSurahRef = useRef(false);
@@ -770,7 +777,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         fullSurahRef.current = false;
         timedRef.current = null;
         loadedSurahRef.current = 0;
-        audio.src = audioUrl(surah, ayah);
+        // perAyah: one file per verse — Minshawi from the islamic.network CDN,
+        // the tutor's own recitation from Supabase Storage.
+        audio.src = rec.key === 'ustadh' ? recitationVerseUrl(surah, ayah) : audioUrl(surah, ayah);
         try { audio.load(); } catch { /* ignore */ }
         audio.play().catch(fail);
     }, [reciter, watchTimed]);
@@ -2826,6 +2835,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                    vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[letterKey]}
                                 />
                             );
                         })}
@@ -3173,7 +3183,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <div className="fixed inset-0 z-30" onClick={() => setReciterMenuOpen(false)} />
                                     <div className="absolute top-full left-0 mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1 min-w-[220px]">
                                         <span className="px-2 pt-0.5 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
-                                        {RECITERS.map(r => (
+                                        {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
                                             <button
                                                 key={r.key}
                                                 onClick={() => {
@@ -3555,6 +3565,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                                                            vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[lk]}
                                                                             focusMode
                                                                         />
                                                                     );
@@ -3900,7 +3911,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         // next ayah until the surah ends, then stop.
                         if (readOnlySeqRef.current && readOnlyAudioVerse) {
                             const { surah, ayah } = readOnlyAudioVerse;
-                            if (ayah < versesInSurah(surah)) {
+                            if (reciter === 'ustadh') {
+                                // The tutor's recitation may have gaps — walk to
+                                // the next RECORDED verse instead of blind +1.
+                                const done = recManifest?.verses ?? {};
+                                for (let a = ayah + 1; a <= versesInSurah(surah); a++) {
+                                    if (done[`${surah}:${a}`]) { playVerse(surah, a, true); return; }
+                                }
+                            } else if (ayah < versesInSurah(surah)) {
                                 playVerse(surah, ayah + 1, true);
                                 return;
                             }

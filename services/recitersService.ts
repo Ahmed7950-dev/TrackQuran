@@ -17,7 +17,7 @@
 //   Al-Nufais  (read 259): mixed, and he chains verses with no pause in places,
 //     so seek cuts would land mid-melody → fullSurah by the tutor's choice.
 
-export type ReciterKey = 'minshawi' | 'dukhain' | 'binhumaid' | 'nufais';
+export type ReciterKey = 'minshawi' | 'dukhain' | 'binhumaid' | 'nufais' | 'ustadh';
 
 export interface Reciter {
   key: ReciterKey;
@@ -31,6 +31,10 @@ export const RECITERS: Reciter[] = [
   { key: 'dukhain',   name: 'Haitham Al-Dukhain', nameAr: 'هيثم الدخين',       mode: 'timedSurah' },
   { key: 'binhumaid', name: 'Ahmad bin Humaid',   nameAr: 'أحمد طالب بن حميد', mode: 'fullSurah' },
   { key: 'nufais',    name: 'Ahmad Al-Nufais',    nameAr: 'أحمد النفيس',       mode: 'fullSurah' },
+  // The tutor's own recitation, recorded in the admin Quran Lab. Real per-ayah
+  // files in Supabase Storage — only offered in the picker once the lab's
+  // manifest says published (StudentProgressPage filters it).
+  { key: 'ustadh',    name: 'Ustadh Ahmed',       nameAr: 'الأستاذ أحمد',      mode: 'perAyah' },
 ];
 
 export const reciterOf = (key: string | null | undefined): Reciter =>

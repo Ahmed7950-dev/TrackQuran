@@ -202,6 +202,95 @@ export const highMeemTopEm = (unit: string): number => {
   return Math.min(...Object.values(table));
 };
 
+// ── Admin vowel repositioning ────────────────────────────────────────────────
+// The admin Quran Lab lets the tutor nudge a specific combining mark on a
+// specific letter unit, per font. Offsets are em values for the same overlay
+// technique the iqlab meems use: the mark is stripped from the inline text and
+// re-drawn absolutely, centred on the unit, at (dx, dy). dy follows the
+// HIGH_MEEM convention (top of the unit's inline box, leading-independent).
+export interface VowelAdjustment { dx: number; dy: number }
+/** font → letterKey ("s:a:w:l") → mark char → offset */
+export type VowelAdjMap = Record<string, Record<string, Record<string, VowelAdjustment>>>;
+
+export const currentQuranicFont = (): string => {
+  try { return localStorage.getItem('quranicFont') || 'Hafs'; } catch { return 'Hafs'; }
+};
+
+export const MARK_NAMES: Record<string, string> = {
+  'ً': 'Fathatan', 'ٌ': 'Dammatan', 'ٍ': 'Kasratan',
+  'َ': 'Fatha', 'ُ': 'Damma', 'ِ': 'Kasra',
+  'ّ': 'Shadda', 'ْ': 'Sukoon', 'ٓ': 'Maddah',
+  'ٔ': 'Hamza above', 'ٕ': 'Hamza below', 'ٖ': 'Small low alef',
+  'ٰ': 'Small high alef', 'ۖ': 'Waqf ṣla', 'ۗ': 'Waqf qla',
+  'ۘ': 'Waqf meem', 'ۙ': 'Waqf lā', 'ۚ': 'Waqf jeem',
+  'ۛ': 'Waqf three dots', 'ۜ': 'Small high seen',
+  '۟': 'Silent circle', '۠': 'Rectangular zero',
+  'ۡ': 'Sukoon (khaa head)', 'ۢ': 'Small high meem',
+  'ۣ': 'Small low seen', 'ۥ': 'Small waw', 'ۦ': 'Small yeh',
+  'ۧ': 'Small high yeh', 'ۨ': 'Small high noon',
+  '۪': 'Imāla dot', '۫': 'Ishmām dot', '۬': 'Rounded filled stop',
+  'ۭ': 'Small low meem', 'ࣰ': 'Open fathatan', 'ࣱ': 'Open dammatan',
+  'ࣲ': 'Open kasratan',
+};
+
+/** Marks that sit BELOW the letter — the editor starts their overlay low. */
+export const BELOW_MARKS = new Set(['ِ', 'ٍ', 'ٕ', 'ٖ', 'ۣ', 'ۭ', 'ࣲ']);
+
+/** The combining marks present in a letter unit (base letters + ZWJ excluded). */
+export const marksInUnit = (unit: string): string[] =>
+  Array.from(unit).filter(ch => ch !== ZWJ && !isArabicLetterCh(ch));
+
+export interface UnitOverlay { mark: string; top: number; dx?: number }
+
+/**
+ * Overlay plan for a letter unit: the shipped iqlab meem overlays plus any
+ * admin vowel adjustments for this unit. An adjustment for a meem replaces the
+ * measured-table position. Returns null when the unit renders as plain text.
+ */
+export const unitOverlayPlan = (
+  unit: string,
+  lineHeight: number,
+  adj?: Record<string, VowelAdjustment>,
+): UnitOverlay[] | null => {
+  const adjMarks = adj ? Object.keys(adj).filter(m => unit.includes(m)) : [];
+  const overlays: UnitOverlay[] = [];
+  if (hasLowMeem(unit) && !adjMarks.includes(LOW_MEEM)) {
+    overlays.push({ mark: LOW_MEEM, top: lowMeemTopEm(unit, lineHeight) });
+  }
+  if (hasIqlabHighMeem(unit) && !adjMarks.includes(HIGH_MEEM)) {
+    overlays.push({ mark: HIGH_MEEM, top: highMeemTopEm(unit), dx: -0.06 });
+  }
+  for (const m of adjMarks) overlays.push({ mark: m, top: adj![m].dy, dx: adj![m].dx });
+  return overlays.length ? overlays : null;
+};
+
+/**
+ * Render a unit with its overlay marks: inline text with the overlay marks
+ * stripped (first occurrence each), plus one absolutely-positioned span per
+ * mark, centred on the unit (the same technique as the iqlab meems — combining
+ * marks centre on their base, so left:0/right:0 + text-align:center is
+ * width-independent). `textWithJoiners` should already carry any ZWJ seams.
+ */
+export const renderUnitOverlays = (textWithJoiners: string, overlays: UnitOverlay[]): React.ReactNode => {
+  let inline = textWithJoiners;
+  for (const o of overlays) inline = inline.replace(o.mark, '');
+  return (
+    <span style={{ position: 'relative', display: 'inline' }}>
+      {inline}
+      {overlays.map((o, i) => (
+        <span
+          key={i}
+          style={{
+            position: 'absolute', top: `${o.top}em`, left: 0, right: 0, textAlign: 'center',
+            transform: `translateX(${o.dx ?? 0}em)`, fontSize: '1em', lineHeight: 1,
+            pointerEvents: 'none', fontFamily: 'inherit',
+          }}
+        >{o.mark}</span>
+      ))}
+    </span>
+  );
+};
+
 export type WordMarkPlan =
   | { mode: 'none' }
   | { mode: 'wholeWord'; font: string };
