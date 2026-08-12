@@ -915,7 +915,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
-        if (showTajweed && !turkishSource) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
+        if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani, turkishSource)));
         return m;
     }, [verses, showTajweed, turkishSource]);
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);

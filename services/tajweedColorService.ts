@@ -154,7 +154,18 @@ const splitWords = (textUthmani: string): string[] => {
   return out;
 };
 
-export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
+/**
+ * `turkish` mode reads the Istanbul (Ali al-Qari) orthography of the bundled
+ * Turkish text instead of Madani conventions. The differences that matter:
+ *   - assimilating nūn/mīm carry an EXPLICIT sukun (Madani leaves them bare
+ *     to signal ikhfā/idghām — in Madani an explicit sukun means izhār);
+ *   - iqlāb is usually written plain (nūn-sukun + ب), only ~87 carry a meem;
+ *   - U+06EA is the everyday long-i mark → counts as a vowel;
+ *   - no hamzat-wasl letter (U+0671) and no silah marks → those rules stay
+ *     uncolored, matching what Turkish readers expect from their mushaf;
+ *   - sun-letter lam follows a plain ا instead of ٱ.
+ */
+export function analyzeVerseTajweed(verse: string, turkish = false): Map<string, TajweedRule> {
   const flat: Unit[] = [];
   splitWords(verse).forEach((w, wi) => segmentWord(w).forEach((u, ui) => flat.push({ wi, ui, u, base: u[0] })));
   const L = flat.length;
@@ -168,7 +179,9 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
   const hasSukun = (i: number) => has(i, SUKUN) || has(i, SUKUN_Q);
   // Waqf signs merged into a word (splitVerseWords) are inert for rule logic.
   const inertMarks = (i: number) => marks(i).replace(/[ۖ-ۜ]/g, '');
-  const bareNoVowel = (i: number) => { const m = marks(i); return !VOWELS.some(v => m.includes(v)) && !m.includes(SUKUN) && !m.includes(SUKUN_Q) && !m.includes(SHADDA) && !TANWEEN.some(t => m.includes(t)); };
+  // Turkish long-vowel strokes (U+06EA below / U+06EB above) vowel the letter.
+  const TR_VOWEL_MARKS = ['\u06EA', '\u06EB'];
+  const bareNoVowel = (i: number) => { const m = marks(i); return !VOWELS.some(v => m.includes(v)) && !m.includes(SUKUN) && !m.includes(SUKUN_Q) && !m.includes(SHADDA) && !TANWEEN.some(t => m.includes(t)) && !(turkish && TR_VOWEL_MARKS.some(v => m.includes(v))); };
   const hasTanween = (i: number) => TANWEEN.some(t => marks(i).includes(t));
 
   let lastPron = L - 1;
@@ -202,20 +215,32 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
     if (b === 'ٱ' && i > 0) set(i, 'ham_wasl');
     // Sun-letter lam: bare ل after ٱ with a mushaddad letter next. The lam of
     // the divine name (ٱ + ل + لّ + ه) is not tagged by QPC.
-    if (b === 'ل' && inertMarks(i) === '' && i > 0 && flat[i - 1].base === 'ٱ' && i + 1 < L && has(i + 1, SHADDA)
+    if (b === 'ل' && inertMarks(i) === '' && i > 0 && (flat[i - 1].base === 'ٱ' || (turkish && flat[i - 1].base === 'ا')) && i + 1 < L && has(i + 1, SHADDA)
       && !(flat[i + 1].base === 'ل' && flat[i + 2]?.base === 'ه')) set(i, 'laam_shamsiyah');
 
     // ── Madd family (U+0653 maddah = the long madds) ──
     if (m.includes(MADDAH)) {
-      const j = nextPron(i);
+      let j = nextPron(i);
+      // Turkish places the maddah on the letter BEFORE the stretch letter
+      // (Madani puts it on the stretch letter itself) — hop over one bare
+      // madd letter so the hamza / shadda that decides the kind is visible,
+      // and color the stretch letter along with the carrier.
+      let stretch = -1;
+      if (turkish && j !== -1 && ['و', 'ي', 'ا', 'ى'].includes(flat[j].base) && inertMarks(j) === '') {
+        stretch = j;
+        j = nextPron(j);
+      }
       if ((m.includes(SMALL_WAW) || m.includes(SMALL_YEH)) && b !== 'ه') {
         // non-pronoun small-waw seat (فَأْوُۥٓ) — QPC leaves uncolored
-      } else if (j !== -1 && (HAMZA_SET.has(flat[j].base) || flat[j].u.includes(HAMZA_ABOVE))) {
+      } else if (j !== -1 && (HAMZA_SET.has(flat[j].base) || flat[j].u.includes(HAMZA_ABOVE)
+          || (turkish && flat[j].base === 'ا' && VOWELS.some(v => flat[j].u.includes(v))))) {
         set(i, 'madda_obligatory', true);
+        if (stretch !== -1) set(stretch, 'madda_obligatory');
         // hamza seated on a tatweel right after a tatweel-carried madd (ـٰٓـَٔ)
         if (b === 'ـ' && flat[j].base === 'ـ' && flat[j].u.includes(HAMZA_ABOVE)) set(j, 'madda_obligatory');
-      } else if (j !== -1 && (has(j, SHADDA) || hasSukun(j))) {
+      } else if (j !== -1 && (has(j, SHADDA) || hasSukun(j) || (turkish && has(j, MADDAH)))) {
         set(i, 'madda_necessary', true);
+        if (stretch !== -1) set(stretch, 'madda_necessary');
       } else if (j === -1) {
         // Verse-final: bare muqattaʿāt letters (سٓ) keep madd lazim; a word-final
         // ىٰٓ/ـِۦٓ loses its madd when stopping → uncolored.
@@ -249,12 +274,12 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
         // Tanween on a hamza (شَىْءٍ): the span also covers the letter before it,
         // without overriding that letter's own label.
         const pullback = b === 'ء' && i > 0 && isLetterUnit(i - 1);
-        if (iqlabMark && nb === 'ب') {
+        if ((iqlabMark || (turkish && (noonSakin || tanw))) && nb === 'ب') {
           cluster((fathatanAlif || m.includes(SHADDA)) ? i + 1 : i, j, 'iqlab');
-        } else if ((noonSakin && bareNoVowel(i)) || tanw) {
+        } else if ((noonSakin && (bareNoVowel(i) || turkish)) || tanw) {
           if (IKHFA_SET.has(nb)) { cluster(start, j, 'ikhafa'); if (pullback) set(i - 1, 'ikhafa'); }
-          else if (IDGHAM_GH_SET.has(nb) && (has(j, SHADDA) || nb === 'ي' || nb === 'و')) { cluster(start, j, 'idgham_ghunnah'); if (pullback) set(i - 1, 'idgham_ghunnah'); }
-          else if (IDGHAM_NO_SET.has(nb) && has(j, SHADDA)) cluster(start, j, 'idgham_wo_ghunnah');
+          else if (IDGHAM_GH_SET.has(nb) && (turkish ? flat[j].wi !== f.wi : (has(j, SHADDA) || nb === 'ي' || nb === 'و'))) { cluster(start, j, 'idgham_ghunnah'); if (pullback) set(i - 1, 'idgham_ghunnah'); }
+          else if (IDGHAM_NO_SET.has(nb) && (turkish ? flat[j].wi !== f.wi : has(j, SHADDA))) cluster(start, j, 'idgham_wo_ghunnah');
         }
         // NOTE: 75:27 (مَنْ ۜ رَاقٍ) stays uncolored on purpose — the explicit sukun
         // + saktah mean Hafs recites izhar there, even though quran.com's dataset
@@ -269,7 +294,7 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
     }
 
     // ── Mīm sākinah ──
-    if (b === 'م' && !m.includes(SHADDA) && bareNoVowel(i) && !m.includes(SUKUN) && !m.includes(SUKUN_Q)) {
+    if (b === 'م' && !m.includes(SHADDA) && ((bareNoVowel(i) && !m.includes(SUKUN) && !m.includes(SUKUN_Q)) || (turkish && hasSukun(i)))) {
       const j = nextPron(i);
       if (j !== -1) {
         const nb = flat[j].base;
@@ -281,7 +306,7 @@ export function analyzeVerseTajweed(verse: string): Map<string, TajweedRule> {
     // ── Idghām mutajānisayn / mutaqāribayn (only the assimilated letter is colored) ──
     if (!m.includes(SHADDA) && !out[i] && (bareNoVowel(i) || m.includes(SUKUN) || m.includes(SUKUN_Q))) {
       const j2 = i + 1 < L && isLetterUnit(i + 1) ? i + 1 : -1;
-      if (j2 !== -1 && has(j2, SHADDA) && !out[j2]) {
+      if (j2 !== -1 && (has(j2, SHADDA) || turkish) && !out[j2]) {
         const pair = b + flat[j2].base;
         if (['دت', 'تد', 'تط', 'طت', 'ذظ', 'ثذ', 'بم'].includes(pair)) set(i, 'idgham_mutajanisayn');
         else if (['قك', 'لر'].includes(pair)) set(i, 'idgham_mutaqaribayn');
