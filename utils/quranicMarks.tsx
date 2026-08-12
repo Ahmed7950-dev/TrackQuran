@@ -58,6 +58,12 @@ export const hasSpecialQuranMark = (text: string): boolean =>
 
 /** Corrective font stack for a word carrying imāla / ishmām, else null. */
 export const correctiveWordFont = (word: string): string | null => {
+  // The corrective fonts exist for TWO words in the Uthmani text whose marks
+  // the bundled fonts draw wrong. The TURKISH text uses the same codepoints as
+  // its own everyday marks (U+06EA = the small vertical stroke under a long-i,
+  // 10k+ of them; U+06EB similar) and the Hamdullah font draws both natively —
+  // hijacking those words into Uthmanic/Amiri shows a DOT instead.
+  if (currentQuranicFont() === TURKISH_FONT) return null;
   if (word.includes(IMALA_MARK)) return UTHMANIC_V22_STACK;
   if (word.includes(ISHMAM_MARK)) return AMIRI_REGULAR_STACK;
   return null;
