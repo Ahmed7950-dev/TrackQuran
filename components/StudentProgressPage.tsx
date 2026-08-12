@@ -605,6 +605,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
     /** One compound popup for speed + reciter + verse repeat. */
     const [audioMenuOpen, setAudioMenuOpen] = useState(false);
+    /** Tutor-side listen mode: verse taps play recitation instead of logging. */
+    const [tutorListen, setTutorListen] = useState(false);
+    const listenActive = readOnly || tutorListen;
     /** Times each verse plays before moving on (verse-by-verse reciters). */
     const [verseRepeat, setVerseRepeat] = useState<number>(() => {
         try { const v = parseInt(localStorage.getItem('quranVerseRepeat') ?? '1', 10); return [1, 2, 3, 5].includes(v) ? v : 1; } catch { return 1; }
@@ -820,13 +823,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setReadOnlyAudioVerse(null);
     }, []);
 
+    useEffect(() => { if (!tutorListen) stopVerse(); }, [tutorListen, stopVerse]);
+
     // Safari marks an <audio> element as user-activated the first time play() is
     // called on it inside a gesture. Do that once, on the first touch anywhere,
     // against a silent zero-length clip — so later programmatic plays (the
     // ayah-to-ayah chain) are already allowed.
     const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
     useEffect(() => {
-        if (!readOnly) return;
+        if (!readOnly && !tutorListen) return;
         const unlock = () => {
             const a = readOnlyAudioRef.current;
             if (!a || audioUnlockedRef.current) return;
@@ -842,7 +847,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             window.removeEventListener('mousedown', unlock);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [readOnly]);
+    }, [readOnly, tutorListen]);
 
     // Clear the failure notice after a few seconds.
     useEffect(() => {
@@ -2716,8 +2721,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // green = hifz(+reading), orange = read, purple = homework, blue = tafsir
         const svgFill = VERSE_MARKER_FILL[verseLogColor(surah, number).base];
 
-        if (readOnly) {
-            // In readOnly mode (student portal): tapping the verse number plays the
+        if (listenActive) {
+            // Listen mode (student portal, or tutor 🎧): tapping the verse number plays the
             // recitation from this ayah to the end of the surah. Tapping again (any
             // number) stops it.
             const isPlayingHere = readOnlyAudioVerse?.surah === surah && readOnlyAudioVerse?.ayah === number;
@@ -2850,7 +2855,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     mistake={mistake}
                                     isEditing={isEditing}
                                     errorText={errorTextInput}
-                                    onLetterClick={readOnly ? () => {} : handleLetterClick}
+                                    onLetterClick={listenActive ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
                                     ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
@@ -2864,7 +2869,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     clickState={clickState}
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
-                                    onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                    onLongPress={!listenActive ? handleLetterLongPress : undefined}
                                     vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseKey]}
                                 />
                             );
@@ -2875,18 +2880,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             });
             const isSelectedStart = selectionStart?.surah === surahNum && selectionStart?.ayah === ayahNum;
             const verseMarker = (<VerseMarker key={`marker-${verse.verse_key}`} number={ayahNum} surah={surahNum} isSelectedStart={isSelectedStart}/>);
-            const isVerseNowPlaying = readOnly && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
+            const isVerseNowPlaying = listenActive && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
             const verseTextNode = (
                 <span
                     key={`text-${verse.verse_key}`}
                     className={`px-1 py-1 rounded-md transition-all duration-300
                         ${VERSE_BG[vColor.base]} ${vColor.underline ? VERSE_UNDERLINE : ''}
                         ${isVerseHidden ? 'opacity-0' : 'opacity-100'}
-                        ${readOnly ? 'cursor-pointer' : ''}
+                        ${listenActive ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
                     // readOnly: use CAPTURE phase so LetterWithError's stopPropagation() (bubble phase) can't block us
                     // Skip audio if the click originated inside the Tadabbur note section
-                    onClickCapture={readOnly ? (e) => {
+                    onClickCapture={listenActive ? (e) => {
                         if ((e.target as Element).closest?.('[data-tadabbur]')) return;
                         const audio = readOnlyAudioRef.current;
                         if (!audio) return;
@@ -3040,6 +3045,82 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
+    // Shared recitation-settings pill (speed + reciter + verse repeat) —
+    // rendered on the student toolbar and beside the tutor's 🎧 listen toggle.
+    const recitationSettings = (
+        <>
+                            {/* One compound button: speed, reciter and verse-repeat live
+                                together in a small settings window. */}
+                            <button
+                                onClick={() => setAudioMenuOpen(o => !o)}
+                                title="Recitation settings"
+                                aria-label="Recitation settings"
+                                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                            >
+                                <span className="text-sm leading-none">🎙️</span>
+                                <span>{readOnlySpeed}×</span>
+                                {verseRepeat > 1 && <span className="text-amber-600 dark:text-amber-400">↻{verseRepeat}</span>}
+                            </button>
+                            {audioMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-30" onClick={() => setAudioMenuOpen(false)} />
+                                    <div className="absolute top-full left-0 mt-1 z-40 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-2 w-[250px]">
+                                        {/* Speed */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🔊 Speed</span>
+                                        <div className="flex gap-1 mb-2.5">
+                                            {[0.5, 0.75, 1, 1.25, 1.5].map(sp => (
+                                                <button
+                                                    key={sp}
+                                                    onClick={() => setReadOnlySpeed(sp)}
+                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${readOnlySpeed === sp ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    {sp}×
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Verse repeat — meaningless for full-surah reciters */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">
+                                            🔁 Repeat each verse{reciterOf(reciter).mode === 'fullSurah' ? ' — verse-by-verse reciters only' : ''}
+                                        </span>
+                                        <div className={`flex gap-1 mb-2.5 ${reciterOf(reciter).mode === 'fullSurah' ? 'opacity-40 pointer-events-none' : ''}`}>
+                                            {[1, 2, 3, 5].map(n => (
+                                                <button
+                                                    key={n}
+                                                    onClick={() => setVerseRepeat(n)}
+                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${verseRepeat === n ? 'bg-amber-500 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    {n === 1 ? 'once' : `${n}×`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Reciter */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
+                                        <div className="flex flex-col">
+                                            {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
+                                                <button
+                                                    key={r.key}
+                                                    onClick={() => {
+                                                        if (r.key !== reciter) { stopVerse(); loadedSurahRef.current = 0; setReciter(r.key); }
+                                                        setAudioMenuOpen(false);
+                                                    }}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-bold text-start flex items-center justify-between gap-3 transition-colors ${reciter === r.key ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    <span>
+                                                        {r.name}
+                                                        <span className={`block text-[9px] font-semibold ${reciter === r.key ? 'text-white/70' : 'text-slate-400'}`}>
+                                                            {r.mode === 'fullSurah' ? 'full surah' : 'verse by verse'}
+                                                        </span>
+                                                    </span>
+                                                    <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+        </>
+    );
+
     return (
         <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
             {/* Cursor-sharing indicator (tutor side) — confirms the student can
@@ -3174,78 +3255,22 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
                         <div className="relative flex items-center gap-1.5 flex-shrink-0" dir="ltr">
-                            {/* One compound button: speed, reciter and verse-repeat live
-                                together in a small settings window. */}
-                            <button
-                                onClick={() => setAudioMenuOpen(o => !o)}
-                                title="Recitation settings"
-                                aria-label="Recitation settings"
-                                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
-                            >
-                                <span className="text-sm leading-none">🎙️</span>
-                                <span>{readOnlySpeed}×</span>
-                                {verseRepeat > 1 && <span className="text-amber-600 dark:text-amber-400">↻{verseRepeat}</span>}
-                            </button>
-                            {audioMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-30" onClick={() => setAudioMenuOpen(false)} />
-                                    <div className="absolute top-full left-0 mt-1 z-40 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-2 w-[250px]">
-                                        {/* Speed */}
-                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🔊 Speed</span>
-                                        <div className="flex gap-1 mb-2.5">
-                                            {[0.5, 0.75, 1, 1.25, 1.5].map(sp => (
-                                                <button
-                                                    key={sp}
-                                                    onClick={() => setReadOnlySpeed(sp)}
-                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${readOnlySpeed === sp ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                                >
-                                                    {sp}×
-                                                </button>
-                                            ))}
-                                        </div>
-                                        {/* Verse repeat — meaningless for full-surah reciters */}
-                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">
-                                            🔁 Repeat each verse{reciterOf(reciter).mode === 'fullSurah' ? ' — verse-by-verse reciters only' : ''}
-                                        </span>
-                                        <div className={`flex gap-1 mb-2.5 ${reciterOf(reciter).mode === 'fullSurah' ? 'opacity-40 pointer-events-none' : ''}`}>
-                                            {[1, 2, 3, 5].map(n => (
-                                                <button
-                                                    key={n}
-                                                    onClick={() => setVerseRepeat(n)}
-                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${verseRepeat === n ? 'bg-amber-500 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                                >
-                                                    {n === 1 ? 'once' : `${n}×`}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        {/* Reciter */}
-                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
-                                        <div className="flex flex-col">
-                                            {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
-                                                <button
-                                                    key={r.key}
-                                                    onClick={() => {
-                                                        if (r.key !== reciter) { stopVerse(); loadedSurahRef.current = 0; setReciter(r.key); }
-                                                        setAudioMenuOpen(false);
-                                                    }}
-                                                    className={`px-3 py-2 rounded-lg text-xs font-bold text-start flex items-center justify-between gap-3 transition-colors ${reciter === r.key ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                                >
-                                                    <span>
-                                                        {r.name}
-                                                        <span className={`block text-[9px] font-semibold ${reciter === r.key ? 'text-white/70' : 'text-slate-400'}`}>
-                                                            {r.mode === 'fullSurah' ? 'full surah' : 'verse by verse'}
-                                                        </span>
-                                                    </span>
-                                                    <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </>
-                            )}
+                            {recitationSettings}
                         </div>
                         ) : (
                         <div className="flex items-center gap-2 flex-shrink-0">
+                            {/* Listen mode: verse taps play recitation instead of logging */}
+                            <div className="relative flex items-center gap-1.5" dir="ltr">
+                                <button
+                                    onClick={() => setTutorListen(o => !o)}
+                                    title={tutorListen ? 'Listening — tap to return to mistake logging' : 'Listen mode: tap verses to hear the recitation'}
+                                    aria-label="Toggle listen mode"
+                                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm shadow-sm leading-none transition-colors ${tutorListen ? 'bg-teal-600 text-white ring-2 ring-teal-300 dark:ring-teal-700' : 'bg-slate-100 dark:bg-gray-700/60 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
+                                >
+                                    🎧
+                                </button>
+                                {recitationSettings}
+                            </div>
                             <div className={`flex items-center gap-1 rounded-full px-2 py-1 h-10 transition-colors duration-300 ${errorType === 'reading' ? 'bg-red-100 dark:bg-red-900/40 ring-1 ring-red-400' : errorType === 'tajweed' ? 'bg-green-100 dark:bg-green-900/40 ring-1 ring-green-400' : 'bg-slate-200 dark:bg-gray-700'}`}>
                                 <button
                                     onClick={() => setErrorType('reading')}
@@ -3590,7 +3615,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             mistake={mk}
                                                                             isEditing={editingLetterKey === lk}
                                                                             errorText={errorTextInput}
-                                                                            onLetterClick={readOnly ? () => {} : handleLetterClick}
+                                                                            onLetterClick={listenActive ? () => {} : handleLetterClick}
                                                                             onTextChange={setErrorTextInput}
                                                                             onTextSubmit={handleLetterTextSubmit}
                                                                             ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
@@ -3604,7 +3629,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             clickState={cs}
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
-                                                                            onLongPress={!readOnly ? handleLetterLongPress : undefined}
+                                                                            onLongPress={!listenActive ? handleLetterLongPress : undefined}
                                                                             vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseLk]}
                                                                             focusMode
                                                                         />
@@ -3885,7 +3910,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
             {/* A failed play() used to be completely silent — the student tapped
                 and nothing happened, with nothing to tell them to try again. */}
-            {readOnly && audioFailed && (
+            {listenActive && audioFailed && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-2xl bg-slate-900/90 text-white text-sm font-semibold shadow-xl flex items-center gap-2">
                     <span>🔇</span>
                     <span>Couldn&apos;t start the recitation — tap the verse again.</span>
@@ -3926,8 +3951,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
             )}
 
-            {/* ── ReadOnly hidden audio element ───────────────────────────── */}
-            {readOnly && (
+            {/* ── Recitation audio element (student portal + tutor listen mode) ── */}
+            {listenActive && (
                 <audio
                     ref={readOnlyAudioRef}
                     onEnded={() => {
