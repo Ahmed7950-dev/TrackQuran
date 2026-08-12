@@ -11,7 +11,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, AyahTiming } from '../services/recitersService';
@@ -645,6 +645,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         try { localStorage.setItem('quranReciter', reciter); } catch { /* private mode */ }
     }, [reciter]);
 
+    // ── Turkish mushaf mode ───────────────────────────────────────────────────
+    // The Hamdullah font renders its OWN text source (public/quran-tr, Istanbul
+    // rasm) — letter positions there don't correspond to the Uthmani text, so
+    // mistakes logged on it are namespaced with a "T" key prefix and kept
+    // fully separate. Tajweed coloring stays off (the engine reads Uthmani
+    // spelling).
+    const turkishSource = currentQuranicFont() === TURKISH_FONT;
+
     // ── Admin vowel-position corrections (Quran Lab) ──────────────────────────
     // One small JSON in storage; applied per font + letter unit while rendering.
     const [vowelAdjMap, setVowelAdjMap] = useState<VowelAdjMap | null>(null);
@@ -907,9 +915,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
-        if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
+        if (showTajweed && !turkishSource) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani)));
         return m;
-    }, [verses, showTajweed]);
+    }, [verses, showTajweed, turkishSource]);
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
@@ -1247,7 +1255,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             // wordIndex maps to the same physical word in both views; just skip
             // empty tokens without renumbering.
             let isVerseStart = true;
-            splitVerseWords(verse.text_uthmani).forEach((word, wordIdx) => {
+            splitVerseWords(verse.text_uthmani, turkishSource).forEach((word, wordIdx) => {
                 if (!word.trim()) return;
                 list.push({ kind: 'word', word, surah: surahNum, ayah: ayahNum, wordIdx, isVerseStart });
                 isVerseStart = false;
@@ -1661,7 +1669,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 const selectedMeta = QURAN_METADATA.find(s => s.number === selectedSurahId);
                 if (!selectedMeta) throw new Error('Surah not found.');
 
-                const response = await fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedMeta.number}`);
+                const response = await fetch(turkishSource
+                    ? `/quran-tr/${selectedMeta.number}.json`
+                    : `https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedMeta.number}`);
                 if (!response.ok) throw new Error('Failed to fetch Surah data.');
                 const data = await response.json();
                 setVerses(data.verses);
@@ -1691,7 +1701,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
         };
         fetchSurah();
-    }, [selectedSurahId]);
+    }, [selectedSurahId, turkishSource]);
 
     useEffect(() => {
         const fetchTranslation = async () => {
@@ -2805,7 +2815,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const vColor = verseLogColor(surahNum, ayahNum);
             const isVerseHidden = hiddenRanges.some(range => isVerseAfterOrEqual({ surah: surahNum, ayah: ayahNum }, range.start) && isVerseAfterOrEqual(range.end, { surah: surahNum, ayah: ayahNum }));
 
-            const verseWords = splitVerseWords(verse.text_uthmani).map((word, wordIndex, wordsArray) => {
+            const verseWords = splitVerseWords(verse.text_uthmani, turkishSource).map((word, wordIndex, wordsArray) => {
                 // Letter-based error marking (always shown)
                 const letters = parseWordIntoLetters(word);
                 if (letters.length === 0) {
@@ -2820,7 +2830,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 return (
                     <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit' }}>
                         {letters.map(({ letter, index: letterIndex }) => {
-                            const letterKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                            const baseKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                            // Turkish-text mistakes live under their own namespace.
+                            const letterKey = turkishSource ? `T${baseKey}` : baseKey;
                             const mistake = studentMistakes[letterKey];
                             const isEditing = editingLetterKey === letterKey;
                             const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
@@ -2853,7 +2865,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
                                     onLongPress={!readOnly ? handleLetterLongPress : undefined}
-                                    vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[letterKey]}
+                                    vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseKey]}
                                 />
                             );
                         })}
@@ -3564,7 +3576,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                             {(() => { const fwPlan = wordMarkPlan(item.word); return (
                                                             <span dir="rtl" className="relative inline" style={{ display: 'inline', fontFamily: fwPlan.mode === 'wholeWord' ? fwPlan.font : 'inherit' }}>
                                                                 {letters.length === 0 ? item.word : letters.map(({ letter, index: li }) => {
-                                                                    const lk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
+                                                                    const baseLk = `${item.surah}:${item.ayah}:${item.wordIdx}:${li}`;
+                                                                    const lk = turkishSource ? `T${baseLk}` : baseLk;
                                                                     const mk = studentMistakes[lk];
                                                                     const cs = letterClickStates.current[lk] || (mk ? 2 : 0);
                                                                     return (
@@ -3592,7 +3605,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
                                                                             onLongPress={!readOnly ? handleLetterLongPress : undefined}
-                                                                            vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[lk]}
+                                                                            vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseLk]}
                                                                             focusMode
                                                                         />
                                                                     );
@@ -3638,7 +3651,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {showTranslation && isTranslationLoading && <div className="text-center my-4 p-3 bg-slate-100 dark:bg-gray-700 rounded-lg mx-6 sm:mx-12"><p className="text-slate-600 dark:text-slate-300 animate-pulse font-semibold">{t('liveSession.loadingTranslation')}</p></div>}
                         {showTranslation && translationError && <div className="text-center my-4 p-3 bg-red-100 text-red-700 rounded-lg mx-6 sm:mx-12"><p className="font-semibold">{translationError}</p></div>}
                         <hr className="w-48 h-1 mx-auto my-8 bg-teal-100 dark:bg-gray-700 border-0 rounded" />
-                        {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>}
+                        {selectedSurahId !== 1 && selectedSurahId !== 9 && <p className="text-center font-quranic text-4xl text-slate-800 dark:text-slate-200 mb-12">{turkishSource ? 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ' : 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ'}</p>}
                         {renderSurahContent()}
                         {/* Colour legend (left) + pagination controls (right) */}
                         {!isLoading && !error && verses.length > 0 && (

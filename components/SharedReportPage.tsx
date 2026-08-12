@@ -90,6 +90,7 @@ const QURANIC_FONTS = [
   { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
   { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
   { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
+  { name: 'Hamdullah', displayName: 'Hamdullah (Türkçe hat)' },
 ] as const;
 
 // ── main page ─────────────────────────────────────────────────────────────────

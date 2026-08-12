@@ -61,7 +61,7 @@ const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !
 
 const toEastern = (n: number): string => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[+d]);
 
-const FONTS = ['Hafs', 'Amiri Regular', 'Elgharib KFGQPCHafs V10', 'Elgharib HAFSTharwatEmara', 'UthmanTN v2-0', 'Uthmanic HAFS v22'];
+const FONTS = ['Hafs', 'Amiri Regular', 'Elgharib KFGQPCHafs V10', 'Elgharib HAFSTharwatEmara', 'UthmanTN v2-0', 'Uthmanic HAFS v22', 'Hamdullah'];
 
 const TOTAL_AYAHS = 6236;
 
@@ -92,19 +92,23 @@ const AdminQuranLabTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Font must be declared before the verses effect below reads it.
+  const [font, setFont] = useState(FONTS[0]);
+
   // ── Verses ────────────────────────────────────────────────────────────────
   useEffect(() => {
     let dead = false;
     setLoading(true); setError(null);
-    fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surah}`)
+    fetch(font === 'Hamdullah'
+      ? `/quran-tr/${surah}.json`
+      : `https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${surah}`)
       .then(r => r.json())
       .then(d => { if (!dead) { setVerses(d.verses ?? []); setLoading(false); } })
       .catch(() => { if (!dead) { setError('Could not load the surah.'); setLoading(false); } });
     return () => { dead = true; };
-  }, [surah]);
+  }, [surah, font]);
 
   // ══ VOWELS TOOL ═══════════════════════════════════════════════════════════
-  const [font, setFont] = useState(FONTS[0]);
   const [adjMap, setAdjMap] = useState<VowelAdjMap>({});
   const [adjLoaded, setAdjLoaded] = useState(false);
   const [saving, setSaving] = useState(false);

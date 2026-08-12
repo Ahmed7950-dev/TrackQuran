@@ -186,4 +186,9 @@ export const MILESTONES: Milestone[] = [
 // as a pipe-joined errorText. Anything iterating mistake keys positionally
 // must filter with isLetterMistakeKey.
 export const PERM_MISTAKE_FLAGS_KEY = '__flags__';
-export const isLetterMistakeKey = (k: string): boolean => /^\d+:\d+(?::\d+){1,2}$/.test(k);
+// Turkish-source mistakes ("T2:255:3:1") are letter positions in the TURKISH
+// text (public/quran-tr) — counted in label/date aggregates like any mistake,
+// but their letter indices only make sense on the Turkish text, so positional
+// renderers on the Uthmani text must skip them (isTurkishMistakeKey).
+export const isLetterMistakeKey = (k: string): boolean => /^T?\d+:\d+(?::\d+){1,2}$/.test(k);
+export const isTurkishMistakeKey = (k: string): boolean => k.startsWith('T');

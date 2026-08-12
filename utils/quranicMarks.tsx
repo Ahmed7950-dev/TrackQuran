@@ -29,8 +29,12 @@ const STANDALONE_WAQF_RE = /^[ۖ-ۜ]+$/;
  * (U+06D6–U+06DC) into the end of the preceding word.
  * Use this instead of a bare `.split(' ')` when splitting verse text.
  */
-export const splitVerseWords = (textUthmani: string): string[] => {
-  const raw = textUthmani.replace(/ْ/g, 'ۡ').split(' ');
+export const TURKISH_FONT = 'Hamdullah';
+
+export const splitVerseWords = (textUthmani: string, turkish = false): string[] => {
+  // The Uthmani text draws sukun as the khaa-head (U+06E1); the Turkish text
+  // uses the round U+0652 natively — keep it.
+  const raw = (turkish ? textUthmani : textUthmani.replace(/ْ/g, 'ۡ')).split(' ');
   const out: string[] = [];
   for (const w of raw) {
     if (STANDALONE_WAQF_RE.test(w) && out.length > 0) {
@@ -254,10 +258,13 @@ export const unitOverlayPlan = (
 ): UnitOverlay[] | null => {
   const adjMarks = adj ? Object.keys(adj).filter(m => unit.includes(m)) : [];
   const overlays: UnitOverlay[] = [];
-  if (hasLowMeem(unit) && !adjMarks.includes(LOW_MEEM)) {
+  // The Hamdullah font stacks marks natively (mark-to-mark GPOS) and has no
+  // measured overlay tables — only admin adjustments apply there.
+  const turkishFont = currentQuranicFont() === TURKISH_FONT;
+  if (!turkishFont && hasLowMeem(unit) && !adjMarks.includes(LOW_MEEM)) {
     overlays.push({ mark: LOW_MEEM, top: lowMeemTopEm(unit, lineHeight) });
   }
-  if (hasIqlabHighMeem(unit) && !adjMarks.includes(HIGH_MEEM)) {
+  if (!turkishFont && hasIqlabHighMeem(unit) && !adjMarks.includes(HIGH_MEEM)) {
     overlays.push({ mark: HIGH_MEEM, top: highMeemTopEm(unit), dx: -0.06 });
   }
   for (const m of adjMarks) overlays.push({ mark: m, top: adj![m].dy, dx: adj![m].dx });
