@@ -603,7 +603,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
-    const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+    /** One compound popup for speed + reciter + verse repeat. */
+    const [audioMenuOpen, setAudioMenuOpen] = useState(false);
+    /** Times each verse plays before moving on (verse-by-verse reciters). */
+    const [verseRepeat, setVerseRepeat] = useState<number>(() => {
+        try { const v = parseInt(localStorage.getItem('quranVerseRepeat') ?? '1', 10); return [1, 2, 3, 5].includes(v) ? v : 1; } catch { return 1; }
+    });
+    useEffect(() => { try { localStorage.setItem('quranVerseRepeat', String(verseRepeat)); } catch { /* private mode */ } }, [verseRepeat]);
+    const verseRepeatRef = useRef(verseRepeat);
+    verseRepeatRef.current = verseRepeat;
+    /** How many times the CURRENT per-ayah file has played so far. */
+    const repeatDoneRef = useRef(1);
     const surahNavScrollRef = useRef<HTMLDivElement | null>(null);
     // Phone-only vertical surah picker. The horizontal pill strip needs width
     // to be usable — on a phone it shows two or three names and fights the
@@ -634,7 +644,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem('quranReciter', reciter); } catch { /* private mode */ }
     }, [reciter]);
-    const [reciterMenuOpen, setReciterMenuOpen] = useState(false);
 
     // ── Admin vowel-position corrections (Quran Lab) ──────────────────────────
     // One small JSON in storage; applied per font + letter unit while rendering.
@@ -655,8 +664,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const fullSurahRef = useRef(false);
     /** Which surah's file is currently loaded in the element (surah-file modes). */
     const loadedSurahRef = useRef(0);
-    /** Active timed-surah playback (Al-Dukhain): timing table + where to stop. */
-    const timedRef = useRef<{ surah: number; timings: AyahTiming[]; stopAtMs: number; sequential: boolean } | null>(null);
+    /** Active timed-surah playback (Al-Dukhain): timing table + position.
+     *  `activeIdx` is the row being recited, `plays` its repeat count so far. */
+    const timedRef = useRef<{ surah: number; timings: AyahTiming[]; activeIdx: number; plays: number; sequential: boolean } | null>(null);
     const timedRafRef = useRef(0);
 
     /** rAF watcher for timed-surah playback: stops at the bound and, in
@@ -668,17 +678,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const td = timedRef.current;
             if (!audio || !td || req !== audioReqRef.current) return;
             const ms = audio.currentTime * 1000;
-            if (ms >= td.stopAtMs - 20) {
-                try { audio.pause(); } catch { /* ignore */ }
-                timedRef.current = null;
-                setReadOnlyAudioVerse(null);
-                return;
-            }
-            if (td.sequential) {
-                const cur = td.timings.find(t => ms >= t.startMs && ms < t.endMs);
-                if (cur) {
+            const row = td.timings[td.activeIdx];
+            if (ms >= row.endMs - 20) {
+                if (td.plays < verseRepeatRef.current) {
+                    // Repeat this verse: seek back to its start.
+                    td.plays += 1;
+                    try { audio.currentTime = row.startMs / 1000; } catch { /* ignore */ }
+                } else if (td.sequential && td.activeIdx < td.timings.length - 1) {
+                    // Move to the next verse (the file is already there).
+                    td.activeIdx += 1;
+                    td.plays = 1;
+                    const next = td.timings[td.activeIdx];
                     setReadOnlyAudioVerse(v =>
-                        v && v.surah === td.surah && v.ayah === cur.ayah ? v : { surah: td.surah, ayah: cur.ayah });
+                        v && v.surah === td.surah && v.ayah === next.ayah ? v : { surah: td.surah, ayah: next.ayah });
+                } else {
+                    try { audio.pause(); } catch { /* ignore */ }
+                    timedRef.current = null;
+                    setReadOnlyAudioVerse(null);
+                    return;
                 }
             }
             timedRafRef.current = requestAnimationFrame(step);
@@ -704,6 +721,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (!audio) return;
         const req = ++audioReqRef.current;
         readOnlySeqRef.current = sequential;
+        repeatDoneRef.current = 1;
         setAudioFailed(false);
         setReadOnlyAudioVerse({ surah, ayah });
         try { audio.pause(); } catch { /* Safari can throw mid-load */ }
@@ -751,9 +769,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             readOnlySeqRef.current = false;
             dukhainTimings(surah).then(timings => {
                 if (req !== audioReqRef.current) return;
-                const row = timings.find(t => t.ayah === ayah) ?? timings[0];
-                const last = timings[timings.length - 1];
-                timedRef.current = { surah, timings, stopAtMs: sequential ? last.endMs : row.endMs, sequential };
+                const idx = Math.max(0, timings.findIndex(t => t.ayah === ayah));
+                const row = timings[idx];
+                timedRef.current = { surah, timings, activeIdx: idx, plays: 1, sequential };
                 const seekPlay = () => {
                     try { audio.currentTime = row.startMs / 1000; } catch { /* pre-metadata */ }
                     audio.play().then(() => { if (req === audioReqRef.current) watchTimed(req); }).catch(fail);
@@ -3144,63 +3162,72 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
                         <div className="relative flex items-center gap-1.5 flex-shrink-0" dir="ltr">
-                            {/* Speed: a single circle showing the current rate; click to pick. */}
+                            {/* One compound button: speed, reciter and verse-repeat live
+                                together in a small settings window. */}
                             <button
-                                onClick={() => setSpeedMenuOpen(o => !o)}
-                                title="Recitation speed"
-                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                                onClick={() => setAudioMenuOpen(o => !o)}
+                                title="Recitation settings"
+                                aria-label="Recitation settings"
+                                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
                             >
-                                {readOnlySpeed}×
+                                <span className="text-sm leading-none">🎙️</span>
+                                <span>{readOnlySpeed}×</span>
+                                {verseRepeat > 1 && <span className="text-amber-600 dark:text-amber-400">↻{verseRepeat}</span>}
                             </button>
-                            {speedMenuOpen && (
+                            {audioMenuOpen && (
                                 <>
-                                    <div className="fixed inset-0 z-30" onClick={() => setSpeedMenuOpen(false)} />
-                                    <div className="absolute top-full left-0 mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1">
-                                        <span className="px-2 pt-0.5 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🔊 Speed</span>
-                                        {[0.5, 0.75, 1, 1.25, 1.5].map(s => (
-                                            <button
-                                                key={s}
-                                                onClick={() => { setReadOnlySpeed(s); setSpeedMenuOpen(false); }}
-                                                className={`px-4 py-1.5 rounded-lg text-xs font-bold text-center transition-colors ${readOnlySpeed === s ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                            >
-                                                {s}×
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                            {/* Reciter picker — same circle-button pattern as speed */}
-                            <button
-                                onClick={() => setReciterMenuOpen(o => !o)}
-                                title="Reciter"
-                                aria-label="Choose reciter"
-                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center text-sm hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
-                            >
-                                🎙️
-                            </button>
-                            {reciterMenuOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-30" onClick={() => setReciterMenuOpen(false)} />
-                                    <div className="absolute top-full left-0 mt-1 z-40 flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-1 min-w-[220px]">
-                                        <span className="px-2 pt-0.5 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
-                                        {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
-                                            <button
-                                                key={r.key}
-                                                onClick={() => {
-                                                    if (r.key !== reciter) { stopVerse(); loadedSurahRef.current = 0; setReciter(r.key); }
-                                                    setReciterMenuOpen(false);
-                                                }}
-                                                className={`px-3 py-2 rounded-lg text-xs font-bold text-start flex items-center justify-between gap-3 transition-colors ${reciter === r.key ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                            >
-                                                <span>
-                                                    {r.name}
-                                                    <span className={`block text-[9px] font-semibold ${reciter === r.key ? 'text-white/70' : 'text-slate-400'}`}>
-                                                        {r.mode === 'fullSurah' ? 'full surah' : 'verse by verse'}
+                                    <div className="fixed inset-0 z-30" onClick={() => setAudioMenuOpen(false)} />
+                                    <div className="absolute top-full left-0 mt-1 z-40 bg-white dark:bg-gray-800 rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10 p-2 w-[250px]">
+                                        {/* Speed */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🔊 Speed</span>
+                                        <div className="flex gap-1 mb-2.5">
+                                            {[0.5, 0.75, 1, 1.25, 1.5].map(sp => (
+                                                <button
+                                                    key={sp}
+                                                    onClick={() => setReadOnlySpeed(sp)}
+                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${readOnlySpeed === sp ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    {sp}×
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Verse repeat — meaningless for full-surah reciters */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">
+                                            🔁 Repeat each verse{reciterOf(reciter).mode === 'fullSurah' ? ' — verse-by-verse reciters only' : ''}
+                                        </span>
+                                        <div className={`flex gap-1 mb-2.5 ${reciterOf(reciter).mode === 'fullSurah' ? 'opacity-40 pointer-events-none' : ''}`}>
+                                            {[1, 2, 3, 5].map(n => (
+                                                <button
+                                                    key={n}
+                                                    onClick={() => setVerseRepeat(n)}
+                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition-colors ${verseRepeat === n ? 'bg-amber-500 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    {n === 1 ? 'once' : `${n}×`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Reciter */}
+                                        <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
+                                        <div className="flex flex-col">
+                                            {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
+                                                <button
+                                                    key={r.key}
+                                                    onClick={() => {
+                                                        if (r.key !== reciter) { stopVerse(); loadedSurahRef.current = 0; setReciter(r.key); }
+                                                        setAudioMenuOpen(false);
+                                                    }}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-bold text-start flex items-center justify-between gap-3 transition-colors ${reciter === r.key ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    <span>
+                                                        {r.name}
+                                                        <span className={`block text-[9px] font-semibold ${reciter === r.key ? 'text-white/70' : 'text-slate-400'}`}>
+                                                            {r.mode === 'fullSurah' ? 'full surah' : 'verse by verse'}
+                                                        </span>
                                                     </span>
-                                                </span>
-                                                <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
-                                            </button>
-                                        ))}
+                                                    <span dir="rtl" className="font-quranic text-base leading-none">{r.nameAr}</span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </>
                             )}
@@ -3906,6 +3933,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             readOnlySeqRef.current = false;
                             setReadOnlyAudioVerse(null);
                             return;
+                        }
+                        // Verse repeat (per-ayah reciters): replay the same file
+                        // until it has played the chosen number of times.
+                        if (readOnlyAudioVerse && repeatDoneRef.current < verseRepeatRef.current) {
+                            repeatDoneRef.current += 1;
+                            const a = readOnlyAudioRef.current;
+                            if (a) {
+                                try { a.currentTime = 0; } catch { /* not seekable */ }
+                                a.play().catch(() => { /* superseded */ });
+                                return;
+                            }
                         }
                         // Sequential mode (started from an ayah number): advance to the
                         // next ayah until the surah ends, then stop.
