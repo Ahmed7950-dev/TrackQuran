@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Student } from '../types';
 import { getVersesForSurah } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
-import { FluencyResult, listFluencyResults, saveFluencyResult } from '../services/fluencyService';
+import { FluencyResult, listFluencyResults, saveFluencyResult, deleteFluencyResult } from '../services/fluencyService';
 import { QURANIC_FONTS } from '../constants';
 import StudentProfileIcon from './StudentProfileIcon';
 
@@ -338,6 +338,20 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
 
   const exitTest = () => { setPhase('challenge'); };
 
+  // ── Removing a score (tutor) ─────────────────────────────────────────────
+  // Only ever this student's own attempts — the list it hangs off is built
+  // from myStanding. Standings recompute from whatever rows remain.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const removeAttempt = async (a: FluencyResult) => {
+    const when = new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    if (!window.confirm(`Remove ${student.name}'s ${fmtTime(a.timeMs)} score from ${when}?\n\nThis can't be undone.`)) return;
+    setDeletingId(a.id);
+    const ok = await deleteFluencyResult(a.id);
+    setDeletingId(null);
+    if (ok) setAllRows(rows => rows.filter(r => r.id !== a.id));
+    else window.alert('Could not remove that score — check the connection and try again.');
+  };
+
   // ── ladder chips ─────────────────────────────────────────────────────────
   /** Vertical position of a score inside a level block: passed sits at the
    *  head; a miss sinks by how far past the ideal it landed (a miss twice the
@@ -551,13 +565,22 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                 <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Recent attempts</p>
                 <div className="space-y-1.5">
                   {recent.map(a => (
-                    <div key={a.id} className="flex items-center gap-2 text-sm rounded-lg bg-slate-50 dark:bg-gray-700/40 px-3 py-1.5">
+                    <div key={a.id} className="group flex items-center gap-2 text-sm rounded-lg bg-slate-50 dark:bg-gray-700/40 px-3 py-1.5">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.passed ? 'bg-emerald-500' : 'bg-red-400'}`} />
                       <span className="font-bold text-slate-700 dark:text-slate-200 tabular-nums">{fmtTime(a.timeMs)}</span>
                       {a.buzzes > 0 && <span className="text-amber-500 text-xs font-bold">⚡{a.buzzes}</span>}
                       <span className="ms-auto text-xs text-slate-400">
                         {new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                       </span>
+                      <button
+                        onClick={() => removeAttempt(a)}
+                        disabled={deletingId === a.id}
+                        title="Remove this score"
+                        aria-label={`Remove the ${fmtTime(a.timeMs)} score`}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-300 hover:text-white hover:bg-red-500 disabled:opacity-40 transition-colors sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                      >
+                        {deletingId === a.id ? '…' : '✕'}
+                      </button>
                     </div>
                   ))}
                 </div>

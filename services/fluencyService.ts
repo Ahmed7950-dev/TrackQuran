@@ -31,6 +31,14 @@ export async function saveFluencyResult(input: {
   if (error) console.error('saveFluencyResult:', error.message);
 }
 
+/** Remove one attempt — the tutor deleting a mis-scored or practice run.
+ *  Standings recompute from the remaining rows, so nothing else needs fixing. */
+export async function deleteFluencyResult(id: string): Promise<boolean> {
+  const { error } = await supabase.from('fluency_results').delete().eq('id', id);
+  if (error) { console.error('deleteFluencyResult:', error.message); return false; }
+  return true;
+}
+
 /** Every attempt for the given students — the page aggregates client-side. */
 export async function listFluencyResults(studentIds: string[]): Promise<FluencyResult[]> {
   if (studentIds.length === 0) return [];
