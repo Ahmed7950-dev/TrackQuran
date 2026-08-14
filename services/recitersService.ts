@@ -17,7 +17,7 @@
 //   Al-Nufais  (read 259): mixed, and he chains verses with no pause in places,
 //     so seek cuts would land mid-melody → fullSurah by the tutor's choice.
 
-export type ReciterKey = 'minshawi' | 'dukhain' | 'dussary' | 'qatami' | 'abbad' | 'juhany' | 'binhumaid' | 'nufais' | 'ustadh';
+export type ReciterKey = 'minshawi' | 'dukhain' | 'salimi' | 'dussary' | 'qatami' | 'abbad' | 'juhany' | 'binhumaid' | 'nufais' | 'ustadh';
 
 export interface Reciter {
   key: ReciterKey;
@@ -26,6 +26,9 @@ export interface Reciter {
   mode: 'perAyah' | 'timedSurah' | 'fullSurah';
   /** everyayah.com folder — set on perAyah reciters served from there. */
   everyayah?: string;
+  /** timedSurah mode: which mp3quran ayat-timing read to use, where the surah
+   *  files live, and how far to pull every cut forward (measured per read). */
+  timing?: { read: number; folder: string; cutEarlyMs: number };
 }
 
 export const RECITERS: Reciter[] = [
@@ -36,7 +39,10 @@ export const RECITERS: Reciter[] = [
   { key: 'qatami',    name: 'Nasser Al-Qatami',   nameAr: 'ناصر القطامي',      mode: 'perAyah', everyayah: 'Nasser_Alqatami_128kbps' },
   { key: 'abbad',     name: 'Fares Abbad',        nameAr: 'فارس عباد',         mode: 'perAyah', everyayah: 'Fares_Abbad_64kbps' },
   { key: 'juhany',    name: 'Abdullah Al-Juhany', nameAr: 'عبد الله الجهني',   mode: 'perAyah', everyayah: 'Abdullaah_3awwaad_Al-Juhaynee_128kbps' },
-  { key: 'dukhain',   name: 'Haitham Al-Dukhain', nameAr: 'هيثم الدخين',       mode: 'timedSurah' },
+  { key: 'dukhain',   name: 'Haitham Al-Dukhain', nameAr: 'هيثم الدخين',       mode: 'timedSurah',
+    timing: { read: 273, folder: 'https://server16.mp3quran.net/h_dukhain/Rewayat-Hafs-A-n-Assem', cutEarlyMs: 150 } },
+  { key: 'salimi',    name: 'Mansour Al-Salimi',  nameAr: 'منصور السالمي',     mode: 'timedSurah',
+    timing: { read: 245, folder: 'https://server14.mp3quran.net/mansor', cutEarlyMs: 0 } },
   { key: 'binhumaid', name: 'Ahmad bin Humaid',   nameAr: 'أحمد طالب بن حميد', mode: 'fullSurah' },
   { key: 'nufais',    name: 'Ahmad Al-Nufais',    nameAr: 'أحمد النفيس',       mode: 'fullSurah' },
   // The tutor's own recitation, recorded in the admin Quran Lab. Real per-ayah
@@ -59,16 +65,16 @@ const BIN_HUMAID_BASE = 'https://media.way2quran.com/ahmed-bin-talib-hamid/hafs-
 export const binHumaidSurahUrl = (surah: number): string =>
   `${BIN_HUMAID_BASE}/${String(surah).padStart(3, '0')}.mp3`;
 
-// Al-Dukhain and Al-Nufais live on mp3quran's server16 — unlike bin Humaid's
-// moshaf there, both were probed complete (114/114 files, ACAO:*,
-// accept-ranges: bytes — 2026-08-11).
+// Al-Nufais lives on mp3quran's server16 — unlike bin Humaid's moshaf there,
+// it was probed complete (114/114 files, ACAO:*, accept-ranges: bytes).
 const MP3QURAN_S16 = 'https://server16.mp3quran.net';
-
-export const dukhainSurahUrl = (surah: number): string =>
-  `${MP3QURAN_S16}/h_dukhain/Rewayat-Hafs-A-n-Assem/${String(surah).padStart(3, '0')}.mp3`;
 
 export const nufaisSurahUrl = (surah: number): string =>
   `${MP3QURAN_S16}/nufais/Rewayat-Hafs-A-n-Assem/${String(surah).padStart(3, '0')}.mp3`;
+
+/** Surah file for a timedSurah reciter. */
+export const timedSurahUrl = (rec: Reciter, surah: number): string =>
+  `${rec.timing!.folder}/${String(surah).padStart(3, '0')}.mp3`;
 
 export const fullSurahUrl = (key: ReciterKey, surah: number): string =>
   key === 'nufais' ? nufaisSurahUrl(surah) : binHumaidSurahUrl(surah);
@@ -80,7 +86,13 @@ const EVERYAYAH_BASE = 'https://everyayah.com/data';
 export const everyayahUrl = (folder: string, surah: number, ayah: number): string =>
   `${EVERYAYAH_BASE}/${folder}/${String(surah).padStart(3, '0')}${String(ayah).padStart(3, '0')}.mp3`;
 
-// ─── Al-Dukhain ayat timing (mp3quran read 273) ──────────────────────────────
+// ─── Ayat timing (mp3quran) ──────────────────────────────────────────────────
+// Accuracy is measured per read before a reciter is offered in timedSurah mode:
+// download the audio, map the real silence gaps, and check where each cut lands.
+//   Al-Dukhain (273): 40–340ms consistently LATE → cutEarlyMs 150.
+//   Al-Salimi  (245): 202 cuts over 6 surahs, 61% dead inside a pause, median
+//                     and p90 offset 0ms → no correction needed.
+//   bin Humaid (137): 700–1000ms off → rejected, kept as fullSurah.
 
 export interface AyahTiming {
   ayah: number;
@@ -88,19 +100,14 @@ export interface AyahTiming {
   endMs: number;
 }
 
-const DUKHAIN_READ = 273;
+const timingCache = new Map<string, Promise<AyahTiming[]>>();
 
-/** Measured against the audio: read 273's cuts sit 40–340ms AFTER the real
- *  verse onset (they clip the first syllable). Pulling every boundary forward
- *  by this much lands the cuts inside the silence gaps. */
-const CUT_EARLY_MS = 150;
-
-const timingCache = new Map<number, Promise<AyahTiming[]>>();
-
-export const dukhainTimings = (surah: number): Promise<AyahTiming[]> => {
-  const hit = timingCache.get(surah);
+export const timedTimings = (rec: Reciter, surah: number): Promise<AyahTiming[]> => {
+  const { read, cutEarlyMs } = rec.timing!;
+  const cacheKey = `${read}:${surah}`;
+  const hit = timingCache.get(cacheKey);
   if (hit) return hit;
-  const p = fetch(`https://www.mp3quran.net/api/v3/ayat_timing?surah=${surah}&read=${DUKHAIN_READ}`)
+  const p = fetch(`https://www.mp3quran.net/api/v3/ayat_timing?surah=${surah}&read=${read}`)
     .then(r => {
       if (!r.ok) throw new Error(`ayat_timing ${r.status}`);
       return r.json();
@@ -110,8 +117,8 @@ export const dukhainTimings = (surah: number): Promise<AyahTiming[]> => {
         .filter(r => typeof r.ayah === 'number' && r.ayah >= 1)
         .map(r => ({
           ayah: r.ayah,
-          startMs: Math.max(0, r.start_time - CUT_EARLY_MS),
-          endMs: Math.max(0, r.end_time - CUT_EARLY_MS),
+          startMs: Math.max(0, r.start_time - cutEarlyMs),
+          endMs: Math.max(0, r.end_time - cutEarlyMs),
         }))
         .sort((a, b) => a.ayah - b.ayah);
       if (!out.length) throw new Error('ayat_timing empty');
@@ -119,7 +126,7 @@ export const dukhainTimings = (surah: number): Promise<AyahTiming[]> => {
     });
   // Cache the promise so parallel taps share one request, but drop it on
   // failure so a flaky network doesn't poison the surah forever.
-  p.catch(() => timingCache.delete(surah));
-  timingCache.set(surah, p);
+  p.catch(() => timingCache.delete(cacheKey));
+  timingCache.set(cacheKey, p);
   return p;
 };

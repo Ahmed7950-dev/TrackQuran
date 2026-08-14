@@ -14,7 +14,7 @@ import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
-import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
+import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -772,13 +772,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
 
         if (rec.mode === 'timedSurah') {
-            // Al-Dukhain: one file per surah + a per-ayah timing table. Seek to
+            // One file per surah + a per-ayah timing table (Al-Dukhain, Al-Salimi). Seek to
             // the tapped verse; the rAF watcher stops at its end (verse tap) or
             // walks the highlight to the end of the surah (ayah-number tap).
             // The per-ayah `ended` chain must never fire for this mode.
             fullSurahRef.current = false;
             readOnlySeqRef.current = false;
-            dukhainTimings(surah).then(timings => {
+            timedTimings(rec, surah).then(timings => {
                 if (req !== audioReqRef.current) return;
                 const idx = Math.max(0, timings.findIndex(t => t.ayah === ayah));
                 const row = timings[idx];
@@ -787,7 +787,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     try { audio.currentTime = row.startMs / 1000; } catch { /* pre-metadata */ }
                     audio.play().then(() => { if (req === audioReqRef.current) watchTimed(req); }).catch(fail);
                 };
-                const url = dukhainSurahUrl(surah);
+                const url = timedSurahUrl(rec, surah);
                 // Safari ignores currentTime before loadedmetadata, so a fresh
                 // file seeks inside that event, not right after load().
                 if (audio.src === url && audio.readyState >= 1) { seekPlay(); return; }
