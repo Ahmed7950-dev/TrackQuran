@@ -573,7 +573,12 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
   // top of its colored block; score diamonds point at where a run landed
   // (on the gate = beat the ideal, below it = how far past). ────────────────
   const GATE_H = 48, BLOCK_H = 96;   // px — marker anchors are computed from these
+  const AVATAR = 40, AV_BOX = AVATAR + 6;  // icon + its ring padding
+  const PASSED = '#16a34a';          // finished levels + their gates go green
   const allDone = myStanding.currentLevel === 11;
+  /** The highest level this student has a score on — the only one that shows
+   *  their avatar; lower levels just carry the number. */
+  const myTopScored = FLUENCY_LEVELS.reduce((top, lv) => myStanding.bestAt(lv.n) !== null ? lv.n : top, 0);
   /** Stable colour for a student's initial-letter avatar (no Lottie icon set). */
   const avatarHue = (name: string): number =>
     [...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
@@ -624,8 +629,8 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                     className="relative z-10 mx-auto w-44 flex items-center justify-center rounded-lg text-white font-black text-lg transition-transform group-hover:scale-[1.04] group-active:scale-95"
                     style={{
                       height: GATE_H,
-                      background: `color-mix(in srgb, ${lv.color} 82%, white)`,
-                      border: `6px solid color-mix(in srgb, ${lv.color} 62%, black)`,
+                      background: `color-mix(in srgb, ${isPassed ? PASSED : lv.color} 82%, white)`,
+                      border: `6px solid color-mix(in srgb, ${isPassed ? PASSED : lv.color} 62%, black)`,
                     }}
                   >
                     {Math.round(lv.idealMs / 1000)} s
@@ -633,9 +638,9 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                   {/* body: grey once passed, colored otherwise */}
                   <div
                     className="mx-auto w-36 flex items-center justify-center text-white font-black text-4xl transition-all group-hover:brightness-95"
-                    style={{ height: BLOCK_H, background: isPassed ? '#9ca3af' : lv.color }}
+                    style={{ height: BLOCK_H, background: isPassed ? PASSED : lv.color }}
                   >
-                    {isPassed ? '✓' : lv.n}
+                    {lv.n}
                   </div>
                 </button>
 
@@ -648,14 +653,21 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                   const topPx = c.timeMs <= lv.idealMs
                     ? GATE_H / 2
                     : GATE_H + 8 + (c.topPct / 100) * (BLOCK_H - 22);
-                  const marker = (
+                  // This student keeps the avatar only on their best-reached
+                  // level; the levels below it just carry the number.
+                  const withAvatar = !c.isMe || lv.n === myTopScored;
+                  const marker = withAvatar ? (
                     <div className="flex flex-col items-center" title={`${c.name} · ${diamondLabel(c.timeMs)}`}>
-                      <div className={`rounded-full p-[3px] shadow-md ${c.isMe ? 'bg-teal-600' : 'bg-white dark:bg-gray-700 ring-2 ring-slate-300 dark:ring-gray-500'}`}>
+                      {/* transparent behind the avatar — only the ring shows */}
+                      <div
+                        className={`rounded-full flex items-center justify-center ${c.isMe ? 'ring-2 ring-teal-500' : 'ring-2 ring-slate-300 dark:ring-gray-500'}`}
+                        style={{ width: AV_BOX, height: AV_BOX }}
+                      >
                         {c.icon
-                          ? <StudentProfileIcon src={c.icon} size={40} mode="always" />
+                          ? <StudentProfileIcon src={c.icon} size={AVATAR} mode="always" />
                           : <span
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-base font-black text-white"
-                              style={{ background: `hsl(${avatarHue(c.name)} 62% 45%)` }}
+                              className="rounded-full flex items-center justify-center text-base font-black text-white"
+                              style={{ width: AVATAR, height: AVATAR, background: `hsl(${avatarHue(c.name)} 62% 45%)` }}
                             >{c.name.trim().charAt(0).toUpperCase()}</span>}
                       </div>
                       <p className="mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap max-w-[68px] truncate leading-tight">
@@ -665,13 +677,23 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                         {diamondLabel(c.timeMs)}
                       </p>
                     </div>
+                  ) : (
+                    <div className="flex items-center" style={{ height: AV_BOX }} title={`${c.name} · ${diamondLabel(c.timeMs)}`}>
+                      <span className="px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[11px] font-black tabular-nums shadow-sm">
+                        {diamondLabel(c.timeMs)}
+                      </span>
+                    </div>
                   );
-                  const line = <div className="h-1.5 w-6 rounded bg-slate-400 dark:bg-slate-500" style={{ opacity: i === 0 ? 1 : 0 }} />;
+                  // the connector leaves the column at the avatar's mid-height
+                  const line = (
+                    <div className="h-1.5 w-6 rounded bg-slate-400 dark:bg-slate-500"
+                      style={{ marginTop: AV_BOX / 2 - 3, opacity: i === 0 ? 1 : 0 }} />
+                  );
                   return (
                     <div key={`${c.id}-${c.name}-${idx}`} className="absolute flex items-start z-20 pointer-events-none"
                       style={side === 'right'
-                        ? { top: topPx, left: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginLeft: i * 76 }
-                        : { top: topPx, right: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginRight: i * 76 }}>
+                        ? { top: topPx, left: 'calc(50% + 88px)', transform: `translateY(-${AV_BOX / 2}px)`, marginLeft: i * 76 }
+                        : { top: topPx, right: 'calc(50% + 88px)', transform: `translateY(-${AV_BOX / 2}px)`, marginRight: i * 76 }}>
                       {side === 'right' ? <>{line}{marker}</> : <>{marker}{line}</>}
                     </div>
                   );
@@ -682,8 +704,8 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         </div>
 
         <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-6 text-center px-6 leading-relaxed">
-          Tap a level to open its challenge. Grey = passed (tap to retake).
-          A diamond on the <b>gate</b> beat that level's ideal time; below it, the further down, the further past the ideal it finished.
+          Tap a level to open its challenge. Green = passed (tap to retake).
+          A marker beside the <b>gate</b> beat that level's ideal time; below it, the further down, the further past the ideal it finished.
         </p>
       </div>
     </div>
