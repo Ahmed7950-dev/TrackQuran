@@ -5,6 +5,7 @@ import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
 import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
+import MissedLessonPrompt from './components/MissedLessonPrompt';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
@@ -2103,6 +2104,14 @@ const App: React.FC = () => {
         quranStudents={students}
         arabicStudents={arabicStudents}
         onUpdateArabicStudent={handleUpdateArabicStudent}
+      />
+
+      {/* Asks what happened whenever a finished lesson has nothing logged.
+          Mounted at the shell so it shows on any tutor page. */}
+      <MissedLessonPrompt
+        teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined}
+        students={students}
+        onUpdateStudent={handleUpdateStudent}
       />
 
       <div className="no-print">
