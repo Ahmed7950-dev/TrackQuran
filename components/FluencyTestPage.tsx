@@ -348,14 +348,13 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     return 12 + overshoot * 66;
   };
 
-  interface Chip { name: string; timeMs: number | null; topPct: number; isMe: boolean; icon?: string; id: string }
+  /** Only students who actually have a score on this level get a marker. */
+  interface Chip { name: string; timeMs: number; topPct: number; isMe: boolean; icon?: string; id: string }
   const chipsFor = (lv: FluencyLevel): Chip[] => {
     const chips: Chip[] = [];
     const mine = myStanding.bestAt(lv.n);
     if (mine !== null) {
       chips.push({ name: student.name, timeMs: mine, topPct: chipTopPct(mine, lv.idealMs), isMe: true, icon: student.profileIcon, id: student.id });
-    } else if (myStanding.currentLevel === lv.n) {
-      chips.push({ name: student.name, timeMs: null, topPct: 80, isMe: true, icon: student.profileIcon, id: student.id });
     }
     if (showAll) {
       for (const s of students) {
@@ -363,10 +362,11 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         const st = standingOf(rowsByStudent.get(s.id) ?? []);
         if (st.currentLevel !== lv.n && !(st.currentLevel === 11 && lv.n === 10)) continue;
         const best = st.bestAt(lv.n);
-        chips.push({ name: s.name, timeMs: best, topPct: best !== null ? chipTopPct(best, lv.idealMs) : 80, isMe: false, icon: s.profileIcon, id: s.id });
+        if (best === null) continue;   // no score yet → no marker
+        chips.push({ name: s.name, timeMs: best, topPct: chipTopPct(best, lv.idealMs), isMe: false, icon: s.profileIcon, id: s.id });
       }
     }
-    return chips.sort((a, b) => (a.timeMs ?? Infinity) - (b.timeMs ?? Infinity));
+    return chips.sort((a, b) => a.timeMs - b.timeMs);
   };
 
   // ─── TEST OVERLAY ────────────────────────────────────────────────────────
@@ -609,7 +609,9 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         <div className="w-44 mx-auto">
           {[...FLUENCY_LEVELS].reverse().map(lv => {
             const isPassed = myStanding.passed(lv.n);
-            const chips = chipsFor(lv).slice(0, 3);
+            const allChips = chipsFor(lv);
+            const myChips = allChips.filter(c => c.isMe);
+            const otherChips = allChips.filter(c => !c.isMe).slice(0, 3);
             return (
               <div key={lv.n} className="relative">
                 <button
@@ -637,35 +639,40 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                   </div>
                 </button>
 
-                {/* score diamonds — connector line into the column */}
-                {chips.map((c, i) => {
-                  const topPx = c.timeMs !== null && c.timeMs <= lv.idealMs
+                {/* Score markers: THIS student's on the right of the column,
+                    everyone else's on the left. A marker is the student's
+                    avatar with their name and score in small text under it. */}
+                {[...myChips.map(c => ({ c, side: 'right' as const })),
+                  ...otherChips.map(c => ({ c, side: 'left' as const }))].map(({ c, side }, idx) => {
+                  const i = side === 'right' ? idx : idx - myChips.length;
+                  const topPx = c.timeMs <= lv.idealMs
                     ? GATE_H / 2
                     : GATE_H + 8 + (c.topPct / 100) * (BLOCK_H - 22);
-                  return (
-                    <div key={`${c.name}-${i}`} className="absolute flex items-center z-20 pointer-events-none"
-                      style={{ top: topPx, left: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginLeft: i * 62 }}>
-                      <div className="h-1.5 w-6 rounded bg-slate-400 dark:bg-slate-500" style={{ opacity: i === 0 ? 1 : 0 }} />
-                      <div className="relative -ml-0.5">
-                        <div className={`w-12 h-12 rotate-45 rounded-md shadow-md flex items-center justify-center ${
-                          c.isMe ? 'bg-slate-700 dark:bg-slate-600' : 'bg-white dark:bg-gray-700 border-2 border-slate-300 dark:border-gray-500'}`}>
-                          <span className={`-rotate-45 text-[11px] font-black tabular-nums ${c.isMe ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
-                            {c.timeMs !== null ? diamondLabel(c.timeMs) : '—'}
-                          </span>
-                        </div>
-                        {/* who this score belongs to: avatar, name underneath */}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center" title={c.name}>
-                          {c.icon
-                            ? <StudentProfileIcon src={c.icon} size={26} mode="always" />
-                            : <span
-                                className="w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-black text-white shadow-sm"
-                                style={{ background: `hsl(${avatarHue(c.name)} 62% 45%)` }}
-                              >{c.name.trim().charAt(0).toUpperCase()}</span>}
-                          <p className="mt-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap max-w-[62px] truncate leading-tight">
-                            {c.name.split(' ')[0]}
-                          </p>
-                        </div>
+                  const marker = (
+                    <div className="flex flex-col items-center" title={`${c.name} · ${diamondLabel(c.timeMs)}`}>
+                      <div className={`rounded-full p-[3px] shadow-md ${c.isMe ? 'bg-teal-600' : 'bg-white dark:bg-gray-700 ring-2 ring-slate-300 dark:ring-gray-500'}`}>
+                        {c.icon
+                          ? <StudentProfileIcon src={c.icon} size={40} mode="always" />
+                          : <span
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-base font-black text-white"
+                              style={{ background: `hsl(${avatarHue(c.name)} 62% 45%)` }}
+                            >{c.name.trim().charAt(0).toUpperCase()}</span>}
                       </div>
+                      <p className="mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap max-w-[68px] truncate leading-tight">
+                        {c.name.split(' ')[0]}
+                      </p>
+                      <p className={`text-[10px] font-black tabular-nums leading-tight ${c.isMe ? 'text-teal-700 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                        {diamondLabel(c.timeMs)}
+                      </p>
+                    </div>
+                  );
+                  const line = <div className="h-1.5 w-6 rounded bg-slate-400 dark:bg-slate-500" style={{ opacity: i === 0 ? 1 : 0 }} />;
+                  return (
+                    <div key={`${c.id}-${c.name}-${idx}`} className="absolute flex items-start z-20 pointer-events-none"
+                      style={side === 'right'
+                        ? { top: topPx, left: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginLeft: i * 76 }
+                        : { top: topPx, right: 'calc(50% + 88px)', transform: 'translateY(-50%)', marginRight: i * 76 }}>
+                      {side === 'right' ? <>{line}{marker}</> : <>{marker}{line}</>}
                     </div>
                   );
                 })}
