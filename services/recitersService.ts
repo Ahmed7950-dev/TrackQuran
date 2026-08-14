@@ -17,17 +17,25 @@
 //   Al-Nufais  (read 259): mixed, and he chains verses with no pause in places,
 //     so seek cuts would land mid-melody → fullSurah by the tutor's choice.
 
-export type ReciterKey = 'minshawi' | 'dukhain' | 'binhumaid' | 'nufais' | 'ustadh';
+export type ReciterKey = 'minshawi' | 'dukhain' | 'dussary' | 'qatami' | 'abbad' | 'juhany' | 'binhumaid' | 'nufais' | 'ustadh';
 
 export interface Reciter {
   key: ReciterKey;
   name: string;
   nameAr: string;
   mode: 'perAyah' | 'timedSurah' | 'fullSurah';
+  /** everyayah.com folder — set on perAyah reciters served from there. */
+  everyayah?: string;
 }
 
 export const RECITERS: Reciter[] = [
   { key: 'minshawi',  name: 'Al-Minshawi',        nameAr: 'المنشاوي',          mode: 'perAyah' },
+  // everyayah.com per-ayah sets — all four verified complete (the final ayah
+  // of all 114 surahs resolves), CORS-open and range-capable, 2026-08-14.
+  { key: 'dussary',   name: 'Yasser Ad-Dussary',  nameAr: 'ياسر الدوسري',      mode: 'perAyah', everyayah: 'Yasser_Ad-Dussary_128kbps' },
+  { key: 'qatami',    name: 'Nasser Al-Qatami',   nameAr: 'ناصر القطامي',      mode: 'perAyah', everyayah: 'Nasser_Alqatami_128kbps' },
+  { key: 'abbad',     name: 'Fares Abbad',        nameAr: 'فارس عباد',         mode: 'perAyah', everyayah: 'Fares_Abbad_64kbps' },
+  { key: 'juhany',    name: 'Abdullah Al-Juhany', nameAr: 'عبد الله الجهني',   mode: 'perAyah', everyayah: 'Abdullaah_3awwaad_Al-Juhaynee_128kbps' },
   { key: 'dukhain',   name: 'Haitham Al-Dukhain', nameAr: 'هيثم الدخين',       mode: 'timedSurah' },
   { key: 'binhumaid', name: 'Ahmad bin Humaid',   nameAr: 'أحمد طالب بن حميد', mode: 'fullSurah' },
   { key: 'nufais',    name: 'Ahmad Al-Nufais',    nameAr: 'أحمد النفيس',       mode: 'fullSurah' },
@@ -64,6 +72,13 @@ export const nufaisSurahUrl = (surah: number): string =>
 
 export const fullSurahUrl = (key: ReciterKey, surah: number): string =>
   key === 'nufais' ? nufaisSurahUrl(surah) : binHumaidSurahUrl(surah);
+
+// everyayah.com names its files SSSAAA.mp3 (3-digit surah + 3-digit ayah),
+// unlike islamic.network's single global-ayah number.
+const EVERYAYAH_BASE = 'https://everyayah.com/data';
+
+export const everyayahUrl = (folder: string, surah: number, ayah: number): string =>
+  `${EVERYAYAH_BASE}/${folder}/${String(surah).padStart(3, '0')}${String(ayah).padStart(3, '0')}.mp3`;
 
 // ─── Al-Dukhain ayat timing (mp3quran read 273) ──────────────────────────────
 

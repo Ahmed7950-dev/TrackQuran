@@ -14,7 +14,7 @@ import { pageVerseList } from '../services/quranPageData';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
-import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, AyahTiming } from '../services/recitersService';
+import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, dukhainSurahUrl, dukhainTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
@@ -807,8 +807,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         timedRef.current = null;
         loadedSurahRef.current = 0;
         // perAyah: one file per verse — Minshawi from the islamic.network CDN,
-        // the tutor's own recitation from Supabase Storage.
-        audio.src = rec.key === 'ustadh' ? recitationVerseUrl(surah, ayah) : audioUrl(surah, ayah);
+        // the everyayah reciters from their own folders, the tutor's own
+        // recitation from Supabase Storage.
+        audio.src = rec.key === 'ustadh' ? recitationVerseUrl(surah, ayah)
+          : rec.everyayah ? everyayahUrl(rec.everyayah, surah, ayah)
+          : audioUrl(surah, ayah);
         try { audio.load(); } catch { /* ignore */ }
         audio.play().catch(fail);
     }, [reciter, watchTimed]);
@@ -3095,7 +3098,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         </div>
                                         {/* Reciter */}
                                         <span className="block px-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-500 select-none">🎙️ Reciter</span>
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col max-h-64 overflow-y-auto">
                                             {RECITERS.filter(r => r.key !== 'ustadh' || recManifest?.published).map(r => (
                                                 <button
                                                     key={r.key}
