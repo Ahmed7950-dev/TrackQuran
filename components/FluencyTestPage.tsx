@@ -4,6 +4,7 @@ import { getVersesForSurah } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { FluencyResult, listFluencyResults, saveFluencyResult } from '../services/fluencyService';
 import { QURANIC_FONTS } from '../constants';
+import StudentProfileIcon from './StudentProfileIcon';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fluency Test — tutor-only tab. A ladder of 10 levels; each test is 10 random
@@ -347,14 +348,14 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     return 12 + overshoot * 66;
   };
 
-  interface Chip { name: string; timeMs: number | null; topPct: number; isMe: boolean }
+  interface Chip { name: string; timeMs: number | null; topPct: number; isMe: boolean; icon?: string; id: string }
   const chipsFor = (lv: FluencyLevel): Chip[] => {
     const chips: Chip[] = [];
     const mine = myStanding.bestAt(lv.n);
     if (mine !== null) {
-      chips.push({ name: student.name, timeMs: mine, topPct: chipTopPct(mine, lv.idealMs), isMe: true });
+      chips.push({ name: student.name, timeMs: mine, topPct: chipTopPct(mine, lv.idealMs), isMe: true, icon: student.profileIcon, id: student.id });
     } else if (myStanding.currentLevel === lv.n) {
-      chips.push({ name: student.name, timeMs: null, topPct: 80, isMe: true });
+      chips.push({ name: student.name, timeMs: null, topPct: 80, isMe: true, icon: student.profileIcon, id: student.id });
     }
     if (showAll) {
       for (const s of students) {
@@ -362,7 +363,7 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         const st = standingOf(rowsByStudent.get(s.id) ?? []);
         if (st.currentLevel !== lv.n && !(st.currentLevel === 11 && lv.n === 10)) continue;
         const best = st.bestAt(lv.n);
-        chips.push({ name: s.name, timeMs: best, topPct: best !== null ? chipTopPct(best, lv.idealMs) : 80, isMe: false });
+        chips.push({ name: s.name, timeMs: best, topPct: best !== null ? chipTopPct(best, lv.idealMs) : 80, isMe: false, icon: s.profileIcon, id: s.id });
       }
     }
     return chips.sort((a, b) => (a.timeMs ?? Infinity) - (b.timeMs ?? Infinity));
@@ -573,6 +574,10 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
   // (on the gate = beat the ideal, below it = how far past). ────────────────
   const GATE_H = 48, BLOCK_H = 96;   // px — marker anchors are computed from these
   const allDone = myStanding.currentLevel === 11;
+  /** Stable colour for a student's initial-letter avatar (no Lottie icon set). */
+  const avatarHue = (name: string): number =>
+    [...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
+
   const diamondLabel = (ms: number): string => ms < 100_000 ? (ms / 1000).toFixed(2) : fmtTime(ms);
 
   return (
@@ -586,9 +591,10 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
               {student.name} · {allDone ? 'all 10 levels passed 🏆' : <>currently on <b className="text-slate-700 dark:text-slate-200">Level {myStanding.currentLevel}</b></>}
             </p>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          {/* the whole control toggles — the label text used to be dead */}
+          <label onClick={() => setShowAll(v => !v)} className="flex items-center gap-2 cursor-pointer select-none">
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Show all students</span>
-            <span onClick={() => setShowAll(v => !v)}
+            <span
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showAll ? 'bg-teal-600' : 'bg-slate-300 dark:bg-gray-600'}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAll ? 'translate-x-6' : 'translate-x-1'}`} />
             </span>
@@ -647,11 +653,18 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
                             {c.timeMs !== null ? diamondLabel(c.timeMs) : '—'}
                           </span>
                         </div>
-                        {showAll && (
-                          <p className="absolute top-full left-1/2 -translate-x-1/2 mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap max-w-[80px] truncate">
+                        {/* who this score belongs to: avatar, name underneath */}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex flex-col items-center" title={c.name}>
+                          {c.icon
+                            ? <StudentProfileIcon src={c.icon} size={26} mode="always" />
+                            : <span
+                                className="w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-black text-white shadow-sm"
+                                style={{ background: `hsl(${avatarHue(c.name)} 62% 45%)` }}
+                              >{c.name.trim().charAt(0).toUpperCase()}</span>}
+                          <p className="mt-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap max-w-[62px] truncate leading-tight">
                             {c.name.split(' ')[0]}
                           </p>
-                        )}
+                        </div>
                       </div>
                     </div>
                   );
