@@ -185,6 +185,19 @@ export const MILESTONES: Milestone[] = [
 // key below stores the student's PERMANENT habit flags (fast/choppy reading…)
 // as a pipe-joined errorText. Anything iterating mistake keys positionally
 // must filter with isLetterMistakeKey.
+// The Quranic font picker's list — ONE copy shared by the main app header,
+// the student portal header and the fluency-test overlay (they used to keep
+// separate copies that drifted apart).
+export const QURANIC_FONTS = [
+  { name: 'Hafs', displayName: 'Hafs' },
+  { name: 'Amiri Regular', displayName: 'Amiri Regular' },
+  { name: 'Elgharib KFGQPCHafs V10', displayName: 'Elgharib KFGQPCHafs V10' },
+  { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
+  { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
+  { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
+  { name: 'Hamdullah', displayName: 'Hamdullah (Türkçe hat)' },
+] as const;
+
 export const PERM_MISTAKE_FLAGS_KEY = '__flags__';
 // Turkish-source mistakes ("T2:255:3:1") are letter positions in the TURKISH
 // text (public/quran-tr) — counted in label/date aggregates like any mistake,

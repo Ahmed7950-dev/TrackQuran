@@ -12,7 +12,7 @@ import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
 import { getArabicStudents, saveArabicStudent, deleteArabicStudent, getVocabWordCountsByLesson, setArabicStudentApprovalStatus, ensureShareTokenById } from './services/arabicService';
 import { getCustomVocabWordCountsForStudents } from './services/vocabularyService';
-import { QURAN_METADATA, POINTS_PER_WORD , PERM_MISTAKE_FLAGS_KEY } from './constants';
+import { QURAN_METADATA, POINTS_PER_WORD , PERM_MISTAKE_FLAGS_KEY, QURANIC_FONTS } from './constants';
 import { useI18n } from './context/I18nProvider';
 import Footer from './components/Footer';
 import Logo from './components/Logo';
@@ -108,16 +108,6 @@ const useTheme = () => {
 
   return { currentTheme: theme, toggleTheme };
 };
-
-const QURANIC_FONTS = [
-  { name: 'Hafs', displayName: 'Hafs' },
-  { name: 'Amiri Regular', displayName: 'Amiri Regular' },
-  { name: 'Elgharib KFGQPCHafs V10', displayName: 'Elgharib KFGQPCHafs V10' },
-  { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
-  { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
-  { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
-  { name: 'Hamdullah', displayName: 'Hamdullah (Türkçe hat)' },
-] as const;
 
 const useQuranicFont = (teacherId?: string) => {
   const [font, setFont] = useState<string>(() => {

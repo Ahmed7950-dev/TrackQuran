@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Student } from '../types';
 import { getVersesForSurah } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { FluencyResult, listFluencyResults, saveFluencyResult } from '../services/fluencyService';
+import { QURANIC_FONTS } from '../constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fluency Test — tutor-only tab. A ladder of 10 levels; each test is 10 random
@@ -145,6 +146,24 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
   const buzzesRef = useRef(0);
   const finishedRef = useRef(false);
 
+  // ── Quranic font (same picker + same global preference as the Quran page) ──
+  const [font, setFont] = useState<string>(() => {
+    try { const f = localStorage.getItem('quranicFont') || 'Hafs'; return QURANIC_FONTS.some(o => o.name === f) ? f : 'Hafs'; }
+    catch { return 'Hafs'; }
+  });
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--quranic-font', font);
+    try { localStorage.setItem('quranicFont', font); } catch { /* private mode */ }
+  }, [font]);
+
+  // ── Fit the segment to its box ────────────────────────────────────────────
+  // The old vw-based size grew with letter count, so a long level-10 verse
+  // overflowed the card and covered the buttons. The type is binary-searched
+  // down instead: as large as possible while still fitting exactly.
+  const textBoxRef = useRef<HTMLDivElement | null>(null);
+  const textRef = useRef<HTMLParagraphElement | null>(null);
+
   const reload = useCallback(() => {
     const ids = [...new Set([student.id, ...students.map(s => s.id)])];
     listFluencyResults(ids).then(setAllRows);
@@ -199,6 +218,45 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
       o.start(); o.stop(ac.currentTime + 0.3);
     } catch { /* no audio — the shake still shows */ }
   }, []);
+
+  useLayoutEffect(() => {
+    if (phase !== 'running') return;
+    let dead = false;
+    const fit = () => {
+      const box = textBoxRef.current, el = textRef.current;
+      if (dead || !box || !el) return;
+      const availH = box.clientHeight, availW = box.clientWidth;
+      if (!availH || !availW) return;
+      let lo = 16, hi = 190, best = lo;
+      for (let i = 0; i < 9; i++) {
+        const mid = (lo + hi) / 2;
+        el.style.fontSize = `${mid}px`;
+        if (el.scrollHeight <= availH && el.scrollWidth <= availW + 1) { best = mid; lo = mid; }
+        else hi = mid;
+      }
+      el.style.fontSize = `${best}px`;
+    };
+    // The box can still be laid out at zero on the first frame — retry until
+    // it has a real size, then keep it fitted through window resizes and
+    // rotations (ResizeObserver alone is not dependable everywhere).
+    let raf = 0;
+    const fitSoon = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(fit); };
+    fit();
+    if (!textBoxRef.current?.clientHeight) fitSoon();
+    const ro = new ResizeObserver(fit);
+    if (textBoxRef.current) ro.observe(textBoxRef.current);
+    window.addEventListener('resize', fitSoon);
+    window.addEventListener('orientationchange', fitSoon);
+    // Font files change the metrics — refit once they have loaded.
+    document.fonts?.ready?.then(() => { if (!dead) fit(); }).catch(() => { /* ignore */ });
+    return () => {
+      dead = true;
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', fitSoon);
+      window.removeEventListener('orientationchange', fitSoon);
+    };
+  }, [phase, itemIdx, items, font]);
 
   // ── test flow ────────────────────────────────────────────────────────────
   const startTest = async (level: number) => {
@@ -262,6 +320,21 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     setTimeout(() => setShaking(false), 420);
   };
 
+  // N = buzz, M = passed — keeps the tutor's hands off the mouse mid-reading.
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'n') { e.preventDefault(); handleBuzz(); }
+      else if (k === 'm') { e.preventDefault(); handlePassed(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const exitTest = () => { setPhase('challenge'); };
 
   // ── ladder chips ─────────────────────────────────────────────────────────
@@ -300,27 +373,53 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     const nearIdeal = elapsedMs >= level.idealMs * 0.8;
     const overIdeal = elapsedMs > level.idealMs;
     const item = items[itemIdx] ?? '';
-    const itemLetters = Math.max(3, countBaseLetters(item));
-    // Single short word → huge; a 30-letter run → still large but wrappable.
-    const fontSize = `clamp(2.4rem, ${Math.round(240 / (itemLetters + 4))}vw, 8.5rem)`;
     const passedResult = elapsedMs <= level.idealMs;
 
     return (
       <div className="fixed inset-0 z-[120] flex flex-col" style={{ background: 'linear-gradient(165deg,#0f172a 0%,#1e293b 100%)' }}>
         {/* top bar: exit · level · timer · progress */}
-        <div className="flex items-center gap-3 px-4 pb-3" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}>
+        <div className="flex-shrink-0 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 pb-2" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}>
           <button onClick={exitTest} className="px-3 py-1.5 rounded-xl bg-white/10 text-white/80 text-sm font-bold hover:bg-white/20 transition-colors">✕ Exit</button>
           <span className="px-3 py-1.5 rounded-xl text-sm font-black text-white" style={{ background: level.color }}>
             Level {level.n}
           </span>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             {buzzes > 0 && <span className="text-amber-400 text-sm font-bold">⚡ {buzzes}</span>}
             <span className="text-white/50 text-sm font-bold tabular-nums">{itemIdx + 1} / 10</span>
+            {/* Quranic font — same list as the main Quran page */}
+            <div className="relative">
+              <button
+                onClick={() => setFontMenuOpen(o => !o)}
+                aria-label="Select Quranic font"
+                title="Quranic font"
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              >
+                <span className="text-xl leading-none" style={{ fontFamily: 'Amiri Regular' }}>ع</span>
+              </button>
+              {fontMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setFontMenuOpen(false)} />
+                  <div className="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl ring-1 ring-black/10 z-20 py-1 max-h-[60vh] overflow-y-auto">
+                    <div className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Quranic font</div>
+                    {QURANIC_FONTS.map(f => (
+                      <button
+                        key={f.name}
+                        onClick={() => { setFont(f.name); setFontMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between gap-2 ${font === f.name ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                      >
+                        <span style={{ fontFamily: f.name }}>{f.displayName}</span>
+                        {font === f.name && <span className="text-teal-600 dark:text-teal-400">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* timer */}
-        <div className="text-center">
+        <div className="flex-shrink-0 text-center">
           <span className={`text-6xl sm:text-7xl font-black tabular-nums transition-colors ${overIdeal ? 'text-red-500 animate-pulse' : nearIdeal ? 'text-red-400' : 'text-white'}`}>
             {fmtTime(elapsedMs)}
           </span>
@@ -328,14 +427,14 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
         </div>
 
         {/* progress dots */}
-        <div className="flex justify-center gap-1.5 mt-3">
+        <div className="flex-shrink-0 flex justify-center gap-1.5 mt-2">
           {items.map((_, i) => (
             <span key={i} className={`w-2.5 h-2.5 rounded-full transition-colors ${i < itemIdx ? 'bg-emerald-400' : i === itemIdx && phase === 'running' ? 'bg-white' : 'bg-white/20'}`} />
           ))}
         </div>
 
         {/* the segment — live-logging rendering */}
-        <div className="flex-1 flex items-center justify-center px-4 py-4 min-h-0">
+        <div className="flex-1 min-h-0 flex items-center justify-center px-2 sm:px-4 py-3 overflow-hidden">
           {phase === 'countdown' ? (
             <span key={count} className="fl-pop text-white font-black" style={{ fontSize: '9rem' }}>{count === 0 ? '﷽' : count}</span>
           ) : phase === 'result' ? (
@@ -361,27 +460,32 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
               </div>
             </div>
           ) : (
-            <div className={`w-full max-w-5xl bg-[#fdf8ee] rounded-3xl border-4 px-6 sm:px-12 py-10 sm:py-14 text-center shadow-2xl ${shaking ? 'fl-shake' : ''}`}
+            <div className={`w-full h-full bg-[#fdf8ee] rounded-3xl border-4 px-3 sm:px-8 py-4 sm:py-6 shadow-2xl overflow-hidden ${shaking ? 'fl-shake' : ''}`}
               style={{ borderColor: shaking ? '#ef4444' : '#fcd34d' }}>
-              <p key={itemIdx} dir="rtl" className="font-quranic text-slate-900 fl-pop" style={{ fontSize, lineHeight: 2.2 }}>
-                {item.split(' ').map((w, i, arr) => (
-                  <React.Fragment key={i}>{renderWordWithMarks(w, `f${i}`, 2.2)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
-                ))}
-              </p>
+              {/* Measured box — the segment is scaled to fill it exactly. */}
+              <div ref={textBoxRef} className="w-full h-full flex items-center justify-center overflow-hidden">
+                <p ref={textRef} key={itemIdx} dir="rtl" className="font-quranic text-slate-900 fl-pop w-full text-center" style={{ fontSize: '4rem', lineHeight: 2.2 }}>
+                  {item.split(' ').map((w, i, arr) => (
+                    <React.Fragment key={i}>{renderWordWithMarks(w, `f${i}`, 2.2)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
+                  ))}
+                </p>
+              </div>
             </div>
           )}
         </div>
 
         {/* tutor buttons */}
         {phase === 'running' && (
-          <div className="px-4 pb-6 pt-2 flex gap-4 justify-center">
-            <button onClick={handleBuzz}
-              className="w-40 sm:w-52 py-4 rounded-2xl bg-red-500 hover:bg-red-400 text-white font-black text-xl shadow-lg shadow-red-900/40 transition-all active:scale-95">
-              ⚡ Buzz
+          <div className="flex-shrink-0 px-3 sm:px-4 pt-2 flex gap-3 sm:gap-4 justify-center" style={{ paddingBottom: 'calc(0.9rem + env(safe-area-inset-bottom))' }}>
+            <button onClick={handleBuzz} aria-keyshortcuts="N"
+              className="flex-1 max-w-[15rem] py-3 sm:py-4 rounded-2xl bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white font-black text-lg sm:text-xl shadow-lg shadow-red-950/40 ring-1 ring-white/15 transition-all active:scale-95 flex items-center justify-center gap-2.5">
+              <span>⚡ Buzz</span>
+              <kbd className="hidden sm:flex items-center justify-center w-6 h-6 rounded-md bg-black/25 text-[11px] font-bold ring-1 ring-white/20">N</kbd>
             </button>
-            <button onClick={handlePassed}
-              className="w-40 sm:w-52 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95">
-              ✓ Passed
+            <button onClick={handlePassed} aria-keyshortcuts="M"
+              className="flex-1 max-w-[15rem] py-3 sm:py-4 rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-lg sm:text-xl shadow-lg shadow-emerald-950/40 ring-1 ring-white/15 transition-all active:scale-95 flex items-center justify-center gap-2.5">
+              <span>✓ Passed</span>
+              <kbd className="hidden sm:flex items-center justify-center w-6 h-6 rounded-md bg-black/25 text-[11px] font-bold ring-1 ring-white/20">M</kbd>
             </button>
           </div>
         )}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from
 import { getSharedReport, SharedReportData, recordVersePlay, getReportPlays, getStudentTimezonePublic } from '../services/dataService';
 import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
-import { QURAN_METADATA } from '../constants';
+import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import { tanweenOnSeatAlif } from '../utils/quranicMarks';
 import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
@@ -81,17 +81,6 @@ const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): nu
   }
   return max;
 };
-
-// Quranic fonts (same list as main app)
-const QURANIC_FONTS = [
-  { name: 'Hafs', displayName: 'Hafs' },
-  { name: 'Amiri Regular', displayName: 'Amiri Regular' },
-  { name: 'Elgharib KFGQPCHafs V10', displayName: 'Elgharib KFGQPCHafs V10' },
-  { name: 'Elgharib HAFSTharwatEmara', displayName: 'Elgharib HAFSTharwatEmara' },
-  { name: 'UthmanTN v2-0', displayName: 'UthmanTN v2-0' },
-  { name: 'Uthmanic HAFS v22', displayName: 'Uthmanic HAFS v22' },
-  { name: 'Hamdullah', displayName: 'Hamdullah (Türkçe hat)' },
-] as const;
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
