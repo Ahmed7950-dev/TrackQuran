@@ -18,6 +18,9 @@ interface StudentHeaderProps {
     /** Start a Google Meet now — the student's portal pops a join card for an hour. */
     onMeetNow?: () => void;
     meetState?: 'idle' | 'loading' | 'started';
+    /** Archive / restore this student. Nothing is deleted either way. */
+    isArchived?: boolean;
+    onToggleArchive?: (archived: boolean) => void;
 }
 
 const getAge = (dob: string) => {
@@ -38,7 +41,7 @@ const ActionButton: React.FC<{ onClick: () => void; title: string; children: Rea
 );
 
 
-const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onStartSession, readingPagesToNext, readingNextStudentName, hifdhPagesToNext, hifdhNextStudentName, onReviewMistakes, onShareLink, shareState = 'idle', onMeetNow, meetState = 'idle' }) => {
+const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onStartSession, readingPagesToNext, readingNextStudentName, hifdhPagesToNext, hifdhNextStudentName, onReviewMistakes, onShareLink, shareState = 'idle', onMeetNow, meetState = 'idle', isArchived = false, onToggleArchive }) => {
     const { t } = useI18n();
     const birthdayStatus = getBirthdayStatus(student.dob);
 
@@ -105,6 +108,19 @@ const StudentHeader: React.FC<StudentHeaderProps> = ({ student, onOpenModal, onS
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" /></svg>
                     </ActionButton>
                     <ActionButton onClick={() => onOpenModal('export')} title="Export Report" className="bg-white dark:bg-gray-600 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-gray-500"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg></ActionButton>
+                    {onToggleArchive && (
+                        <ActionButton
+                            onClick={() => onToggleArchive(!isArchived)}
+                            title={isArchived ? 'Restore to active students' : 'Archive this student'}
+                            className={isArchived
+                                ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400'
+                                : 'bg-white dark:bg-gray-600 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-500'}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                            </svg>
+                        </ActionButton>
+                    )}
                     <ActionButton onClick={() => onOpenModal('edit')} title="Edit Student Data" className="bg-white dark:bg-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-500"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg></ActionButton>
                 </div>
             </div>

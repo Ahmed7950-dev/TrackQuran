@@ -48,6 +48,9 @@ interface Props {
   /** When set, auto-navigate to the lessons section and open this lesson's homework */
   hwDeepLink?: { studentId: string; lessonId: string } | null;
   onHwDeepLinkConsumed?: () => void;
+  /** Archive state for this student (tutor-private organisation). */
+  isArchived?: boolean;
+  onToggleArchive?: (archived: boolean) => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1016,6 +1019,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
 
 const ArabicStudentDetailPage: React.FC<Props> = ({
   student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false, vocabCount = 0,
+  isArchived = false, onToggleArchive,
   hwDeepLink, onHwDeepLinkConsumed,
 }) => {
   const { t } = useI18n();
@@ -1198,6 +1202,21 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                 </svg>
               )}
               {meetState === 'started' ? 'Meet started' : meetState === 'loading' ? 'Starting…' : 'Meet now'}
+            </button>
+          )}
+          {!studentMode && onToggleArchive && (
+            <button
+              onClick={() => onToggleArchive(!isArchived)}
+              title={isArchived ? 'Restore to active students' : 'Archive this student'}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                isArchived
+                  ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                  : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+              </svg>
+              {isArchived ? 'Restore' : 'Archive'}
             </button>
           )}
           <button onClick={() => setEditOpen(true)}

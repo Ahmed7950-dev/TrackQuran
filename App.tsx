@@ -6,6 +6,7 @@ import StudentProgressPage from './components/StudentProgressPage';
 import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
 import MissedLessonPrompt from './components/MissedLessonPrompt';
+import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
@@ -923,6 +924,29 @@ const App: React.FC = () => {
     setArabicStudents(prev => prev.map(s => s.id === studentId ? { ...s, approvalStatus: 'rejected' } : s));
   };
 
+  // ── Archived students ─────────────────────────────────────────────────────
+  // Tutor-private: an archived student keeps everything, they just drop out of
+  // the active roster. One JSON per tutor, so it needs no schema change.
+  const [archive, setArchive] = useState<StudentArchive>(EMPTY_ARCHIVE);
+  const archiveOwnerId = currentUser?.role === 'teacher' ? currentUser.id : undefined;
+  useEffect(() => {
+    if (!archiveOwnerId) { setArchive(EMPTY_ARCHIVE); return; }
+    let dead = false;
+    loadArchive(archiveOwnerId).then(a => { if (!dead) setArchive(a); });
+    return () => { dead = true; };
+  }, [archiveOwnerId]);
+
+  const handleToggleArchive = async (subject: ArchiveSubject, studentId: string, archived: boolean) => {
+    if (!archiveOwnerId) return;
+    const next = withArchived(archive, subject, studentId, archived);
+    setArchive(next);                                   // optimistic — the list reacts at once
+    const ok = await saveArchive(archiveOwnerId, next);
+    if (!ok) {
+      setArchive(archive);                              // put it back, tell the tutor
+      window.alert('Could not save the archive change — check the connection and try again.');
+    }
+  };
+
   const handleUpdateStudent = (updatedStudent: Student) => {
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
@@ -1521,11 +1545,15 @@ const App: React.FC = () => {
               vocabCount={arabicVocabCounts[selectedArabicStudent.id] ?? 0}
               hwDeepLink={hwDeepLink?.studentId === selectedArabicStudent.id ? hwDeepLink : null}
               onHwDeepLinkConsumed={() => setHwDeepLink(null)}
+              isArchived={archive.arabic.includes(selectedArabicStudent.id)}
+              onToggleArchive={archived => handleToggleArchive('arabic', selectedArabicStudent.id, archived)}
             />
           ) : (
             <ArabicDashboard
               teacherId={currentUser.id}
               students={arabicStudents}
+              archivedIds={archive.arabic}
+              onToggleArchive={(id, archived) => handleToggleArchive('arabic', id, archived)}
               vocabCounts={arabicVocabCounts}
               onAddStudent={handleAddArabicStudent}
               onSelectStudent={id => { setSelectedArabicStudentId(id); setActiveTab('main'); }}
@@ -2067,11 +2095,15 @@ const App: React.FC = () => {
               onUpdateTajweedRules={handleSaveTajweedRules}
               onReviewMistakes={() => setCurrentStudentView('mistakes')}
               teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined}
+              isArchived={archive.quran.includes(selectedStudent.id)}
+              onToggleArchive={archived => handleToggleArchive('quran', selectedStudent.id, archived)}
             />
           )
         ) : (
           <Dashboard
             students={students}
+            archivedIds={archive.quran}
+            onToggleArchive={(id, archived) => handleToggleArchive('quran', id, archived)}
             onSelectStudent={(id) => { setSelectedStudentId(id); setCurrentStudentView('details'); }}
             quranMetadata={QURAN_METADATA}
             onFamilyLinks={() => setIsFamilyLinkModalOpen(true)}

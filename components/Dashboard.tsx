@@ -473,9 +473,14 @@ interface DashboardProps {
   teacherId?: string;
   onApproveStudent?: (studentId: string) => void;
   onRejectStudent?: (studentId: string) => void;
+  /** Ids the tutor has archived — hidden from the roster unless they ask. */
+  archivedIds?: string[];
+  onToggleArchive?: (studentId: string, archived: boolean) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId, onApproveStudent, onRejectStudent }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId, onApproveStudent, onRejectStudent, archivedIds = [], onToggleArchive }) => {
+  const [showArchived, setShowArchived] = useState(false);
+  const archivedSet = useMemo(() => new Set(archivedIds), [archivedIds]);
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
   const [searchQuery, setSearchQuery] = useState('');
@@ -604,6 +609,8 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         student.name.toLowerCase().includes(searchQuery.toLowerCase())
         // Hide pending/rejected join requests from the normal roster.
         && (!student.approvalStatus || student.approvalStatus === 'active')
+        // Archived students only appear while the archive view is on.
+        && (showArchived ? archivedSet.has(student.id) : !archivedSet.has(student.id))
     );
 
     return [...filtered].sort((a, b) => {
@@ -642,7 +649,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           return 0;
       }
     });
-  }, [students, sortCriteria, searchQuery]);
+  }, [students, sortCriteria, searchQuery, showArchived, archivedSet]);
 
   /** Resolve the effective age category for a student. */
   const getEffectiveCategory = (s: Student): AgeCategory => {
@@ -825,6 +832,32 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+
+          {/* Active / archived counter — doubles as the archive toggle */}
+          {(() => {
+            const roster = students.filter(s => !s.approvalStatus || s.approvalStatus === 'active');
+            const archivedCount = roster.filter(s => archivedSet.has(s.id)).length;
+            const activeCount = roster.length - archivedCount;
+            return (
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                title={showArchived ? 'Back to active students' : 'Show archived students'}
+                className={`flex-shrink-0 flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-bold transition-colors ${
+                  showArchived
+                    ? 'bg-slate-700 dark:bg-gray-600 border-slate-700 dark:border-gray-500 text-white'
+                    : 'bg-white dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:border-teal-400'}`}
+              >
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  {activeCount} <span className="hidden sm:inline font-semibold">active</span>
+                </span>
+                <span className="text-slate-300 dark:text-gray-600">|</span>
+                <span className={showArchived ? 'text-amber-300' : 'text-slate-400 dark:text-slate-400'}>
+                  {archivedCount} <span className="hidden sm:inline font-semibold">archived</span>
+                </span>
+              </button>
+            );
+          })()}
 
           {/* Add Student — between search and honor board */}
           <button

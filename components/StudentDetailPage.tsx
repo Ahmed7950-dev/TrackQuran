@@ -28,6 +28,9 @@ interface StudentDetailPageProps {
     quranMetadata: SurahMetadata[];
     // action props — optional when readOnly
     onUpdateStudent?: (student: Student) => void;
+    /** Archive state for this student (tutor-private organisation). */
+    isArchived?: boolean;
+    onToggleArchive?: (archived: boolean) => void;
     onDeleteStudent?: (studentId: string) => void;
     onStartSession?: (studentId: string) => void;
     tajweedRules?: string[];
@@ -161,7 +164,7 @@ const StatSection: React.FC<{
     </section>
 );
 
-const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, overrideRanks, readOnly = false }) => {
+const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students, quranMetadata, onUpdateStudent, onDeleteStudent, onStartSession, onReviewMistakes, teacherId, overrideRanks, readOnly = false, isArchived = false, onToggleArchive }) => {
     // Fix: Replaced 'a.useState' with 'useState'.
     const [timePeriod, setTimePeriod] = useState<TimePeriod>(TimePeriod.AllTime);
 
@@ -910,6 +913,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     shareState={shareState}
                     onMeetNow={teacherId ? handleMeetNow : undefined}
                     meetState={meetState}
+                    isArchived={isArchived}
+                    onToggleArchive={onToggleArchive}
                 />
             )}
 

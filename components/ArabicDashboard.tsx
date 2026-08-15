@@ -36,6 +36,9 @@ interface Props {
   onFamilyLinks?:  () => void;
   onApproveStudent?: (id: string) => void;
   onRejectStudent?:  (id: string) => void;
+  /** Ids the tutor has archived — hidden from the roster unless they ask. */
+  archivedIds?: string[];
+  onToggleArchive?: (id: string, archived: boolean) => void;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -89,6 +92,7 @@ function getBookingNextDate(booking: import('../services/lessonBookingService').
 const ArabicDashboard: React.FC<Props> = ({
   teacherId, students, vocabCounts = {},
   onAddStudent, onSelectStudent, onUpdateStudent, onFamilyLinks,
+  archivedIds = [],
   onApproveStudent, onRejectStudent,
 }) => {
   const { t } = useI18n();
@@ -97,6 +101,7 @@ const ArabicDashboard: React.FC<Props> = ({
   // ── state ─────────────────────────────────────────────────────────────────
   const [modalOpen,       setModalOpen]       = useState(false);
   const [search,          setSearch]          = useState('');
+  const [showArchived,    setShowArchived]    = useState(false);
   const [copyingId,       setCopyingId]       = useState<string | null>(null);
   const [copiedId,        setCopiedId]        = useState<string | null>(null);
 
@@ -268,9 +273,16 @@ const ArabicDashboard: React.FC<Props> = ({
     }
   }
 
+  const archivedSet = new Set(archivedIds);
+  const roster = students.filter(s => !s.approvalStatus || s.approvalStatus === 'active');
+  const archivedCount = roster.filter(s => archivedSet.has(s.id)).length;
+  const activeCount = roster.length - archivedCount;
+
   const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
     && (!s.approvalStatus || s.approvalStatus === 'active')  // hide pending/rejected join requests
+    // Archived students only appear while the archive view is on.
+    && (showArchived ? archivedSet.has(s.id) : !archivedSet.has(s.id))
   );
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -396,6 +408,25 @@ const ArabicDashboard: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* ── Active / archived counter — doubles as the archive toggle ──────── */}
+      <button
+        onClick={() => setShowArchived(v => !v)}
+        title={showArchived ? 'Back to active students' : 'Show archived students'}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-colors ${
+          showArchived
+            ? 'bg-slate-700 dark:bg-gray-600 border-slate-700 dark:border-gray-500 text-white'
+            : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:border-amber-400'}`}
+      >
+        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+          {activeCount} <span className="font-semibold">active</span>
+        </span>
+        <span className="text-slate-300 dark:text-gray-600">|</span>
+        <span className={showArchived ? 'text-amber-300' : 'text-slate-400'}>
+          {archivedCount} <span className="font-semibold">archived</span>
+        </span>
+      </button>
 
       {/* ── Search ─────────────────────────────────────────────────────────── */}
       {students.length > 3 && (
