@@ -464,29 +464,15 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     );
 };
 
-/** Colored banner heading a student age-group column. */
-const GroupHeader: React.FC<{
-  label: string;
-  icon: string;
-  count: number;
-  gradient: string;   // tailwind from-…/to-… pair
-  ring: string;       // matching soft glow under the banner
-}> = ({ label, icon, count, gradient, ring }) => (
-  <div className={`relative overflow-hidden rounded-2xl px-4 py-3 bg-gradient-to-r ${gradient} shadow-md ${ring}`}>
-    {/* soft sheen so the flat gradient reads as a surface */}
-    <div className="absolute inset-0 pointer-events-none"
-      style={{ background: 'radial-gradient(ellipse at 0% 0%, rgba(255,255,255,.28) 0%, transparent 60%)' }} />
-    <div className="relative flex items-center gap-2.5">
-      <span className="w-9 h-9 rounded-xl bg-white/25 backdrop-blur-sm flex items-center justify-center text-lg flex-shrink-0">
-        {icon}
-      </span>
-      <h2 className="flex-1 min-w-0 text-[15px] sm:text-base font-black text-white tracking-tight truncate drop-shadow-sm">
-        {label}
-      </h2>
-      <span className="flex-shrink-0 min-w-[28px] px-2 py-0.5 rounded-full bg-white/90 text-slate-800 text-xs font-black text-center tabular-nums">
-        {count}
-      </span>
-    </div>
+/** Flat green banner heading a student age-group column. */
+const GroupHeader: React.FC<{ label: string; count: number }> = ({ label, count }) => (
+  <div className="rounded-xl px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center gap-3">
+    <h2 className="flex-1 min-w-0 text-[15px] sm:text-base font-black text-white tracking-tight truncate">
+      {label}
+    </h2>
+    <span className="flex-shrink-0 min-w-[26px] px-2 py-0.5 rounded-full bg-white/25 text-white text-xs font-black text-center tabular-nums">
+      {count}
+    </span>
   </div>
 );
 
@@ -912,37 +898,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <div className="space-y-4">
-          <GroupHeader
-            label={t('dashboard.youngGems')}
-            icon="⭐"
-            count={studentGroups.youngGems.length}
-            gradient="from-teal-500 to-emerald-600"
-            ring="shadow-emerald-500/20"
-          />
+          <GroupHeader label={t('dashboard.youngGems')} count={studentGroups.youngGems.length} />
           {studentGroups.youngGems.length > 0 ? studentGroups.youngGems.map((student, idx) => (
             <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
-          <GroupHeader
-            label={t('dashboard.aspiringScholars')}
-            icon="📚"
-            count={studentGroups.aspiringScholars.length}
-            gradient="from-orange-500 to-amber-600"
-            ring="shadow-amber-500/20"
-          />
+          <GroupHeader label={t('dashboard.aspiringScholars')} count={studentGroups.aspiringScholars.length} />
           {studentGroups.aspiringScholars.length > 0 ? studentGroups.aspiringScholars.map((student, idx) => (
             <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )): <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
         <div className="space-y-4">
-          <GroupHeader
-            label={t('dashboard.devotedLearners')}
-            icon="🌿"
-            count={studentGroups.devotedLearners.length}
-            gradient="from-sky-500 to-indigo-600"
-            ring="shadow-indigo-500/20"
-          />
+          <GroupHeader label={t('dashboard.devotedLearners')} count={studentGroups.devotedLearners.length} />
           {studentGroups.devotedLearners.length > 0 ? studentGroups.devotedLearners.map((student, idx) => (
             <StudentCard key={student.id} student={student} onSelect={() => onSelectStudent(student.id)} quranMetadata={quranMetadata} viewMode={viewMode} rank={idx < 3 ? (idx + 1) as 1 | 2 | 3 : null} teacherId={teacherId} allStudents={students} isNext={student.id === highlightedStudentId} isLinked={linkedStudentIds.has(student.id)} />
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
