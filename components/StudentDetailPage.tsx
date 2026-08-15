@@ -18,6 +18,8 @@ import ProgressChart from './ProgressChart';
 import MistakeRatioChart from './MistakeRatioChart';
 import { useI18n } from '../context/I18nProvider';
 import StudentHeader from './StudentHeader';
+import { createGoogleMeetLink } from '../services/googleCalendarService';
+import { saveInstantMeeting } from '../services/instantMeetingService';
 import ModernToggle from './ModernToggle';
 
 interface StudentDetailPageProps {
@@ -165,6 +167,28 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
 
     // ── Copy student's shareable report link (same link the Dashboard share button makes) ──
     const [shareState, setShareState] = useState<'idle' | 'loading' | 'copied'>('idle');
+
+    // ── Meet now ──────────────────────────────────────────────────────────────
+    // Starts a Google Meet regardless of the timetable and publishes it to this
+    // student's portal, where it pops a join card and stays live for an hour.
+    const [meetState, setMeetState] = useState<'idle' | 'loading' | 'started'>('idle');
+    const handleMeetNow = async () => {
+        if (meetState === 'loading') return;
+        setMeetState('loading');
+        try {
+            const url = await createGoogleMeetLink(student.name, new Date().toISOString());
+            if (!url) throw new Error('no link');
+            const saved = await saveInstantMeeting('quran', student.id, url, `Lesson with ${student.name}`);
+            if (!saved) throw new Error('not published');
+            try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — the link is open below */ }
+            window.open(url, '_blank', 'noopener');
+            setMeetState('started');
+            setTimeout(() => setMeetState('idle'), 60_000);
+        } catch {
+            setMeetState('idle');
+            alert('Could not start the meeting. Make sure Google Calendar is connected, then try again.');
+        }
+    };
     const handleShareLink = async () => {
         if (!teacherId || shareState === 'loading') return;
         setShareState('loading');
@@ -884,6 +908,8 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     onReviewMistakes={onReviewMistakes ?? (() => {})}
                     onShareLink={teacherId ? handleShareLink : undefined}
                     shareState={shareState}
+                    onMeetNow={teacherId ? handleMeetNow : undefined}
+                    meetState={meetState}
                 />
             )}
 

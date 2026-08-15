@@ -8,6 +8,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import StudentProfileIcon from './StudentProfileIcon';
+import { createGoogleMeetLink } from '../services/googleCalendarService';
+import { saveInstantMeeting } from '../services/instantMeetingService';
 import {
   getArabicLessons,
   getAllVocabAttemptsForStudent,
@@ -1018,6 +1020,32 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 }) => {
   const { t } = useI18n();
   const [editOpen, setEditOpen]       = useState(false);
+
+  // ── Meet now ────────────────────────────────────────────────────────────────
+  // A Google Meet started outside the timetable: published to this student's
+  // portal, where it pops a join card and stays live for an hour.
+  const [meetState, setMeetState] = useState<'idle' | 'loading' | 'started'>('idle');
+  const handleMeetNow = async () => {
+    if (meetState === 'loading') return;
+    if (!student.shareToken) {
+      window.alert("Share this student's portal link first — the invitation is published to it.");
+      return;
+    }
+    setMeetState('loading');
+    try {
+      const url = await createGoogleMeetLink(student.name, new Date().toISOString());
+      if (!url) throw new Error('no link');
+      const saved = await saveInstantMeeting('arabic', student.shareToken, url, `Lesson with ${student.name}`);
+      if (!saved) throw new Error('not published');
+      try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — the tab opens below */ }
+      window.open(url, '_blank', 'noopener');
+      setMeetState('started');
+      setTimeout(() => setMeetState('idle'), 60_000);
+    } catch {
+      setMeetState('idle');
+      window.alert('Could not start the meeting. Make sure Google Calendar is connected, then try again.');
+    }
+  };
   const [showDelete, setShowDelete]   = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
   const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
@@ -1153,6 +1181,25 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           </div>
         )}
         <div className="flex items-center gap-2">
+          {!studentMode && (
+            <button
+              onClick={meetState === 'idle' ? handleMeetNow : undefined}
+              title={meetState === 'started' ? 'Meet started — link copied, student notified' : 'Start a Google Meet now'}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                meetState === 'started'
+                  ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-gray-700'}`}
+            >
+              {meetState === 'loading' ? (
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              )}
+              {meetState === 'started' ? 'Meet started' : meetState === 'loading' ? 'Starting…' : 'Meet now'}
+            </button>
+          )}
           <button onClick={() => setEditOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">

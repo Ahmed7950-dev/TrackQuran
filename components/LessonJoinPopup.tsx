@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { getConfirmedBookingsFor, istanbulDayOfWeek, istanbulDateString, BookingPortal } from '../services/lessonBookingService';
+import { loadInstantMeeting } from '../services/instantMeetingService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "Your lesson is on — join!" popup for the student portals.
@@ -11,6 +12,9 @@ import { getConfirmedBookingsFor, istanbulDayOfWeek, istanbulDateString, Booking
 //   · calendar-linked sessions (arabic_lesson_sessions — Preply & platform
 //     students the tutor linked from the calendar), and
 //   · platform bookings (lesson_bookings, single or weekly, Istanbul times).
+//
+// It also covers "meet now" invitations the tutor starts outside any scheduled
+// lesson (instantMeetingService) — those live for one hour and then vanish.
 //
 // It refetches every 90s rather than trusting the parent's one-shot load, so a
 // Meet link the tutor generates AFTER the student opened the page still pops
@@ -84,6 +88,20 @@ const LessonJoinPopup: React.FC<{
           }
         }
       } catch { /* offline — try again next tick */ }
+    }
+
+    // A tutor-started "meet now" — outside any schedule, live for an hour.
+    if (bookingKey && bookingPortal) {
+      const inst = await loadInstantMeeting(bookingPortal, bookingKey);
+      if (inst) {
+        found.push({
+          key: `i:${inst.createdAt}`,
+          title: inst.title,
+          meetUrl: inst.meetUrl,
+          startAt: new Date(inst.createdAt),
+          endAt: new Date(inst.expiresAt),
+        });
+      }
     }
 
     const lesson = found.sort((a, b) => a.startAt.getTime() - b.startAt.getTime())[0] ?? null;
