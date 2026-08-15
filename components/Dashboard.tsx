@@ -466,11 +466,11 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
 
 /** Flat green banner heading a student age-group column. */
 const GroupHeader: React.FC<{ label: string; count: number }> = ({ label, count }) => (
-  <div className="rounded-xl px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center gap-3">
+  <div className="px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 flex items-center gap-3">
     <h2 className="flex-1 min-w-0 text-[15px] sm:text-base font-black text-white tracking-tight truncate">
       {label}
     </h2>
-    <span className="flex-shrink-0 min-w-[26px] px-2 py-0.5 rounded-full bg-white/25 text-white text-xs font-black text-center tabular-nums">
+    <span className="flex-shrink-0 min-w-[26px] px-2 py-0.5 bg-white/25 text-white text-xs font-black text-center tabular-nums">
       {count}
     </span>
   </div>
