@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import LottieIcon from './LottieIcon';
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { getConfirmedBookingsFor, istanbulDayOfWeek, istanbulDateString, BookingPortal } from '../services/lessonBookingService';
 import { loadInstantMeeting, subscribeInstantMeeting } from '../services/instantMeetingService';
@@ -33,6 +34,23 @@ interface ActiveLesson {
 
 const DEFAULT_SESSION_MIN = 60;   // gcal sessions without an end time
 
+/** Entrance animation for the join card (injected once, like the fluency page). */
+const useJoinCardStyles = () => {
+  useEffect(() => {
+    const id = 'ljp-styles';
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id;
+    el.textContent = `
+      @keyframes ljp-fade { from { opacity: 0 } to { opacity: 1 } }
+      @keyframes ljp-rise { from { opacity: 0; transform: translateY(14px) scale(.96) } to { opacity: 1; transform: none } }
+      .ljp-fade { animation: ljp-fade .18s ease-out both; }
+      .ljp-rise { animation: ljp-rise .34s cubic-bezier(.34,1.4,.64,1) both; }
+    `;
+    document.head.appendChild(el);
+  }, []);
+};
+
 const LessonJoinPopup: React.FC<{
   /** arabic_lesson_sessions student id (Quran or Arabic profile id). */
   studentId?: string;
@@ -42,6 +60,7 @@ const LessonJoinPopup: React.FC<{
 }> = ({ studentId, bookingKey, bookingPortal }) => {
   const [active, setActive] = useState<ActiveLesson | null>(null);
   const [minimized, setMinimized] = useState(false);
+  useJoinCardStyles();
 
   const check = useCallback(async () => {
     const now = new Date();
@@ -157,35 +176,64 @@ const LessonJoinPopup: React.FC<{
     return (
       <button
         onClick={join}
-        className="fixed bottom-5 right-5 z-[400] flex items-center gap-2 pl-3 pr-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-900/30 animate-pulse hover:animate-none transition-colors"
+        className="fixed bottom-5 right-5 z-[400] flex items-center gap-2 pl-2 pr-4 py-2 rounded-full bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-900/40 ring-1 ring-white/20 transition-colors"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <span className="text-base">🎥</span> Join lesson
+        <span className="w-8 h-8 flex items-center justify-center">
+          <LottieIcon src="/video-conference.json" size={32} loop autoplay playOnHover={false} />
+        </span>
+        Join lesson
       </button>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center px-4" style={{ background: 'rgba(2,20,12,0.55)', backdropFilter: 'blur(3px)' }}>
-      <div className="w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden text-center">
-        <div className="pt-8 pb-5 px-6 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white">
-          <div className="text-5xl mb-2">🎥</div>
-          <p className="text-2xl font-black leading-tight">Your lesson is on!</p>
-          <p className="text-sm font-semibold opacity-90 mt-1" dir="rtl">درسك بدأ — انضم الآن</p>
-        </div>
-        <div className="p-6">
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold">
-            {active.title} · {timeRange}
+    <div
+      className="fixed inset-0 z-[400] flex items-center justify-center px-4 ljp-fade"
+      style={{ background: 'rgba(4,17,12,0.62)', backdropFilter: 'blur(6px)' }}
+    >
+      <div className="ljp-rise w-full max-w-[380px] rounded-[28px] overflow-hidden bg-white dark:bg-gray-800 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.55)] ring-1 ring-black/5 dark:ring-white/10">
+
+        {/* Header — animated icon on a soft field, no heavy colour block */}
+        <div className="relative px-7 pt-8 pb-7 text-center bg-gradient-to-b from-emerald-50 to-white dark:from-emerald-900/25 dark:to-gray-800">
+          {/* live dot */}
+          <span className="absolute top-5 left-5 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/80 dark:bg-gray-900/60 ring-1 ring-emerald-200 dark:ring-emerald-800">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Live</span>
+          </span>
+
+          <div className="mx-auto w-[104px] h-[104px] flex items-center justify-center">
+            <LottieIcon src="/video-conference.json" size={104} loop autoplay playOnHover={false} />
+          </div>
+
+          <h2 className="mt-3 text-[26px] leading-tight font-black text-slate-800 dark:text-white tracking-tight">
+            Your lesson is on
+          </h2>
+          <p className="mt-1.5 text-[15px] font-bold text-emerald-700/90 dark:text-emerald-400" dir="rtl">
+            درسك بدأ — انضم الآن
           </p>
+        </div>
+
+        {/* Details + actions */}
+        <div className="px-7 pb-7">
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 dark:bg-gray-700/40 px-4 py-3">
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{active.title}</span>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-400 tabular-nums whitespace-nowrap">{timeRange}</span>
+          </div>
+
           <button
             onClick={join}
-            className="mt-4 w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-lg shadow-lg shadow-emerald-600/30 transition-all active:scale-[0.98]"
+            className="group mt-4 w-full py-4 rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-[17px] shadow-lg shadow-emerald-900/25 ring-1 ring-white/15 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
-            Join with Google Meet →
+            Join with Google Meet
+            <span className="transition-transform group-hover:translate-x-0.5">→</span>
           </button>
           <button
             onClick={dismiss}
-            className="mt-3 w-full py-2 text-sm font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            className="mt-2 w-full py-2.5 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
             Later
           </button>
