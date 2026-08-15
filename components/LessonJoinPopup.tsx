@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { getStudentUpcomingSessions } from '../services/lessonSessionService';
 import { getConfirmedBookingsFor, istanbulDayOfWeek, istanbulDateString, BookingPortal } from '../services/lessonBookingService';
-import { loadInstantMeeting } from '../services/instantMeetingService';
+import { loadInstantMeeting, subscribeInstantMeeting } from '../services/instantMeetingService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "Your lesson is on — join!" popup for the student portals.
@@ -115,8 +115,26 @@ const LessonJoinPopup: React.FC<{
 
   useEffect(() => {
     void check();
-    const id = setInterval(() => { void check(); }, 90_000);
+    const id = setInterval(() => { void check(); }, 30_000);
     return () => clearInterval(id);
+  }, [check]);
+
+  // Pushed delivery: the tutor's "meet now" wakes this portal immediately, so
+  // the card appears without a refresh and without waiting for the poll.
+  useEffect(() => {
+    if (!bookingKey || !bookingPortal) return;
+    return subscribeInstantMeeting(bookingPortal, bookingKey, () => { void check(); });
+  }, [bookingKey, bookingPortal, check]);
+
+  // Coming back to the tab re-checks at once (phones suspend timers).
+  useEffect(() => {
+    const wake = () => { if (!document.hidden) void check(); };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    return () => {
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+    };
   }, [check]);
 
   // DEV-only inspection hook for the browser test harness.

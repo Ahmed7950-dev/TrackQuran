@@ -8,6 +8,11 @@
 // so this needs no migration: the tutor writes it while signed in, and the
 // student portal reads the public URL anonymously.
 //
+// Delivery is PUSHED, not polled: publishing also broadcasts on a Supabase
+// Realtime channel named after the student, so a portal that is already open
+// pops the card within a second — no refresh, no waiting for the next poll
+// (the poll stays as the offline/missed-message fallback).
+//
 //   instant-meetings/quran-<studentId>.json
 //   instant-meetings/arabic-<shareToken>.json
 // -----------------------------------------------------------------------------
@@ -28,6 +33,10 @@ export interface InstantMeeting {
   createdAt: string;   // ISO
   expiresAt: string;   // ISO — the portal stops showing it after this
 }
+
+/** Realtime channel both sides meet on — same shape as gameInviteService. */
+const channelName = (portal: MeetPortal, key: string): string =>
+  `instant-meeting-${portal}-${key}`;
 
 const pathFor = (portal: MeetPortal, key: string): string =>
   `${FOLDER}/${portal}-${encodeURIComponent(key)}.json`;
@@ -54,7 +63,40 @@ export async function saveInstantMeeting(
     upsert: true, cacheControl: '30', contentType: 'application/json',
   });
   if (error) { console.error('saveInstantMeeting:', error.message); return null; }
+  void announce(portal, key);        // wake any portal that is already open
   return meeting;
+}
+
+/** Tell open portals to re-check right now. Best-effort: the file is already
+ *  published, so a lost broadcast only costs the student one poll interval. */
+async function announce(portal: MeetPortal, key: string): Promise<void> {
+  try {
+    const ch = supabase.channel(channelName(portal, key));
+    await new Promise<void>(resolve => {
+      ch.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') resolve();
+      });
+      setTimeout(resolve, 4000);     // never hang the click on a dead socket
+    });
+    await ch.send({ type: 'broadcast', event: 'meet', payload: { at: Date.now() } });
+    setTimeout(() => { void supabase.removeChannel(ch); }, 1500);
+  } catch { /* the portal still finds it on its next poll */ }
+}
+
+/**
+ * Listen for meet-now invitations for this student. `onPing` fires when the
+ * tutor publishes one; the caller re-reads the invitation itself.
+ * Returns an unsubscribe function.
+ */
+export function subscribeInstantMeeting(
+  portal: MeetPortal,
+  key: string,
+  onPing: () => void,
+): () => void {
+  const ch = supabase.channel(channelName(portal, key), { config: { broadcast: { self: false } } });
+  ch.on('broadcast', { event: 'meet' }, () => { try { onPing(); } catch { /* listener errors stay local */ } });
+  ch.subscribe();
+  return () => { void supabase.removeChannel(ch); };
 }
 
 /** The live invitation for this student, or null when there is none / it expired. */
