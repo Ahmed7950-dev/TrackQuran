@@ -215,27 +215,26 @@ const LessonJoinPopup: React.FC<{
           <p className="mt-1.5 text-[15px] font-bold text-emerald-700/90 dark:text-emerald-400" dir="rtl">
             درسك بدأ — انضم الآن
           </p>
+
+          {/* Which lesson, and when — part of the header block */}
+          <p className="mt-4 text-[15px] font-black text-slate-700 dark:text-slate-100 truncate">{active.title}</p>
+          <p className="mt-0.5 text-[13px] font-bold text-slate-400 dark:text-slate-400 tabular-nums">{timeRange}</p>
         </div>
 
-        {/* Details + actions */}
-        <div className="px-7 pb-7">
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 dark:bg-gray-700/40 px-4 py-3">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{active.title}</span>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-400 tabular-nums whitespace-nowrap">{timeRange}</span>
-          </div>
-
-          <button
-            onClick={join}
-            className="group mt-4 w-full py-4 rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-[17px] shadow-lg shadow-emerald-900/25 ring-1 ring-white/15 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            Join with Google Meet
-            <span className="transition-transform group-hover:translate-x-0.5">→</span>
-          </button>
+        {/* Actions — the whole lower half, split evenly */}
+        <div className="grid grid-cols-2 gap-3 px-6 py-6">
           <button
             onClick={dismiss}
-            className="mt-2 w-full py-2.5 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            className="py-4 rounded-2xl bg-gradient-to-b from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-black text-[16px] shadow-lg shadow-amber-900/20 ring-1 ring-white/25 transition-all active:scale-[0.98]"
           >
             Later
+          </button>
+          <button
+            onClick={join}
+            className="group py-4 rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-[16px] shadow-lg shadow-emerald-900/25 ring-1 ring-white/15 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+          >
+            Join
+            <span className="transition-transform group-hover:translate-x-0.5">→</span>
           </button>
         </div>
       </div>
