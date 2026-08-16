@@ -6,7 +6,7 @@ import LegalPage, { Section, Bullets, SITE_NAME, SUPPORT_EMAIL } from './LegalPa
 const RefundPolicyPage: React.FC = () => (
   <LegalPage
     title="Refund Policy"
-    updated="23 June 2026"
+    updated="16 August 2026"
     intro={
       <>
         We want you to be happy with your lessons. This policy explains when refunds are available and how
@@ -22,10 +22,10 @@ const RefundPolicyPage: React.FC = () => (
       </p>
     </Section>
 
-    <Section heading="2. Monthly subscriptions">
+    <Section heading="2. Refunds for unused lessons">
       <Bullets items={[
-        'If you have not used any sessions in the current billing period, you may request a full refund within 7 days of that payment.',
-        'If some sessions have already been delivered, we may issue a pro-rated refund for the unused, undelivered sessions in that period.',
+        'Unused lesson credits are eligible for refund requests within 90 days of purchase.',
+        'After 90 days, unused credits remain usable for lessons but are non-refundable.',
         'Completed (delivered) lessons are non-refundable.',
       ]} />
     </Section>
@@ -38,10 +38,13 @@ const RefundPolicyPage: React.FC = () => (
       </p>
     </Section>
 
-    <Section heading="4. Missed or cancelled lessons">
+    <Section heading="4. Cancellation & Missed Lessons Policy">
       <Bullets items={[
-        'Lessons cancelled with reasonable advance notice can usually be rescheduled at no extra cost.',
-        'Lessons missed without reasonable notice may be counted as delivered and are not refundable.',
+        'Lessons may be cancelled or rescheduled free of charge up to 12 hours before the scheduled start time. The lesson credit returns to your balance.',
+        'Cancellations made less than 12 hours before the lesson are charged in full, and the credit is not returned.',
+        'If you do not attend a scheduled lesson without cancelling in advance (no-show), the lesson is marked as completed and charged in full.',
+        "In emergencies, you may contact your teacher to request a free reschedule; this is at the teacher's discretion.",
+        'Unused lesson credits are eligible for refund requests within 90 days of purchase. After 90 days, credits remain usable but are non-refundable.',
         'If a teacher cancels a session, it will be rescheduled or credited to you.',
       ]} />
     </Section>
@@ -56,9 +59,9 @@ const RefundPolicyPage: React.FC = () => (
 
     <Section heading="6. How refunds are processed">
       <p>
-        Approved refunds are issued through our payment processor and Merchant of Record,{' '}
-        <strong>Paddle.com</strong>, back to your original payment method. Depending on your bank, it may
-        take a few business days for the funds to appear.
+        Approved refunds are issued back to your original payment method. Payments are processed securely
+        through trusted third-party payment processors; we do not store your card details on our servers.
+        Depending on your bank, it may take a few business days for the funds to appear.
       </p>
     </Section>
 

@@ -6,7 +6,7 @@ import LegalPage, { Section, Bullets, SITE_NAME, SUPPORT_EMAIL } from './LegalPa
 const TermsOfServicePage: React.FC = () => (
   <LegalPage
     title="Terms of Service"
-    updated="23 June 2026"
+    updated="16 August 2026"
     intro={
       <>
         These Terms of Service ("Terms") govern your access to and use of the {SITE_NAME} website,
@@ -35,16 +35,16 @@ const TermsOfServicePage: React.FC = () => (
     <Section heading="3. Lessons & scheduling">
       <Bullets items={[
         'Lesson times are agreed between you and your teacher and shown in your portal and calendar.',
-        'Please attend on time. Reschedule requests should be made as early as reasonably possible so the teacher can adjust the schedule.',
-        'Missed sessions without reasonable notice may be counted as delivered, at our discretion.',
+        'Lessons may be cancelled or rescheduled free of charge up to 12 hours before the scheduled start time.',
+        <>Cancellations made less than 12 hours before the lesson, and lessons missed without cancelling in advance (no-shows), are charged in full, as described in our <a href="/refunds" className="text-teal-600 dark:text-teal-300 hover:underline">Refund Policy</a>.</>,
       ]} />
     </Section>
 
     <Section heading="4. Plans, payment & billing">
       <Bullets items={[
         <>Paid plans are billed in advance on a recurring (monthly) basis and renew automatically until cancelled.</>,
-        <>Payments are processed by our authorized reseller and Merchant of Record, <strong>Paddle.com</strong>, which handles billing, invoicing, and applicable taxes. Your purchase is also subject to Paddle’s buyer terms.</>,
-        <>You authorize us and Paddle to charge your selected payment method for the plan you choose, including at each renewal, until you cancel.</>,
+        <>Payments are processed securely through trusted third-party payment processors. We do not store your card details on our servers.</>,
+        <>You authorize us to charge your selected payment method for the plan you choose, including at each renewal, until you cancel.</>,
         <>Refunds are handled in accordance with our <a href="/refunds" className="text-teal-600 dark:text-teal-300 hover:underline">Refund Policy</a>.</>,
       ]} />
     </Section>

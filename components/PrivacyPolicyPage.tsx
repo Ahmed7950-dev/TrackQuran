@@ -6,7 +6,7 @@ import LegalPage, { Section, Bullets, SITE_NAME, SUPPORT_EMAIL } from './LegalPa
 const PrivacyPolicyPage: React.FC = () => (
   <LegalPage
     title="Privacy Policy"
-    updated="23 June 2026"
+    updated="16 August 2026"
     intro={
       <>
         This Privacy Policy explains what information {SITE_NAME} collects, how we use it, and the choices
@@ -20,7 +20,7 @@ const PrivacyPolicyPage: React.FC = () => (
         <><strong>Account information</strong> — name, email, and (for students) optional date of birth and timezone, used to set up lessons and the student portal.</>,
         <><strong>Learning data</strong> — lesson progress, recitation/memorization records, mistakes, homework, notes, and attendance, used to track and share progress.</>,
         <><strong>Scheduling data</strong> — lesson times and, if you connect it, your Google Calendar events used to schedule and link lessons.</>,
-        <><strong>Payment data</strong> — handled by our payment processor (Paddle). We receive confirmation of your plan and limited billing details, but we do not collect or store your full card number.</>,
+        <><strong>Payment data</strong> — payments are processed securely through trusted third-party payment processors. We receive confirmation of your plan and limited billing details, but we do not store your card details on our servers.</>,
         <><strong>Technical data</strong> — basic device/browser information and local storage used to keep you signed in and remember preferences (such as language and theme).</>,
       ]} />
     </Section>
@@ -29,7 +29,7 @@ const PrivacyPolicyPage: React.FC = () => (
       <Bullets items={[
         'To provide and schedule lessons and operate the student portal.',
         'To track learning progress and generate reports for students and parents.',
-        'To process payments, renewals, and refunds (via Paddle).',
+        'To process payments, renewals, and refunds.',
         'To send service messages such as lesson reminders and subscription notices.',
         'To maintain security, prevent abuse, and improve the Service.',
       ]} />
@@ -38,7 +38,7 @@ const PrivacyPolicyPage: React.FC = () => (
     <Section heading="3. Service providers we share with">
       <p>We do not sell your personal information. We share data only with trusted providers that help us run the Service:</p>
       <Bullets items={[
-        <><strong>Paddle</strong> — payment processing and billing (Merchant of Record).</>,
+        <><strong>Payment processors</strong> — trusted third-party providers that process payments securely on our behalf; we do not store your card details on our servers.</>,
         <><strong>Supabase</strong> — secure database and authentication hosting.</>,
         <><strong>Google</strong> — Calendar and Meet, only if you choose to connect them, to schedule and run lessons.</>,
       ]} />

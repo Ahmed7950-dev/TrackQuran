@@ -15,6 +15,7 @@ const FEATURES = [
 const PricingPage: React.FC = () => (
   <LegalPage
     title="Pricing"
+    updated="16 August 2026"
     intro={
       <>
         One simple, transparent rate for everyone — no tiers, no hidden fees. New students can start
@@ -55,9 +56,8 @@ const PricingPage: React.FC = () => (
       </p>
       <p>
         <span className="font-semibold text-slate-800 dark:text-slate-100">Secure payments.</span> Payments
-        are securely processed by our authorized reseller and Merchant of Record,{' '}
-        <strong>Paddle.com</strong>, which handles billing, receipts, and applicable taxes. We never see or
-        store your full card details.
+        are processed securely through trusted third-party payment processors. We do not store your card
+        details on our servers.
       </p>
       <p>
         <span className="font-semibold text-slate-800 dark:text-slate-100">Questions?</span> Email{' '}
