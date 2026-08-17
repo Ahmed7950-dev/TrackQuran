@@ -114,7 +114,9 @@
     "errorsPerPage": "خطأ / صفحة",
     "mistakesBreakdown": "{{total}} إجمالي · {{reading}} قراءة · {{tajweed}} تجويد",
     "noMistakesYet": "لا توجد أخطاء في الصفحات المقروءة — أحسنت!",
-    "lastMemorization": "آخر حفظ"
+    "lastMemorization": "آخر حفظ",
+    "fluencyTest": "اختبار الطلاقة",
+    "fluencyDetail": "{buzzes} أخطاء · {date}"
   },
   "login": {
     "title": "أهلاً بك في LISAN & QURAN",

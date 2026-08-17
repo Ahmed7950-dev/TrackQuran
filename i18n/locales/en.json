@@ -114,7 +114,9 @@
     "errorsPerPage": "err / page",
     "mistakesBreakdown": "{{total}} total · {{reading}} reading · {{tajweed}} tajweed",
     "noMistakesYet": "No mistakes on read pages — great job!",
-    "lastMemorization": "Last Memorization"
+    "lastMemorization": "Last Memorization",
+    "fluencyTest": "Fluency Test",
+    "fluencyDetail": "{buzzes} buzzes · {date}"
   },
   "login": {
     "title": "Welcome to LISAN & QURAN",

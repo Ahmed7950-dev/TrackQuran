@@ -114,7 +114,9 @@
     "errorsPerPage": "hata / sayfa",
     "mistakesBreakdown": "{{total}} toplam · {{reading}} okuma · {{tajweed}} tecvid",
     "noMistakesYet": "Okunan sayfalarda hata yok — aferin!",
-    "lastMemorization": "Son Ezber"
+    "lastMemorization": "Son Ezber",
+    "fluencyTest": "Akıcılık Testi",
+    "fluencyDetail": "{buzzes} hata · {date}"
   },
   "login": {
     "title": "LISAN & QURAN'a Hoş Geldiniz",
