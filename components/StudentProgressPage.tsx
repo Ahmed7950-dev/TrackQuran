@@ -2497,9 +2497,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Automatic quality score ──────────────────────────────────────────────
     // Score falls with the density of mistakes logged TODAY inside the range
     // (old mistakes on the same verses don't re-penalize a fresh reading).
-    // Reading mistakes weigh 1, tajweed ½. rate = weighted/verses, and
-    // score = 10·e^(−2.2·rate) rounded into 1–10:
-    //   0/verse→10 · 1 per 10 verses→8 · 1 per 5→6 · 1 per 2→3 · 1 per verse→1.
+    // Verses are terrible units (one verse can be two words or half a page),
+    // so the denominator is FRACTIONAL PAGES: for every mushaf page the range
+    // touches, the share of that page's ayahs actually read. A page is 15
+    // lines, so this is per-line accuracy without needing the letter text.
+    // Reading mistakes weigh 1, tajweed ½; rate = weighted mistakes per page;
+    // score = 10·e^(−0.09·rate) rounded into 1–10:
+    //   1/page→9 · 3/page→8 · 5/page→6 · 8/page→5 · 12/page→3 · 20/page→2.
     const autoScoreForRange = (range: { start: Progress; end: Progress }) => {
         const today = new Date().toDateString();
         const inRange = (su: number, ay: number) => {
@@ -2518,16 +2522,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             weighted += mm.errorType === 'tajweed' ? 0.5 : 1;
             count += 1;
         }
-        let verses = 0;
+        // Ayahs-in-range and ayahs-total per touched page → fractional pages.
+        const inRangeOnPage = new Map<number, number>();
         for (let su = range.start.surah; su <= range.end.surah; su++) {
             const meta = QURAN_METADATA[su - 1];
             const from = su === range.start.surah ? range.start.ayah : 1;
             const to = su === range.end.surah ? range.end.ayah : meta.numberOfAyahs;
-            verses += Math.max(0, to - from + 1);
+            for (let ay = from; ay <= to; ay++) {
+                const pg = getPageOfAyah(su, ay);
+                inRangeOnPage.set(pg, (inRangeOnPage.get(pg) ?? 0) + 1);
+            }
         }
-        const rate = verses > 0 ? weighted / verses : 0;
-        const score = Math.max(1, Math.min(10, Math.round(10 * Math.exp(-2.2 * rate))));
-        return { score, count, verses };
+        const totalOnPage = new Map<number, number>();
+        if (inRangeOnPage.size > 0) {
+            // Only surahs that can touch these pages need scanning.
+            const pages = [...inRangeOnPage.keys()];
+            const minPg = Math.min(...pages), maxPg = Math.max(...pages);
+            for (const meta of QURAN_METADATA) {
+                if (meta.endPage < minPg || meta.startPage > maxPg) continue;
+                for (let ay = 1; ay <= meta.numberOfAyahs; ay++) {
+                    const pg = getPageOfAyah(meta.number, ay);
+                    if (inRangeOnPage.has(pg)) totalOnPage.set(pg, (totalOnPage.get(pg) ?? 0) + 1);
+                }
+            }
+        }
+        let pagesRead = 0;
+        for (const [pg, n] of inRangeOnPage) {
+            const total = totalOnPage.get(pg) ?? n;
+            pagesRead += n / Math.max(n, total);
+        }
+        const rate = pagesRead > 0 ? weighted / pagesRead : 0;
+        const score = Math.max(1, Math.min(10, Math.round(10 * Math.exp(-0.09 * rate))));
+        return { score, count, pagesRead };
     };
 
     const confirmLog = (quality: number = logQuality) => {
@@ -3967,7 +3993,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             <div className="rounded-2xl bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-600 px-4 py-3 mb-3 text-center">
                                                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Auto score</p>
                                                 <p className={`text-4xl font-black ${auto.score >= 8 ? 'text-teal-600 dark:text-teal-400' : auto.score >= 5 ? 'text-amber-500' : 'text-rose-500'}`}>{auto.score}<span className="text-lg text-slate-400">/10</span></p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{auto.count} mistake{auto.count === 1 ? '' : 's'} · {auto.verses} verse{auto.verses === 1 ? '' : 's'}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{auto.count} mistake{auto.count === 1 ? '' : 's'} · {auto.pagesRead.toFixed(auto.pagesRead < 1 ? 2 : 1)} page{auto.pagesRead === 1 ? '' : 's'} (≈{Math.max(1, Math.round(auto.pagesRead * 15))} lines)</p>
                                             </div>
                                             <button
                                                 onClick={() => { setLogQuality(auto.score); confirmLog(auto.score); }}
