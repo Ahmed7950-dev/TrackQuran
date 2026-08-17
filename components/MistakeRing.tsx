@@ -1,6 +1,7 @@
 import React from 'react';
 import { Mistake } from '../types';
 import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
+import { useI18n } from '../context/I18nProvider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MistakeRing — the letter-click mistake logger as a two-ring donut chart.
@@ -72,6 +73,56 @@ export const TAJWEED_AREAS: MistakeArea[] = [
 export const TAJWEED_MISTAKE_LABELS = new Set(TAJWEED_AREAS.flatMap(a => a.subs));
 
 export const PERMANENT_MISTAKES = ['Fast reading', 'Choppy reading', 'Breaking up words', 'Articulation points'];
+
+// ── Display translations ─────────────────────────────────────────────────────
+// The English labels above are STORED in mistake data as keys — they must
+// never change. Translation is display-only: run any label through
+// mistakeLabel(text, language) at render time.
+const LABELS_AR: Record<string, string> = {
+  'Length': 'المدّ الطبيعي', 'Short': 'قصير', 'Long': 'طويل',
+  'Hold': 'تمكين', 'No Hold': 'بدون تمكين',
+  'Harakah': 'الحركة', 'Fatha': 'فتحة', 'Kasrah': 'كسرة', 'Dammah': 'ضمة',
+  'Sakin': 'ساكن', 'Tanween': 'تنوين',
+  'Silence': 'الإسكات', 'Silent': 'ساكت', 'Not Silent': 'غير ساكت',
+  'Weight': 'التفخيم', 'Heavy': 'مفخّم', 'Light': 'مرقّق',
+  'Letter change': 'تغيير حرف', 'Change to Alif': 'إبدال ألفاً', 'Change to Ha': 'إبدال هاءً',
+  'Stop': 'الوقف', 'No Stop': 'بدون وقف',
+  'Letter recognition': 'معرفة الحرف',
+  'Ghunnah': 'غنّة', 'Qalqalah': 'قلقلة', 'Madd': 'مدّ', 'Izhar': 'إظهار',
+  'Idgham w/ ghunnah': 'إدغام بغنّة', 'Idgham with ghunnah': 'إدغام بغنّة',
+  'Idgham w/o ghunnah': 'إدغام بلا غنّة', 'Idgham without ghunnah': 'إدغام بلا غنّة',
+  'Ikhfa': 'إخفاء', 'Iqlab': 'إقلاب',
+  'Oral izhar': 'إظهار شفوي', 'Oral idgham': 'إدغام شفوي', 'Oral ikhfa': 'إخفاء شفوي',
+  'Fast reading': 'قراءة سريعة', 'Choppy reading': 'قراءة متقطعة',
+  'Breaking up words': 'تقطيع الكلمات', 'Articulation points': 'مخارج الحروف',
+  '(No comment)': '(بدون تعليق)',
+};
+const LABELS_TR: Record<string, string> = {
+  'Length': 'Uzatma', 'Short': 'Kısa', 'Long': 'Uzun',
+  'Hold': 'Tutma', 'No Hold': 'Tutmasız',
+  'Harakah': 'Hareke', 'Fatha': 'Fetha', 'Kasrah': 'Kesra', 'Dammah': 'Ötre',
+  'Sakin': 'Sâkin', 'Tanween': 'Tenvin',
+  'Silence': 'Susma', 'Silent': 'Sessiz', 'Not Silent': 'Sessiz değil',
+  'Weight': 'Kalınlık', 'Heavy': 'Kalın', 'Light': 'İnce',
+  'Letter change': 'Harf değişimi', 'Change to Alif': 'Elife çevirme', 'Change to Ha': 'He’ye çevirme',
+  'Stop': 'Vakıf', 'No Stop': 'Vakıfsız',
+  'Letter recognition': 'Harf tanıma',
+  'Ghunnah': 'Ğunne', 'Qalqalah': 'Kalkale', 'Madd': 'Med', 'Izhar': 'İzhar',
+  'Idgham w/ ghunnah': 'Ğunneli idğam', 'Idgham with ghunnah': 'Ğunneli idğam',
+  'Idgham w/o ghunnah': 'Ğunnesiz idğam', 'Idgham without ghunnah': 'Ğunnesiz idğam',
+  'Ikhfa': 'İhfa', 'Iqlab': 'İklab',
+  'Oral izhar': 'Şefevî izhar', 'Oral idgham': 'Şefevî idğam', 'Oral ikhfa': 'Şefevî ihfa',
+  'Fast reading': 'Hızlı okuma', 'Choppy reading': 'Kesik okuma',
+  'Breaking up words': 'Kelime bölme', 'Articulation points': 'Mahreçler',
+  '(No comment)': '(Yorum yok)',
+};
+
+/** Display-translate a stored mistake label. Unknown labels pass through. */
+export const mistakeLabel = (text: string, language: string): string => {
+  if (language === 'ar') return LABELS_AR[text] ?? text;
+  if (language === 'tr') return LABELS_TR[text] ?? text;
+  return text;
+};
 
 // ── Letter transliteration (Letter recognition + history normalization) ──────
 export const TRANSLIT: Record<string, string> = {
@@ -306,6 +357,7 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
   counts, permFlags, areas = MISTAKE_AREAS, mode = 'reading', translit = '',
   errorText = '', readOnly = false, onTextChange, onPick, onToggleFlag, onSubmitText, onCancel,
 }) => {
+  const { language } = useI18n();
   const inputRef = React.useRef<HTMLInputElement>(null);
   // <textPath href="#id"> resolves against the whole document, so two rings on
   // one page (the study view shows reading + tajweed side by side) would share
@@ -342,12 +394,13 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
       const r1 = R_MID1 - si * (layerH + RGAP);
       const r0 = r1 - layerH;
       const on = (counts[label] ?? 0) > 0;
-      const display = DISPLAY[label] ?? label;
-      const twoLine = layerH >= 44 ? DISPLAY_2LINE[label] : undefined;
+      // Stored labels stay English; only what's DRAWN follows the site language.
+      const display = language === 'en' ? (DISPLAY[label] ?? label) : mistakeLabel(label, language);
+      const twoLine = language === 'en' && layerH >= 44 ? DISPLAY_2LINE[label] : undefined;
       const ink = on ? '#ffffff' : '#3f4c5e';
       middle.push(
         <g key={`m-${label}`} className={readOnly ? undefined : 'mr-seg'} onClick={() => { if (!readOnly) onPick?.(label); }}>
-          <title>{label}{(counts[label] ?? 0) > 0 ? ` · ${counts[label]}×` : ''}</title>
+          <title>{mistakeLabel(label, language)}{(counts[label] ?? 0) > 0 ? ` · ${counts[label]}×` : ''}</title>
           <path d={sector(r0, r1, a0, a1)}
             fill={on ? area.color : '#ffffff'} fillOpacity={on ? 0.92 - si * 0.16 : 0.92}
             stroke={on ? '#ffffff' : '#dbe2ea'} strokeOpacity={0.9} strokeWidth={1.5} />
