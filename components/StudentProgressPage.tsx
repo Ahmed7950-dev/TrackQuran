@@ -429,18 +429,22 @@ type SurahStatus = {
     memStatus: 'completed' | 'in-progress' | 'not-started'; // memorization (hifdh)
 };
 
-const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, type: 'reading' | 'memorization' }> = ({ surahStatuses, title, type }) => {
-    const colors = {
-        reading: {
-            completed: 'bg-teal-400',
-            inProgress: 'bg-amber-400',
-            notStarted: 'bg-slate-200 hover:bg-slate-300'
-        },
-        memorization: {
-            completed: 'bg-sky-400',
-            inProgress: 'bg-indigo-400',
-            notStarted: 'bg-slate-200 hover:bg-slate-300'
-        }
+const SurahProgressBar: React.FC<{
+    surahStatuses: SurahStatus[], title: string, type: 'reading' | 'memorization',
+    /** Same category colors + priority as the surah nav bar (mem > read > homework > tafsir). */
+    hasHomework?: (id: number) => boolean,
+    hasTafsir?: (id: number) => boolean,
+    /** Segment click → jump to that surah's beginning. */
+    onSelectSurah?: (id: number) => void,
+}> = ({ surahStatuses, title, type, hasHomework, hasTafsir, onSelectSurah }) => {
+    // Mirrors getSurahNavButtonClass so the mini-map and the nav bar speak the
+    // same color language: green=hifz, orange=read, purple=homework, blue=tafsir.
+    const segmentClass = (status: SurahStatus['status'], memStatus: SurahStatus['memStatus'], id: number) => {
+        if (memStatus !== 'not-started') return 'bg-green-400 dark:bg-green-600 hover:bg-green-500';
+        if (status !== 'not-started') return 'bg-orange-400 dark:bg-orange-600 hover:bg-orange-500';
+        if (hasHomework?.(id)) return 'bg-purple-400 dark:bg-purple-600 hover:bg-purple-500';
+        if (hasTafsir?.(id)) return 'bg-blue-400 dark:bg-blue-600 hover:bg-blue-500';
+        return 'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600';
     };
 
     return (
@@ -448,16 +452,14 @@ const SurahProgressBar: React.FC<{ surahStatuses: SurahStatus[], title: string, 
             <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{title}</h4>
             <div className="flex flex-wrap gap-1">
                 {surahStatuses.map(({ id, transliteratedName, status, memStatus }) => {
-                    const effectiveStatus = type === 'memorization' ? memStatus : status;
-                    const statusClass = {
-                        'completed': colors[type].completed,
-                        'in-progress': colors[type].inProgress,
-                        'not-started': colors[type].notStarted
-                    }[effectiveStatus];
+                    const statusClass = segmentClass(status, memStatus, id);
                     return (
                         <div key={id} className="relative group flex-grow" style={{ minWidth: '0.5%' }}>
-                            <div
-                                className={`h-4 rounded-sm w-full ${statusClass} transition-colors`}
+                            <button
+                                type="button"
+                                aria-label={transliteratedName}
+                                onClick={onSelectSurah ? () => onSelectSurah(id) : undefined}
+                                className={`h-4 rounded-sm w-full block ${statusClass} transition-colors ${onSelectSurah ? 'cursor-pointer' : 'cursor-default'}`}
                             />
                             <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 dark:bg-black text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 left-1/2 -translate-x-1/2">
                                 {transliteratedName}
@@ -3263,7 +3265,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                      <div className="flex-shrink-0 flex items-center gap-2"><button onClick={() => onGoBack()} className="p-2.5 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg></button></div>
                      )}
                 </div>
-                <SurahProgressBar surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading" />
+                <SurahProgressBar
+                    surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading"
+                    hasHomework={surahHasHomework} hasTafsir={surahHasTafsir}
+                    onSelectSurah={handleSurahSelection}
+                />
                 <MilestoneTracker completedPages={new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)])} />
             </div>
 
