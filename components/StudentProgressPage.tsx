@@ -2494,6 +2494,42 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setSelectionStart(null);
     };
 
+    // ── Automatic quality score ──────────────────────────────────────────────
+    // Score falls with the density of mistakes logged TODAY inside the range
+    // (old mistakes on the same verses don't re-penalize a fresh reading).
+    // Reading mistakes weigh 1, tajweed ½. rate = weighted/verses, and
+    // score = 10·e^(−2.2·rate) rounded into 1–10:
+    //   0/verse→10 · 1 per 10 verses→8 · 1 per 5→6 · 1 per 2→3 · 1 per verse→1.
+    const autoScoreForRange = (range: { start: Progress; end: Progress }) => {
+        const today = new Date().toDateString();
+        const inRange = (su: number, ay: number) => {
+            if (su < range.start.surah || su > range.end.surah) return false;
+            if (su === range.start.surah && ay < range.start.ayah) return false;
+            if (su === range.end.surah && ay > range.end.ayah) return false;
+            return true;
+        };
+        let weighted = 0, count = 0;
+        for (const [key, m] of Object.entries(student.mistakes || {})) {
+            const parts = key.replace(/^T/, '').split(':').map(Number);
+            if (parts.length < 2 || parts.some(isNaN)) continue;
+            const mm = m as { date?: string; errorType?: string };
+            if (!mm.date || new Date(mm.date).toDateString() !== today) continue;
+            if (!inRange(parts[0], parts[1])) continue;
+            weighted += mm.errorType === 'tajweed' ? 0.5 : 1;
+            count += 1;
+        }
+        let verses = 0;
+        for (let su = range.start.surah; su <= range.end.surah; su++) {
+            const meta = QURAN_METADATA[su - 1];
+            const from = su === range.start.surah ? range.start.ayah : 1;
+            const to = su === range.end.surah ? range.end.ayah : meta.numberOfAyahs;
+            verses += Math.max(0, to - from + 1);
+        }
+        const rate = verses > 0 ? weighted / verses : 0;
+        const score = Math.max(1, Math.min(10, Math.round(10 * Math.exp(-2.2 * rate))));
+        return { score, count, verses };
+    };
+
     const confirmLog = (quality: number = logQuality) => {
         if (!pendingLogRange || !selectedLogType) return;
         if (selectedLogType === 'reading') {
@@ -3906,9 +3942,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                      selectedLogType === 'reading-revision' ? 'Reading Revision Quality' :
                                      selectedLogType === 'hifz' ? 'Hifz Quality' : 'Hifz Revision Quality'}
                                 </h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Tap the score (1–10)</p>
-                                {/* One tap = logged. Ten circles beat a slider on a touchscreen:
-                                    no dragging, no reading a number off the end of a track. */}
+                                {(() => {
+                                    const auto = autoScoreForRange(pendingLogRange);
+                                    return (
+                                        <div className="mb-4">
+                                            <div className="rounded-2xl bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-600 px-4 py-3 mb-3 text-center">
+                                                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Auto score</p>
+                                                <p className={`text-4xl font-black ${auto.score >= 8 ? 'text-teal-600 dark:text-teal-400' : auto.score >= 5 ? 'text-amber-500' : 'text-rose-500'}`}>{auto.score}<span className="text-lg text-slate-400">/10</span></p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{auto.count} mistake{auto.count === 1 ? '' : 's'} · {auto.verses} verse{auto.verses === 1 ? '' : 's'}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => { setLogQuality(auto.score); confirmLog(auto.score); }}
+                                                className="w-full py-3 rounded-xl bg-teal-600 dark:bg-orange-600 text-white font-black text-base hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors active:scale-[0.98]"
+                                            >
+                                                Save with score {auto.score}
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 text-center">or set it manually</p>
                                 <div className="grid grid-cols-5 gap-2 mb-5">
                                     {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                                         <button
