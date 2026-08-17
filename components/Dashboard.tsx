@@ -181,14 +181,29 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
     // Read pages = recited ∪ memorized — a recited short surah is logged as
     // memorization but still counts as read, so mistakes in it must count too.
     const recitedPagesForMistakes = new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)]);
-    const validMistakeEntries = Object.entries(student.mistakes || {}).filter(([key]) => {
+    // The rate is a CURRENT-form snapshot, not a lifetime average: only the last
+    // 30 days of logging count, so long-fixed early mistakes stop dragging the
+    // number forever. Students with no logs in the window fall back to all-time.
+    const RATE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+    const windowStart = Date.now() - RATE_WINDOW_MS;
+    const inWindow = (d?: string) => !!d && new Date(d).getTime() >= windowStart;
+    const windowStudent = {
+      ...student,
+      recitationAchievements: (student.recitationAchievements || []).filter(a => inWindow(a.date)),
+      memorizationAchievements: (student.memorizationAchievements || []).filter(a => inWindow(a.date)),
+    };
+    const windowPages = new Set<number>([...getRecitedPagesSet(windowStudent), ...getMemorizedPagesSet(windowStudent)]);
+    const useWindow = windowPages.size > 0;
+    const ratePages = useWindow ? windowPages : recitedPagesForMistakes;
+    const validMistakeEntries = Object.entries(student.mistakes || {}).filter(([key, m]) => {
       const [surah, ayah] = key.split(':').map(Number);
       if (isNaN(surah) || isNaN(ayah)) return false;
-      return recitedPagesForMistakes.has(getPageOfAyah(surah, ayah));
+      if (useWindow && !inWindow((m as { date?: string }).date)) return false;
+      return ratePages.has(getPageOfAyah(surah, ayah)) || useWindow;
     });
     const readingMistakesCount = validMistakeEntries.filter(([, m]) => m.errorType === 'reading').length; // yellow (fixed) excluded
     const tajweedMistakesCount = validMistakeEntries.filter(([, m]) => m.errorType === 'tajweed').length;
-    const mistakePages = recitedPagesForMistakes.size;
+    const mistakePages = ratePages.size;
     const readingRate = mistakePages > 0 ? readingMistakesCount / mistakePages : 0;
     const tajweedRate = mistakePages > 0 ? tajweedMistakesCount / mistakePages : 0;
 
@@ -386,7 +401,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                           <span className="text-[10px] font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 flex-wrap">
-                            <span className="text-[10px] font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">{(readingRate + tajweedRate).toFixed(2)} err/pg</span>
+                            <span className="text-[10px] font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">{(readingRate + tajweedRate).toFixed(2)} err/pg · 30d</span>
                             {mistakeRateTrend && mistakeRateTrend.dir !== 'same' && (
                               <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                                 mistakeRateTrend.dir === 'better' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
