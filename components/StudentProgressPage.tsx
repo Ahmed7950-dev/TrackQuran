@@ -82,13 +82,13 @@ interface StudentProgressPageProps {
    */
   notesStudentId?: string;
   /**
-   * Called (on the tutor side) each time the tutor presses Ctrl to signal a
+   * Called (on the tutor side) each time the tutor presses N to signal a
    * mistake. The parent can use this to broadcast the event to the student.
    */
   onMistakeBuzz?: () => void;
   /**
    * Incrementing counter from the parent. Every time it changes the component
-   * fires the red-flash + buzz sound — used to replay the tutor's Ctrl press
+   * fires the red-flash + buzz sound — used to replay the tutor's N press
    * on the student's screen in real time.
    */
   externalBuzzTrigger?: number;
@@ -1356,7 +1356,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     // React to a buzz broadcast from the tutor (student-side only).
     // externalBuzzTrigger is an incrementing counter; every new value means
-    // the tutor just pressed Ctrl — show the red flash + play the sound here too.
+    // the tutor just pressed N — show the red flash + play the sound here too.
     useEffect(() => {
         if (externalBuzzTrigger === undefined || externalBuzzTrigger === 0) return;
         setShowMistakeHighlight(true);
@@ -1409,8 +1409,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 setIsAutoScrolling(prev => !prev);
             }
 
-            // Ctrl key for mistake indication
-            if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
+            // N key for mistake indication (was Ctrl — same key as the fluency test's buzz)
+            if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
                 event.preventDefault();
                 setShowMistakeHighlight(true);
                 if (mistakeSoundRef.current) mistakeSoundRef.current();
