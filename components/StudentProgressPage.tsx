@@ -1628,6 +1628,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             return surahId >= ss && surahId <= es;
         });
 
+    // Surahs with a log dated TODAY get a stronger shade of their category
+    // color, so today's work stands out from older sessions at a glance.
+    const surahLoggedToday = (surahId: number, kind: 'read' | 'mem'): boolean => {
+        const today = new Date().toDateString();
+        const list = kind === 'read' ? (student.recitationAchievements || []) : (student.memorizationAchievements || []);
+        return list.some(a => {
+            if (new Date(a.date).toDateString() !== today) return false;
+            const ss = (a as { startSurah?: number; surah?: number }).startSurah ?? (a as { surah?: number }).surah;
+            const es = (a as { endSurah?: number; surah?: number }).endSurah ?? (a as { surah?: number }).surah;
+            return ss !== undefined && es !== undefined && surahId >= ss && surahId <= es;
+        });
+    };
+
     // Surah-name tint mirrors the verse model: green=hifz, orange=read,
     // purple=homework, blue=tafsir, with a blue underline when tafsir overlaps.
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
@@ -1636,7 +1649,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const hasMem  = memStatus !== 'not-started';
         const hasTaf  = surahHasTafsir(surahId);
         const underline = hasTaf && (hasMem || hasRead) ? ' border-b-2 border-blue-400 dark:border-blue-500' : '';
+        if (hasMem && surahLoggedToday(surahId, 'mem'))
+            return 'bg-green-300 text-green-900 dark:bg-green-700 dark:text-green-50 font-bold hover:bg-green-400 dark:hover:bg-green-600' + underline;
         if (hasMem)  return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900' + underline;
+        if (hasRead && surahLoggedToday(surahId, 'read'))
+            return 'bg-orange-300 text-orange-900 dark:bg-orange-700 dark:text-orange-50 font-bold hover:bg-orange-400 dark:hover:bg-orange-600' + underline;
         if (hasRead) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900' + underline;
         if (surahHasHomework(surahId)) return 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900';
         if (hasTaf)  return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900';
