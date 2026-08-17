@@ -3922,6 +3922,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         ? ` → ${QURAN_METADATA.find(s => s.number === pendingLogRange.end.surah)?.transliteratedName} ${pendingLogRange.end.ayah}`
                                         : ''}
                                 </p>
+                                {/* One-tap suggestions — most homework is one of these four. */}
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {[
+                                        { label: '📖 Memorize', text: 'Memorize this range.' },
+                                        { label: '🔁 Revise', text: 'Revise this range.' },
+                                        { label: '👀 Prepare for reading', text: 'Prepare this range for reading in the next lesson.' },
+                                        { label: '✍️ Write tafsir', text: 'Write the tafsir of this range in your notebook.' },
+                                    ].map(c => (
+                                        <button
+                                            key={c.label}
+                                            type="button"
+                                            onClick={() => setHomeworkNote(n => n.trim() ? `${n.trim()}\n${c.text}` : c.text)}
+                                            className="px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/70 transition-colors active:scale-95"
+                                        >
+                                            {c.label}
+                                        </button>
+                                    ))}
+                                </div>
                                 <textarea
                                     autoFocus
                                     value={homeworkNote}
