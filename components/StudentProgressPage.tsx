@@ -604,6 +604,34 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
+    // Full-surah player bar: position/duration/paused mirrors of the audio
+    // element, plus a whole-surah repeat toggle honored by onEnded.
+    const [surahBarTime, setSurahBarTime] = useState(0);
+    const [surahBarDur, setSurahBarDur] = useState(0);
+    const [surahBarPaused, setSurahBarPaused] = useState(false);
+    const [repeatSurah, setRepeatSurah] = useState(false);
+    const repeatSurahRef = useRef(false);
+    useEffect(() => { repeatSurahRef.current = repeatSurah; }, [repeatSurah]);
+    const fullSurahActive = readOnlyAudioVerse !== null && readOnlyAudioVerse.ayah === 0;
+    useEffect(() => {
+        if (!fullSurahActive) return;
+        const a = readOnlyAudioRef.current;
+        if (!a) return;
+        const onTime = () => setSurahBarTime(a.currentTime);
+        const onDur = () => setSurahBarDur(a.duration || 0);
+        const onPause = () => setSurahBarPaused(a.paused);
+        onTime(); onDur(); onPause();
+        a.addEventListener('timeupdate', onTime);
+        a.addEventListener('durationchange', onDur);
+        a.addEventListener('play', onPause);
+        a.addEventListener('pause', onPause);
+        return () => {
+            a.removeEventListener('timeupdate', onTime);
+            a.removeEventListener('durationchange', onDur);
+            a.removeEventListener('play', onPause);
+            a.removeEventListener('pause', onPause);
+        };
+    }, [fullSurahActive]);
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
     /** One compound popup for speed + reciter + verse repeat. */
     const [audioMenuOpen, setAudioMenuOpen] = useState(false);
@@ -4073,6 +4101,54 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
             )}
 
+            {/* ── Full-surah player bar (pause / ±5s / repeat / seek) ── */}
+            {listenActive && fullSurahActive && (() => {
+                const a = () => readOnlyAudioRef.current;
+                const fmt = (t: number) => {
+                    if (!isFinite(t)) return '0:00';
+                    const m = Math.floor(t / 60), sec = Math.floor(t % 60);
+                    return `${m}:${String(sec).padStart(2, '0')}`;
+                };
+                const skip = (d: number) => {
+                    const el = a(); if (!el) return;
+                    try { el.currentTime = Math.max(0, Math.min((el.duration || Infinity), el.currentTime + d)); } catch { /* not seekable */ }
+                };
+                const Btn: React.FC<{ onClick: () => void; label: string; children: React.ReactNode; active?: boolean }> = ({ onClick, label, children, active }) => (
+                    <button onClick={onClick} aria-label={label} title={label}
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-lg font-black transition-all active:scale-90 ${
+                            active ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-white/15 text-white hover:bg-white/25'}`}>
+                        {children}
+                    </button>
+                );
+                return (
+                    <div className="fixed bottom-0 inset-x-0 z-[260] pb-[env(safe-area-inset-bottom)]">
+                        <div className="mx-auto max-w-2xl m-2 sm:m-3 rounded-2xl bg-slate-900/95 dark:bg-black/90 backdrop-blur shadow-2xl ring-1 ring-white/10 px-3 sm:px-4 py-2.5">
+                            <div className="flex items-center gap-2 sm:gap-3">
+                                <span className="hidden sm:block text-xs font-bold text-white/70 truncate min-w-0 flex-shrink">
+                                    {QURAN_METADATA[readOnlyAudioVerse.surah - 1]?.transliteratedName}
+                                </span>
+                                <Btn onClick={() => skip(-5)} label="Back 5 seconds">↺5</Btn>
+                                <Btn onClick={() => { const el = a(); if (!el) return; if (el.paused) el.play().catch(() => {}); else el.pause(); }}
+                                    label={surahBarPaused ? 'Play' : 'Pause'}>
+                                    {surahBarPaused ? '▶' : '⏸'}
+                                </Btn>
+                                <Btn onClick={() => skip(5)} label="Forward 5 seconds">↻5</Btn>
+                                <Btn onClick={() => setRepeatSurah(v => !v)} label="Repeat surah" active={repeatSurah}>🔁</Btn>
+                                <span className="text-[11px] tabular-nums text-white/70 flex-shrink-0">{fmt(surahBarTime)}</span>
+                                <input
+                                    type="range" min={0} max={surahBarDur || 0} step={1} value={Math.min(surahBarTime, surahBarDur || 0)}
+                                    onChange={e => { const el = a(); if (!el) return; try { el.currentTime = Number(e.target.value); } catch { /* ignore */ } }}
+                                    className="flex-1 min-w-0 h-1.5 accent-teal-500 dark:accent-orange-500 cursor-pointer"
+                                    aria-label="Seek"
+                                />
+                                <span className="text-[11px] tabular-nums text-white/70 flex-shrink-0">{fmt(surahBarDur)}</span>
+                                <Btn onClick={stopVerse} label="Stop">✕</Btn>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* ── Recitation audio element (student portal + tutor listen mode) ── */}
             {listenActive && (
                 <audio
@@ -4081,6 +4157,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         // bin Humaid plays one file per surah — its end IS the surah's
                         // end, never a per-ayah boundary to chain across.
                         if (fullSurahRef.current) {
+                            const a = readOnlyAudioRef.current;
+                            if (repeatSurahRef.current && a) {
+                                // Repeat-surah toggle: start the same file over.
+                                try { a.currentTime = 0; } catch { /* not seekable */ }
+                                a.play().catch(() => { /* superseded */ });
+                                return;
+                            }
                             fullSurahRef.current = false;
                             readOnlySeqRef.current = false;
                             setReadOnlyAudioVerse(null);
