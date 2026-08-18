@@ -996,7 +996,9 @@
     "savedForRevision": "Kaydedildi!",
     "revisionSession": "Tekrar",
     "reviseSaved": "Kaydedilen kelimeleri çalış ({{count}})",
-    "reviseSavedDesc": "Sadece kaydettiğin kelimeleri çalış"
+    "reviseSavedDesc": "Sadece kaydettiğin kelimeleri çalış",
+    "continueFlashcard": "Kaldığın yerden devam et ({n} / {total})",
+    "continueFlashcardHint": "Yarım kalan kart turun"
   },
   "alphabetTrainer": {
     "pageTitle": "Arapça Alfabe Pratiği",

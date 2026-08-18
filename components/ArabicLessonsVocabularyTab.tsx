@@ -65,6 +65,45 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
     try { localStorage.setItem(revisionKey, JSON.stringify([...next])); } catch { /* quota */ }
   };
 
+  // ── Unfinished flashcard run — survives leaving the tab (per student). ────
+  // Saved on every answer, cleared on completion; the idle screen offers a
+  // "continue where you left off" button while one exists.
+  const progressKey = `arabicVocabFlashProgress:${student.id}`;
+  interface SavedRun { wordIds: string[]; cardIndex: number; wrongIds: string[]; reviewingSaved: boolean }
+  const persistProgress = (deck: VocabWord[], idx: number, wrong: VocabWord[], savedRun: boolean) => {
+    try {
+      localStorage.setItem(progressKey, JSON.stringify({
+        wordIds: deck.map(w => w.id), cardIndex: idx,
+        wrongIds: wrong.map(w => w.id), reviewingSaved: savedRun,
+      } satisfies SavedRun));
+    } catch { /* quota */ }
+  };
+  const clearProgress = () => { try { localStorage.removeItem(progressKey); } catch { /* quota */ } };
+  const savedProgress = useMemo((): SavedRun | null => {
+    void phase;   // re-read whenever a run starts/ends
+    try {
+      const raw = localStorage.getItem(progressKey);
+      if (!raw) return null;
+      const pr = JSON.parse(raw) as SavedRun;
+      if (!Array.isArray(pr.wordIds) || typeof pr.cardIndex !== 'number') return null;
+      if (pr.cardIndex < 1 || pr.cardIndex >= pr.wordIds.length) return null;   // nothing meaningful to resume
+      return pr;
+    } catch { return null; }
+  }, [progressKey, phase]);
+
+  const resumeRun = () => {
+    if (!savedProgress) return;
+    const byId = new Map<string, VocabWord>(words.map(w => [w.id, w] as [string, VocabWord]));
+    const deck = savedProgress.wordIds.map(id => byId.get(id)).filter((w): w is VocabWord => !!w);
+    if (deck.length < 2 || savedProgress.cardIndex >= deck.length) { clearProgress(); return; }
+    setShuffled(deck);
+    setCardIndex(savedProgress.cardIndex);
+    setWrongWords(savedProgress.wrongIds.map(id => byId.get(id)).filter((w): w is VocabWord => !!w));
+    setReviewingSaved(!!savedProgress.reviewingSaved);
+    setFlipped(false);
+    setPhase('active');
+  };
+
   // Lessons in course order, and the words that belong to each.
   const orderedLessons = useMemo(
     () => [...lessons].sort((a, b) => (a.level - b.level) || (a.orderIndex - b.orderIndex)),
@@ -149,20 +188,31 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
   // ── Flashcard controls ────────────────────────────────────────────────────
   const startChallenge = (pool: VocabWord[], savedRun = false) => {
     if (!pool.length) return;
-    setShuffled(shuffleArray(pool));
+    const deck: VocabWord[] = shuffleArray(pool) as VocabWord[];
+    setShuffled(deck);
     setCardIndex(0); setWrongWords([]); setReviewingSaved(savedRun);
+    persistProgress(deck, 0, [], savedRun);
     setPhase('active');
   };
-  const restart = () => { setShuffled(shuffleArray(reviewingSaved ? savedWords : practicePool)); setCardIndex(0); setPhase('active'); };
+  const restart = () => {
+    const deck: VocabWord[] = shuffleArray(reviewingSaved ? savedWords : practicePool) as VocabWord[];
+    setShuffled(deck); setCardIndex(0);
+    persistProgress(deck, 0, [], reviewingSaved);
+    setPhase('active');
+  };
 
   const advance = () => {
     if (cardIndex + 1 >= shuffled.length) {
+      clearProgress();
       setPhase('complete');
       // Wrong words feed the existing mistakes-review flow (grouped per lesson).
       if (!reviewingSaved && wrongWords.length > 0) {
         saveVocabMistakes(student.id, wrongWords.map(w => ({ wordId: w.id, lessonId: w.lessonId }))).catch(console.error);
       }
-    } else setCardIndex(i => i + 1);
+    } else {
+      persistProgress(shuffled, cardIndex + 1, wrongWords, reviewingSaved);
+      setCardIndex(i => i + 1);
+    }
   };
   const handleKnow = () => {
     const w = shuffled[cardIndex];
@@ -180,7 +230,9 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
   };
   const handleNotSure = () => {
     const w = shuffled[cardIndex];
-    setWrongWords(prev => prev.some(x => x.id === w.id) ? prev : [...prev, w]);
+    const nextWrong = wrongWords.some(x => x.id === w.id) ? wrongWords : [...wrongWords, w];
+    setWrongWords(nextWrong);
+    persistProgress(shuffled, cardIndex, nextWrong, reviewingSaved);
     setPhase('wrong');
   };
 
@@ -372,6 +424,19 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
             )}
           </div>
         </div>
+
+        {savedProgress && (
+          <button onClick={resumeRun}
+            className="w-full flex items-center gap-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-left hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all">
+            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">▶️</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-emerald-800 dark:text-emerald-200 truncate">
+                {t('arabicLessonDetail.continueFlashcard', { n: savedProgress.cardIndex + 1, total: savedProgress.wordIds.length })}
+              </span>
+              <span className="block text-xs text-emerald-600/70 dark:text-emerald-300/60">{t('arabicLessonDetail.continueFlashcardHint')}</span>
+            </span>
+          </button>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <button onClick={() => startChallenge(practicePool)} disabled={practicePool.length === 0}

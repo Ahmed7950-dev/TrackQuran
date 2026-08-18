@@ -996,7 +996,9 @@
     "savedForRevision": "تم الحفظ!",
     "revisionSession": "مراجعة",
     "reviseSaved": "مراجعة الكلمات المحفوظة ({{count}})",
-    "reviseSavedDesc": "تدرّب على الكلمات التي حفظتها فقط"
+    "reviseSavedDesc": "تدرّب على الكلمات التي حفظتها فقط",
+    "continueFlashcard": "أكمل من حيث توقفت ({n} / {total})",
+    "continueFlashcardHint": "جولة البطاقات غير المكتملة"
   },
   "alphabetTrainer": {
     "pageTitle": "تدريب الحروف العربية",

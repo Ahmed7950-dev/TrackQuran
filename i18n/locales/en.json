@@ -1030,7 +1030,9 @@
     "savedForRevision": "Saved!",
     "revisionSession": "Revision",
     "reviseSaved": "Revise saved words ({{count}})",
-    "reviseSavedDesc": "Drill just the words you saved"
+    "reviseSavedDesc": "Drill just the words you saved",
+    "continueFlashcard": "Continue where you left off ({n} / {total})",
+    "continueFlashcardHint": "Your unfinished flashcard run"
   },
   "landing": {
     "announcementBar": "✦ Free trial class — Meet your teacher before you commit. No card required.",
