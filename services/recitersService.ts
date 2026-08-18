@@ -17,7 +17,7 @@
 //   Al-Nufais  (read 259): mixed, and he chains verses with no pause in places,
 //     so seek cuts would land mid-melody → fullSurah by the tutor's choice.
 
-export type ReciterKey = 'minshawi' | 'dukhain' | 'salimi' | 'dussary' | 'qatami' | 'abbad' | 'juhany' | 'binhumaid' | 'nufais' | 'ustadh';
+export type ReciterKey = 'minshawi' | 'dukhain' | 'salimi' | 'dussary' | 'qatami' | 'abbad' | 'juhany' | 'binhumaid' | 'nufais' | 'qurafi' | 'ustadh';
 
 export interface Reciter {
   key: ReciterKey;
@@ -45,6 +45,7 @@ export const RECITERS: Reciter[] = [
     timing: { read: 245, folder: 'https://server14.mp3quran.net/mansor', cutEarlyMs: 0 } },
   { key: 'binhumaid', name: 'Ahmad bin Humaid',   nameAr: 'أحمد طالب بن حميد', mode: 'fullSurah' },
   { key: 'nufais',    name: 'Ahmad Al-Nufais',    nameAr: 'أحمد النفيس',       mode: 'fullSurah' },
+  { key: 'qurafi',    name: 'Abdullah Al-Qurafi', nameAr: 'عبدالله القرافي',   mode: 'fullSurah' },
   // The tutor's own recitation, recorded in the admin Quran Lab. Real per-ayah
   // files in Supabase Storage — only offered in the picker once the lab's
   // manifest says published (StudentProgressPage filters it).
@@ -72,12 +73,18 @@ const MP3QURAN_S16 = 'https://server16.mp3quran.net';
 export const nufaisSurahUrl = (surah: number): string =>
   `${MP3QURAN_S16}/nufais/Rewayat-Hafs-A-n-Assem/${String(surah).padStart(3, '0')}.mp3`;
 
+// Coverage verified 2026-08-18: all 114 files live, incl. the surahs missing
+// from other server16 moshafs (9/14/16/17/23/24/33). No ayat-timing read and
+// no per-ayah catalogue entry exists for him, hence full-surah mode.
+export const qurafiSurahUrl = (surah: number): string =>
+  `${MP3QURAN_S16}/a_alqrafi/Rewayat-Hafs-A-n-Assem/${String(surah).padStart(3, '0')}.mp3`;
+
 /** Surah file for a timedSurah reciter. */
 export const timedSurahUrl = (rec: Reciter, surah: number): string =>
   `${rec.timing!.folder}/${String(surah).padStart(3, '0')}.mp3`;
 
 export const fullSurahUrl = (key: ReciterKey, surah: number): string =>
-  key === 'nufais' ? nufaisSurahUrl(surah) : binHumaidSurahUrl(surah);
+  key === 'qurafi' ? qurafiSurahUrl(surah) : key === 'nufais' ? nufaisSurahUrl(surah) : binHumaidSurahUrl(surah);
 
 // everyayah.com names its files SSSAAA.mp3 (3-digit surah + 3-digit ayah),
 // unlike islamic.network's single global-ayah number.
