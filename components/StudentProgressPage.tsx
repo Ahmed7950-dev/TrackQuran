@@ -11,7 +11,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
@@ -409,7 +409,10 @@ const LetterWithError: React.FC<{
                     // text and re-drawn at their measured positions — the fonts
                     // overprint them otherwise) plus any admin vowel-position
                     // corrections for this exact unit in the current font.
-                    const text = (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+                    // almSeedForUnit: tatweel-seated hamza units (ـَٔ) carry no
+                    // Script=Arabic char, so iOS CoreText skips their GPOS and
+                    // drops the vowel to the baseline — seed the run as Arabic.
+                    const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
                     const overlays = unitOverlayPlan(letter, markLineHeight, vowelAdj);
                     return overlays ? renderUnitOverlays(text, overlays) : text;
                 })()}

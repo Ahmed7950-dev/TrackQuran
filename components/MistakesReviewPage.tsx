@@ -8,7 +8,7 @@ import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, almSeedForUnit } from '../utils/quranicMarks';
 
 
 // Helper function to check if a character is an Arabic letter
@@ -785,7 +785,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                         padding: '0'
                     }}
                 >
-                    {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 10 / 7) : letter}
+                    {/* almSeedForUnit: keeps iOS CoreText shaping tatweel-hamza units as Arabic */}
+                    {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 10 / 7) : almSeedForUnit(letter) + letter}
                 </span>
             </span>
         );

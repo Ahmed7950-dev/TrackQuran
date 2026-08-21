@@ -345,6 +345,34 @@ const toUnits = (word: string): string[] => {
 export const tanweenOnSeatAlif = (word: string): string =>
   word.replace(/ًا/g, 'اً');
 
+// ── iOS tatweel-seated hamza fix (3:179 فَـَٔامِنُوا۟ and 771 sister words) ────
+// U+0640 TATWEEL is Script=Common and combining marks (hamza U+0654, harakat)
+// are Script=Inherited — so a split-out tatweel letter unit ("‍ـَٔ‍", ZWJ seams
+// included) contains NO Script=Arabic character at all. CoreText (every iOS
+// browser + desktop Safari) itemizes that run as non-Arabic and skips the
+// font's Arabic mark/mkmk GPOS features entirely: the hamza and its vowel pile
+// up unpositioned at the tatweel's origin, so the fatha lands at the baseline
+// under the hamza and reads as a kasra. Chrome never shows it because Blink
+// merges same-styled sibling spans into ONE shaping run — the whole word, which
+// contains real Arabic letters. (Measured with CoreText: in `‍ـَٔ‍` alone GPOS
+// never fires for ANY mark, in ف + the same run every mark anchors perfectly —
+// mark ORDER was irrelevant, so a UTR#53-style reorder would fix nothing.)
+//
+// The fix: seed the unit's span text with U+061C ARABIC LETTER MARK — an
+// invisible, zero-width, joining-TRANSPARENT format character whose script IS
+// Arabic. It flips the run's script itemization to Arabic and CoreText then
+// anchors hamza + fatha/fathatan/damma/kasra/sukun exactly as it does mid-word
+// (verified per-font: Hafs, KFGQPC, uthmanic v22, both Elgharibs). It must be
+// the FIRST character of the span — CoreText ignores it after the lead ZWJ.
+// HarfBuzz proof of no regression: Chrome's merged-run glyph stream with the
+// ALM is identical to today's (one extra invisible zero-advance glyph), and
+// ف+ALM+ـ still yields the initial ف form. Display-time only: base-letter
+// count, unit order and mistake-key letter indices are untouched.
+export const ALM = '؜';
+/** Invisible Arabic-script seed for letter units whose base is the TATWEEL. */
+export const almSeedForUnit = (unit: string): string =>
+  unit.charCodeAt(0) === 0x0640 ? ALM : '';
+
 /**
  * Render a word as React nodes. Returns the plain string unless it carries an
  * imāla / ishmām mark (whole word in a corrective font) or an iqlab LOW meem

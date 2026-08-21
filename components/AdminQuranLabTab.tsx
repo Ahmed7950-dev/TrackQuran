@@ -18,7 +18,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QURAN_METADATA } from '../constants';
 import {
-  splitVerseWords, tanweenOnSeatAlif, unitOverlayPlan, renderUnitOverlays,
+  splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays,
   marksInUnit, MARK_NAMES, BELOW_MARKS, VowelAdjMap, VowelAdjustment,
 } from '../utils/quranicMarks';
 import {
@@ -475,7 +475,7 @@ const AdminQuranLabTab: React.FC = () => {
           const letterKey = `${verseKey}:${wordIdx}:${li}`;
           const joinLead = li > 0 && connectsForward(letters[li - 1].letter[0]);
           const joinTrail = li < letters.length - 1 && connectsForward(letter[0]);
-          const text = (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+          const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
           // Live preview: the picked mark follows `work` before it is saved.
           let adj = savedAdjFor(letterKey);
           if (sel?.letterKey === letterKey && pickedMark) adj = { ...(adj ?? {}), [pickedMark]: work };
@@ -505,7 +505,7 @@ const AdminQuranLabTab: React.FC = () => {
           const overlays = unitOverlayPlan(letter, 2.6, undefined);
           const joinLead = li > 0 && connectsForward(letters[li - 1].letter[0]);
           const joinTrail = li < letters.length - 1 && connectsForward(letter[0]);
-          const text = (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+          const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
           return <React.Fragment key={li}>{overlays ? renderUnitOverlays(text, overlays) : text}</React.Fragment>;
         })}
       </span>
