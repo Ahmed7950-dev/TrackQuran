@@ -799,18 +799,40 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                             {status === AttendanceStatus.Rescheduled && (
                                 <span className="text-[8px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wide px-1 py-0.5 w-full">{t('studentDetail.rescheduled')}</span>
                             )}
-                            {entries.map((e, i) => (
+                            {/* Reading / hifz (and their revisions) keep their range
+                                label — that is the day's real Quran work. Everything
+                                else is an icon only; the day view has the details. */}
+                            {entries.filter(e => e.type !== 'tafsir' && e.type !== 'qaedah').map((e, i) => (
                                 <span key={i} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight whitespace-nowrap ${e.badgeCls}`}>
                                     <span>{TYPE_ICONS[e.type]}</span>
                                     <span>{e.label}</span>
                                 </span>
                             ))}
-                            {acts.map(a => (
-                                <span key={a.id} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight whitespace-nowrap ${ACTIVITY_STYLE[a.activity!.kind].badgeCls}`}>
-                                    <span>{ACTIVITY_STYLE[a.activity!.kind].icon}</span>
-                                    <span>{a.activity!.title}</span>
-                                </span>
-                            ))}
+                            {(() => {
+                                // Icon-only chips, one per kind, with a count when a
+                                // kind happened more than once that day.
+                                const icons: Array<{ key: string; icon: string; cls: string; n: number; title: string }> = [];
+                                const push = (key: string, icon: string, cls: string, title: string) => {
+                                    const hit = icons.find(x => x.key === key);
+                                    if (hit) { hit.n += 1; hit.title += `, ${title}`; }
+                                    else icons.push({ key, icon, cls, n: 1, title });
+                                };
+                                entries.filter(e => e.type === 'tafsir' || e.type === 'qaedah')
+                                    .forEach(e => push(e.type, TYPE_ICONS[e.type], e.badgeCls, e.label));
+                                acts.forEach(a => push(
+                                    a.activity!.kind,
+                                    ACTIVITY_STYLE[a.activity!.kind].icon,
+                                    ACTIVITY_STYLE[a.activity!.kind].badgeCls,
+                                    a.activity!.title,
+                                ));
+                                return icons.map(ic => (
+                                    <span key={ic.key} title={ic.title}
+                                        className={`inline-flex items-center gap-0.5 text-[10px] leading-none px-1 py-0.5 rounded-full ${ic.cls}`}>
+                                        <span>{ic.icon}</span>
+                                        {ic.n > 1 && <span className="text-[8px] font-bold">{ic.n}</span>}
+                                    </span>
+                                ));
+                            })()}
                         </div>
                     )}
                 </button>
