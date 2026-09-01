@@ -2550,6 +2550,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const mm = m as { date?: string; errorType?: string };
             if (!mm.date || new Date(mm.date).toDateString() !== today) continue;
             if (!inRange(parts[0], parts[1])) continue;
+            // YELLOW = the tutor cycled the letter back to "corrected": the row
+            // survives (so the highlight persists) but its errorType is cleared.
+            // Those are fixed, not outstanding — they must not cost any score.
+            // Same rule the dashboard's err/pg uses.
+            if (mm.errorType !== 'reading' && mm.errorType !== 'tajweed') continue;
             weighted += mm.errorType === 'tajweed' ? 0.5 : 1;
             count += 1;
         }
