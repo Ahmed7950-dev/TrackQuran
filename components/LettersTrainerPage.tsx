@@ -527,8 +527,8 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
           // opened from a student, so this lands in the right logbook.
           onLogActivity?.(student.id, {
             kind: 'letters',
-            title: `Letters challenge — ${challenge.letters.join(' ')}`,
-            detail: `${challenge.verses.length} verse${challenge.verses.length === 1 ? '' : 's'}`,
+            title: `${challenge.letters.length} letter${challenge.letters.length === 1 ? '' : 's'} revised through letters challenge`,
+            detail: `${challenge.letters.join(' ')} · ${challenge.verses.length} verse${challenge.verses.length === 1 ? '' : 's'}`,
             sourceId: challenge.id,
           }, student.name);
         }}

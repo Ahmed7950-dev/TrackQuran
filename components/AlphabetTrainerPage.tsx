@@ -182,10 +182,12 @@ const AlphabetTrainerPage: React.FC<{
     if (covered.length === 0) return;
     runLoggedRef.current = true;
     const ls = covered.join(' ');
+    // The calendar cell shows the TITLE, so it carries the count only — the
+    // letters themselves stay in the detail, visible when the day is opened.
     onLogActivity(logTarget.id, {
       kind: 'game',
-      title: `${ls} letters revised through game ${gameName}`,
-      detail: `${covered.length} letter${covered.length === 1 ? '' : 's'} · ${rounds} round${rounds === 1 ? '' : 's'}`
+      title: `${covered.length} letter${covered.length === 1 ? '' : 's'} revised through game ${gameName}`,
+      detail: `${ls} · ${rounds} round${rounds === 1 ? '' : 's'}`
         + (completed ? '' : ' · not finished'),
       sourceId: `${gameName}:${ls}`,
     }, logTarget.name);
@@ -195,12 +197,14 @@ const AlphabetTrainerPage: React.FC<{
     const playedMs = gameStartRef.current ? Date.now() - gameStartRef.current : 0;
     if (logTarget && onLogActivity && playedMs >= 30_000) {
       const ls = (letters ?? []).join(' ');
+      const n = (letters ?? []).length;
+      const played = playedMs >= 60_000 ? `${Math.round(playedMs / 60_000)} min` : `${Math.round(playedMs / 1000)}s`;
       onLogActivity(logTarget.id, {
         kind: 'game',
-        title: ls
-          ? `${ls} letters revised through game ${gameName}`
+        title: n
+          ? `${n} letter${n === 1 ? '' : 's'} revised through game ${gameName}`
           : `Letters revised through game ${gameName}`,
-        detail: playedMs >= 60_000 ? `${Math.round(playedMs / 60_000)} min` : `${Math.round(playedMs / 1000)}s`,
+        detail: ls ? `${ls} · ${played}` : played,
         sourceId: `${gameName}:${ls}`,
       }, logTarget.name);
     }
