@@ -559,7 +559,12 @@
     "playAgainChild": "🔁 Play again!",
     "changeLetters": "← Change letters",
     "logTo": "Log to",
-    "logToNobody": "— nobody —"
+    "logToNobody": "— nobody —",
+    "hardcore": "Hardcore",
+    "hardcoreHint": "Hardcore: a wrong answer restarts the whole run",
+    "missedTimes": "Missed {count} time(s)",
+    "missesLegend": "red = times this letter was missed",
+    "clearMisses": "clear"
   },
   "arabicPortal": {
     "loading": "Loading your page…",

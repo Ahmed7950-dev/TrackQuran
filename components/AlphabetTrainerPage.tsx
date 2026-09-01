@@ -49,6 +49,15 @@ const PRAISE = [
 
 const CONFETTI_COLORS = ['#ff6b9d','#ffd93d','#6bcb77','#4d96ff','#ff9a3c','#c77dff','#ff595e','#6af2f0'];
 const STORAGE_KEY = 'alphabet_trainer_priorities';
+/** Missed-letter tallies, per student (each reader misses different letters).
+ *  Only the practice challenge feeds this — adult mode and the child-mode
+ *  castle battle — never the arcade games. */
+const MISS_KEY = (studentId?: string) => `alphabet_trainer_misses:${studentId ?? 'default'}`;
+const HARDCORE_KEY = 'alphabet_trainer_hardcore';
+const readMisses = (studentId?: string): Record<string, number> => {
+  try { return JSON.parse(localStorage.getItem(MISS_KEY(studentId)) ?? '{}') as Record<string, number>; }
+  catch { return {}; }
+};
 
 // ─── Letter-form (positional shape) support ────────────────────────────────
 type LetterForm = 'isolated' | 'initial' | 'medial' | 'final';
@@ -119,6 +128,13 @@ const AlphabetTrainerPage: React.FC<{
   });
 
   const [childMode, setChildMode] = useState(false);
+  /** Hardcore: a wrong answer restarts the whole run (the old behaviour).
+   *  Off by default — a mistake now just moves on and is counted. */
+  const [hardcore, setHardcore] = useState<boolean>(() => {
+    try { return localStorage.getItem(HARDCORE_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem(HARDCORE_KEY, hardcore ? '1' : '0'); } catch { /* private mode */ } }, [hardcore]);
+  const [misses, setMisses] = useState<Record<string, number>>({});
   const [view, setView] = useState<View>('select');
 
   // ── Game logbook ────────────────────────────────────────────────────────────
@@ -138,6 +154,14 @@ const AlphabetTrainerPage: React.FC<{
   const logTarget = hostStudent
     ?? students.find(x => x.id === logToId)
     ?? null;
+  useEffect(() => { setMisses(readMisses(logTarget?.id)); }, [logTarget?.id]);
+  const bumpMiss = (letter: string) => {
+    setMisses(prev => {
+      const next = { ...prev, [letter]: (prev[letter] ?? 0) + 1 };
+      try { localStorage.setItem(MISS_KEY(logTarget?.id), JSON.stringify(next)); } catch { /* private mode */ }
+      return next;
+    });
+  };
   useEffect(() => {
     if (view === 'airplane' || view === 'flappy' || view === 'race' || view === 'oddletter') {
       gameStartRef.current = Date.now();
@@ -359,6 +383,24 @@ const AlphabetTrainerPage: React.FC<{
     roundsRef.current += 1;
     consecutiveCorrect.current = 0;  // reset streak on wrong answer
     gameRef.current?.setStreak(0);
+    // The missed letter is tallied for this student and shown in red on the
+    // letter grid, so the tutor sees at a glance what needs more work.
+    const missed = queue[pos];
+    if (missed) bumpMiss(missed);
+
+    if (!hardcore) {
+      // Default: keep going. A mistake costs the streak and is recorded, but
+      // it no longer throws away the whole run.
+      if (childMode) {
+        setShaking(true);
+        setTimeout(() => { setShaking(false); advancePos(); }, 450);
+      } else {
+        advancePos();
+      }
+      return;
+    }
+
+    // Hardcore: start the run over, as before.
     if (childMode) {
       setShaking(true);
       setRestartMsg(t('alphabetTrainer.restartChild'));
@@ -384,6 +426,21 @@ const AlphabetTrainerPage: React.FC<{
       <p className={`text-center mb-4 ${childMode ? 'text-base font-bold text-blue-700' : 'text-sm text-slate-500 dark:text-slate-400'}`}>
         {childMode ? t('alphabetTrainer.instrChild') : t('alphabetTrainer.instrAdult')}
       </p>
+      {Object.values(misses).some((n: number) => n > 0) && (
+        <p className="text-center mb-3 text-xs text-slate-500 dark:text-slate-400">
+          <span className="inline-block align-middle me-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black">n</span>
+          {t('alphabetTrainer.missesLegend')}
+          {!isStudentView && (
+            <button
+              onClick={() => {
+                setMisses({});
+                try { localStorage.setItem(MISS_KEY(logTarget?.id), '{}'); } catch { /* private mode */ }
+              }}
+              className="ms-2 underline font-semibold text-slate-400 hover:text-red-600"
+            >{t('alphabetTrainer.clearMisses')}</button>
+          )}
+        </p>
+      )}
 
       {/* Legend (adult only — child mode is self-explanatory) */}
       {!childMode && (
@@ -450,6 +507,20 @@ const AlphabetTrainerPage: React.FC<{
         {LETTERS.map((letter, i) => {
           const p  = priorities[i];
           const cc = CHILD_CARD_COLORS[i % CHILD_CARD_COLORS.length];
+          const missed = misses[letter] ?? 0;
+          // How often this student got the letter wrong in the challenge.
+          const missBadge = missed > 0 ? (
+            <span
+              title={t('alphabetTrainer.missedTimes', { count: missed })}
+              style={{
+                position: 'absolute', top: 3, insetInlineEnd: 3,
+                minWidth: 17, height: 17, padding: '0 4px',
+                borderRadius: 9, background: '#dc2626', color: '#fff',
+                fontSize: 10, fontWeight: 800, lineHeight: '17px',
+                textAlign: 'center', pointerEvents: 'none',
+              }}
+            >{missed}</span>
+          ) : null;
           // Dot row — 3 slots; filled dots = chosen priority level
           const dotRow = (dotFill: string, dotEmpty: string) => (
             <div className="flex gap-[3px] mt-1.5">
@@ -477,8 +548,9 @@ const AlphabetTrainerPage: React.FC<{
                 outline: p > 0 ? `3px solid ${CHILD_PRIORITY_OUTLINES[p]}` : 'none',
                 outlineOffset: '1px',
               }}
-              className="rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
+              className="relative rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
             >
+              {missBadge}
               <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.8rem, 14vw, 6rem)', lineHeight: 1 }}>
                 {getLetterInForm(letter, letterForm)}
               </span>
@@ -493,13 +565,14 @@ const AlphabetTrainerPage: React.FC<{
             <button
               key={i}
               onClick={() => handleLetterClick(i)}
-              className={`rounded-xl border flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
+              className={`relative rounded-xl border flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
                 p === 0 ? 'bg-slate-100 dark:bg-gray-700/60 border-slate-200 dark:border-gray-600' :
                 p === 1 ? 'bg-amber-50  dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
                 p === 2 ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600' :
                           'bg-amber-200 dark:bg-amber-900/50 border-amber-500'
               }`}
             >
+              {missBadge}
               <span
                 style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.6rem, 13vw, 5.8rem)', lineHeight: 1 }}
                 className={
@@ -1095,6 +1168,16 @@ const AlphabetTrainerPage: React.FC<{
                 </select>
               )}
             </div>
+          )}
+
+          {/* Hardcore: wrong answer restarts the run (tutor side only) */}
+          {!isStudentView && (
+            <label className="flex items-center gap-1.5 cursor-pointer select-none me-3" title={t('alphabetTrainer.hardcoreHint')}>
+              <input type="checkbox" checked={hardcore} onChange={e => setHardcore(e.target.checked)} className="accent-red-600" />
+              <span className={`text-[11px] font-bold uppercase tracking-wide ${hardcore ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                {t('alphabetTrainer.hardcore')}
+              </span>
+            </label>
           )}
 
           {/* Child mode toggle */}

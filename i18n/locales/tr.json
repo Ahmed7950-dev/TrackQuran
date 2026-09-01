@@ -1057,7 +1057,12 @@
     "playAgainChild": "🔁 Tekrar oyna!",
     "changeLetters": "← Harfleri değiştir",
     "logTo": "Kayıt",
-    "logToNobody": "— kimse —"
+    "logToNobody": "— kimse —",
+    "hardcore": "Zorlu",
+    "hardcoreHint": "Zorlu mod: yanlış cevap turu baştan başlatır",
+    "missedTimes": "{count} kez yanlış",
+    "missesLegend": "kırmızı = harfin yanlış sayısı",
+    "clearMisses": "temizle"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",

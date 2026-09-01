@@ -1057,7 +1057,12 @@
     "playAgainChild": "🔁 العب مجدداً!",
     "changeLetters": "تغيير الحروف ←",
     "logTo": "يُسجَّل لـ",
-    "logToNobody": "— لا أحد —"
+    "logToNobody": "— لا أحد —",
+    "hardcore": "صارم",
+    "hardcoreHint": "الوضع الصارم: الخطأ يعيد الجولة من البداية",
+    "missedTimes": "أُخطئ {count} مرة",
+    "missesLegend": "الأحمر = عدد مرات الخطأ في الحرف",
+    "clearMisses": "مسح"
   },
   "landing": {
     "announcementBar": "✦ درس تجريبي مجاني — تعرّف على معلمك قبل الالتزام. لا بطاقة مطلوبة.",
