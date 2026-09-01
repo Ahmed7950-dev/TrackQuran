@@ -6,6 +6,7 @@ import StudentProgressPage from './components/StudentProgressPage';
 import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
 import MissedLessonPrompt from './components/MissedLessonPrompt';
+import LetterHuntGame from './components/LetterHuntGame';
 import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
 import { withActivityLog } from './utils/activityLog';
 import { ActivityLog } from './types';
@@ -481,6 +482,13 @@ const App: React.FC = () => {
     const m = window.location.pathname.match(/^\/odd-letter\/([a-f0-9-]{36})$/i);
     return m ? m[1] : null;
   })();
+  const letterHuntRoomId = (() => {
+    const m = window.location.pathname.match(/^\/letter-hunt\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterHuntRoomId) return (
+    <LetterHuntGame letters={[]} roomId={letterHuntRoomId} playerRole="2" onExit={() => { window.location.href = '/'; }} />
+  );
   if (oddLetterRoomId) return (
     <OddLetterGame roomId={oddLetterRoomId} playerRole="2" onExit={() => { window.location.href = '/'; }} />
   );

@@ -1065,7 +1065,9 @@
     "clearMisses": "temizle",
     "longPressReset": "sıfırlamak için harfe uzun basın",
     "wordChallenge": "📝 Kelime görevi",
-    "wordChallengeHint": "Seçilen harfleri içeren 20 Kur’an kelimesi"
+    "wordChallengeHint": "Seçilen harfleri içeren 20 Kur’an kelimesi",
+    "letterHunt": "🔍 Harf avı",
+    "letterHuntHint": "15 tur — harfi dinle, 10×10 tabloda bul"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",

@@ -567,7 +567,9 @@
     "clearMisses": "clear",
     "longPressReset": "long-press a letter to reset it",
     "wordChallenge": "📝 Word challenge",
-    "wordChallengeHint": "20 Qur’anic words containing the chosen letters"
+    "wordChallengeHint": "20 Qur’anic words containing the chosen letters",
+    "letterHunt": "🔍 Letter hunt",
+    "letterHuntHint": "15 rounds — hear a letter, find it in a 10×10 grid"
   },
   "arabicPortal": {
     "loading": "Loading your page…",
