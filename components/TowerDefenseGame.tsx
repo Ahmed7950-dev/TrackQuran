@@ -124,6 +124,20 @@ class GameAudio {
   private musicPlaying = false;
   private bgmVolume    = 0.40;   // current desired BGM level (0–1)
 
+  /** Sound effects (clashes, spawns, roars). OFF by default — the game is
+   *  played in lessons, so it must never start making noise on its own; the
+   *  tutor turns it on with the 🔔 button. Gated at the primitives below, so
+   *  every current and future effect obeys it. */
+  private sfxEnabled = false;
+  setSfxEnabled(on: boolean) {
+    this.sfxEnabled = on;
+    if (!on) {
+      for (const a of this.clashPool) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
+      try { if (this.jafarEl) { this.jafarEl.pause(); this.jafarEl.currentTime = 0; } } catch { /* ignore */ }
+    }
+  }
+  toggleSfx(): boolean { this.setSfxEnabled(!this.sfxEnabled); return this.sfxEnabled; }
+
   setBgmVolume(vol: number) {
     this.bgmVolume = vol;
     if (this.bgmEl) this.bgmEl.volume = vol;
@@ -176,6 +190,7 @@ class GameAudio {
     freq: number, type: OscillatorType, dur: number,
     vol: number, t?: number, freqEnd?: number,
   ) {
+    if (!this.sfxEnabled) return;
     try {
       const c = this.ac(); const now = t ?? c.currentTime;
       const osc = c.createOscillator(); const g = c.createGain();
@@ -189,6 +204,7 @@ class GameAudio {
   }
 
   private noise(dur: number, vol: number, fc: number, q: number, t?: number) {
+    if (!this.sfxEnabled) return;
     try {
       const c = this.ac(); const now = t ?? c.currentTime;
       const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
@@ -209,6 +225,7 @@ class GameAudio {
 
   /** Swords clashing — plays from the MP3 pool, throttled to 130 ms */
   clash() {
+    if (!this.sfxEnabled) return;
     const now = Date.now();
     if (now - this.lastClash < 130) return;
     this.lastClash = now;
@@ -254,6 +271,7 @@ class GameAudio {
 
   /** Jafar spawn roar — plays from MP3 file */
   spawnJafar() {
+    if (!this.sfxEnabled) return;
     if (this.jafarEl) {
       try {
         this.jafarEl.currentTime = 0;
@@ -442,8 +460,9 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
 
   const audioRef        = useRef<GameAudio | null>(null);
   const musicStarted    = useRef(false);
-  const musicEnabledRef = useRef(true);
-  const [musicOn,       setMusicOn]       = useState(true);
+  const musicEnabledRef = useRef(false);   // music starts muted; the tutor opts in
+  const [musicOn,       setMusicOn]       = useState(false);   // muted by default
+  const [sfxOn,         setSfxOn]         = useState(false);   // muted by default
   const [musicVolume,   setMusicVolume]   = useState(0.40);
   const canvasHRef   = useRef(CANVAS_H);
   const groundFracRef = useRef(0.87);                         // ground-line at 87% of canvas height
@@ -1294,6 +1313,23 @@ const TowerDefenseGame = forwardRef<TowerDefenseRef, {
           }}
         >
           {musicOn ? (musicVolume === 0 ? '🔈' : musicVolume < 0.5 ? '🔉' : '🔊') : '🔇'}
+        </button>
+        {/* Sound-effects toggle — separate from the music so clashes and roars
+            can be silenced while the music keeps playing, and vice versa. */}
+        <button
+          onClick={() => {
+            const nowOn = audioRef.current?.toggleSfx() ?? false;
+            setSfxOn(nowOn);
+          }}
+          title={sfxOn ? 'Mute sound effects' : 'Unmute sound effects'}
+          style={{
+            background: 'none', border: 'none',
+            color: 'white', fontSize: 17, lineHeight: 1,
+            padding: '1px 2px', cursor: 'pointer',
+            opacity: sfxOn ? 1 : 0.75,
+          }}
+        >
+          {sfxOn ? '🔔' : '🔕'}
         </button>
       </div>
     </div>
