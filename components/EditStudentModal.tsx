@@ -29,7 +29,9 @@ const categoryFromDob = (dob: string): AgeCategory => {
 };
 
 const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onClose, onUpdateStudent, onDeleteStudent, student, quranMetadata }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'logbook'>('info');
+  // The logbook moved to the calendar day view on the student page; only the
+  // info tab remains here.
+  const [activeTab, setActiveTab] = useState<'info'>('info');
   const [name, setName] = useState(student.name);
   const [dob, setDob] = useState(student.dob ?? '');
   const [ageCategory, setAgeCategory] = useState<AgeCategory>(student.ageCategory ?? 'young_gems');
@@ -347,7 +349,6 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                 <div className="flex-shrink-0 border-b border-slate-200 dark:border-gray-700 mb-4">
                     <div className="flex space-x-4">
                         <button onClick={() => setActiveTab('info')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-teal-500 dark:border-orange-500 text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>{t('modals.editStudent.infoTab')}</button>
-                        <button onClick={() => setActiveTab('logbook')} className={`py-2 px-4 text-sm font-medium ${activeTab === 'logbook' ? 'border-b-2 border-teal-500 dark:border-orange-500 text-teal-600 dark:text-orange-500' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>{t('modals.editStudent.logbookTab')}</button>
                     </div>
                 </div>
 
@@ -435,42 +436,7 @@ const EditStudentDataModal: React.FC<EditStudentDataModalProps> = ({ isOpen, onC
                         </form>
                     )}
 
-                    {activeTab === 'logbook' && (
-                        <div className="p-2">
-                            <table className="w-full border-collapse text-left">
-                                <thead className="border-b-2 border-slate-200 dark:border-gray-700">
-                                    <tr>
-                                        <th className="p-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('modals.editStudent.logDate')}</th>
-                                        <th className="p-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('modals.editStudent.logType')}</th>
-                                        <th className="p-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('modals.editStudent.logDetails')}</th>
-                                        <th className="p-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('modals.editStudent.logScore')}</th>
-                                        <th className="p-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('modals.editStudent.logActions')}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {allLogs.map(log => 
-                                        editingLogId === log.id ? (
-                                            renderEditRow()
-                                        ) : (
-                                            <tr key={log.id} className="odd:bg-white even:bg-slate-50 dark:odd:bg-gray-800 dark:even:bg-gray-800/50 hover:bg-slate-100 dark:hover:bg-gray-700">
-                                                <td className="p-2 text-sm text-slate-700 dark:text-slate-300">{new Date(log.date).toLocaleDateString()}</td>
-                                                <td className="p-2 text-sm text-slate-700 dark:text-slate-300">{log.type}</td>
-                                                <td className="p-2 text-sm text-slate-700 dark:text-slate-300">{renderLogDetails(log)}</td>
-                                                <td className="p-2 text-sm text-slate-700 dark:text-slate-300">{renderScoreStatus(log)}</td>
-                                                <td className="p-2 text-sm text-slate-700 dark:text-slate-300">
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => handleEditClick(log)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{t('modals.editStudent.edit')}</button>
-                                                        <button onClick={() => handleDeleteLogRequest(log.type, log.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline">{t('modals.editStudent.deleteLog')}</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )
-                                    )}
-                                </tbody>
-                            </table>
-                            {allLogs.length === 0 && <p className="text-center italic text-slate-500 dark:text-slate-400 py-8">{t('modals.editStudent.noLogs')}</p>}
-                        </div>
-                    )}
+                    
                 </div>
             </div>
         </div>

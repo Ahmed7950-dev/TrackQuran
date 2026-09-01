@@ -6,10 +6,27 @@ export enum AttendanceStatus {
   Rescheduled = 'RESCHEDULED',
 }
 
+/** What a student DID, when the record is more than plain attendance.
+ *  Activity records live in the same `attendance` array (a jsonb column, so no
+ *  migration): they already mean "the student showed up and worked", they reach
+ *  the student portal through the existing report payload, and the calendar and
+ *  attendance stats pick them up for free. `detail` is a short human line; the
+ *  optional numbers let the day view show a score without re-querying. */
+export interface ActivityLog {
+  kind: 'fluency' | 'tajweed' | 'letters' | 'letters-tajweed' | 'game';
+  title: string;        // e.g. "Fluency test — level 4"
+  detail?: string;      // e.g. "52.3s · 2 buzzes"
+  /** Source row id (fluency_results.id, tajweed lesson id, challenge id …) so a
+   *  log can be traced back and never double-written for the same event. */
+  sourceId?: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   date: string; // ISO string
   status: AttendanceStatus;
+  /** Present when this record logs a specific activity rather than bare attendance. */
+  activity?: ActivityLog;
 }
 
 export interface RecitationAchievement {

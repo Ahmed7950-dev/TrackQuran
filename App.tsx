@@ -7,6 +7,8 @@ import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
 import MissedLessonPrompt from './components/MissedLessonPrompt';
 import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
+import { withActivityLog } from './utils/activityLog';
+import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
@@ -945,6 +947,22 @@ const App: React.FC = () => {
       setArchive(archive);                              // put it back, tell the tutor
       window.alert('Could not save the archive change — check the connection and try again.');
     }
+  };
+
+  /** THE logbook writer. Every trackable activity (fluency test, tajweed lesson
+   *  marked done, letters-trainer challenge, letter game) lands here and becomes
+   *  an attendance record carrying the activity — so it shows on the calendar,
+   *  counts as the student having worked that day, and reaches their portal.
+   *  Re-logging the same event on the same day is a no-op. */
+  const handleLogActivity = (studentId: string, activity: ActivityLog) => {
+    setStudents(prev => {
+      const stu = prev.find(x => x.id === studentId);
+      if (!stu) return prev;
+      const next = withActivityLog(stu, activity);
+      if (next === stu) return prev;                 // already logged today
+      if (currentUser?.role === 'teacher') void saveStudent(currentUser.id, next);
+      return prev.map(x => (x.id === studentId ? next : x));
+    });
   };
 
   const handleUpdateStudent = (updatedStudent: Student) => {
@@ -1886,6 +1904,7 @@ const App: React.FC = () => {
           />
         ) : activeTab === 'lettersTrainer' ? (
           <LettersTrainerPage
+            onLogActivity={handleLogActivity}
             preSelectedStudent={
               selectedStudent ? { id: selectedStudent.id, name: selectedStudent.name } :
               sessionStudent  ? { id: sessionStudent.id,  name: sessionStudent.name  } :
@@ -1908,7 +1927,7 @@ const App: React.FC = () => {
         ) : activeTab === 'aboutUs' ? (
           <AboutUsPage />
         ) : activeTab === 'tajweed' ? (
-          <TajweedPage students={students} preSelectedStudentId={(sessionStudentId ?? selectedStudentId) ?? undefined} />
+          <TajweedPage students={students} preSelectedStudentId={(sessionStudentId ?? selectedStudentId) ?? undefined} onLogActivity={handleLogActivity} />
         ) : activeTab === 'calendar' ? (
           <CalendarPage
             gcalToken={gcalToken}
@@ -1920,7 +1939,7 @@ const App: React.FC = () => {
             arabicStudents={arabicStudents}
           />
         ) : activeTab === 'fluencyTest' && (sessionStudent ?? selectedStudent) ? (
-          <FluencyTestPage student={(sessionStudent ?? selectedStudent)!} students={students} />
+          <FluencyTestPage student={(sessionStudent ?? selectedStudent)!} students={students} onLogActivity={handleLogActivity} />
         ) : activeTab === 'mistakesStudy' && (sessionStudent ?? selectedStudent) ? (
           <MistakesStudyPage student={(sessionStudent ?? selectedStudent)!} />
         ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {

@@ -116,7 +116,22 @@
     "noMistakesYet": "Okunan sayfalarda hata yok — aferin!",
     "lastMemorization": "Son Ezber",
     "fluencyTest": "Akıcılık Testi",
-    "fluencyDetail": "{buzzes} hata · {date}"
+    "fluencyDetail": "{buzzes} hata · {date}",
+    "openDayLog": "Bu günün kaydını aç",
+    "noLogsThisDay": "Bu gün için kayıt yok",
+    "logCount": "{count} kayıt",
+    "confirmDeleteLog": "Bu kayıt silinsin mi ({label})? Geri alınamaz.",
+    "edit": "Düzenle",
+    "delete": "Sil",
+    "attendanceLog": "Devam",
+    "readingRevision": "Okuma tekrarı",
+    "hifz": "Hıfz",
+    "hifzRevision": "Hıfz tekrarı",
+    "tafsirHifz": "Tefsir (hıfz)",
+    "qaedahLog": "Kaide görevi",
+    "pagesWord": "sayfa",
+    "editLogTitle": "Kayıt başlığı",
+    "editLogDetail": "Ayrıntı (isteğe bağlı)"
   },
   "login": {
     "title": "LISAN & QURAN'a Hoş Geldiniz",

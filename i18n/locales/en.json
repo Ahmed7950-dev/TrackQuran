@@ -116,7 +116,22 @@
     "noMistakesYet": "No mistakes on read pages — great job!",
     "lastMemorization": "Last Memorization",
     "fluencyTest": "Fluency Test",
-    "fluencyDetail": "{buzzes} buzzes · {date}"
+    "fluencyDetail": "{buzzes} buzzes · {date}",
+    "openDayLog": "Open this day’s logbook",
+    "noLogsThisDay": "Nothing logged this day",
+    "logCount": "{count} log(s)",
+    "confirmDeleteLog": "Delete this log ({label})? This cannot be undone.",
+    "edit": "Edit",
+    "delete": "Delete",
+    "attendanceLog": "Attendance",
+    "readingRevision": "Reading revision",
+    "hifz": "Hifz",
+    "hifzRevision": "Hifz revision",
+    "tafsirHifz": "Tafsir (hifz)",
+    "qaedahLog": "Qaedah challenge",
+    "pagesWord": "pages",
+    "editLogTitle": "Log title",
+    "editLogDetail": "Details (optional)"
   },
   "login": {
     "title": "Welcome to LISAN & QURAN",

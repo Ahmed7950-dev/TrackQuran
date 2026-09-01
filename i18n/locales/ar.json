@@ -116,7 +116,22 @@
     "noMistakesYet": "لا توجد أخطاء في الصفحات المقروءة — أحسنت!",
     "lastMemorization": "آخر حفظ",
     "fluencyTest": "اختبار الطلاقة",
-    "fluencyDetail": "{buzzes} أخطاء · {date}"
+    "fluencyDetail": "{buzzes} أخطاء · {date}",
+    "openDayLog": "افتح سجل هذا اليوم",
+    "noLogsThisDay": "لا يوجد تسجيل في هذا اليوم",
+    "logCount": "{count} سجل",
+    "confirmDeleteLog": "حذف هذا السجل ({label})؟ لا يمكن التراجع.",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "attendanceLog": "الحضور",
+    "readingRevision": "مراجعة قراءة",
+    "hifz": "حفظ",
+    "hifzRevision": "مراجعة حفظ",
+    "tafsirHifz": "تفسير (حفظ)",
+    "qaedahLog": "تحدي القاعدة",
+    "pagesWord": "صفحات",
+    "editLogTitle": "عنوان السجل",
+    "editLogDetail": "التفاصيل (اختياري)"
   },
   "login": {
     "title": "أهلاً بك في LISAN & QURAN",

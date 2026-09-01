@@ -14,6 +14,7 @@ import AddTafsirAchievementModal from './AddTafsirAchievementModal';
 import EditStudentDataModal from './EditStudentModal';
 import ExportReportModal from './ExportReportModal';
 import AddAttendanceModal from './AddAttendanceModal';
+import { ACTIVITY_STYLE, withoutAttendanceRecord, withEditedActivity } from '../utils/activityLog';
 import { listFluencyResults, FluencyResult } from '../services/fluencyService';
 import ProgressChart from './ProgressChart';
 import MistakeRatioChart from './MistakeRatioChart';
@@ -702,6 +703,23 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         return map;
     }, [student.recitationAchievements, student.memorizationAchievements, student.tafsirReviews, quranMetadata, qaedahDone]);
 
+    /** The day whose logbook is open (null = closed). Clicking any calendar
+     *  cell opens it; it replaces the old logbook tab in Edit Student. */
+    const [logbookDay, setLogbookDay] = useState<Date | null>(null);
+
+    /** Activity logs (fluency, tajweed, letters…) grouped by day. They live in
+     *  `attendance`, so they are attendance AND logbook entries at once. */
+    const calActivityMap = useMemo(() => {
+        const m = new Map<string, AttendanceRecord[]>();
+        (student.attendance ?? []).forEach(a => {
+            if (!a.activity) return;
+            const ds = new Date(a.date).toDateString();
+            if (!m.has(ds)) m.set(ds, []);
+            m.get(ds)!.push(a);
+        });
+        return m;
+    }, [student.attendance]);
+
     const calAttendanceMap = useMemo(
         () => new Map(student.attendance.map(a => [new Date(a.date).toDateString(), a.status])),
         [student.attendance]
@@ -732,7 +750,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             const status  = calAttendanceMap.get(ds);
             const entries = calEntriesMap.get(ds) ?? [];
             const isToday = ds === new Date().toDateString();
-            const hasProgress = entries.length > 0;
+            const hasProgress = entries.length > 0 || (calActivityMap.get(ds)?.length ?? 0) > 0;
 
             // header strip colour
             let headerCls = 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
@@ -745,8 +763,14 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 headerCls = 'bg-emerald-400 text-white'; borderCls = 'border-emerald-300 dark:border-emerald-700';
             }
 
+            const acts = calActivityMap.get(ds) ?? [];
             cells.push(
-                <div key={day} className={`rounded-lg border ${borderCls} flex flex-col min-h-[56px] sm:min-h-[100px] overflow-hidden ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
+                <button
+                    type="button"
+                    key={day}
+                    onClick={() => setLogbookDay(date)}
+                    title={t('studentDetail.openDayLog')}
+                    className={`text-start rounded-lg border ${borderCls} flex flex-col min-h-[56px] sm:min-h-[100px] overflow-hidden transition-shadow hover:shadow-md hover:ring-2 hover:ring-teal-400/60 dark:hover:ring-orange-400/60 ${isToday ? 'ring-2 ring-teal-500 dark:ring-orange-500 ring-offset-1' : ''}`}>
                     {/* Day number strip */}
                     <div className={`${headerCls} px-1.5 py-0.5 text-center flex-shrink-0`}>
                         <span className="text-xs font-bold leading-none">{day}</span>
@@ -763,7 +787,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                         </div>
                     )}
                     {/* Entry badges */}
-                    {entries.length > 0 && (
+                    {(entries.length > 0 || acts.length > 0) && (
                         <div className="flex flex-wrap gap-0.5 p-1 content-start overflow-hidden">
                             {status === AttendanceStatus.Absent && (
                                 <span className="text-[8px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wide px-1 py-0.5 w-full">{t('studentDetail.absent')}</span>
@@ -777,9 +801,15 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                     <span>{e.label}</span>
                                 </span>
                             ))}
+                            {acts.map(a => (
+                                <span key={a.id} className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-tight whitespace-nowrap ${ACTIVITY_STYLE[a.activity!.kind].badgeCls}`}>
+                                    <span>{ACTIVITY_STYLE[a.activity!.kind].icon}</span>
+                                    <span>{a.activity!.title}</span>
+                                </span>
+                            ))}
                         </div>
                     )}
-                </div>
+                </button>
             );
         }
 
@@ -1257,6 +1287,118 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                 <EditStudentDataModal isOpen={activeModal === 'edit'} onClose={() => setActiveModal(null)} student={student} onUpdateStudent={onUpdateStudent!} onDeleteStudent={onDeleteStudent!} quranMetadata={quranMetadata} />
                 <ExportReportModal isOpen={activeModal === 'export'} onClose={() => setActiveModal(null)} student={student} students={students} quranMetadata={quranMetadata} />
             </>}
+
+            {/* ── Day logbook: everything logged on one day, editable by the tutor ── */}
+            {logbookDay && (() => {
+                const ds = logbookDay.toDateString();
+                const inDay = (d: string) => new Date(d).toDateString() === ds;
+                const rec  = (student.recitationAchievements   ?? []).filter(a => inDay(a.date));
+                const mem  = (student.memorizationAchievements ?? []).filter(a => inDay(a.date));
+                const taf  = (student.tafsirReviews            ?? []).filter(a => inDay(a.date));
+                const tafM = (student.tafsirMemorizationReviews?? []).filter(a => inDay(a.date));
+                const acts = (student.attendance ?? []).filter(a => a.activity && inDay(a.date));
+                const plainAtt = (student.attendance ?? []).filter(a => !a.activity && inDay(a.date));
+                const qd   = qaedahDone.filter(q => inDay(q.completedAt));
+                const total = rec.length + mem.length + taf.length + tafM.length + acts.length + plainAtt.length + qd.length;
+
+                const range = (a: { startSurah: number; startAyah: number; endSurah: number; endAyah: number }) => {
+                    const sn = quranMetadata.find(x => x.number === a.startSurah)?.transliteratedName ?? `S${a.startSurah}`;
+                    const en = quranMetadata.find(x => x.number === a.endSurah)?.transliteratedName ?? `S${a.endSurah}`;
+                    return a.startSurah === a.endSurah
+                        ? `${sn} ${a.startAyah}–${a.endAyah}`
+                        : `${sn} ${a.startAyah} → ${en} ${a.endAyah}`;
+                };
+                const save = (next: Student) => { onUpdateStudent?.(next); };
+                const del = (label: string, apply: () => Student) => {
+                    if (!window.confirm(t('studentDetail.confirmDeleteLog', { label }))) return;
+                    save(apply());
+                };
+
+                const Row: React.FC<{ icon: string; badgeCls: string; title: string; detail?: string; onDelete?: () => void; onEdit?: () => void }> =
+                    ({ icon, badgeCls, title, detail, onDelete, onEdit }) => (
+                    <div className="flex items-start gap-2.5 py-2.5 border-b border-slate-100 dark:border-gray-700 last:border-0">
+                        <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-base ${badgeCls}`}>{icon}</span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-700 dark:text-slate-200 break-words">{title}</p>
+                            {detail && <p className="text-xs text-slate-500 dark:text-slate-400 break-words">{detail}</p>}
+                        </div>
+                        {!readOnly && (onEdit || onDelete) && (
+                            <div className="flex-shrink-0 flex gap-1.5">
+                                {onEdit && <button onClick={onEdit} className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline">{t('studentDetail.edit')}</button>}
+                                {onDelete && <button onClick={onDelete} className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline">{t('studentDetail.delete')}</button>}
+                            </div>
+                        )}
+                    </div>
+                );
+
+                return (
+                    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4" onClick={() => setLogbookDay(null)}>
+                        <div className="w-full sm:max-w-lg bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                            <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-700 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-lg text-slate-800 dark:text-slate-100 truncate">
+                                        {logbookDay.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    </h3>
+                                    <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                        {total === 0 ? t('studentDetail.noLogsThisDay') : t('studentDetail.logCount', { count: total })}
+                                    </p>
+                                </div>
+                                <button onClick={() => setLogbookDay(null)} className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 font-bold">✕</button>
+                            </div>
+
+                            <div className="px-5 py-2 overflow-y-auto">
+                                {plainAtt.map(a => (
+                                    <Row key={a.id} icon={a.status === AttendanceStatus.Absent ? '🚫' : a.status === AttendanceStatus.Rescheduled ? '🔁' : '✅'}
+                                        badgeCls="bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300"
+                                        title={t('studentDetail.attendanceLog')} detail={String(a.status).toLowerCase()}
+                                        onDelete={() => del(t('studentDetail.attendanceLog'), () => ({ ...student, attendance: student.attendance.filter(x => x.id !== a.id) }))} />
+                                ))}
+                                {rec.map(a => (
+                                    <Row key={a.id} icon={a.isRevision ? '🔄' : '📖'} badgeCls="bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300"
+                                        title={`${a.isRevision ? t('studentDetail.readingRevision') : t('studentDetail.reading')} — ${range(a)}`}
+                                        detail={`${a.pagesCompleted?.toFixed?.(2) ?? a.pagesCompleted} ${t('studentDetail.pagesWord')}`}
+                                        onDelete={() => del(t('studentDetail.reading'), () => ({ ...student, recitationAchievements: student.recitationAchievements.filter(x => x.id !== a.id) }))} />
+                                ))}
+                                {mem.map(a => (
+                                    <Row key={a.id} icon={a.isRevision ? '↩️' : '🧠'} badgeCls="bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+                                        title={`${a.isRevision ? t('studentDetail.hifzRevision') : t('studentDetail.hifz')} — ${range(a)}`}
+                                        detail={`${a.pagesCompleted?.toFixed?.(2) ?? a.pagesCompleted} ${t('studentDetail.pagesWord')}`}
+                                        onDelete={() => del(t('studentDetail.hifz'), () => ({ ...student, memorizationAchievements: student.memorizationAchievements.filter(x => x.id !== a.id) }))} />
+                                ))}
+                                {taf.map(a => (
+                                    <Row key={a.id} icon="📚" badgeCls="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                                        title={t('studentDetail.tafsir')}
+                                        onDelete={() => del(t('studentDetail.tafsir'), () => ({ ...student, tafsirReviews: student.tafsirReviews.filter(x => x.id !== a.id) }))} />
+                                ))}
+                                {tafM.map(a => (
+                                    <Row key={a.id} icon="📗" badgeCls="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                                        title={t('studentDetail.tafsirHifz')}
+                                        onDelete={() => del(t('studentDetail.tafsirHifz'), () => ({ ...student, tafsirMemorizationReviews: student.tafsirMemorizationReviews.filter(x => x.id !== a.id) }))} />
+                                ))}
+                                {qd.map(q => (
+                                    <Row key={q.id ?? q.lessonId} icon="🔤" badgeCls="bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
+                                        title={t('studentDetail.qaedahLog')} detail={q.lessonTitle} />
+                                ))}
+                                {acts.map(a => (
+                                    <Row key={a.id} icon={ACTIVITY_STYLE[a.activity!.kind].icon} badgeCls={ACTIVITY_STYLE[a.activity!.kind].badgeCls}
+                                        title={a.activity!.title} detail={a.activity!.detail}
+                                        onEdit={() => {
+                                            const title = window.prompt(t('studentDetail.editLogTitle'), a.activity!.title);
+                                            if (title === null) return;
+                                            const detail = window.prompt(t('studentDetail.editLogDetail'), a.activity!.detail ?? '');
+                                            if (detail === null) return;
+                                            save(withEditedActivity(student, a.id, { title: title.trim() || a.activity!.title, detail: detail.trim() || undefined }));
+                                        }}
+                                        onDelete={() => del(a.activity!.title, () => withoutAttendanceRecord(student, a.id))} />
+                                ))}
+                                {total === 0 && (
+                                    <p className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">{t('studentDetail.noLogsThisDay')}</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

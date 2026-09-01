@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Student } from '../types';
+import { Student, ActivityLog } from '../types';
 import { getVersesForSurah } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { FluencyResult, listFluencyResults, saveFluencyResult, deleteFluencyResult } from '../services/fluencyService';
@@ -131,7 +131,7 @@ const standingOf = (rows: FluencyResult[]): StudentStanding => {
 
 type Phase = 'ladder' | 'challenge' | 'countdown' | 'running' | 'result';
 
-const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ student, students }) => {
+const FluencyTestPage: React.FC<{ student: Student; students: Student[]; onLogActivity?: (studentId: string, a: ActivityLog) => void }> = ({ student, students, onLogActivity }) => {
   const [allRows, setAllRows] = useState<FluencyResult[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -303,13 +303,26 @@ const FluencyTestPage: React.FC<{ student: Student; students: Student[] }> = ({ 
     const total = Math.round(performance.now() - startAtRef.current);
     setElapsedMs(total);
     setPhase('result');
+    const passed = total <= level.idealMs;
     void saveFluencyResult({
       studentId: student.id,
       level: level.n,
       timeMs: total,
       buzzes: buzzesRef.current,
-      passed: total <= level.idealMs,
-    }).then(reload);
+      passed,
+    }).then(() => {
+      reload();
+      // The attempt also enters the student's logbook (= attendance for the day).
+      // sourceId is level+time: re-running the SAME level to the same
+      // millisecond twice in one day is not a thing, so this both dedupes a
+      // double-fire and keeps a second, different attempt as its own log.
+      onLogActivity?.(student.id, {
+        kind: 'fluency',
+        title: `Fluency test — level ${level.n}`,
+        detail: `${(total / 1000).toFixed(1)}s · ${buzzesRef.current} buzz${buzzesRef.current === 1 ? '' : 'es'} · ${passed ? 'passed' : 'not passed'}`,
+        sourceId: `L${level.n}-${total}`,
+      });
+    });
   };
 
   const handleBuzz = () => {

@@ -9,19 +9,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Student, TajweedLesson } from '../types';
 import { useAuth } from '../context/AuthProvider';
-import { listLessons, deleteLesson, updateLesson, getCompletedLessonIds } from '../services/tajweedService';
+import { listLessons, deleteLesson, updateLesson, getCompletedLessonIds, markLessonCompleted } from '../services/tajweedService';
 import CreateLessonModal from './CreateLessonModal';
 import TajweedLessonViewer from './TajweedLessonViewer';
 
 interface Props {
   students: Student[];
   preSelectedStudentId?: string;
+  /** Writes the "lesson done" event into the student's logbook (tutor side). */
+  onLogActivity?: (studentId: string, a: import('../types').ActivityLog) => void;
   /** When true, hides all admin/edit controls regardless of auth state.
    *  Use when rendering TajweedPage inside the student-facing shared report. */
   readOnly?: boolean;
 }
 
-const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, readOnly = false }) => {
+const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogActivity, readOnly = false }) => {
   const { currentUser } = useAuth();
   // In readOnly mode (student portal) never show admin controls even if the
   // teacher happens to open the link in their authenticated browser.
@@ -187,6 +189,17 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, readOnly
           students={students}
           tutorId={tutorId}
           preSelectedStudentId={preSelectedStudentId}
+          onMarkCompleted={async (studentId, lessonId, tId) => {
+            const ok = await markLessonCompleted(studentId, lessonId, tId);
+            // Marking a lesson done is a logbook event for that student.
+            if (ok) onLogActivity?.(studentId, {
+              kind: 'tajweed',
+              title: `Tajweed lesson — ${viewing.title}`,
+              detail: 'marked done',
+              sourceId: lessonId,
+            });
+            return ok;
+          }}
           onClose={() => {
             setViewing(null);
             // Re-fetch completed IDs so any "Mark Done" changes in the viewer

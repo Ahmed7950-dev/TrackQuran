@@ -278,9 +278,12 @@ interface LettersTrainerPageProps {
   /** Read-only mode (student portal): can run challenges but cannot add/edit
    *  challenges or rename the student. */
   readOnly?: boolean;
+  /** Writes a finished challenge into the real student's logbook. Only wired on
+   *  the tutor side — the portal is read-only and must not author logs. */
+  onLogActivity?: (studentId: string, a: import('../types').ActivityLog) => void;
 }
 
-const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent, readOnly = false }) => {
+const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent, readOnly = false, onLogActivity }) => {
   const { t } = useI18n();
   const [state, setState] = useState<TrainerState>(() => {
     const loaded = loadTrainerState();
@@ -518,7 +521,17 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
       <ChallengeRunner
         student={student}
         challenge={challenge}
-        onComplete={() => incrementLetterCompletion(student.id, challenge.id)}
+        onComplete={() => {
+          incrementLetterCompletion(student.id, challenge.id);
+          // The trainer student shares the real student's id when the trainer is
+          // opened from a student, so this lands in the right logbook.
+          onLogActivity?.(student.id, {
+            kind: 'letters',
+            title: `Letters challenge — ${challenge.letters.join(' ')}`,
+            detail: `${challenge.verses.length} verse${challenge.verses.length === 1 ? '' : 's'}`,
+            sourceId: challenge.id,
+          });
+        }}
         onHome={goHome}
         onStudent={() => setView({ name: 'student', studentId: student.id })}
       />
@@ -531,7 +544,15 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
       <TajweedRunner
         student={student}
         tajweed={tajweed}
-        onComplete={() => incrementTajweedCompletion(student.id, tajweed.id)}
+        onComplete={() => {
+          incrementTajweedCompletion(student.id, tajweed.id);
+          onLogActivity?.(student.id, {
+            kind: 'letters-tajweed',
+            title: `Tajweed challenge — ${tajweed.ruleName}`,
+            detail: `${tajweed.verses.length} verse${tajweed.verses.length === 1 ? '' : 's'}`,
+            sourceId: tajweed.id,
+          });
+        }}
         onHome={goHome}
         onStudent={() => setView({ name: 'student', studentId: student.id })}
       />
