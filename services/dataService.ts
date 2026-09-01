@@ -376,12 +376,27 @@ export const getRecitedPagesSet = (student: Student): Set<number> =>
 export const getMemorizedPagesSet = (student: Student): Set<number> =>
   fullyRecitedPageSet(student.memorizationAchievements);
 
+/**
+ * Verses and pages covered by an inclusive verse range.
+ *
+ * Both numbers used to be wrong in opposite ways. Verses counted
+ * `endAyah - startAyah` inside one surah — off by one against the multi-surah
+ * branch, which was already inclusive (2:1-2:20 read as 19 verses). Pages
+ * counted `endPage - startPage`, so anything inside a single page scored ZERO
+ * and every multi-page range lost its first page.
+ *
+ * Now: verses are inclusive everywhere, and pages are FRACTIONAL — for every
+ * mushaf page the range touches, the share of that page's ayahs actually
+ * covered (half a page = 0.5), summed and rounded to 2dp. That is the honest
+ * measure: it neither drops a short range to zero nor credits two verses as a
+ * whole page, and it matches how the live-logging auto-score measures a range.
+ */
 export const calculateVersesAndPages = (
   startSurah: number, startAyah: number, endSurah: number, endAyah: number,
 ): { verses: number; pages: number } => {
   let versesCompleted = 0;
   if (startSurah === endSurah) {
-    versesCompleted = endAyah - startAyah;
+    versesCompleted = endAyah - startAyah + 1;          // inclusive
   } else {
     const startMeta = QURAN_METADATA.find(s => s.number === startSurah);
     if (startMeta) versesCompleted += startMeta.numberOfAyahs - startAyah + 1;
@@ -393,10 +408,27 @@ export const calculateVersesAndPages = (
     if (endMeta) versesCompleted += endAyah;
   }
   if (versesCompleted < 0) versesCompleted = 0;
-  const startPage = getPageOfAyah(startSurah, startAyah);
-  const endPage   = getPageOfAyah(endSurah, endAyah);
-  if (startPage === 0 || endPage === 0) return { verses: versesCompleted, pages: 0 };
-  return { verses: Math.max(0, versesCompleted), pages: Math.max(0, endPage - startPage) };
+
+  // Fractional page coverage over the pages the range touches.
+  const pageMap = getPageVerseMap();
+  const covered = new Map<number, number>();
+  for (let su = startSurah; su <= endSurah; su++) {
+    const meta = QURAN_METADATA.find(m => m.number === su);
+    if (!meta) continue;
+    const from = su === startSurah ? startAyah : 1;
+    const to   = su === endSurah ? Math.min(endAyah, meta.numberOfAyahs) : meta.numberOfAyahs;
+    for (let ay = Math.max(1, from); ay <= to; ay++) {
+      const pg = getPageOfAyah(su, ay);
+      if (!pg) continue;
+      covered.set(pg, (covered.get(pg) ?? 0) + 1);
+    }
+  }
+  let pages = 0;
+  for (const [pg, n] of covered) {
+    const total = pageMap.get(pg)?.length ?? 0;
+    pages += total > 0 ? Math.min(1, n / total) : 0;
+  }
+  return { verses: Math.max(0, versesCompleted), pages: Math.round(pages * 100) / 100 };
 };
 
 const getDefaultTajweedRules = (): string[] => [
