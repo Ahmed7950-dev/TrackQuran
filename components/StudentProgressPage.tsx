@@ -432,6 +432,17 @@ type SurahStatus = {
     memStatus: 'completed' | 'in-progress' | 'not-started'; // memorization (hifdh)
 };
 
+/** Auto-scroll speed is remembered PER STUDENT — every reader has their own
+ *  pace, so coming back to a student should restore the speed last used with
+ *  them instead of the 50 default. Same key convention as the saved view. */
+const SCROLL_SPEED_KEY = (studentId: string) => `quranful:scrollSpeed:${studentId}`;
+const readScrollSpeed = (studentId: string): number => {
+  try {
+    const n = parseInt(localStorage.getItem(SCROLL_SPEED_KEY(studentId)) ?? '', 10);
+    return Number.isFinite(n) && n >= 1 && n <= 100 ? n : 50;
+  } catch { return 50; }   // private mode
+};
+
 const SurahProgressBar: React.FC<{
     surahStatuses: SurahStatus[], title: string, type: 'reading' | 'memorization',
     /** Same category colors + priority as the surah nav bar (mem > read > homework > tafsir). */
@@ -974,7 +985,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const progressBarFillRef    = useRef<HTMLDivElement>(null);
     // Refs that mirror state values so the RAF loop can read them without stale closures
     const isAutoScrollingRef    = useRef(false);
-    const scrollSpeedRef        = useRef(50);
+    const scrollSpeedRef        = useRef(readScrollSpeed(student.id));
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -991,7 +1002,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [tafsirError, setTafsirError] = useState<string | null>(null);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-    const [scrollSpeed, setScrollSpeed] = useState(50); // Default speed 1-100
+    const [scrollSpeed, setScrollSpeed] = useState(() => readScrollSpeed(student.id)); // 1-100, restored per student
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearchResultsModalOpen, setIsSearchResultsModalOpen] = useState(false);
@@ -1061,8 +1072,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         language === 'ar' ? TAJWEED_RULES[r].labelAr : TAJWEED_RULES[r].label
     ), [language]);
 
-    const handleIncreaseSpeed = () => setScrollSpeed(prev => Math.min(100, prev + 5));
-    const handleDecreaseSpeed = () => setScrollSpeed(prev => Math.max(1, prev - 5));
+    const applyScrollSpeed = (next: number) => {
+        setScrollSpeed(next);
+        scrollSpeedRef.current = next;   // the running scroll loop reads the ref
+        try { localStorage.setItem(SCROLL_SPEED_KEY(student.id), String(next)); } catch { /* private mode */ }
+    };
+    const handleIncreaseSpeed = () => applyScrollSpeed(Math.min(100, scrollSpeedRef.current + 5));
+    const handleDecreaseSpeed = () => applyScrollSpeed(Math.max(1, scrollSpeedRef.current - 5));
+
+    // Switching students inside the same mount: pick up that student's speed.
+    useEffect(() => {
+        const stored = readScrollSpeed(student.id);
+        scrollSpeedRef.current = stored;
+        setScrollSpeed(stored);
+    }, [student.id]);
 
     // ── Close tajweed menu on outside click ──────────────────────────────────
     useEffect(() => {
