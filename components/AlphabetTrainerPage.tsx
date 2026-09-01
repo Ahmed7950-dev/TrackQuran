@@ -144,15 +144,25 @@ const AlphabetTrainerPage: React.FC<{
     }
   }, [view]);
   /** A completed letter-practice run (the castle battle in child mode). */
-  const logPractice = (gameName: string) => {
+  /** Rounds answered in the current run, and whether it was already logged.
+   *  A wrong answer restarts the queue, so a long session can end without ever
+   *  reaching the win screen — those still count as revision and must log. */
+  const roundsRef = useRef(0);
+  const runLoggedRef = useRef(false);
+  const logPractice = (gameName: string, completed = true) => {
     if (!logTarget || !onLogActivity) return;
+    if (runLoggedRef.current) return;
+    const rounds = roundsRef.current;
+    if (!completed && rounds < 3) return;            // a glance, not a session
     const covered = [...new Set(queue.length ? queue : selectedLetters)];
     if (covered.length === 0) return;
+    runLoggedRef.current = true;
     const ls = covered.join(' ');
     onLogActivity(logTarget.id, {
       kind: 'game',
       title: `${ls} letters revised through game ${gameName}`,
-      detail: `${covered.length} letter${covered.length === 1 ? '' : 's'} · ${queue.length} round${queue.length === 1 ? '' : 's'}`,
+      detail: `${covered.length} letter${covered.length === 1 ? '' : 's'} · ${rounds} round${rounds === 1 ? '' : 's'}`
+        + (completed ? '' : ' · not finished'),
       sourceId: `${gameName}:${ls}`,
     }, logTarget.name);
   };
@@ -289,6 +299,7 @@ const AlphabetTrainerPage: React.FC<{
       return;
     }
     const q = buildQueue(priorities);
+    roundsRef.current = 0; runLoggedRef.current = false;
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
     consecutiveCorrect.current = 0;
     gameRef.current?.setStreak(0);
@@ -317,6 +328,7 @@ const AlphabetTrainerPage: React.FC<{
   const handleCorrect = () => {
     if (celebrating) return;
     setRestartMsg('');
+    roundsRef.current += 1;
     consecutiveCorrect.current += 1;
     const streak = consecutiveCorrect.current;
     console.log('[AlphabetTrainer] streak:', streak);
@@ -344,6 +356,7 @@ const AlphabetTrainerPage: React.FC<{
 
   const handleWrong = () => {
     if (celebrating) return;
+    roundsRef.current += 1;
     consecutiveCorrect.current = 0;  // reset streak on wrong answer
     gameRef.current?.setStreak(0);
     if (childMode) {
@@ -827,7 +840,11 @@ const AlphabetTrainerPage: React.FC<{
     const topBar = (
       <div className="flex items-center gap-3">
         <button
-          onClick={() => { setView('select'); setRestartMsg(''); }}
+          onClick={() => {
+            // Log the work done even though the run was not completed.
+            logPractice(childMode ? 'Castle Battle' : 'Letter Practice', false);
+            setView('select'); setRestartMsg('');
+          }}
           className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
             childMode
               ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
@@ -1002,7 +1019,10 @@ const AlphabetTrainerPage: React.FC<{
       </p>
       <div className="flex gap-3 flex-wrap justify-center">
         <button
-          onClick={() => { setQueue(buildQueue(priorities)); setPos(0); setRestartMsg(''); setView('practice'); gameRef.current?.reset(); }}
+          onClick={() => {
+            roundsRef.current = 0; runLoggedRef.current = false;
+            setQueue(buildQueue(priorities)); setPos(0); setRestartMsg(''); setView('practice'); gameRef.current?.reset();
+          }}
           className={`px-6 py-2.5 font-bold transition-all active:scale-95 ${
             childMode
               ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md'
