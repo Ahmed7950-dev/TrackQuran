@@ -116,11 +116,11 @@
     "noMistakesYet": "Okunan sayfalarda hata yok — aferin!",
     "lastMemorization": "Son Ezber",
     "fluencyTest": "Akıcılık Testi",
-    "fluencyDetail": "{buzzes} hata · {date}",
+    "fluencyDetail": "{{buzzes}} hata · {{date}}",
     "openDayLog": "Bu günün kaydını aç",
     "noLogsThisDay": "Bu gün için kayıt yok",
-    "logCount": "{count} kayıt",
-    "confirmDeleteLog": "Bu kayıt silinsin mi ({label})? Geri alınamaz.",
+    "logCount": "{{count}} kayıt",
+    "confirmDeleteLog": "Bu kayıt silinsin mi ({{label}})? Geri alınamaz.",
     "edit": "Düzenle",
     "delete": "Sil",
     "attendanceLog": "Devam",
@@ -223,7 +223,7 @@
     "importBackup": "Yedek İçe Aktar",
     "exportFailed": "Yedek dışa aktarılamadı.",
     "importConfirm": "Yedek içe aktarmak bu cihazdaki TÜM mevcut verilerin ÜZERİNE YAZACAK. Devam edilsin mi?",
-    "importSuccess": "Yedek başarıyla geri yüklendi ({count} kayıt). Uygulama yeniden başlatılacak.",
+    "importSuccess": "Yedek başarıyla geri yüklendi ({{count}} kayıt). Uygulama yeniden başlatılacak.",
     "importFailed": "Yedek içe aktarılamadı. Lütfen dosyanın geçerli bir LISAN & QURAN yedeği olduğundan emin olun.",
     "contactSupport": "Destekle İletişim"
   },
@@ -1020,7 +1020,7 @@
     "revisionSession": "Tekrar",
     "reviseSaved": "Kaydedilen kelimeleri çalış ({{count}})",
     "reviseSavedDesc": "Sadece kaydettiğin kelimeleri çalış",
-    "continueFlashcard": "Kaldığın yerden devam et ({n} / {total})",
+    "continueFlashcard": "Kaldığın yerden devam et ({{n}} / {{total}})",
     "continueFlashcardHint": "Yarım kalan kart turun"
   },
   "alphabetTrainer": {
@@ -1060,10 +1060,12 @@
     "logToNobody": "— kimse —",
     "hardcore": "Zorlu",
     "hardcoreHint": "Zorlu mod: yanlış cevap turu baştan başlatır",
-    "missedTimes": "{count} kez yanlış",
+    "missedTimes": "{{count}} kez yanlış",
     "missesLegend": "kırmızı = harfin yanlış sayısı",
     "clearMisses": "temizle",
-    "longPressReset": "sıfırlamak için harfe uzun basın"
+    "longPressReset": "sıfırlamak için harfe uzun basın",
+    "wordChallenge": "📝 Kelime görevi",
+    "wordChallengeHint": "Seçilen harfleri içeren 20 Kur’an kelimesi"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",
@@ -1382,5 +1384,14 @@
     "progressStudentPlaceholder": "Öğrencinin adı…",
     "progressPointPlaceholder": "İlerleme maddesi ekleyin…",
     "addStudent": "Öğrenci ekle"
+  },
+  "wordChallenge": {
+    "loading": "Kelimeler seçiliyor…",
+    "finished": "Görev tamamlandı",
+    "scoreHint": "%{{percent}} doğru",
+    "back": "Harflere dön",
+    "exit": "← Harfler",
+    "correct": "Doğru",
+    "wrong": "Yanlış"
   }
 }

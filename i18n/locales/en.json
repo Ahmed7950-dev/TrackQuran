@@ -116,11 +116,11 @@
     "noMistakesYet": "No mistakes on read pages — great job!",
     "lastMemorization": "Last Memorization",
     "fluencyTest": "Fluency Test",
-    "fluencyDetail": "{buzzes} buzzes · {date}",
+    "fluencyDetail": "{{buzzes}} buzzes · {{date}}",
     "openDayLog": "Open this day’s logbook",
     "noLogsThisDay": "Nothing logged this day",
-    "logCount": "{count} log(s)",
-    "confirmDeleteLog": "Delete this log ({label})? This cannot be undone.",
+    "logCount": "{{count}} log(s)",
+    "confirmDeleteLog": "Delete this log ({{label}})? This cannot be undone.",
     "edit": "Edit",
     "delete": "Delete",
     "attendanceLog": "Attendance",
@@ -223,7 +223,7 @@
     "importBackup": "Import Backup",
     "exportFailed": "Failed to export backup.",
     "importConfirm": "Importing a backup will REPLACE all existing data on this device. Continue?",
-    "importSuccess": "Backup restored successfully ({count} entries). The app will reload.",
+    "importSuccess": "Backup restored successfully ({{count}} entries). The app will reload.",
     "importFailed": "Failed to import backup. Please make sure the file is a valid LISAN & QURAN backup.",
     "contactSupport": "Contact Support"
   },
@@ -562,10 +562,12 @@
     "logToNobody": "— nobody —",
     "hardcore": "Hardcore",
     "hardcoreHint": "Hardcore: a wrong answer restarts the whole run",
-    "missedTimes": "Missed {count} time(s)",
+    "missedTimes": "Missed {{count}} time(s)",
     "missesLegend": "red = times this letter was missed",
     "clearMisses": "clear",
-    "longPressReset": "long-press a letter to reset it"
+    "longPressReset": "long-press a letter to reset it",
+    "wordChallenge": "📝 Word challenge",
+    "wordChallengeHint": "20 Qur’anic words containing the chosen letters"
   },
   "arabicPortal": {
     "loading": "Loading your page…",
@@ -1062,7 +1064,7 @@
     "revisionSession": "Revision",
     "reviseSaved": "Revise saved words ({{count}})",
     "reviseSavedDesc": "Drill just the words you saved",
-    "continueFlashcard": "Continue where you left off ({n} / {total})",
+    "continueFlashcard": "Continue where you left off ({{n}} / {{total}})",
     "continueFlashcardHint": "Your unfinished flashcard run"
   },
   "landing": {
@@ -1382,5 +1384,14 @@
     "progressStudentPlaceholder": "Student's name…",
     "progressPointPlaceholder": "Add a progress point…",
     "addStudent": "Add student"
+  },
+  "wordChallenge": {
+    "loading": "Finding words…",
+    "finished": "Challenge complete",
+    "scoreHint": "{{percent}}% correct",
+    "back": "Back to letters",
+    "exit": "← Letters",
+    "correct": "Correct",
+    "wrong": "Wrong"
   }
 }

@@ -116,11 +116,11 @@
     "noMistakesYet": "لا توجد أخطاء في الصفحات المقروءة — أحسنت!",
     "lastMemorization": "آخر حفظ",
     "fluencyTest": "اختبار الطلاقة",
-    "fluencyDetail": "{buzzes} أخطاء · {date}",
+    "fluencyDetail": "{{buzzes}} أخطاء · {{date}}",
     "openDayLog": "افتح سجل هذا اليوم",
     "noLogsThisDay": "لا يوجد تسجيل في هذا اليوم",
-    "logCount": "{count} سجل",
-    "confirmDeleteLog": "حذف هذا السجل ({label})؟ لا يمكن التراجع.",
+    "logCount": "{{count}} سجل",
+    "confirmDeleteLog": "حذف هذا السجل ({{label}})؟ لا يمكن التراجع.",
     "edit": "تعديل",
     "delete": "حذف",
     "attendanceLog": "الحضور",
@@ -223,7 +223,7 @@
     "importBackup": "استيراد نسخة احتياطية",
     "exportFailed": "فشل تصدير النسخة الاحتياطية.",
     "importConfirm": "سيؤدي استيراد النسخة الاحتياطية إلى استبدال جميع البيانات الحالية على هذا الجهاز. هل تريد المتابعة؟",
-    "importSuccess": "تمت استعادة النسخة الاحتياطية بنجاح ({count} عنصرًا). سيتم إعادة تحميل التطبيق.",
+    "importSuccess": "تمت استعادة النسخة الاحتياطية بنجاح ({{count}} عنصرًا). سيتم إعادة تحميل التطبيق.",
     "importFailed": "فشل استيراد النسخة الاحتياطية. تأكد من أن الملف نسخة احتياطية صالحة لـ LISAN & QURAN.",
     "contactSupport": "تواصل مع الدعم"
   },
@@ -1020,7 +1020,7 @@
     "revisionSession": "مراجعة",
     "reviseSaved": "مراجعة الكلمات المحفوظة ({{count}})",
     "reviseSavedDesc": "تدرّب على الكلمات التي حفظتها فقط",
-    "continueFlashcard": "أكمل من حيث توقفت ({n} / {total})",
+    "continueFlashcard": "أكمل من حيث توقفت ({{n}} / {{total}})",
     "continueFlashcardHint": "جولة البطاقات غير المكتملة"
   },
   "alphabetTrainer": {
@@ -1060,10 +1060,12 @@
     "logToNobody": "— لا أحد —",
     "hardcore": "صارم",
     "hardcoreHint": "الوضع الصارم: الخطأ يعيد الجولة من البداية",
-    "missedTimes": "أُخطئ {count} مرة",
+    "missedTimes": "أُخطئ {{count}} مرة",
     "missesLegend": "الأحمر = عدد مرات الخطأ في الحرف",
     "clearMisses": "مسح",
-    "longPressReset": "اضغط مطولاً على الحرف لتصفيره"
+    "longPressReset": "اضغط مطولاً على الحرف لتصفيره",
+    "wordChallenge": "📝 تحدي الكلمات",
+    "wordChallengeHint": "٢٠ كلمة قرآنية تحتوي الحروف المختارة"
   },
   "landing": {
     "announcementBar": "✦ درس تجريبي مجاني — تعرّف على معلمك قبل الالتزام. لا بطاقة مطلوبة.",
@@ -1382,5 +1384,14 @@
     "progressStudentPlaceholder": "اسم الطالب…",
     "progressPointPlaceholder": "أضف نقطة تقدّم…",
     "addStudent": "إضافة طالب"
+  },
+  "wordChallenge": {
+    "loading": "جارٍ اختيار الكلمات…",
+    "finished": "انتهى التحدي",
+    "scoreHint": "{{percent}}٪ صحيحة",
+    "back": "العودة للحروف",
+    "exit": "← الحروف",
+    "correct": "صحيح",
+    "wrong": "خطأ"
   }
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import lottie from 'lottie-web';
 import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
+import WordChallengePage from './WordChallengePage';
 import AirplaneGame from './AirplaneGame';
 import LetterRaceGame from './LetterRaceGame';
 import ReadingBattleGame from './ReadingBattleGame';
@@ -103,8 +104,8 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
-type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge';
+type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge';
 
 const AlphabetTrainerPage: React.FC<{
   isStudentView?: boolean;
@@ -358,6 +359,7 @@ const AlphabetTrainerPage: React.FC<{
 
   const handleStart = () => {
     // Odd-letter has its own letter set → launch even with no alphabet selected.
+    if (gameChoice === 'wordchallenge' && unique > 0) { setView('wordchallenge'); return; }
     if (childMode && gameChoice === 'oddletter') { setView('oddletter'); return; }
     // Reading Battle brings its own Quran verse content — no letter selection needed.
     if (childMode && gameChoice === 'battle') { setView('battle'); return; }
@@ -971,6 +973,16 @@ const AlphabetTrainerPage: React.FC<{
                 : 'rounded-lg bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
             }`}
           >{t('alphabetTrainer.startPractice')}</button>
+          <button
+            onClick={() => { if (unique > 0) setView('wordchallenge'); }}
+            disabled={unique === 0}
+            title={t('alphabetTrainer.wordChallengeHint')}
+            className={`px-5 py-2 text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+              childMode
+                ? 'rounded-full bg-violet-400 hover:bg-violet-500 text-white shadow-md shadow-violet-200'
+                : 'rounded-lg bg-violet-600 hover:bg-violet-700 text-white'
+            }`}
+          >{t('alphabetTrainer.wordChallenge')}</button>
         </div>
       </div>
     </div>
@@ -1291,6 +1303,23 @@ const AlphabetTrainerPage: React.FC<{
       )}
       {view === 'oddletter' && (
         <OddLetterGame onExit={() => finishGame('Odd Letter')} />
+      )}
+      {view === 'wordchallenge' && (
+        <WordChallengePage
+          letters={selectedLetters}
+          childMode={childMode}
+          onFinish={(score, total) => {
+            if (!logTarget || !onLogActivity) return;
+            const ls = selectedLetters.join(' ');
+            onLogActivity(logTarget.id, {
+              kind: 'letters',
+              title: `${selectedLetters.length} letter${selectedLetters.length === 1 ? '' : 's'} revised through word challenge`,
+              detail: `${score}/${total} correct · ${ls}`,
+              sourceId: `WordChallenge:${ls}`,
+            }, logTarget.name);
+          }}
+          onExit={() => setView('select')}
+        />
       )}
     </div>
   );
