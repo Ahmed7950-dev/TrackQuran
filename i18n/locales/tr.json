@@ -1062,7 +1062,8 @@
     "hardcoreHint": "Zorlu mod: yanlış cevap turu baştan başlatır",
     "missedTimes": "{count} kez yanlış",
     "missesLegend": "kırmızı = harfin yanlış sayısı",
-    "clearMisses": "temizle"
+    "clearMisses": "temizle",
+    "longPressReset": "sıfırlamak için harfe uzun basın"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",

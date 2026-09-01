@@ -564,7 +564,8 @@
     "hardcoreHint": "Hardcore: a wrong answer restarts the whole run",
     "missedTimes": "Missed {count} time(s)",
     "missesLegend": "red = times this letter was missed",
-    "clearMisses": "clear"
+    "clearMisses": "clear",
+    "longPressReset": "long-press a letter to reset it"
   },
   "arabicPortal": {
     "loading": "Loading your page…",

@@ -1062,7 +1062,8 @@
     "hardcoreHint": "الوضع الصارم: الخطأ يعيد الجولة من البداية",
     "missedTimes": "أُخطئ {count} مرة",
     "missesLegend": "الأحمر = عدد مرات الخطأ في الحرف",
-    "clearMisses": "مسح"
+    "clearMisses": "مسح",
+    "longPressReset": "اضغط مطولاً على الحرف لتصفيره"
   },
   "landing": {
     "announcementBar": "✦ درس تجريبي مجاني — تعرّف على معلمك قبل الالتزام. لا بطاقة مطلوبة.",

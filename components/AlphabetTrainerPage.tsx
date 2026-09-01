@@ -312,7 +312,47 @@ const AlphabetTrainerPage: React.FC<{
   const unique = priorities.filter(p => p > 0).length;
   const total  = priorities.reduce((a, b) => a + b, 0);
 
+  // Miss heat: 1 miss = faintest red … 5+ = deepest. Semi-transparent so it
+  // composites over the card in both light and dark themes.
+  const MISS_ALPHA = [0, 0.16, 0.30, 0.44, 0.58, 0.72];
+  const missStyle = (n: number) => {
+    if (n <= 0) return null;
+    const g = Math.min(5, n);                       // beyond 5 stays at grade 5
+    return {
+      alpha: MISS_ALPHA[g],
+      border: `rgba(185, 28, 28, ${0.45 + g * 0.1})`,
+      ink: g >= 3 ? '#ffffff' : undefined,          // keep the glyph readable
+    };
+  };
+
+  /** Long-press a letter to wipe its miss counter (and its red background). */
+  const pressTimer = useRef<number | null>(null);
+  const longFired  = useRef(false);
+  const clearMiss = (letter: string) => {
+    setMisses(prev => {
+      const next = { ...prev };
+      delete next[letter];
+      try { localStorage.setItem(MISS_KEY(logTarget?.id), JSON.stringify(next)); } catch { /* private mode */ }
+      return next;
+    });
+  };
+  const startPress = (letter: string) => {
+    longFired.current = false;
+    if (pressTimer.current) window.clearTimeout(pressTimer.current);
+    pressTimer.current = window.setTimeout(() => {
+      longFired.current = true;
+      clearMiss(letter);
+      try { navigator.vibrate?.(30); } catch { /* unsupported */ }
+    }, 600);
+  };
+  const endPress = () => {
+    if (pressTimer.current) { window.clearTimeout(pressTimer.current); pressTimer.current = null; }
+  };
+  useEffect(() => () => { if (pressTimer.current) window.clearTimeout(pressTimer.current); }, []);
+
   const handleLetterClick = (i: number) => {
+    // A long press already did its job — don't also cycle the priority.
+    if (longFired.current) { longFired.current = false; return; }
     setPriorities(prev => { const n = [...prev]; n[i] = (n[i] + 1) % 4; return n; });
   };
 
@@ -433,7 +473,7 @@ const AlphabetTrainerPage: React.FC<{
       {Object.values(misses).some((n: number) => n > 0) && (
         <p className="text-center mb-3 text-xs text-slate-500 dark:text-slate-400">
           <span className="inline-block align-middle me-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black">n</span>
-          {t('alphabetTrainer.missesLegend')}
+          {t('alphabetTrainer.missesLegend')} · {t('alphabetTrainer.longPressReset')}
           {!isStudentView && (
             <button
               onClick={() => {
@@ -512,6 +552,24 @@ const AlphabetTrainerPage: React.FC<{
           const p  = priorities[i];
           const cc = CHILD_CARD_COLORS[i % CHILD_CARD_COLORS.length];
           const missed = misses[letter] ?? 0;
+          const ms = missStyle(missed);
+          // Painted as a layer INSIDE the card: it tints whatever background the
+          // card already has (priority amber, child colour, dark mode) without
+          // competing with the Tailwind bg-* class.
+          const missHeat = ms ? (
+            <span aria-hidden style={{
+              position: 'absolute', inset: 0, borderRadius: 'inherit',
+              background: `rgba(220, 38, 38, ${ms.alpha})`,
+              pointerEvents: 'none',
+            }} />
+          ) : null;
+          const pressHandlers = {
+            onPointerDown: () => startPress(letter),
+            onPointerUp: endPress,
+            onPointerLeave: endPress,
+            onPointerCancel: endPress,
+            onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+          };
           // How often this student got the letter wrong in the challenge.
           const missBadge = missed > 0 ? (
             <span
@@ -545,17 +603,20 @@ const AlphabetTrainerPage: React.FC<{
             <button
               key={i}
               onClick={() => handleLetterClick(i)}
+              {...pressHandlers}
+              title={missed > 0 ? t('alphabetTrainer.missedTimes', { count: missed }) : undefined}
               style={{
                 background: cc.bg,
-                borderColor: cc.border,
-                color: cc.char,
+                borderColor: ms?.border ?? cc.border,
+                color: ms?.ink ?? cc.char,
                 outline: p > 0 ? `3px solid ${CHILD_PRIORITY_OUTLINES[p]}` : 'none',
                 outlineOffset: '1px',
               }}
-              className="relative rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none"
+              className={`relative rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none`}
             >
+              {missHeat}
               {missBadge}
-              <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.8rem, 14vw, 6rem)', lineHeight: 1 }}>
+              <span style={{ position: 'relative', fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.8rem, 14vw, 6rem)', lineHeight: 1, ...(ms?.ink ? { color: ms.ink } : {}) }}>
                 {getLetterInForm(letter, letterForm)}
               </span>
               {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
@@ -569,6 +630,9 @@ const AlphabetTrainerPage: React.FC<{
             <button
               key={i}
               onClick={() => handleLetterClick(i)}
+              {...pressHandlers}
+              title={missed > 0 ? t('alphabetTrainer.missedTimes', { count: missed }) : undefined}
+              style={ms ? { borderColor: ms.border } : undefined}
               className={`relative rounded-xl border flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
                 p === 0 ? 'bg-slate-100 dark:bg-gray-700/60 border-slate-200 dark:border-gray-600' :
                 p === 1 ? 'bg-amber-50  dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
@@ -576,9 +640,10 @@ const AlphabetTrainerPage: React.FC<{
                           'bg-amber-200 dark:bg-amber-900/50 border-amber-500'
               }`}
             >
+              {missHeat}
               {missBadge}
               <span
-                style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.6rem, 13vw, 5.8rem)', lineHeight: 1 }}
+                style={{ position: 'relative', fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.6rem, 13vw, 5.8rem)', lineHeight: 1, ...(ms?.ink ? { color: ms.ink } : {}) }}
                 className={
                   p === 0 ? 'text-slate-500 dark:text-slate-400' :
                   p === 3 ? 'text-amber-800 dark:text-amber-200' :
