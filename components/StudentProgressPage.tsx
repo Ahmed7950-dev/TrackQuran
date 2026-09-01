@@ -2526,8 +2526,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
 
     // ── Automatic quality score ──────────────────────────────────────────────
-    // Score falls with the density of mistakes logged TODAY inside the range
-    // (old mistakes on the same verses don't re-penalize a fresh reading).
+    // Score falls with the density of the range's OUTSTANDING mistakes: every
+    // red (reading) and green (tajweed) letter inside it, new or from an older
+    // lesson. Yellow (corrected) letters never count.
     // Verses are terrible units (one verse can be two words or half a page),
     // so the denominator is FRACTIONAL PAGES: for every mushaf page the range
     // touches, the share of that page's ayahs actually read. A page is 15
@@ -2536,7 +2537,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // score = 10·e^(−0.09·rate) rounded into 1–10:
     //   1/page→9 · 3/page→8 · 5/page→6 · 8/page→5 · 12/page→3 · 20/page→2.
     const autoScoreForRange = (range: { start: Progress; end: Progress }) => {
-        const today = new Date().toDateString();
         const inRange = (su: number, ay: number) => {
             if (su < range.start.surah || su > range.end.surah) return false;
             if (su === range.start.surah && ay < range.start.ayah) return false;
@@ -2548,12 +2548,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const parts = key.replace(/^T/, '').split(':').map(Number);
             if (parts.length < 2 || parts.some(isNaN)) continue;
             const mm = m as { date?: string; errorType?: string };
-            if (!mm.date || new Date(mm.date).toDateString() !== today) continue;
             if (!inRange(parts[0], parts[1])) continue;
-            // YELLOW = the tutor cycled the letter back to "corrected": the row
-            // survives (so the highlight persists) but its errorType is cleared.
-            // Those are fixed, not outstanding — they must not cost any score.
-            // Same rule the dashboard's err/pg uses.
+            // Every OUTSTANDING mistake on this range counts — red (reading) and
+            // green (tajweed) alike, whether logged today or in an earlier
+            // lesson: the score describes how the range stands right now.
+            // YELLOW is the exception: cycling a letter back to yellow keeps its
+            // row (so the highlight survives a reload) but CLEARS errorType —
+            // that is the "corrected" state, so it costs nothing, whether it was
+            // yellow already or was red/green until a moment ago.
             if (mm.errorType !== 'reading' && mm.errorType !== 'tajweed') continue;
             weighted += mm.errorType === 'tajweed' ? 0.5 : 1;
             count += 1;
@@ -4029,7 +4031,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             <div className="rounded-2xl bg-slate-50 dark:bg-gray-700/50 border border-slate-200 dark:border-gray-600 px-4 py-3 mb-3 text-center">
                                                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Auto score</p>
                                                 <p className={`text-4xl font-black ${auto.score >= 8 ? 'text-teal-600 dark:text-teal-400' : auto.score >= 5 ? 'text-amber-500' : 'text-rose-500'}`}>{auto.score}<span className="text-lg text-slate-400">/10</span></p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{auto.count} mistake{auto.count === 1 ? '' : 's'} · {auto.pagesRead.toFixed(auto.pagesRead < 1 ? 2 : 1)} page{auto.pagesRead === 1 ? '' : 's'} (≈{Math.max(1, Math.round(auto.pagesRead * 15))} lines)</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{auto.count} open mistake{auto.count === 1 ? '' : 's'} · {auto.pagesRead.toFixed(auto.pagesRead < 1 ? 2 : 1)} page{auto.pagesRead === 1 ? '' : 's'} (≈{Math.max(1, Math.round(auto.pagesRead * 15))} lines)</p>
                                             </div>
                                             <button
                                                 onClick={() => { setLogQuality(auto.score); confirmLog(auto.score); }}
