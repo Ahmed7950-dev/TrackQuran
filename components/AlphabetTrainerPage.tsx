@@ -129,6 +129,20 @@ const AlphabetTrainerPage: React.FC<{
       gameStartRef.current = Date.now();
     }
   }, [view]);
+  /** A completed letter-practice run (the castle battle in child mode). */
+  const logPractice = (gameName: string) => {
+    if (!hostStudent || !onLogActivity) return;
+    const covered = [...new Set(queue.length ? queue : selectedLetters)];
+    if (covered.length === 0) return;
+    const ls = covered.join(' ');
+    onLogActivity(hostStudent.id, {
+      kind: 'game',
+      title: `${ls} letters revised through game ${gameName}`,
+      detail: `${covered.length} letter${covered.length === 1 ? '' : 's'} · ${queue.length} round${queue.length === 1 ? '' : 's'}`,
+      sourceId: `${gameName}:${ls}`,
+    });
+  };
+
   const finishGame = (gameName: string, letters?: string[]) => {
     const playedMs = gameStartRef.current ? Date.now() - gameStartRef.current : 0;
     if (hostStudent && onLogActivity && playedMs >= 30_000) {
@@ -274,7 +288,14 @@ const AlphabetTrainerPage: React.FC<{
   const advancePos = () => {
     setPos(prev => {
       const next = prev + 1;
-      if (next >= queue.length) { if (childMode) launchConfetti(120); setView('win'); }
+      if (next >= queue.length) {
+        if (childMode) launchConfetti(120);
+        // Finishing the run is the logbook event. In child mode the practice
+        // arena is the castle battle, so it is logged under that name; the
+        // plain layout logs as letter practice. Both list the letters covered.
+        logPractice(childMode ? 'Castle Battle' : 'Letter Practice');
+        setView('win');
+      }
       return next;
     });
   };
