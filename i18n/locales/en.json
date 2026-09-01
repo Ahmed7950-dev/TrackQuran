@@ -557,7 +557,9 @@
     "winSubChildB": "You are a superstar! ⭐",
     "practiceAgain": "Practice again",
     "playAgainChild": "🔁 Play again!",
-    "changeLetters": "← Change letters"
+    "changeLetters": "← Change letters",
+    "logTo": "Log to",
+    "logToNobody": "— nobody —"
   },
   "arabicPortal": {
     "loading": "Loading your page…",

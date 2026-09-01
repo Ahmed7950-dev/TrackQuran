@@ -1055,7 +1055,9 @@
     "winSubChildB": "Sen bir süpersin! ⭐",
     "practiceAgain": "Tekrar pratik yap",
     "playAgainChild": "🔁 Tekrar oyna!",
-    "changeLetters": "← Harfleri değiştir"
+    "changeLetters": "← Harfleri değiştir",
+    "logTo": "Kayıt",
+    "logToNobody": "— kimse —"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",

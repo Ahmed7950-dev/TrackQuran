@@ -280,7 +280,7 @@ interface LettersTrainerPageProps {
   readOnly?: boolean;
   /** Writes a finished challenge into the real student's logbook. Only wired on
    *  the tutor side — the portal is read-only and must not author logs. */
-  onLogActivity?: (studentId: string, a: import('../types').ActivityLog) => void;
+  onLogActivity?: (studentId: string, a: import('../types').ActivityLog, studentName?: string) => void;
 }
 
 const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStudent, readOnly = false, onLogActivity }) => {
@@ -530,7 +530,7 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
             title: `Letters challenge — ${challenge.letters.join(' ')}`,
             detail: `${challenge.verses.length} verse${challenge.verses.length === 1 ? '' : 's'}`,
             sourceId: challenge.id,
-          });
+          }, student.name);
         }}
         onHome={goHome}
         onStudent={() => setView({ name: 'student', studentId: student.id })}
@@ -551,7 +551,7 @@ const LettersTrainerPage: React.FC<LettersTrainerPageProps> = ({ preSelectedStud
             title: `Tajweed challenge — ${tajweed.ruleName}`,
             detail: `${tajweed.verses.length} verse${tajweed.verses.length === 1 ? '' : 's'}`,
             sourceId: tajweed.id,
-          });
+          }, student.name);
         }}
         onHome={goHome}
         onStudent={() => setView({ name: 'student', studentId: student.id })}

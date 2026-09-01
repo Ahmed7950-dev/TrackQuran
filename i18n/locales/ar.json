@@ -1055,7 +1055,9 @@
     "winSubChildB": "أنت نجم حقيقي! ⭐",
     "practiceAgain": "تدريب مرة أخرى",
     "playAgainChild": "🔁 العب مجدداً!",
-    "changeLetters": "تغيير الحروف ←"
+    "changeLetters": "تغيير الحروف ←",
+    "logTo": "يُسجَّل لـ",
+    "logToNobody": "— لا أحد —"
   },
   "landing": {
     "announcementBar": "✦ درس تجريبي مجاني — تعرّف على معلمك قبل الالتزام. لا بطاقة مطلوبة.",

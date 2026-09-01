@@ -103,8 +103,11 @@ const AlphabetTrainerPage: React.FC<{
   /** The student the tutor is working with — games played here are logged to
    *  THEM (they are the host). Absent in the student portal, which is read-only. */
   hostStudent?: { id: string; name: string };
-  onLogActivity?: (studentId: string, a: import('../types').ActivityLog) => void;
-}> = ({ isStudentView = false, avatarSrc, hostStudent, onLogActivity }) => {
+  /** Roster for the "log to" picker, so a session started without a student
+   *  open can still be attributed instead of silently going nowhere. */
+  students?: Array<{ id: string; name: string }>;
+  onLogActivity?: (studentId: string, a: import('../types').ActivityLog, studentName?: string) => void;
+}> = ({ isStudentView = false, avatarSrc, hostStudent, students = [], onLogActivity }) => {
   const { t } = useI18n();
 
   const [priorities, setPriorities] = useState<number[]>(() => {
@@ -124,6 +127,17 @@ const AlphabetTrainerPage: React.FC<{
   // out of the record, and sourceId collapses repeat rounds of the same game on
   // the same letters into one entry for the day.
   const gameStartRef = useRef(0);
+  // Who this session belongs to. Defaults to the student the tutor already has
+  // open; otherwise the tutor picks, and the choice is remembered.
+  const LOG_TO_KEY = 'alphabetTrainer:logTo';
+  const [logToId, setLogToId] = useState<string>(() => {
+    if (hostStudent) return hostStudent.id;
+    try { return localStorage.getItem(LOG_TO_KEY) ?? ''; } catch { return ''; }
+  });
+  useEffect(() => { if (hostStudent) setLogToId(hostStudent.id); }, [hostStudent?.id]);
+  const logTarget = hostStudent
+    ?? students.find(x => x.id === logToId)
+    ?? null;
   useEffect(() => {
     if (view === 'airplane' || view === 'flappy' || view === 'race' || view === 'oddletter') {
       gameStartRef.current = Date.now();
@@ -131,30 +145,30 @@ const AlphabetTrainerPage: React.FC<{
   }, [view]);
   /** A completed letter-practice run (the castle battle in child mode). */
   const logPractice = (gameName: string) => {
-    if (!hostStudent || !onLogActivity) return;
+    if (!logTarget || !onLogActivity) return;
     const covered = [...new Set(queue.length ? queue : selectedLetters)];
     if (covered.length === 0) return;
     const ls = covered.join(' ');
-    onLogActivity(hostStudent.id, {
+    onLogActivity(logTarget.id, {
       kind: 'game',
       title: `${ls} letters revised through game ${gameName}`,
       detail: `${covered.length} letter${covered.length === 1 ? '' : 's'} · ${queue.length} round${queue.length === 1 ? '' : 's'}`,
       sourceId: `${gameName}:${ls}`,
-    });
+    }, logTarget.name);
   };
 
   const finishGame = (gameName: string, letters?: string[]) => {
     const playedMs = gameStartRef.current ? Date.now() - gameStartRef.current : 0;
-    if (hostStudent && onLogActivity && playedMs >= 30_000) {
+    if (logTarget && onLogActivity && playedMs >= 30_000) {
       const ls = (letters ?? []).join(' ');
-      onLogActivity(hostStudent.id, {
+      onLogActivity(logTarget.id, {
         kind: 'game',
         title: ls
           ? `${ls} letters revised through game ${gameName}`
           : `Letters revised through game ${gameName}`,
         detail: playedMs >= 60_000 ? `${Math.round(playedMs / 60_000)} min` : `${Math.round(playedMs / 1000)}s`,
         sourceId: `${gameName}:${ls}`,
-      });
+      }, logTarget.name);
     }
     setView('select');
   };
@@ -1032,6 +1046,36 @@ const AlphabetTrainerPage: React.FC<{
               {t('alphabetTrainer.pageTitle')}
             </h2>
           </div>
+
+          {/* Who this session is logged to — tutor side only. Without it a
+              finished session has nobody to belong to and quietly vanishes. */}
+          {!isStudentView && onLogActivity && (
+            <div className="flex items-center gap-1.5 me-auto ms-3">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                {t('alphabetTrainer.logTo')}
+              </span>
+              {hostStudent ? (
+                <span className="px-2 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-xs font-bold">
+                  {hostStudent.name}
+                </span>
+              ) : (
+                <select
+                  value={logToId}
+                  onChange={e => {
+                    setLogToId(e.target.value);
+                    try { localStorage.setItem(LOG_TO_KEY, e.target.value); } catch { /* private mode */ }
+                  }}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold border ${
+                    logTarget
+                      ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300'
+                      : 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'}`}
+                >
+                  <option value="">{t('alphabetTrainer.logToNobody')}</option>
+                  {students.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+              )}
+            </div>
+          )}
 
           {/* Child mode toggle */}
           <label className="flex items-center gap-2 cursor-pointer select-none">

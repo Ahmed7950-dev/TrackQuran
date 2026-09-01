@@ -954,14 +954,26 @@ const App: React.FC = () => {
    *  an attendance record carrying the activity — so it shows on the calendar,
    *  counts as the student having worked that day, and reaches their portal.
    *  Re-logging the same event on the same day is a no-op. */
-  const handleLogActivity = (studentId: string, activity: ActivityLog) => {
+  const handleLogActivity = (studentId: string, activity: ActivityLog, studentName?: string) => {
     setStudents(prev => {
-      const stu = prev.find(x => x.id === studentId);
-      if (!stu) return prev;
+      // The letters trainer keeps its OWN roster: a student added inside it has
+      // a trainer-generated id that matches no real record, so the log used to
+      // vanish silently. Fall back to a unique name match before giving up.
+      let stu = prev.find(x => x.id === studentId);
+      if (!stu && studentName) {
+        const n = studentName.trim().toLowerCase();
+        const byName = prev.filter(x => x.name.trim().toLowerCase() === n);
+        if (byName.length === 1) stu = byName[0];
+      }
+      if (!stu) {
+        console.warn('[logbook] activity not logged — no student matched', { studentId, studentName, activity });
+        return prev;
+      }
       const next = withActivityLog(stu, activity);
       if (next === stu) return prev;                 // already logged today
       if (currentUser?.role === 'teacher') void saveStudent(currentUser.id, next);
-      return prev.map(x => (x.id === studentId ? next : x));
+      const targetId = stu.id;
+      return prev.map(x => (x.id === targetId ? next : x));
     });
   };
 
@@ -1914,6 +1926,7 @@ const App: React.FC = () => {
         ) : activeTab === 'alphabetTrainer' ? (
           <GameInviteContext.Provider value={tutorInviteIdentity}>
             <AlphabetTrainerPage
+              students={students.map(st => ({ id: st.id, name: st.name }))}
               hostStudent={
                 selectedStudent ? { id: selectedStudent.id, name: selectedStudent.name } :
                 sessionStudent  ? { id: sessionStudent.id,  name: sessionStudent.name  } :
