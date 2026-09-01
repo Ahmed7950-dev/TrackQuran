@@ -42,11 +42,13 @@ export const MISTAKE_AREAS: MistakeArea[] = [
   { name: 'length',   title: 'Length',        color: '#0ea5a4', subs: ['Short', 'Long'] },
   { name: 'hold',     title: 'Hold',          color: '#7c86f8', subs: ['Hold', 'No Hold'] },
   { name: 'harakah',  title: 'Harakah',       color: '#f0a626', subs: ['Fatha', 'Kasrah', 'Dammah'] },
+  { name: 'ignoreVowel', title: 'Ignore vowel', color: '#d64550', subs: ['Ignore vowel'] },
   { name: 'sakin',    title: 'Sakin',         color: '#a8763e', subs: ['Sakin'] },
   { name: 'tanween',  title: 'Tanween',       color: '#c2569e', subs: ['Tanween'] },
   { name: 'silence',  title: 'Silence',       color: '#f26d8c', subs: ['Silent', 'Not Silent'] },
   { name: 'weight',   title: 'Weight',        color: '#a186f2', subs: ['Heavy', 'Light'] },
   { name: 'change',   title: 'Letter change', color: '#3cb2ec', subs: ['Change to Alif', 'Change to Ha'] },
+  { name: 'weakLetter', title: 'Weak letter',  color: '#16a34a', subs: ['Weak letter'] },
   { name: 'stop',     title: 'Stop',          color: '#8fc93a', subs: ['Stop', 'No Stop'] },
   { name: 'recognition', title: 'Letter recognition', color: '#f59a63', subs: ['Letter recognition'] },
 ];
@@ -88,6 +90,7 @@ const LABELS_AR: Record<string, string> = {
   'Letter change': 'تغيير حرف', 'Change to Alif': 'إبدال ألفاً', 'Change to Ha': 'إبدال هاءً',
   'Stop': 'الوقف', 'No Stop': 'بدون وقف',
   'Letter recognition': 'معرفة الحرف',
+  'Ignore vowel': 'إهمال الحركة', 'Weak letter': 'حرف علة',
   'Ghunnah': 'غنّة', 'Qalqalah': 'قلقلة', 'Madd': 'مدّ', 'Izhar': 'إظهار',
   'Idgham w/ ghunnah': 'إدغام بغنّة', 'Idgham with ghunnah': 'إدغام بغنّة',
   'Idgham w/o ghunnah': 'إدغام بلا غنّة', 'Idgham without ghunnah': 'إدغام بلا غنّة',
@@ -107,6 +110,7 @@ const LABELS_TR: Record<string, string> = {
   'Letter change': 'Harf değişimi', 'Change to Alif': 'Elife çevirme', 'Change to Ha': 'He’ye çevirme',
   'Stop': 'Vakıf', 'No Stop': 'Vakıfsız',
   'Letter recognition': 'Harf tanıma',
+  'Ignore vowel': 'Hareke atlama', 'Weak letter': 'İllet harfi',
   'Ghunnah': 'Ğunne', 'Qalqalah': 'Kalkale', 'Madd': 'Med', 'Izhar': 'İzhar',
   'Idgham w/ ghunnah': 'Ğunneli idğam', 'Idgham with ghunnah': 'Ğunneli idğam',
   'Idgham w/o ghunnah': 'Ğunnesiz idğam', 'Idgham without ghunnah': 'Ğunnesiz idğam',
@@ -282,11 +286,14 @@ export const computeRingData = (mistakes: Record<string, Mistake>, excludeKey?: 
 const DISPLAY: Record<string, string> = {
   'No Hold': 'No hold', 'Not Silent': 'Not silent', 'Change to Alif': 'To Alif',
   'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
+  'Ignore vowel': 'Ign. vowel', 'Weak letter': 'Weak ltr',
 };
 /** Labels too long for a single arc get stacked on two arcs inside their layer. */
 const DISPLAY_2LINE: Record<string, [string, string]> = {
   'Idgham with ghunnah': ['Idgham', 'with ghunnah'],
   'Idgham without ghunnah': ['Idgham', 'no ghunnah'],
+  'Ignore vowel': ['Ignore', 'vowel'],
+  'Weak letter': ['Weak', 'letter'],
 };
 const FLAG_DISPLAY: Record<string, string> = {
   'Fast reading': 'Fast', 'Choppy reading': 'Choppy',
