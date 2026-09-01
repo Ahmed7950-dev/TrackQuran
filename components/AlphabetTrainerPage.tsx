@@ -97,7 +97,14 @@ function buildQueue(priorities: number[]): string[] {
 type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
 type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle';
 
-const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: string }> = ({ isStudentView = false, avatarSrc }) => {
+const AlphabetTrainerPage: React.FC<{
+  isStudentView?: boolean;
+  avatarSrc?: string;
+  /** The student the tutor is working with — games played here are logged to
+   *  THEM (they are the host). Absent in the student portal, which is read-only. */
+  hostStudent?: { id: string; name: string };
+  onLogActivity?: (studentId: string, a: import('../types').ActivityLog) => void;
+}> = ({ isStudentView = false, avatarSrc, hostStudent, onLogActivity }) => {
   const { t } = useI18n();
 
   const [priorities, setPriorities] = useState<number[]>(() => {
@@ -110,6 +117,33 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
 
   const [childMode, setChildMode] = useState(false);
   const [view, setView] = useState<View>('select');
+
+  // ── Game logbook ────────────────────────────────────────────────────────────
+  // Leaving a game writes "<letters> letters revised through game <name>" into
+  // the host student's logbook. A 30s floor keeps an accidental open-and-close
+  // out of the record, and sourceId collapses repeat rounds of the same game on
+  // the same letters into one entry for the day.
+  const gameStartRef = useRef(0);
+  useEffect(() => {
+    if (view === 'airplane' || view === 'flappy' || view === 'race' || view === 'oddletter') {
+      gameStartRef.current = Date.now();
+    }
+  }, [view]);
+  const finishGame = (gameName: string, letters?: string[]) => {
+    const playedMs = gameStartRef.current ? Date.now() - gameStartRef.current : 0;
+    if (hostStudent && onLogActivity && playedMs >= 30_000) {
+      const ls = (letters ?? []).join(' ');
+      onLogActivity(hostStudent.id, {
+        kind: 'game',
+        title: ls
+          ? `${ls} letters revised through game ${gameName}`
+          : `Letters revised through game ${gameName}`,
+        detail: playedMs >= 60_000 ? `${Math.round(playedMs / 60_000)} min` : `${Math.round(playedMs / 1000)}s`,
+        sourceId: `${gameName}:${ls}`,
+      });
+    }
+    setView('select');
+  };
   const [gameChoice, setGameChoice] = useState<GameChoice>('tower');
   const [queue, setQueue] = useState<string[]>([]);
   const [pos, setPos] = useState(0);
@@ -1006,20 +1040,20 @@ const AlphabetTrainerPage: React.FC<{ isStudentView?: boolean; avatarSrc?: strin
       {view === 'win'      && renderWin()}
       {view === 'airplane' && (
         <div className="max-w-3xl mx-auto px-4 pb-8">
-          <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} avatarSrc={avatarSrc} />
+          <AirplaneGame letters={selectedLetters} letterForm={letterForm} onExit={() => finishGame('Airplane', selectedLetters)} avatarSrc={avatarSrc} />
         </div>
       )}
       {view === 'flappy' && (
-        <FlappyLettersGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
+        <FlappyLettersGame letters={selectedLetters} letterForm={letterForm} onExit={() => finishGame('Flappy Letters', selectedLetters)} />
       )}
       {view === 'race' && (
-        <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => setView('select')} />
+        <LetterRaceGame letters={selectedLetters} letterForm={letterForm} onExit={() => finishGame('Letter Race', selectedLetters)} />
       )}
       {view === 'battle' && (
         <ReadingBattleGame onExit={() => setView('select')} />
       )}
       {view === 'oddletter' && (
-        <OddLetterGame onExit={() => setView('select')} />
+        <OddLetterGame onExit={() => finishGame('Odd Letter')} />
       )}
     </div>
   );

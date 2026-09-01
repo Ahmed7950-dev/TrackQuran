@@ -706,6 +706,10 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     /** The day whose logbook is open (null = closed). Clicking any calendar
      *  cell opens it; it replaces the old logbook tab in Edit Student. */
     const [logbookDay, setLogbookDay] = useState<Date | null>(null);
+    /** The reading / hifz log being range-edited inside the day view. */
+    const [editingLog, setEditingLog] = useState<
+        { kind: 'rec' | 'mem'; id: string; startSurah: number; startAyah: number;
+          endSurah: number; endAyah: number; q1: number; q2: number } | null>(null);
 
     /** Activity logs (fluency, tajweed, letters…) grouped by day. They live in
      *  `attendance`, so they are attendance AND logbook entries at once. */
@@ -1314,6 +1318,71 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                     save(apply());
                 };
 
+                /** Inline range editor — the capability the old logbook tab had. */
+                const RangeEditor = () => {
+                    if (!editingLog) return null;
+                    const e = editingLog;
+                    const set = (patch: Partial<typeof e>) => setEditingLog({ ...e, ...patch });
+                    const maxAyah = (su: number) => quranMetadata.find(x => x.number === su)?.numberOfAyahs ?? 286;
+                    const num = (v: string, min: number, max: number) =>
+                        Math.max(min, Math.min(max, parseInt(v || '0', 10) || min));
+                    const Field: React.FC<{ label: string; value: number; min: number; max: number; onChange: (n: number) => void }> =
+                        ({ label, value, min, max, onChange }) => (
+                        <label className="flex-1 min-w-0">
+                            <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</span>
+                            <input type="number" min={min} max={max} value={value}
+                                onChange={ev => onChange(num(ev.target.value, min, max))}
+                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-slate-800 dark:text-slate-100" />
+                        </label>
+                    );
+                    const commit = () => {
+                        const { verses, pages } = calculateVersesAndPages(e.startSurah, e.startAyah, e.endSurah, e.endAyah);
+                        if (e.kind === 'rec') {
+                            save({ ...student, recitationAchievements: student.recitationAchievements.map(x =>
+                                x.id === e.id ? { ...x, startSurah: e.startSurah, startAyah: e.startAyah, endSurah: e.endSurah,
+                                    endAyah: e.endAyah, readingQuality: e.q1, tajweedQuality: e.q2,
+                                    versesCompleted: verses, pagesCompleted: pages } : x) });
+                        } else {
+                            save({ ...student, memorizationAchievements: student.memorizationAchievements.map(x =>
+                                x.id === e.id ? { ...x, startSurah: e.startSurah, startAyah: e.startAyah, endSurah: e.endSurah,
+                                    endAyah: e.endAyah, memorizationQuality: e.q1,
+                                    versesCompleted: verses, pagesCompleted: pages } : x) });
+                        }
+                        setEditingLog(null);
+                    };
+                    const preview = calculateVersesAndPages(e.startSurah, e.startAyah, e.endSurah, e.endAyah);
+                    return (
+                        <div className="py-3 space-y-2 bg-slate-50 dark:bg-gray-700/40 rounded-xl px-3 my-2">
+                            <div className="flex gap-2">
+                                <Field label={t('studentDetail.fromSurah')} value={e.startSurah} min={1} max={114}
+                                    onChange={n => set({ startSurah: n, startAyah: Math.min(e.startAyah, maxAyah(n)) })} />
+                                <Field label={t('studentDetail.ayah')} value={e.startAyah} min={1} max={maxAyah(e.startSurah)}
+                                    onChange={n => set({ startAyah: n })} />
+                            </div>
+                            <div className="flex gap-2">
+                                <Field label={t('studentDetail.toSurah')} value={e.endSurah} min={1} max={114}
+                                    onChange={n => set({ endSurah: n, endAyah: Math.min(e.endAyah, maxAyah(n)) })} />
+                                <Field label={t('studentDetail.ayah')} value={e.endAyah} min={1} max={maxAyah(e.endSurah)}
+                                    onChange={n => set({ endAyah: n })} />
+                            </div>
+                            <div className="flex gap-2">
+                                <Field label={e.kind === 'rec' ? t('studentDetail.readingQuality') : t('studentDetail.hifzQuality')}
+                                    value={e.q1} min={1} max={10} onChange={n => set({ q1: n })} />
+                                {e.kind === 'rec' && (
+                                    <Field label={t('studentDetail.tajweedQuality')} value={e.q2} min={1} max={10} onChange={n => set({ q2: n })} />
+                                )}
+                            </div>
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                {preview.verses} {t('studentDetail.versesWord')} · {preview.pages.toFixed(2)} {t('studentDetail.pagesWord')}
+                            </p>
+                            <div className="flex gap-2 pt-1">
+                                <button onClick={() => setEditingLog(null)} className="flex-1 py-2 rounded-lg bg-slate-200 dark:bg-gray-600 text-slate-700 dark:text-slate-200 text-sm font-bold">{t('studentDetail.cancel')}</button>
+                                <button onClick={commit} className="flex-1 py-2 rounded-lg bg-teal-600 dark:bg-orange-600 text-white text-sm font-bold">{t('studentDetail.save')}</button>
+                            </div>
+                        </div>
+                    );
+                };
+
                 const Row: React.FC<{ icon: string; badgeCls: string; title: string; detail?: string; onDelete?: () => void; onEdit?: () => void }> =
                     ({ icon, badgeCls, title, detail, onDelete, onEdit }) => (
                     <div className="flex items-start gap-2.5 py-2.5 border-b border-slate-100 dark:border-gray-700 last:border-0">
@@ -1354,16 +1423,24 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                         onDelete={() => del(t('studentDetail.attendanceLog'), () => ({ ...student, attendance: student.attendance.filter(x => x.id !== a.id) }))} />
                                 ))}
                                 {rec.map(a => (
+                                    editingLog?.kind === 'rec' && editingLog.id === a.id ? <RangeEditor key={a.id} /> : (
                                     <Row key={a.id} icon={a.isRevision ? '🔄' : '📖'} badgeCls="bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300"
                                         title={`${a.isRevision ? t('studentDetail.readingRevision') : t('studentDetail.reading')} — ${range(a)}`}
                                         detail={`${a.pagesCompleted?.toFixed?.(2) ?? a.pagesCompleted} ${t('studentDetail.pagesWord')}`}
+                                        onEdit={() => setEditingLog({ kind: 'rec', id: a.id, startSurah: a.startSurah, startAyah: a.startAyah,
+                                            endSurah: a.endSurah, endAyah: a.endAyah, q1: a.readingQuality ?? 8, q2: a.tajweedQuality ?? 8 })}
                                         onDelete={() => del(t('studentDetail.reading'), () => ({ ...student, recitationAchievements: student.recitationAchievements.filter(x => x.id !== a.id) }))} />
+                                    )
                                 ))}
                                 {mem.map(a => (
+                                    editingLog?.kind === 'mem' && editingLog.id === a.id ? <RangeEditor key={a.id} /> : (
                                     <Row key={a.id} icon={a.isRevision ? '↩️' : '🧠'} badgeCls="bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
                                         title={`${a.isRevision ? t('studentDetail.hifzRevision') : t('studentDetail.hifz')} — ${range(a)}`}
                                         detail={`${a.pagesCompleted?.toFixed?.(2) ?? a.pagesCompleted} ${t('studentDetail.pagesWord')}`}
+                                        onEdit={() => setEditingLog({ kind: 'mem', id: a.id, startSurah: a.startSurah, startAyah: a.startAyah,
+                                            endSurah: a.endSurah, endAyah: a.endAyah, q1: a.memorizationQuality ?? 8, q2: 8 })}
                                         onDelete={() => del(t('studentDetail.hifz'), () => ({ ...student, memorizationAchievements: student.memorizationAchievements.filter(x => x.id !== a.id) }))} />
+                                    )
                                 ))}
                                 {taf.map(a => (
                                     <Row key={a.id} icon="📚" badgeCls="bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"

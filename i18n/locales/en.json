@@ -131,7 +131,15 @@
     "qaedahLog": "Qaedah challenge",
     "pagesWord": "pages",
     "editLogTitle": "Log title",
-    "editLogDetail": "Details (optional)"
+    "editLogDetail": "Details (optional)",
+    "fromSurah": "From surah",
+    "toSurah": "To surah",
+    "ayah": "Ayah",
+    "hifzQuality": "Hifz /10",
+    "tajweedQuality": "Tajweed /10",
+    "versesWord": "verses",
+    "cancel": "Cancel",
+    "save": "Save"
   },
   "login": {
     "title": "Welcome to LISAN & QURAN",

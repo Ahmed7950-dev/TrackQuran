@@ -131,7 +131,15 @@
     "qaedahLog": "Kaide görevi",
     "pagesWord": "sayfa",
     "editLogTitle": "Kayıt başlığı",
-    "editLogDetail": "Ayrıntı (isteğe bağlı)"
+    "editLogDetail": "Ayrıntı (isteğe bağlı)",
+    "fromSurah": "Başlangıç sure",
+    "toSurah": "Bitiş sure",
+    "ayah": "Ayet",
+    "hifzQuality": "Hıfz /10",
+    "tajweedQuality": "Tecvid /10",
+    "versesWord": "ayet",
+    "cancel": "İptal",
+    "save": "Kaydet"
   },
   "login": {
     "title": "LISAN & QURAN'a Hoş Geldiniz",

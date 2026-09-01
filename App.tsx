@@ -1913,7 +1913,14 @@ const App: React.FC = () => {
           />
         ) : activeTab === 'alphabetTrainer' ? (
           <GameInviteContext.Provider value={tutorInviteIdentity}>
-            <AlphabetTrainerPage />
+            <AlphabetTrainerPage
+              hostStudent={
+                selectedStudent ? { id: selectedStudent.id, name: selectedStudent.name } :
+                sessionStudent  ? { id: sessionStudent.id,  name: sessionStudent.name  } :
+                undefined
+              }
+              onLogActivity={handleLogActivity}
+            />
           </GameInviteContext.Provider>
         ) : activeTab === 'qaedah' ? (
           <GameInviteContext.Provider value={tutorInviteIdentity}>

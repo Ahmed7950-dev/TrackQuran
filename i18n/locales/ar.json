@@ -131,7 +131,15 @@
     "qaedahLog": "تحدي القاعدة",
     "pagesWord": "صفحات",
     "editLogTitle": "عنوان السجل",
-    "editLogDetail": "التفاصيل (اختياري)"
+    "editLogDetail": "التفاصيل (اختياري)",
+    "fromSurah": "من سورة",
+    "toSurah": "إلى سورة",
+    "ayah": "آية",
+    "hifzQuality": "الحفظ /١٠",
+    "tajweedQuality": "التجويد /١٠",
+    "versesWord": "آيات",
+    "cancel": "إلغاء",
+    "save": "حفظ"
   },
   "login": {
     "title": "أهلاً بك في LISAN & QURAN",
