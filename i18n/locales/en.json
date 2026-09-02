@@ -1398,7 +1398,7 @@
     "correct": "Correct",
     "wrong": "Wrong",
     "setupTitle": "Word challenge",
-    "setupIntro": "{{count}} Qur’anic items built from your {{letters}} chosen letters. Add categories to test a particular reading rule.",
+    "setupIntro": "{{count}} Qur’anic items built from the letters you chose. Add categories to test a particular reading rule.",
     "categories": "Categories",
     "categoriesHint": "Nothing chosen — any word containing your letters.",
     "categoriesChosen": "{{count}} chosen — the run is shared out between them.",
@@ -1413,7 +1413,9 @@
     "withoutLetters": "outside your letters",
     "variant": {
       "heavy": "Heavy",
-      "light": "Light"
+      "light": "Light",
+      "madd": "Dropped madd",
+      "tanween": "Tanween"
     },
     "cat": {
       "letters": "Your letters",

@@ -164,7 +164,7 @@ const WordChallengePage: React.FC<{
           {t('wordChallenge.setupTitle')}
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-          {t('wordChallenge.setupIntro', { count: WORD_CHALLENGE_TOTAL, letters: letters.length })}
+          {t('wordChallenge.setupIntro', { count: WORD_CHALLENGE_TOTAL })}
         </p>
         <p dir="rtl" className="font-quranic text-2xl text-teal-700 dark:text-orange-300 mb-6">{letters.join(' ')}</p>
 
@@ -217,10 +217,18 @@ const WordChallengePage: React.FC<{
     );
   }
 
+  // A rare letter with a rare category can scan every surah, which is seconds of
+  // waiting — so this phase gets the same way out as every other one.
   if (phase === 'loading') {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <p className="text-sm text-slate-400 dark:text-slate-500">{t('wordChallenge.loading')}</p>
+      <div className="max-w-3xl mx-auto px-4 pb-12">
+        <div className="flex items-center gap-3 mb-5">
+          <button onClick={onExit}
+            className="px-4 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400">
+            {t('wordChallenge.exit')}
+          </button>
+        </div>
+        <p className="text-sm text-center py-12 text-slate-400 dark:text-slate-500">{t('wordChallenge.loading')}</p>
       </div>
     );
   }

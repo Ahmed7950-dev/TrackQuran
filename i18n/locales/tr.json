@@ -1398,7 +1398,7 @@
     "correct": "Doğru",
     "wrong": "Yanlış",
     "setupTitle": "Kelime görevi",
-    "setupIntro": "Seçtiğin {{letters}} harften kurulu {{count}} Kur’an ögesi. Belirli bir okuma kuralını denemek için kategori ekle.",
+    "setupIntro": "Seçtiğin harflerden kurulu {{count}} Kur’an ögesi. Belirli bir okuma kuralını denemek için kategori ekle.",
     "categories": "Kategoriler",
     "categoriesHint": "Hiçbiri seçili değil — harflerini içeren herhangi bir kelime.",
     "categoriesChosen": "{{count}} seçildi — tur bunlar arasında paylaştırılır.",
@@ -1413,7 +1413,9 @@
     "withoutLetters": "harflerinin dışında",
     "variant": {
       "heavy": "Kalın",
-      "light": "İnce"
+      "light": "İnce",
+      "madd": "Med harfi düşer",
+      "tanween": "Tenvin"
     },
     "cat": {
       "letters": "Harflerin",

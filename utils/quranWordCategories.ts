@@ -55,6 +55,8 @@ const VOWELS       = SHORT_VOWELS + TANWEEN;
 const LETTER_RE = /[ء-غف-يٱ]/;
 /** Waqf signs U+06D6–U+06DC — splitVerseWords glues these onto the previous word. */
 const WAQF_RE = /[ۖ-ۜ]/;
+/** U+06D8 waqf lāzim — the one stop that is compulsory, not merely permitted. */
+const WAQF_LAZIM = 'ۘ';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Letter matching (moved here from WordChallengePage so the builder is pure)
@@ -67,9 +69,12 @@ const isMark = (ch: string): boolean => {
     || c === 0x0640 || c === 0x200c || c === 0x200d || c === 0x061c;
 };
 
-/** Alef/ya/waw/ha variants fold onto their base so "ا" matches أ إ آ ٱ. */
+/** Alef/ya/waw/ha variants fold onto their base so "ا" matches أ إ آ ٱ.
+ *  The dagger alef U+0670 is deliberately NOT here: it is a MARK, filtered by
+ *  isMark above, and a word carrying one (ذَٰلِكَ, مَـٰلِكِ) shows no alef LETTER for the
+ *  student to recognise. It is a madd, and the madd category is where it counts. */
 const FOLD: Record<string, string> = {
-  'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ٰ': 'ا',
+  'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا',
   'ى': 'ي', 'ئ': 'ي', 'ؤ': 'و', 'ة': 'ه',
 };
 
@@ -94,6 +99,77 @@ const lastVowel = (s: string): string | null => {
 const lastLetter = (s: string): string => {
   for (let i = s.length - 1; i >= 0; i--) if (LETTER_RE.test(s[i])) return s[i];
   return '';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Letter/mark segmentation — "WHICH letter carries this mark?"
+//
+// `hasFatha(w)` answers "is there a fatha anywhere in this word", which is not
+// what a tutor drilling "ب with a fatha" is asking: with letters = [ب], only 37%
+// of the fatha pool, and 21% of the sukoon pool, carries the mark ON a ب
+// (نَعۡبُدُ, بِسۡمِ …). The focus* predicates below answer the sharper question, and
+// the builder PREFERS the words they accept — as a preference, never a filter,
+// so a rare letter still gets a full run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface LetterSpan {
+  ch: string;
+  /** Everything written on this letter, up to the next letter: harakat, tanween,
+   *  sukoon, shadda, dagger alef, tatweel, waqf signs. */
+  marks: string;
+}
+
+const letterSpans = (word: string): LetterSpan[] => {
+  const out: LetterSpan[] = [];
+  for (const ch of word) {
+    if (LETTER_RE.test(ch)) out.push({ ch, marks: '' });
+    else if (out.length > 0) out[out.length - 1].marks += ch;
+  }
+  return out;
+};
+
+/** A madd letter must be written BARE — same class as NOT_VOCALISED. */
+const VOCALISED_RE = /[ً-ْ۟۠ۡ]/;
+/** U+06DF / U+06E0: this letter is written but NOT pronounced (ءَامَنُوا۟). */
+const SILENT_RE = /[۟۠]/;
+/** A madd written as a mark on its own carrier: dagger alef, small waw/yeh. */
+const MADD_MARK_RE = /[ٰۥۦۧ]/;
+
+/** Is the letter at `i` the CARRIER of a long vowel? Returns how it is written:
+ *  'mark'   — the madd rides on this letter (مَـٰلِكِ, بِهِۦ);
+ *  'letter' — the madd is the NEXT letter (نَا, قُو, بِي);
+ *  null     — no madd here. */
+const maddKindAt = (toks: LetterSpan[], i: number): 'mark' | 'letter' | null => {
+  if (MADD_MARK_RE.test(toks[i].marks)) return 'mark';
+  const next = toks[i + 1];
+  if (!next || VOCALISED_RE.test(next.marks)) return null;
+  const v = toks[i].marks;
+  if ((next.ch === ALEF || next.ch === ALEF_MAKSURA) && v.includes(FATHA)) return 'letter';
+  if (next.ch === WAW && v.includes(DAMMA)) return 'letter';
+  if ((next.ch === YEH || next.ch === ALEF_MAKSURA) && v.includes(KASRA)) return 'letter';
+  return null;
+};
+
+/** Does one of the chosen letters CARRY this mark? */
+const markOnChosenLetter = (word: string, letters: string[], mark: RegExp): boolean => {
+  if (letters.length === 0) return false;
+  const want = new Set(letters.map(l => FOLD[l] ?? l));
+  return letterSpans(word).some(t => want.has(FOLD[t.ch] ?? t.ch) && mark.test(t.marks));
+};
+
+/** Is one of the chosen letters lengthened — as the carrier (بَا) or as the madd
+ *  letter itself (the alef of بَا)? */
+const longVowelOnChosenLetter = (word: string, letters: string[]): boolean => {
+  if (letters.length === 0) return false;
+  const want = new Set(letters.map(l => FOLD[l] ?? l));
+  const toks = letterSpans(word);
+  for (let i = 0; i < toks.length; i++) {
+    const kind = maddKindAt(toks, i);
+    if (!kind) continue;
+    if (want.has(FOLD[toks[i].ch] ?? toks[i].ch)) return true;
+    if (kind === 'letter' && want.has(FOLD[toks[i + 1].ch] ?? toks[i + 1].ch)) return true;
+  }
+  return false;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -176,39 +252,79 @@ export const endsWithTanween = (word: string): boolean => {
 // must show BOTH words.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** HAMZAT AL-WASL — 10,541 pairs. wordB opens with U+0671, the only encoding this
+/** HAMZAT AL-WASL — 10,538 pairs. wordB opens with U+0671, the only encoding this
  *  text uses (13,483×). Word-INITIAL only: 2,679 waṣls sit inside a word (بِٱللَّهِ)
  *  and are always elided, teaching nothing about the join. The muqaṭṭaʿāt الٓمٓ /
  *  الٓرۚ start with a BARE U+0627 and are not waṣl — a "starts with alef" rule eats
- *  them. The istifhām form writes it U+0627 U+0653 instead (ءَآللَّهُ, 6 words). */
+ *  them. The istifhām form writes it U+0627 U+0653 instead (ءَآللَّهُ, 6 words).
+ *  Waqf lāzim U+06D8 on wordA is excluded (3 pairs: 6:20 أَبۡنَآءَهُمُۘ ٱلَّذِينَ, 6:124,
+ *  7:148): there the reader MUST stop, so the waṣl is begun with a full hamza —
+ *  the opposite of the rule being drilled. The other stop signs are optional, and
+ *  reading the pair joined stays correct. */
 export const isHamzatWaslPair = (a: string, b: string): boolean =>
-  isQuranWord(a) && b.startsWith(WASLA);
+  isQuranWord(a) && b.startsWith(WASLA) && !a.includes(WAQF_LAZIM);
 
-/** TA MARBUTA — 2,222 pairs. wordA's last LETTER is ة (word-final in 100% of its
- *  2,344 occurrences) — but never its last CHARACTER: a haraka/tanween always
- *  follows, plus a waqf sign in 285 cases, so `endsWith('ة')` is false every time. */
+/** TA MARBUTA — 1,937 drillable pairs. wordA's last LETTER is ة (word-final in
+ *  100% of its 2,344 occurrences) — but never its last CHARACTER: a haraka/tanween
+ *  always follows, so `endsWith('ة')` is false every time.
+ *  The pair is the item because the drill is the /t/ reading in continuation; the
+ *  285 pairs whose wordA carries a waqf sign (2:7 غِشَـٰوَةٌۖ وَلَهُمۡ) are dropped, because
+ *  stopping there is legitimate and then the ة is read /h/ — the tutor would have
+ *  no way to say which of the two readings "Correct" meant. */
 export const isTaMarbutaPair = (a: string, b: string): boolean =>
-  lastLetter(a) === TA_MARBUTA && isQuranWord(b);
+  lastLetter(a) === TA_MARBUTA && isQuranWord(b) && !WAQF_RE.test(a);
 
-/** ILTIQAA AS-SAKINAYN — 46 pairs, 33 of them clean.
- *  wordA ends in a tanween (its noon-sakina is the last sound) and wordB opens
- *  with hamzat al-waṣl, which is dropped in continuation and exposes the saakin
- *  underneath (the lam-sukun of ٱلْ, the shadda of a shamsiyya, or a verb's ٱسْـ/ٱنْـ).
- *  That waṣl is the ONLY generator in this text: 0 words begin with an explicit
- *  sukoon without one, so "wordB starts with a sukoon" is dead code. */
-export const isIltiqaaSakinaynPair = (a: string, b: string): boolean => {
-  if (!b.startsWith(WASLA)) return false;
-  let t = -1;
-  for (let i = 0; i < a.length; i++) if (TANWEEN.includes(a[i])) t = i;
-  if (t < 0) return false;
-  return TANWEEN_TAIL_RE.test(a.slice(t + 1));
+/** wordA's last PRONOUNCED sound is a madd letter — the first of the two saakins
+ *  in ٱهۡدِنَا ٱلصِّرَٰطَ, and the one that gets DROPPED (ḥadhf ḥarf al-madd).
+ *  Three ways the muṣḥaf writes it:
+ *    · a mark on its carrier — مُوسَىٰ (dagger alef), بِهِۦ (small yeh, the ṣilah);
+ *    · a bare ا/ى/و/ي after the matching short vowel — ٱهۡدِنَا, فِى, وَقُودُهَا;
+ *    · the same, behind a silent letter — لَقُوا۟, where the alef carries U+06DF and
+ *      is not read, so the madd is the waw before it.
+ *  ى is checked against BOTH fatha (عَلَى /aː/) and kasra (ٱلَّذِى /iː/). */
+export const endsWithMaddLetter = (a: string): boolean => {
+  const toks = letterSpans(a);
+  let i = toks.length - 1;
+  while (i >= 0 && SILENT_RE.test(toks[i].marks)) i--;
+  if (i < 0) return false;
+  const t = toks[i];
+  if (MADD_MARK_RE.test(t.marks)) return true;
+  if (i === 0 || VOCALISED_RE.test(t.marks)) return false;
+  const pv = toks[i - 1].marks;
+  if (t.ch === ALEF) return pv.includes(FATHA);
+  if (t.ch === ALEF_MAKSURA) return pv.includes(FATHA) || pv.includes(KASRA);
+  if (t.ch === WAW) return pv.includes(DAMMA);
+  if (t.ch === YEH) return pv.includes(KASRA);
+  return false;
 };
 
-/** Drop the 13 pairs whose wordA carries a waqf sign — including 7:148
+/** ILTIQAA AS-SAKINAYN — 2,699 drillable pairs.
+ *  wordB opens with hamzat al-waṣl, which is dropped in continuation and exposes
+ *  the saakin underneath (the lam-sukun of ٱلْ, the shadda of a shamsiyya, or a
+ *  verb's ٱسْـ/ٱنْـ). That waṣl is the ONLY generator of the second saakin in this
+ *  text: 0 words begin with an explicit sukoon without one.
+ *  wordA supplies the FIRST saakin, and it does so in two ways — both are the
+ *  textbook cases and the item is labelled with which one it is:
+ *    'madd'    2,666 pairs — a madd letter, dropped:  ٱهۡدِنَا ٱلصِّرَٰطَ (1:6);
+ *    'tanween'    33 pairs — the noon of a tanween, which then takes a kasra:
+ *                            بِغُلَـٰمٍ ٱسۡمُهُۥ (3:39).
+ *  Only the tanween half shipped first, so the category served 1.2% of itself and
+ *  a 20-item run showed 62% of every instance that exists (32 distinct items in all;
+ *  there are now 1,221). */
+export const isIltiqaaSakinaynPair = (a: string, b: string): boolean => {
+  if (!b.startsWith(WASLA)) return false;
+  return endsWithTanween(a) || endsWithMaddLetter(a);
+};
+
+/** Drop the pairs whose wordA carries a waqf sign — including 7:148
  *  سَبِيلًاۘ ٱتَّخَذُوهُ with U+06D8 waqf lāzim, where the reader stops and the two
- *  saakins never meet. Leaves the 33 drillable pairs. */
+ *  saakins never meet. */
 export const isIltiqaaSakinaynDrillPair = (a: string, b: string): boolean =>
   isIltiqaaSakinaynPair(a, b) && !WAQF_RE.test(a);
+
+/** Which of the two saakins wordA supplies — the item's sub-label. */
+export const iltiqaaVariant = (a: string): 'tanween' | 'madd' =>
+  endsWithTanween(a) ? 'tanween' : 'madd';
 
 // ── LAFZ AL-JALALAH ───────── 2,704 words = 2,124 pairs + 546 internal + 34 ──
 /** The jalālah core carries no dagger alef here: U+0644 U+0651 U+064E U+0647. */
@@ -244,11 +360,18 @@ export type JalalahWeight = 'heavy' | 'light';
  *  The governing vowel is the one immediately before the jalālah body, so it comes
  *  from wordB ITSELF whenever wordB carries a prefix (بِٱللَّهِ light, وَٱللَّهُ heavy,
  *  لِلَّهِ light) and only otherwise from the end of wordA. Anchoring on wordB's first
- *  lam instead is the classic bug: it makes ٱلۡحَمۡدُ لِلَّهِ (1:2) come out heavy. */
+ *  lam instead is the classic bug: it makes ٱلۡحَمۡدُ لِلَّهِ (1:2) come out heavy.
+ *  The vowel that governs is the one actually PRONOUNCED at the join: when wordA
+ *  ends in a tanween and wordB is waṣl-initial, the two saakins meet and the
+ *  tanween's noon takes a KASRA, so the lam is light however the tanween is
+ *  written — قَوۡمًاۙ ٱللَّهُ (7:164) is "qawman-illāhu", tarqīq, and so is خَيۡرًاۖ ٱللَّهُ
+ *  (11:31). Reading the written fathatan/dammatan instead made both heavy. */
 export const jalalahWeight = (a: string, b: string): JalalahWeight | null => {
   const i = jalalahCoreIndex(b);
   if (i < 0) return null;
-  const v = lastVowel(b.slice(0, i)) ?? lastVowel(a);
+  const inB = lastVowel(b.slice(0, i));
+  if (inB === null && b.startsWith(WASLA) && endsWithTanween(a)) return 'light';
+  const v = inB ?? lastVowel(a);
   if (v === null) return null;
   return v === KASRA || v === KASRATAN ? 'light' : 'heavy';
 };
@@ -282,19 +405,33 @@ export interface WordCategory {
   matchPair?: (a: string, b: string) => boolean;
   /** Optional sub-label for an item, e.g. the jalālah's heavy/light. */
   variantOf?: (words: string[]) => string | null;
+  /** True when a CHOSEN letter is the one carrying this category's mark. The
+   *  builder prefers these words; it never requires them, so a rare letter still
+   *  gets a full run out of the plain "contains the letter" match. */
+  focusWord?: (word: string, letters: string[]) => boolean;
 }
 
 export const WORD_CATEGORIES: readonly WordCategory[] = [
-  { id: 'fatha',      group: 'basic', arity: 1, matchWord: hasFatha },
-  { id: 'kasra',      group: 'basic', arity: 1, matchWord: hasKasra },
-  { id: 'damma',      group: 'basic', arity: 1, matchWord: hasDamma },
-  { id: 'longVowel',  group: 'basic', arity: 1, matchWord: hasLongVowel },
-  { id: 'shadda',     group: 'basic', arity: 1, matchWord: hasShadda },
-  { id: 'sukoon',     group: 'basic', arity: 1, matchWord: hasSukoon },
-  { id: 'tanween',    group: 'basic', arity: 1, matchWord: hasTanween },
+  { id: 'fatha',      group: 'basic', arity: 1, matchWord: hasFatha,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[َ]/) },
+  { id: 'kasra',      group: 'basic', arity: 1, matchWord: hasKasra,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ِ]/) },
+  { id: 'damma',      group: 'basic', arity: 1, matchWord: hasDamma,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ُ]/) },
+  { id: 'longVowel',  group: 'basic', arity: 1, matchWord: hasLongVowel,
+    focusWord: longVowelOnChosenLetter },
+  { id: 'shadda',     group: 'basic', arity: 1, matchWord: hasShadda,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ّ]/) },
+  { id: 'sukoon',     group: 'basic', arity: 1, matchWord: hasSukoon,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ْۡ]/) },
+  { id: 'tanween',    group: 'basic', arity: 1, matchWord: hasTanween,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ً-ٍ]/) },
   { id: 'hamzatWasl', group: 'basic', arity: 2, matchPair: isHamzatWaslPair },
   { id: 'taMarbuta',  group: 'basic', arity: 2, matchPair: isTaMarbutaPair },
-  { id: 'iltiqaa',    group: 'basic', arity: 2, matchPair: isIltiqaaSakinaynDrillPair },
+  {
+    id: 'iltiqaa', group: 'basic', arity: 2, matchPair: isIltiqaaSakinaynDrillPair,
+    variantOf: ws => (ws.length === 2 ? iltiqaaVariant(ws[0]) : null),
+  },
   {
     id: 'jalalah', group: 'basic', arity: 2, matchPair: isJalalahPair,
     variantOf: ws => (ws.length === 2 ? jalalahWeight(ws[0], ws[1]) : null),
@@ -346,7 +483,11 @@ export type VerseFetcher = (surah: number) => Promise<VerseLike[]>;
 const SURAH_COUNT = 114;
 /** Surahs fetched per round trip. The whole run is bounded by SURAH_COUNT. */
 const SCAN_BATCH = 8;
-/** Per-pool cap: a pool never needs more than a few runs' worth of choices. */
+/** Per-TIER cap: a tier never needs more than a few runs' worth of choices.
+ *  Capping the tiers TOGETHER was a real bug: the letter-ignoring matches, which
+ *  are ~30× more numerous, filled the cap first and locked the on-letter matches
+ *  out. letters = [ظ] then served 17% of its items from the chosen letter even
+ *  though 247 qualifying ظ words exist, and scanned all 114 surahs to do it. */
 const POOL_CAP = 240;
 
 const shuffle = <T,>(arr: T[], rnd: () => number): T[] => {
@@ -361,15 +502,20 @@ const shuffle = <T,>(arr: T[], rnd: () => number): T[] => {
 /** Same word, any spelling → once. Pairs key on both words. */
 const itemKey = (words: string[]): string => words.map(w => baseLettersOf(w).join('')).join('|');
 
-interface Pool { strict: ChallengeItem[]; loose: ChallengeItem[]; keys: Set<string>; }
-const emptyPool = (): Pool => ({ strict: [], loose: [], keys: new Set() });
+/** Three tiers, best first:
+ *  focus  — a chosen letter carries the category's mark  (ب in بَعۡدِ for 'fatha')
+ *  strict — the word contains a chosen letter            (ب in نَعۡبُدُ)
+ *  loose  — no chosen letter at all; only used as a last resort, and flagged. */
+type Tier = 'focus' | 'strict' | 'loose';
+interface Pool { focus: ChallengeItem[]; strict: ChallengeItem[]; loose: ChallengeItem[]; keys: Set<string>; }
+const emptyPool = (): Pool => ({ focus: [], strict: [], loose: [], keys: new Set() });
 
-const push = (pool: Pool, item: ChallengeItem, strict: boolean): void => {
-  if (pool.strict.length + pool.loose.length >= POOL_CAP) return;
+const push = (pool: Pool, item: ChallengeItem, tier: Tier): void => {
+  if (pool[tier].length >= POOL_CAP) return;
   const k = itemKey(item.words);
   if (pool.keys.has(k)) return;
   pool.keys.add(k);
-  (strict ? pool.strict : pool.loose).push(strict ? item : { ...item, relaxed: true });
+  pool[tier].push(tier === 'loose' ? { ...item, relaxed: true } : item);
 };
 
 export interface BuildOptions {
@@ -388,9 +534,11 @@ export interface BuildOptions {
  * Termination is structural: the search walks a SHUFFLED list of the 114 surahs
  * and stops when the list is exhausted, so no configuration can hang — a category
  * with no match anywhere simply reports empty. Quotas are shared out evenly; a
- * category that cannot fill its share first drops the letter filter (marking the
- * items `relaxed`), then hands the shortfall to the other selected categories, and
- * finally to the plain letter rule.
+ * category serves its share from the best tier it can fill (see Pool), then hands
+ * the shortfall to the other selected categories, and finally to the plain letter
+ * rule. The scan stops once every category has enough ON-LETTER matches; the
+ * sharper focus tier is a preference, never something the scan waits for, so a
+ * rare letter costs no extra round trips.
  */
 export async function buildChallengeItems(opts: BuildOptions): Promise<ChallengeBuild> {
   const letters = opts.letters ?? [];
@@ -419,11 +567,18 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
   const pools = new Map<CategoryId, Pool>(cats.map(id => [id, emptyPool()]));
   const plain = emptyPool();
 
+  // No letters chosen = no letter filter, rather than a filter nothing can pass.
+  // Before, wordHasAnyLetter(w, []) was false for every word, so the plain pool
+  // could never fill, satisfied() never returned true, and a categories-only run
+  // fetched all 114 surahs and then flagged all 20 items "outside your letters".
+  const noFilter = letters.length === 0;
+  const hasLetter = (w: string): boolean => noFilter || wordHasAnyLetter(w, letters);
+
   const satisfied = (): boolean => {
     if (cats.length === 0) return plain.strict.length >= count;
     for (const id of cats) {
       const p = pools.get(id)!;
-      if (p.strict.length < (quota.get(id) ?? 0)) return false;
+      if (p.focus.length + p.strict.length < (quota.get(id) ?? 0)) return false;
     }
     return plain.strict.length >= count;   // enough for the last-resort top-up too
   };
@@ -431,8 +586,8 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
   const scanVerse = (text: string): void => {
     const words = splitVerseWords(text).filter(isQuranWord);
     for (const w of words) {
-      if (baseLettersOf(w).length >= 3 && wordHasAnyLetter(w, letters)) {
-        push(plain, { words: [w], category: 'letters' }, true);
+      if (baseLettersOf(w).length >= 3 && hasLetter(w)) {
+        push(plain, { words: [w], category: 'letters' }, 'strict');
       }
     }
     for (const id of cats) {
@@ -442,15 +597,19 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
         for (const w of words) {
           if (baseLettersOf(w).length < 3) continue;   // a 2-letter particle is no challenge
           if (!cat.matchWord(w)) continue;
-          push(pool, { words: [w], category: id }, wordHasAnyLetter(w, letters));
+          const tier: Tier = !hasLetter(w) ? 'loose'
+            : cat.focusWord?.(w, letters) ? 'focus' : 'strict';
+          push(pool, { words: [w], category: id }, tier);
         }
       } else if (cat.arity === 2 && cat.matchPair) {
         for (let i = 0; i < words.length - 1; i++) {
           const a = words[i], b = words[i + 1];
           if (!cat.matchPair(a, b)) continue;
           const variant = cat.variantOf?.([a, b]) ?? undefined;
-          const strict = wordHasAnyLetter(a, letters) || wordHasAnyLetter(b, letters);
-          push(pool, { words: [a, b], category: id, ...(variant ? { variant } : {}) }, strict);
+          // A pair is about the join, so there is no focus tier: either word
+          // carrying a chosen letter is as on-topic as the drill gets.
+          const tier: Tier = hasLetter(a) || hasLetter(b) ? 'strict' : 'loose';
+          push(pool, { words: [a, b], category: id, ...(variant ? { variant } : {}) }, tier);
         }
       }
     }
@@ -489,23 +648,28 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
     const shuffled = new Map<CategoryId, Pool>(
       cats.map(id => {
         const p = pools.get(id)!;
-        return [id, { strict: shuffle(p.strict, rnd), loose: shuffle(p.loose, rnd), keys: p.keys }];
+        return [id, {
+          focus: shuffle(p.focus, rnd), strict: shuffle(p.strict, rnd),
+          loose: shuffle(p.loose, rnd), keys: p.keys,
+        }];
       }),
     );
     for (const id of cats) {
       const want = quota.get(id) ?? 0;
       const p = shuffled.get(id)!;
-      const strictGot = take(p.strict, want);
-      const looseGot = strictGot < want ? take(p.loose, want - strictGot) : 0;
+      const focusGot = take(p.focus, want);
+      const strictGot = focusGot < want ? take(p.strict, want - focusGot) : 0;
+      const onLetter = focusGot + strictGot;
+      const looseGot = onLetter < want ? take(p.loose, want - onLetter) : 0;
       reports.push({
-        id, wanted: want, used: strictGot + looseGot,
+        id, wanted: want, used: onLetter + looseGot,
         relaxed: looseGot > 0,
-        empty: strictGot + looseGot === 0,
+        empty: onLetter + looseGot === 0,
       });
     }
     // Top up: the other selected categories first (still on-topic), then the
     // plain letter rule, so a short run never happens because one category is rare.
-    for (const pass of ['strict', 'loose'] as const) {
+    for (const pass of ['focus', 'strict', 'loose'] as const) {
       for (const id of cats) {
         if (items.length >= count) break;
         const before = items.length;
