@@ -33,18 +33,40 @@ function rowToSession(r: SessionRow): LessonSession {
   };
 }
 
+/**
+ * PostgREST returns at most 1000 rows per request. This table passed that
+ * (1046 sessions for the main tutor in the calendar's 120-day window), and an
+ * unpaged read silently dropped the tail: those events rendered as UNLINKED,
+ * and re-linking them appeared to do nothing because the freshly written row
+ * was still outside the truncated page. Every unbounded read pages instead.
+ */
+const PAGE = 1000;
+async function pageAll<T>(
+  run: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await run(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 /** Fetch all upcoming (or recently started) sessions for a teacher */
 export async function getUpcomingSessions(teacherId: string): Promise<LessonSession[]> {
   const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hrs ago
-  const { data, error } = await supabase
+  const rows = await pageAll<SessionRow>((from, to) => supabase
     .from('arabic_lesson_sessions')
     .select('*')
     .eq('teacher_id', teacherId)
     .neq('status', 'cancelled')
     .gte('start_at', since)
-    .order('start_at', { ascending: true });
-  if (error) throw error;
-  return (data as SessionRow[]).map(rowToSession);
+    .order('start_at', { ascending: true })
+    .range(from, to));
+  return rows.map(rowToSession);
 }
 
 /**
@@ -53,13 +75,13 @@ export async function getUpcomingSessions(teacherId: string): Promise<LessonSess
  * whether the linked lesson is upcoming or already past.
  */
 export async function getLinkedStudentIds(teacherId: string): Promise<Set<string>> {
-  const { data, error } = await supabase
+  const rows = await pageAll<{ student_id: string }>((from, to) => supabase
     .from('arabic_lesson_sessions')
     .select('student_id')
     .eq('teacher_id', teacherId)
-    .neq('status', 'cancelled');
-  if (error) throw error;
-  return new Set((data as { student_id: string }[]).map(r => r.student_id));
+    .neq('status', 'cancelled')
+    .range(from, to));
+  return new Set(rows.map(r => r.student_id));
 }
 
 /** Fetch upcoming sessions for a single student (used by student portal) */
@@ -149,7 +171,7 @@ export async function getScheduledSessionsRange(
   fromISO: string,
   toISO: string,
 ): Promise<LessonSession[]> {
-  const { data, error } = await supabase
+  const rows = await pageAll<SessionRow>((from, to) => supabase
     .from('arabic_lesson_sessions')
     .select('*')
     .eq('teacher_id', teacherId)
@@ -157,9 +179,9 @@ export async function getScheduledSessionsRange(
     .neq('status', 'cancelled')
     .gte('start_at', fromISO)
     .lt('start_at', toISO)
-    .order('start_at', { ascending: true });
-  if (error) throw error;
-  return (data as SessionRow[]).map(rowToSession);
+    .order('start_at', { ascending: true })
+    .range(from, to));
+  return rows.map(rowToSession);
 }
 
 /** Remove a linked session */
@@ -314,15 +336,15 @@ export async function getSessionsByGcalId(teacherId: string): Promise<Record<str
   // Wide window (not just "upcoming") so linked events in the current week —
   // including earlier days — still render as linked.
   const since = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  const rows = await pageAll<SessionRow>((from, to) => supabase
     .from('arabic_lesson_sessions')
     .select('*')
     .eq('teacher_id', teacherId)
     .neq('status', 'cancelled')
-    .gte('start_at', since);
-  if (error) throw error;
+    .gte('start_at', since)
+    .range(from, to));
   const map: Record<string, LessonSession> = {};
-  for (const r of data as SessionRow[]) {
+  for (const r of rows) {
     const s = rowToSession(r);
     if (s.gcalEventId) map[s.gcalEventId] = s;
   }
@@ -335,15 +357,15 @@ export async function getSessionsByGcalId(teacherId: string): Promise<Record<str
  */
 export async function getSessionsListByGcalId(teacherId: string): Promise<Record<string, LessonSession[]>> {
   const since = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  const rows = await pageAll<SessionRow>((from, to) => supabase
     .from('arabic_lesson_sessions')
     .select('*')
     .eq('teacher_id', teacherId)
     .neq('status', 'cancelled')
-    .gte('start_at', since);
-  if (error) throw error;
+    .gte('start_at', since)
+    .range(from, to));
   const map: Record<string, LessonSession[]> = {};
-  for (const r of data as SessionRow[]) {
+  for (const r of rows) {
     const s = rowToSession(r);
     if (!s.gcalEventId) continue;
     (map[s.gcalEventId] ??= []).push(s);
