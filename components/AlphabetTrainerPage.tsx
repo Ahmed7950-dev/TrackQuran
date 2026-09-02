@@ -4,6 +4,7 @@ import { useI18n } from '../context/I18nProvider';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import WordChallengePage from './WordChallengePage';
 import LetterHuntGame from './LetterHuntGame';
+import LetterFormDrill from './LetterFormDrill';
 import AirplaneGame from './AirplaneGame';
 import LetterRaceGame from './LetterRaceGame';
 import ReadingBattleGame from './ReadingBattleGame';
@@ -105,7 +106,7 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill';
 type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt';
 
 const AlphabetTrainerPage: React.FC<{
@@ -361,7 +362,7 @@ const AlphabetTrainerPage: React.FC<{
   const handleStart = () => {
     // Odd-letter has its own letter set → launch even with no alphabet selected.
     if (gameChoice === 'wordchallenge' && unique > 0) { setView('wordchallenge'); return; }
-    if (gameChoice === 'letterhunt' && unique > 0) { setView('letterhunt'); return; }
+    if (childMode && gameChoice === 'letterhunt' && unique > 0) { setView('letterhunt'); return; }
     if (childMode && gameChoice === 'oddletter') { setView('oddletter'); return; }
     // Reading Battle brings its own Quran verse content — no letter selection needed.
     if (childMode && gameChoice === 'battle') { setView('battle'); return; }
@@ -895,6 +896,44 @@ const AlphabetTrainerPage: React.FC<{
               );
             })()}
 
+            {/* Letter Hunt (multiplayer) */}
+            {(() => {
+              const active = gameChoice === 'letterhunt';
+              return (
+                <button
+                  onClick={() => setGameChoice('letterhunt')}
+                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
+                  style={{
+                    minWidth: 0,
+                    borderColor: active ? '#0284c7' : '#bae6fd',
+                    background: active ? 'linear-gradient(160deg,#0284c7 0%,#0369a1 100%)' : 'linear-gradient(160deg,#f0f9ff 0%,#e0f2fe 100%)',
+                    boxShadow: active ? '0 8px 24px rgba(2,132,199,0.45), 0 2px 8px rgba(2,132,199,0.3)' : '0 2px 8px rgba(2,132,199,0.1)',
+                    transform: active ? 'scale(1.06)' : 'scale(1)',
+                  }}
+                >
+                  {active && (
+                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)' }} />
+                  )}
+                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 92, height: 92, fontSize: 42 }}>
+                    🔍
+                  </div>
+                  <div className="pb-3 px-3 w-full text-center">
+                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-sky-700'}`}>
+                      Letter Hunt
+                    </div>
+                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-sky-100' : 'text-sky-500'}`}>
+                      Hear it, find it first!
+                    </div>
+                  </div>
+                  {active && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                    </div>
+                  )}
+                </button>
+              );
+            })()}
+
             {/* Find the Odd Letter */}
             {(() => {
               const active = gameChoice === 'oddletter';
@@ -985,16 +1024,14 @@ const AlphabetTrainerPage: React.FC<{
                 : 'rounded-lg bg-violet-600 hover:bg-violet-700 text-white'
             }`}
           >{t('alphabetTrainer.wordChallenge')}</button>
-          <button
-            onClick={() => { if (unique > 0) setView('letterhunt'); }}
-            disabled={unique === 0}
-            title={t('alphabetTrainer.letterHuntHint')}
-            className={`px-5 py-2 text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-              childMode
-                ? 'rounded-full bg-sky-400 hover:bg-sky-500 text-white shadow-md shadow-sky-200'
-                : 'rounded-lg bg-sky-600 hover:bg-sky-700 text-white'
-            }`}
-          >{t('alphabetTrainer.letterHunt')}</button>
+          {!childMode && (
+            <button
+              onClick={() => { if (unique > 0) setView('formdrill'); }}
+              disabled={unique === 0}
+              title={t('alphabetTrainer.formDrillHint')}
+              className="px-5 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >{t('alphabetTrainer.formDrill')}</button>
+          )}
         </div>
       </div>
     </div>
@@ -1315,6 +1352,22 @@ const AlphabetTrainerPage: React.FC<{
       )}
       {view === 'oddletter' && (
         <OddLetterGame onExit={() => finishGame('Odd Letter')} />
+      )}
+      {view === 'formdrill' && (
+        <LetterFormDrill
+          letters={selectedLetters}
+          onFinish={(score, total, repeats) => {
+            if (!logTarget || !onLogActivity) return;
+            const ls = selectedLetters.join(' ');
+            onLogActivity(logTarget.id, {
+              kind: 'letters',
+              title: `${selectedLetters.length} letter${selectedLetters.length === 1 ? '' : 's'} revised through letter-form drill`,
+              detail: `${score}/${total} correct · ${repeats}× each · ${ls}`,
+              sourceId: `FormDrill:${ls}`,
+            }, logTarget.name);
+          }}
+          onExit={() => setView('select')}
+        />
       )}
       {view === 'letterhunt' && (
         <LetterHuntGame

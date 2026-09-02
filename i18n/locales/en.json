@@ -569,7 +569,9 @@
     "wordChallenge": "📝 Word challenge",
     "wordChallengeHint": "20 Qur’anic words containing the chosen letters",
     "letterHunt": "🔍 Letter hunt",
-    "letterHuntHint": "15 rounds — hear a letter, find it in a 10×10 grid"
+    "letterHuntHint": "15 rounds — hear a letter, find it in a 10×10 grid",
+    "formDrill": "⏱️ Letter-form drill",
+    "formDrillHint": "Chosen letters in every position with short vowels, 1s each"
   },
   "arabicPortal": {
     "loading": "Loading your page…",
@@ -1395,5 +1397,20 @@
     "exit": "← Letters",
     "correct": "Correct",
     "wrong": "Wrong"
+  },
+  "letterDrill": {
+    "title": "Letter-form drill",
+    "intro": "Your chosen letters, one per second, in every position with a fatha, damma or kasra.",
+    "repeatsLabel": "How many times should each letter appear?",
+    "totalHint": "{{letters}} letters × repeats = {{total}} cards",
+    "start": "Start the drill",
+    "back": "Back to letters",
+    "exit": "← Letters",
+    "correct": "Correct",
+    "wrong": "Wrong",
+    "finished": "Drill complete",
+    "scoreHint": "{{percent}}% correct",
+    "missedHint": "{{count}} ran out of time",
+    "timeoutNote": "One second per letter — no answer counts as missed."
   }
 }
