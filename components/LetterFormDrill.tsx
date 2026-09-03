@@ -3,7 +3,7 @@
 // Letter-form drill (adult mode) — only the letters the tutor chose, shown one
 // at a time in a random position (isolated, beginning, middle, end) carrying one
 // of the three short vowels (fatha, damma, kasra). Fluency-test presentation,
-// one second per letter, graded Correct / Wrong by the tutor.
+// ITEM_MS per letter, graded Correct / Wrong by the tutor.
 //
 // The tutor sets how many times each letter should appear before starting, so a
 // two-letter set can still make a long drill.
@@ -24,7 +24,7 @@ const FORM_NAME: Record<Form, string> = { isolated: 'Isolated', initial: 'Beginn
 /** These never connect to the LEFT, so they have only two real shapes. */
 const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
 
-export const ITEM_MS = 1000;          // one second per letter
+export const ITEM_MS = 3000;          // three seconds per letter
 export const MAX_REPEATS = 20;
 
 export interface DrillItem { letter: string; form: Form; vowel: string }
@@ -104,7 +104,9 @@ const LetterFormDrill: React.FC<{
     });
   }, [items.length, correct, repeats, onFinish]);
 
-  // One-second exposure. Running out counts as missed — this is a speed drill.
+  // Timed exposure (ITEM_MS). Running out counts as missed — this is a speed
+  // drill, and the on-screen wording reads the same constant so the two can
+  // never disagree.
   useEffect(() => {
     if (phase !== 'running') return;
     const started = Date.now();
@@ -138,7 +140,7 @@ const LetterFormDrill: React.FC<{
       <div className="max-w-md mx-auto px-4 py-10 text-center">
         <p className="text-4xl mb-2">🔤</p>
         <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-1">{t('letterDrill.title')}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{t('letterDrill.intro')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{t('letterDrill.intro', { seconds: ITEM_MS / 1000 })}</p>
 
         <label className="block text-start mb-5">
           <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">
@@ -229,7 +231,7 @@ const LetterFormDrill: React.FC<{
           <kbd className="hidden sm:flex items-center justify-center w-6 h-6 rounded-md bg-black/25 text-[11px] font-bold ring-1 ring-white/20">M</kbd>
         </button>
       </div>
-      <p className="text-center text-[11px] text-slate-400 mt-3">{t('letterDrill.timeoutNote')}</p>
+      <p className="text-center text-[11px] text-slate-400 mt-3">{t('letterDrill.timeoutNote', { seconds: ITEM_MS / 1000 })}</p>
     </div>
   );
 };

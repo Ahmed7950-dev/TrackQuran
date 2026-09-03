@@ -571,7 +571,7 @@
     "letterHunt": "🔍 Letter hunt",
     "letterHuntHint": "15 rounds — hear a letter, find it in a 10×10 grid",
     "formDrill": "⏱️ Letter-form drill",
-    "formDrillHint": "Chosen letters in every position with short vowels, 1s each"
+    "formDrillHint": "Chosen letters in every position with short vowels, 3s each"
   },
   "arabicPortal": {
     "loading": "Loading your page…",
@@ -1434,7 +1434,7 @@
   },
   "letterDrill": {
     "title": "Letter-form drill",
-    "intro": "Your chosen letters, one per second, in every position with a fatha, damma or kasra.",
+    "intro": "Your chosen letters, {{seconds}} seconds each, in every position with a fatha, damma or kasra.",
     "repeatsLabel": "How many times should each letter appear?",
     "totalHint": "{{letters}} letters × repeats = {{total}} cards",
     "start": "Start the drill",
@@ -1445,6 +1445,6 @@
     "finished": "Drill complete",
     "scoreHint": "{{percent}}% correct",
     "missedHint": "{{count}} ran out of time",
-    "timeoutNote": "One second per letter — no answer counts as missed."
+    "timeoutNote": "{{seconds}} seconds per letter — no answer counts as missed."
   }
 }

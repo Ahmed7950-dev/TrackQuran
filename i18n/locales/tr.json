@@ -1069,7 +1069,7 @@
     "letterHunt": "🔍 Harf avı",
     "letterHuntHint": "15 tur — harfi dinle, 10×10 tabloda bul",
     "formDrill": "⏱️ Şekil alıştırması",
-    "formDrillHint": "Seçilen harfler her konumda, harekeyle, 1 sn"
+    "formDrillHint": "Seçilen harfler her konumda, harekeyle, 3 sn"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",
@@ -1434,7 +1434,7 @@
   },
   "letterDrill": {
     "title": "Harf şekli alıştırması",
-    "intro": "Seçtiğin harfler, saniyede bir, her konumda fetha/ötre/kesra ile.",
+    "intro": "Seçtiğin harfler, her biri {{seconds}} saniye, her konumda fetha/ötre/kesra ile.",
     "repeatsLabel": "Her harf kaç kez görünsün?",
     "totalHint": "{{letters}} harf × tekrar = {{total}} kart",
     "start": "Alıştırmayı başlat",
@@ -1445,6 +1445,6 @@
     "finished": "Alıştırma bitti",
     "scoreHint": "%{{percent}} doğru",
     "missedHint": "{{count}} süresi doldu",
-    "timeoutNote": "Her harf için bir saniye — cevapsız kalan yanlış sayılır."
+    "timeoutNote": "Her harf için {{seconds}} saniye — cevapsız kalan yanlış sayılır."
   }
 }
