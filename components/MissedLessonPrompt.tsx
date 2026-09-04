@@ -7,8 +7,12 @@
 // A lesson counts as "unlogged" when, on the lesson's own day, the student has
 //   * no reading / hifz / tafsir achievement, AND
 //   * no attendance record at all (present, absent or rescheduled).
-// Answering writes that day's attendance; "Ignore" only silences the occurrence
-// (kept in localStorage, so it never nags twice for the same lesson).
+// Answering writes that day's attendance; dismissing with ✕ only silences the
+// occurrence (kept in localStorage, so it never nags twice for the same lesson).
+//
+// It sits in the bottom-LEFT corner rather than over the page: the tutor can
+// carry on working, and a queue of several misses is answered one card at a
+// time without the screen being blocked.
 // -----------------------------------------------------------------------------
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -164,46 +168,54 @@ const MissedLessonPrompt: React.FC<Props> = ({ teacherId, students, onUpdateStud
   const at = current.startAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden">
-        <div className="px-6 py-5 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-100 dark:border-amber-900/50">
-          <p className="text-3xl">📋</p>
-          <h3 className="mt-2 font-black text-lg text-slate-800 dark:text-slate-100 leading-snug">
-            No progress was logged for {current.student.name}
-          </h3>
-          <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {when} · {at} — {current.title}
-          </p>
+    // A corner card, not a modal: the tutor can keep working while it waits.
+    // Physically left in both directions — the tutor asked for that corner.
+    <div className="fixed bottom-4 left-4 right-4 sm:right-auto z-[130] sm:w-80" dir="ltr">
+      <div className="rounded-2xl bg-white dark:bg-gray-800 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden">
+        <div className="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-100 dark:border-amber-900/50">
+          <span className="text-lg leading-none mt-0.5">📋</span>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-black text-sm text-slate-800 dark:text-slate-100 leading-snug">
+              Nothing logged for {current.student.name}
+            </h3>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">
+              {when} · {at} — {current.title}
+            </p>
+          </div>
+          <button
+            onClick={ignore}
+            disabled={busy}
+            title="Ignore"
+            className="flex-shrink-0 -me-1 -mt-0.5 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <div className="p-4 sm:p-5 space-y-2">
+        <div className="p-2.5 flex items-center gap-2">
           <button
             onClick={() => record(AttendanceStatus.Absent)}
             disabled={busy}
-            className="w-full py-3 rounded-2xl font-black text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 transition-colors"
+            className="flex-1 py-2 rounded-xl text-xs font-black text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 transition-colors"
           >
             Absent
           </button>
           <button
             onClick={() => record(AttendanceStatus.Rescheduled)}
             disabled={busy}
-            className="w-full py-3 rounded-2xl font-black text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            className="flex-1 py-2 rounded-xl text-xs font-black text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 transition-colors"
           >
-            Agreed to reschedule
+            Rescheduled
           </button>
-          <button
-            onClick={ignore}
-            disabled={busy}
-            className="w-full py-3 rounded-2xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
-          >
-            Ignore
-          </button>
-          {queue.length > 1 && (
-            <p className="pt-1 text-center text-[11px] font-bold text-slate-400">
-              {queue.length - 1} more lesson{queue.length - 1 === 1 ? '' : 's'} to review
-            </p>
-          )}
         </div>
+
+        {queue.length > 1 && (
+          <p className="px-3 pb-2.5 -mt-0.5 text-[10px] font-bold text-slate-400">
+            {queue.length - 1} more lesson{queue.length - 1 === 1 ? '' : 's'} to review
+          </p>
+        )}
       </div>
     </div>
   );
