@@ -11,7 +11,8 @@ import {
   logQaedahAttempt,
   logQaedahCompletion,
 } from '../services/qaedahService';
-import { qaedahLessonNote } from '../services/qaedahLessons';
+import { loadQaedahPdfs, QaedahPdfIndex } from '../services/qaedahPdfService';
+import TajweedLessonViewer from './TajweedLessonViewer';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ const QaedahPage: React.FC<{
   // word id → this student's history for the open lesson, oldest first.
   const [attempts,    setAttempts]    = useState<Map<string, QaedahAttempt[]>>(new Map());
   const [showCrane,   setShowCrane]   = useState(false);
+  // topicId → lesson PDF (uploaded by an admin), and whether the board is open.
+  const [pdfs,        setPdfs]       = useState<QaedahPdfIndex>({});
+  const [boardOpen,   setBoardOpen]  = useState(false);
   const [craneRoomId, setCraneRoomId] = useState<string | null>(null); // set ⇒ live session (tutor spectates)
 
   // ── Challenge state ───────────────────────────────────────────────────────
@@ -141,6 +145,7 @@ const QaedahPage: React.FC<{
   // ── Load topics on mount ─────────────────────────────────────────────────
   useEffect(() => {
     listQaedahTopics().then(t => { setTopics(t); setLoading(false); });
+    loadQaedahPdfs().then(setPdfs);
   }, []);
 
   // ── Load words when topic selected ───────────────────────────────────────
@@ -379,6 +384,14 @@ const QaedahPage: React.FC<{
                   </p>
                 )}
               </div>
+              {/* Has a lesson PDF */}
+              {pdfs[topic.id] && (
+                <span title="Has a lesson PDF" className="flex-shrink-0 text-teal-500 dark:text-teal-400">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                </span>
+              )}
               {/* Arrow */}
               <svg className="w-4 h-4 text-slate-400 group-hover:text-teal-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -411,39 +424,28 @@ const QaedahPage: React.FC<{
         </div>
       </div>
 
-      {/* What this lesson teaches — English + Arabic, before the words. */}
-      {(() => {
-        const idx  = topics.findIndex(t => t.id === selectedTopic?.id);
-        const note = selectedTopic ? qaedahLessonNote(idx + 1, selectedTopic.titleEn) : null;
-        if (!note) return null;
-        return (
-          <div className="mb-5 rounded-2xl border border-teal-100 dark:border-teal-900/50 bg-teal-50/60 dark:bg-teal-900/20 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 pt-3.5 pb-2">
-              <span className="text-2xl leading-none text-teal-700 dark:text-teal-300" style={HAFS}>{note.emoji}</span>
-              <p className="text-[11px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">About this lesson</p>
-            </div>
-            <div className="px-4 pb-4 space-y-3">
-              {([
-                { k: 'what',  en: note.en,      ar: note.ar,      icon: '📘' },
-                { k: 'sound', en: note.soundEn, ar: note.soundAr, icon: '🔊' },
-                { k: 'watch', en: note.watchEn, ar: note.watchAr, icon: '⚠️' },
-              ] as const).map(row => (
-                <div key={row.k} className="flex gap-2.5">
-                  <span className="text-sm leading-6 flex-shrink-0">{row.icon}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{row.en}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-loose mt-0.5" dir="rtl" style={HAFS}>{row.ar}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="rounded-xl bg-white/70 dark:bg-gray-800/60 border border-teal-100 dark:border-teal-900/50 px-3 py-2 text-center"
-                   dir="rtl" style={{ ...HAFS, fontSize: '1.6rem', lineHeight: 1.9 }}>
-                {note.example}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* The lesson PDF — opened on the board, exactly like a Tajweed lesson. */}
+      {selectedTopic && pdfs[selectedTopic.id] && (
+        <button
+          onClick={() => setBoardOpen(true)}
+          className="w-full mb-5 flex items-center gap-3 p-4 rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-900/20 hover:border-teal-400 dark:hover:border-teal-600 hover:shadow-md transition-all text-left group"
+        >
+          <span className="flex-shrink-0 w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-teal-100 dark:border-teal-900 flex items-center justify-center">
+            <svg className="w-6 h-6 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[11px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">Lesson</span>
+            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+              Open the lesson board — {selectedTopic.titleEn}
+            </span>
+          </span>
+          <svg className="w-4 h-4 text-slate-400 group-hover:text-teal-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
 
       {wordsLoading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">Loading words…</div>
@@ -795,6 +797,23 @@ const QaedahPage: React.FC<{
       {view === 'words'     && renderWords()}
       {view === 'challenge' && renderChallenge()}
       {view === 'win'       && renderWin()}
+
+      {/* Lesson board — same viewer (PDF + whiteboard) as the Tajweed lessons. */}
+      {boardOpen && selectedTopic && pdfs[selectedTopic.id] && (
+        <TajweedLessonViewer
+          lesson={{
+            id:         selectedTopic.id,
+            title:      selectedTopic.titleAr || selectedTopic.titleEn,
+            orderIndex: selectedTopic.orderIndex,
+            pdfUrl:     pdfs[selectedTopic.id].url,
+            createdAt:  selectedTopic.createdAt,
+            updatedAt:  selectedTopic.updatedAt,
+          }}
+          students={[]}
+          tutorId=""
+          onClose={() => setBoardOpen(false)}
+        />
+      )}
 
       {showCrane && (
         <CraneBuilderGame

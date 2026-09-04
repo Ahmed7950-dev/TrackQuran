@@ -14,6 +14,12 @@ import {
   updateQaedahWordsLevel,
   deleteQaedahWord,
 } from '../services/qaedahService';
+import {
+  QaedahPdfIndex,
+  loadQaedahPdfs,
+  uploadQaedahLessonPdf,
+  removeQaedahLessonPdf,
+} from '../services/qaedahPdfService';
 
 const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
 
@@ -77,7 +83,13 @@ const AdminQaedahTab: React.FC = () => {
   const [selectedIds,    setSelectedIds]    = useState<Set<string>>(new Set());
   const [assigningLevel, setAssigningLevel] = useState(false);
 
+  // Lesson PDF — one per topic, shown on the board before the words.
+  const [pdfs,        setPdfs]        = useState<QaedahPdfIndex>({});
+  const [pdfBusy,     setPdfBusy]     = useState(false);
+  const [pdfError,    setPdfError]    = useState('');
+
   const wordInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef  = useRef<HTMLInputElement>(null);
 
   // ── Load topics ───────────────────────────────────────────────────────────
   const loadTopics = async () => {
@@ -86,7 +98,7 @@ const AdminQaedahTab: React.FC = () => {
     setTopicsLoading(false);
   };
 
-  useEffect(() => { loadTopics(); }, []);
+  useEffect(() => { loadTopics(); loadQaedahPdfs().then(setPdfs); }, []);
 
   // ── Load words for selected topic ─────────────────────────────────────────
   const loadWords = async (topicId: string) => {
@@ -255,6 +267,32 @@ const AdminQaedahTab: React.FC = () => {
     setDeletingWordId(null);
   };
 
+  // ── Lesson PDF ─────────────────────────────────────────────────────────────
+  const handlePdfPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';                       // let the same file be picked again
+    if (!file || !selectedTopic) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setPdfError('That file is not a PDF.');
+      return;
+    }
+    setPdfBusy(true); setPdfError('');
+    const entry = await uploadQaedahLessonPdf(selectedTopic.id, file);
+    if (entry) setPdfs(prev => ({ ...prev, [selectedTopic.id]: entry }));
+    else       setPdfError('Upload failed. Please try again.');
+    setPdfBusy(false);
+  };
+
+  const handlePdfRemove = async () => {
+    if (!selectedTopic) return;
+    if (!confirm('Remove this lesson PDF? Tutors and students will no longer see it.')) return;
+    setPdfBusy(true); setPdfError('');
+    const ok = await removeQaedahLessonPdf(selectedTopic.id);
+    if (ok) setPdfs(prev => { const next = { ...prev }; delete next[selectedTopic.id]; return next; });
+    else    setPdfError('Could not remove it. Please try again.');
+    setPdfBusy(false);
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col lg:flex-row gap-6">
@@ -362,7 +400,10 @@ const AdminQaedahTab: React.FC = () => {
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{topic.titleEn}</p>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                        {topic.titleEn}
+                        {pdfs[topic.id] && <span title="Has a lesson PDF" className="ms-1.5 text-teal-500">📄</span>}
+                      </p>
                       {topic.titleAr && (
                         <p className="text-xs text-slate-400 dark:text-slate-500 truncate" style={HAFS}>{topic.titleAr}</p>
                       )}
@@ -439,6 +480,48 @@ const AdminQaedahTab: React.FC = () => {
                 {showBulk ? 'Hide Bulk Add' : '⚡ Bulk Add'}
               </button>
             </div>
+
+            {/* Lesson PDF — opened on the board before the words */}
+            {(() => {
+              const pdf = pdfs[selectedTopic.id];
+              return (
+                <div className="rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                      </svg>
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Lesson PDF</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 truncate">
+                        {pdf
+                          ? <a href={pdf.url} target="_blank" rel="noreferrer" className="hover:underline">{pdf.name}</a>
+                          : <span className="text-slate-400">None yet — tutors and students see only the words.</span>}
+                      </p>
+                    </div>
+                    <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" onChange={handlePdfPick} className="hidden" />
+                    <button
+                      onClick={() => pdfInputRef.current?.click()}
+                      disabled={pdfBusy}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition-colors flex-shrink-0"
+                    >
+                      {pdfBusy ? 'Working…' : pdf ? 'Replace PDF' : '+ Upload PDF'}
+                    </button>
+                    {pdf && (
+                      <button
+                        onClick={handlePdfRemove}
+                        disabled={pdfBusy}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-300 hover:text-red-600 hover:border-red-300 disabled:opacity-50 transition-colors flex-shrink-0"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {pdfError && <p className="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">{pdfError}</p>}
+                </div>
+              );
+            })()}
 
             {/* Selection action bar */}
             {selectMode && (
