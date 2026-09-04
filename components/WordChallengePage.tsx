@@ -1,9 +1,11 @@
 // components/WordChallengePage.tsx
 // -----------------------------------------------------------------------------
 // Word challenge — the tutor picks letters in the Alphabet tab, then chooses on
-// the setup screen which reading rules to test (fatha, kasra, damma, madd,
-// shaddah, sukoon, tanween, hamzat al-wasl, ta marbuta, iltiqaa as-sakinayn,
-// lafz al-jalalah). The student reads 20 Qur'anic items containing the chosen
+// the setup screen which reading rules to test. The rules are listed in Qaedah
+// Nooraniyya order (fatha, kasra, damma, madd, sukoon, tanween, shaddah,
+// hamzat al-wasl, then ta marbuta / iltiqaa as-sakinayn / lafz al-jalalah), and
+// the highest one picked caps the run: fatha alone never shows a kasra, a madd
+// or a sukoon. See LESSON ORDER in utils/quranWordCategories.ts. The student reads 20 Qur'anic items containing the chosen
 // letters; a two-word category shows BOTH words, because the phenomenon only
 // exists across the join. Same presentation as the fluency test (one big segment
 // drawn with renderWordWithMarks so the hand-patched fonts and mark overlays
@@ -19,7 +21,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderWordWithMarks } from '../utils/quranicMarks';
 import {
-  buildChallengeItems, WORD_CATEGORIES,
+  buildChallengeItems, WORD_CATEGORIES, lessonCeiling, OPEN_CEILING_FROM,
   type CategoryId, type ChallengeItem, type CategoryReport,
 } from '../utils/quranWordCategories';
 import { useI18n } from '../context/I18nProvider';
@@ -152,6 +154,7 @@ const WordChallengePage: React.FC<{
   if (phase === 'setup') {
     const toggle = (id: CategoryId) =>
       setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    const ceiling = lessonCeiling(selected);
     return (
       <div className="max-w-3xl mx-auto px-4 pb-12">
         <div className="flex items-center gap-3 mb-5">
@@ -184,6 +187,13 @@ const WordChallengePage: React.FC<{
                     ? 'bg-teal-600 dark:bg-orange-600 border-teal-600 dark:border-orange-600 text-white'
                     : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:border-teal-400'}`}
               >
+                {cat.lesson <= 10 && (
+                  <span className={`text-[10px] font-black tabular-nums w-4 h-4 rounded-full flex items-center justify-center ${
+                    on ? 'bg-white/25' : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500'}`}
+                    title={t('wordChallenge.lessonBadge', { lesson: cat.lesson })}>
+                    {cat.lesson}
+                  </span>
+                )}
                 <span>{catName(cat.id)}</span>
                 {cat.arity === 2 && (
                   <span className={`text-[10px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${
@@ -195,10 +205,21 @@ const WordChallengePage: React.FC<{
             );
           })}
         </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500 mb-6">
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-1.5">
           {selected.length === 0
             ? t('wordChallenge.categoriesHint')
             : t('wordChallenge.categoriesChosen', { count: selected.length })}
+        </p>
+        {/* How far the run is allowed to go — the whole point of the ordering. */}
+        {selected.length > 0 && (
+          <p className="text-xs font-bold text-teal-600 dark:text-orange-400 mb-1.5">
+            {ceiling >= OPEN_CEILING_FROM
+              ? t('wordChallenge.lessonCeilingOpen')
+              : t('wordChallenge.lessonCeiling', { lesson: ceiling })}
+          </p>
+        )}
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-6 leading-relaxed">
+          {t('wordChallenge.lessonLadder')}
         </p>
 
         <div className="flex items-center gap-3">

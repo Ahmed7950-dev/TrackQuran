@@ -13,7 +13,8 @@
 // on the Turkish path (splitVerseWords(t, true) keeps U+0652).
 //
 // The module is a REGISTRY: WORD_CATEGORIES lists every category with its arity
-// (1 word or a 2-word pair) and its predicate. Adding the coming tajweed half is
+// (1 word or a 2-word pair), its Qaedah lesson number, and its predicate. The
+// lesson number is a CEILING as well as an order — see LESSON ORDER below. Adding the coming tajweed half is
 // a matter of appending entries with group: 'tajweed' — the builder and the UI
 // iterate the registry and need no change.
 // -----------------------------------------------------------------------------
@@ -384,6 +385,99 @@ export const isJalalahPair = (a: string, b: string): boolean => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LESSON ORDER — a run never runs ahead of the rule you picked
+//
+// The categories follow the ten Qaedah Nooraniyya lessons, and a run is capped
+// at the HIGHEST one selected: pick Fatha alone and every word is pure fatha —
+// no kasra, damma, sukoon, shadda, and no madd either, because a madd is lesson
+// 4. Pick Sukoon and the three short vowels and the madds come back, but the
+// shadda stays out. Pick Shadda (or anything past it) and nothing is held back.
+//
+// An UNMARKED consonant counts as a sukoon, because that is what it is: أَنتَ
+// and أَحَدُهُم are written with a bare noon and meem. Below the sukoon lesson a
+// word must therefore be fully vowelled, madd letters excepted.
+//
+// Measured on the 82,011-token Uthmani corpus, distinct words of 3+ letters that
+// carry the rule's own mark and nothing later:
+//   fatha 168 · kasra 137 · damma 161 · madd 2,229 · sukoon 7,190 ·
+//   tanween 2,577 · shadda 4,779
+// Small, but never empty — and every letter of the alphabet appears in the
+// strictest pool of all (fatha: ي is the thinnest at 2 words). Where the chosen
+// letters run out the builder tops up from the same pool and flags the items, so
+// the ceiling holds even for a rare letter.
+//
+// THE ONE PLACE THIS DIVERGES from the tutor's phrasing: pure-kasra and
+// pure-damma words barely exist (9 and 24 in the whole Qur'an, nearly all of
+// them madds), so a strictly pure kasra run would show almost nothing. Lesson 2
+// therefore allows lesson 1's fatha, and lesson 3 allows both — which is how the
+// Qaedah itself teaches them. Lesson 1 IS strictly pure.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Rules with no Qaedah lesson of their own (ta marbuta, iltiqaa, jalalah) sit
+ *  past the last one: picking them lifts the ceiling entirely. */
+const OPEN_LESSON = 11;
+/** From the shadda on, everything a word can carry has been taught. */
+export const OPEN_CEILING_FROM = 9;
+
+const LESSON_MADD   = 4;
+const LESSON_SUKOON = 7;
+const LESSON_TANWEEN = 8;
+
+/** Marks that belong to no lesson and never block a word: hamza above/below
+ *  (part of how a letter is spelt), tatweel, and the joiners. */
+const TRANSPARENT_RE = /[\u0654-\u0656\u0640\u200C\u200D\u061C]/;
+/** The iqlab meems — they only ever ride on a tanween or a sakin noon. */
+const IQLAB_RE = /[ۭۢ]/;
+
+/** The highest lesson among the selected rules; 0 when nothing is selected. */
+export const lessonCeiling = (cats: readonly CategoryId[]): number =>
+  cats.reduce((max, id) => Math.max(max, CATEGORY_BY_ID.get(id)?.lesson ?? OPEN_LESSON), 0);
+
+/** Every letter carries a vowel — a bare letter is a sukoon that was not
+ *  written. Madd letters are exempt (they are bare by definition), as is the
+ *  wasla alef and a letter carrying a madd mark. */
+const isFullyVowelled = (word: string): boolean => {
+  const toks = letterSpans(word);
+  for (let i = 0; i < toks.length; i++) {
+    const { ch, marks } = toks[i];
+    if ([...marks].some(m => VOWELS.includes(m))) continue;
+    if (ch === WASLA) continue;
+    if (MADD_MARK_RE.test(marks)) continue;
+    const prev = i > 0 ? toks[i - 1].marks : '';
+    if ((ch === ALEF || ch === ALEF_MAKSURA) && prev.includes(FATHA)) continue;
+    if (ch === WAW && prev.includes(DAMMA)) continue;
+    if ((ch === YEH || ch === ALEF_MAKSURA) && prev.includes(KASRA)) continue;
+    return false;
+  }
+  return true;
+};
+
+/**
+ * May this word appear in a run capped at `ceiling`? A ceiling of 0 (no rule
+ * picked) or OPEN_CEILING_FROM and up lets everything through.
+ */
+export const wordFitsLesson = (word: string, ceiling: number): boolean => {
+  if (ceiling <= 0 || ceiling >= OPEN_CEILING_FROM) return true;
+
+  for (const ch of word) {
+    if (LETTER_RE.test(ch) || TRANSPARENT_RE.test(ch)) continue;
+    if (ch === FATHA)                       continue;                        // lesson 1
+    if (ch === KASRA)  { if (ceiling >= 2) continue; return false; }
+    if (ch === DAMMA)  { if (ceiling >= 3) continue; return false; }
+    if (MADD_MARK_RE.test(ch) || ch === MADDAH) { if (ceiling >= LESSON_MADD) continue; return false; }
+    if (ch === SUKUN || ch === SUKUN_KHAA) { if (ceiling >= LESSON_SUKOON) continue; return false; }
+    if (TANWEEN.includes(ch) || IQLAB_RE.test(ch)) { if (ceiling >= LESSON_TANWEEN) continue; return false; }
+    return false;   // shadda, the silent zeros, waqf signs — all past the ceiling
+  }
+
+  // A madd written as fatha+alef carries no mark of its own, so the scan above
+  // cannot see it.
+  if (ceiling < LESSON_MADD && hasLongVowel(word)) return false;
+  if (ceiling < LESSON_SUKOON && !isFullyVowelled(word)) return false;
+  return true;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // THE REGISTRY
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -401,6 +495,8 @@ export interface WordCategory {
   group: 'basic' | 'tajweed';
   /** 1 = one word; 2 = two consecutive words of the same verse. */
   arity: 1 | 2;
+  /** Where this rule sits in the Qaedah Nooraniyya order — see LESSON_ORDER. */
+  lesson: number;
   matchWord?: (word: string) => boolean;
   matchPair?: (a: string, b: string) => boolean;
   /** Optional sub-label for an item, e.g. the jalālah's heavy/light. */
@@ -412,28 +508,28 @@ export interface WordCategory {
 }
 
 export const WORD_CATEGORIES: readonly WordCategory[] = [
-  { id: 'fatha',      group: 'basic', arity: 1, matchWord: hasFatha,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[َ]/) },
-  { id: 'kasra',      group: 'basic', arity: 1, matchWord: hasKasra,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ِ]/) },
-  { id: 'damma',      group: 'basic', arity: 1, matchWord: hasDamma,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ُ]/) },
-  { id: 'longVowel',  group: 'basic', arity: 1, matchWord: hasLongVowel,
+  { id: 'fatha',      group: 'basic', arity: 1, lesson: 1, matchWord: hasFatha,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u064E]/) },
+  { id: 'kasra',      group: 'basic', arity: 1, lesson: 2, matchWord: hasKasra,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u0650]/) },
+  { id: 'damma',      group: 'basic', arity: 1, lesson: 3, matchWord: hasDamma,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u064F]/) },
+  { id: 'longVowel',  group: 'basic', arity: 1, lesson: 4, matchWord: hasLongVowel,
     focusWord: longVowelOnChosenLetter },
-  { id: 'shadda',     group: 'basic', arity: 1, matchWord: hasShadda,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ّ]/) },
-  { id: 'sukoon',     group: 'basic', arity: 1, matchWord: hasSukoon,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ْۡ]/) },
-  { id: 'tanween',    group: 'basic', arity: 1, matchWord: hasTanween,
-    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[ً-ٍ]/) },
-  { id: 'hamzatWasl', group: 'basic', arity: 2, matchPair: isHamzatWaslPair },
-  { id: 'taMarbuta',  group: 'basic', arity: 2, matchPair: isTaMarbutaPair },
+  { id: 'sukoon',     group: 'basic', arity: 1, lesson: 7, matchWord: hasSukoon,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u0652\u06E1]/) },
+  { id: 'tanween',    group: 'basic', arity: 1, lesson: 8, matchWord: hasTanween,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u064B-\u064D]/) },
+  { id: 'shadda',     group: 'basic', arity: 1, lesson: 9, matchWord: hasShadda,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u0651]/) },
+  { id: 'hamzatWasl', group: 'basic', arity: 2, lesson: 10, matchPair: isHamzatWaslPair },
+  { id: 'taMarbuta',  group: 'basic', arity: 2, lesson: OPEN_LESSON, matchPair: isTaMarbutaPair },
   {
-    id: 'iltiqaa', group: 'basic', arity: 2, matchPair: isIltiqaaSakinaynDrillPair,
+    id: 'iltiqaa', group: 'basic', arity: 2, lesson: OPEN_LESSON, matchPair: isIltiqaaSakinaynDrillPair,
     variantOf: ws => (ws.length === 2 ? iltiqaaVariant(ws[0]) : null),
   },
   {
-    id: 'jalalah', group: 'basic', arity: 2, matchPair: isJalalahPair,
+    id: 'jalalah', group: 'basic', arity: 2, lesson: OPEN_LESSON, matchPair: isJalalahPair,
     variantOf: ws => (ws.length === 2 ? jalalahWeight(ws[0], ws[1]) : null),
   },
 ] as const;
@@ -574,6 +670,12 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
   const noFilter = letters.length === 0;
   const hasLetter = (w: string): boolean => noFilter || wordHasAnyLetter(w, letters);
 
+  // The run never runs ahead of the highest lesson selected — see LESSON ORDER.
+  // It gates EVERY pool, the plain letter rule included: a fatha run that had to
+  // top up would otherwise pad itself with shaddas and sukoons.
+  const ceiling = lessonCeiling(cats);
+  const fits = (w: string): boolean => wordFitsLesson(w, ceiling);
+
   const satisfied = (): boolean => {
     if (cats.length === 0) return plain.strict.length >= count;
     for (const id of cats) {
@@ -586,7 +688,7 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
   const scanVerse = (text: string): void => {
     const words = splitVerseWords(text).filter(isQuranWord);
     for (const w of words) {
-      if (baseLettersOf(w).length >= 3 && hasLetter(w)) {
+      if (baseLettersOf(w).length >= 3 && hasLetter(w) && fits(w)) {
         push(plain, { words: [w], category: 'letters' }, 'strict');
       }
     }
@@ -596,7 +698,7 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
       if (cat.arity === 1 && cat.matchWord) {
         for (const w of words) {
           if (baseLettersOf(w).length < 3) continue;   // a 2-letter particle is no challenge
-          if (!cat.matchWord(w)) continue;
+          if (!cat.matchWord(w) || !fits(w)) continue;
           const tier: Tier = !hasLetter(w) ? 'loose'
             : cat.focusWord?.(w, letters) ? 'focus' : 'strict';
           push(pool, { words: [w], category: id }, tier);
@@ -605,6 +707,7 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
         for (let i = 0; i < words.length - 1; i++) {
           const a = words[i], b = words[i + 1];
           if (!cat.matchPair(a, b)) continue;
+          if (!fits(a) || !fits(b)) continue;
           const variant = cat.variantOf?.([a, b]) ?? undefined;
           // A pair is about the join, so there is no focus tier: either word
           // carrying a chosen letter is as on-topic as the drill gets.

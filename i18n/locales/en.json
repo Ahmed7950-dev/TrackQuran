@@ -1430,7 +1430,11 @@
       "taMarbuta": "Ends with ta marbuta",
       "iltiqaa": "Iltiqaa as-sakinayn",
       "jalalah": "Lafz al-jalalah"
-    }
+    },
+    "lessonLadder": "The rules follow the Qaedah lessons, and a run never goes past the highest one you pick: Fatha alone shows words of nothing but fatha — no kasra, damma, madd, sukoon or shaddah. Shaddah (or any rule after it) lets everything in.",
+    "lessonCeiling": "Up to lesson {{lesson}} — nothing later appears.",
+    "lessonCeilingOpen": "No limit — words may carry anything.",
+    "lessonBadge": "Lesson {{lesson}}"
   },
   "letterDrill": {
     "title": "Letter-form drill",

@@ -1430,7 +1430,11 @@
       "taMarbuta": "Yuvarlak te ile biter",
       "iltiqaa": "İki sâkinin karşılaşması",
       "jalalah": "Lafza-i celâl"
-    }
+    },
+    "lessonLadder": "Kurallar Kaide derslerinin sırasını izler ve bir tur seçtiğin en ileri kuralın ötesine geçmez: yalnızca Fetha seçersen kelimelerde fethadan başka hiçbir şey olmaz — kesra, damme, med, sükûn, şedde yok. Şedde (veya sonrasındaki bir kural) her şeyin önünü açar.",
+    "lessonCeiling": "{{lesson}}. derse kadar — sonrası görünmez.",
+    "lessonCeilingOpen": "Sınır yok — kelimeler her işareti taşıyabilir.",
+    "lessonBadge": "{{lesson}}. ders"
   },
   "letterDrill": {
     "title": "Harf şekli alıştırması",
