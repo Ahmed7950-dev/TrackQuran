@@ -405,7 +405,7 @@ const QaedahPage: React.FC<{
 
   // ─── VIEW: WORDS ──────────────────────────────────────────────────────────
   const renderWords = () => (
-    <div className="max-w-2xl mx-auto px-4 pb-12 pt-2">
+    <div className="max-w-6xl mx-auto px-4 pb-12 pt-2">
       {/* Header row */}
       <div className="flex items-center gap-3 mb-5">
         <button
@@ -496,17 +496,26 @@ const QaedahPage: React.FC<{
             {studentId && <> Squares under a word are {studentName ? `${studentName}'s` : 'this student\u2019s'} past reads.</>}
           </p>
 
-          {/* Word grid — Hafs font, each word on ONE line (size scales with
-              letter count), with this student's read history underneath. */}
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 mb-6">
+          {/* Word grid — Hafs font, each word on ONE line, with this student's
+              read history underneath. Cards are as wide as the page allows:
+              auto-fill lays out as many ~9.5rem columns as fit (six across a
+              desktop, three on a phone, where 27vw takes over as the minimum).
+              The word then scales with the CARD, not with a guess about it —
+              see the container-query note on the font size below. */}
+          <div className="grid gap-2.5 mb-6"
+               style={{
+                 gridTemplateColumns: 'repeat(auto-fill, minmax(min(9.5rem, 27vw), 1fr))',
+                 gridAutoFlow: 'dense',          // let short words fill the gaps a wide card leaves
+               }}>
             {(levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter)).map(w => {
               const isPicked = picked.has(w.id);
               const hist = attempts.get(w.id) ?? [];
               const shown = hist.slice(-10);
               const n = Math.max(1, letterCount(w.word));
-              // ~7.4rem of card width / n letters, clamped so short words don't
-              // balloon and long ones stay legible.
+              // Fallback size, in rem: what a browser without container queries
+              // gets. Inherited by the word from the card below.
               const size = Math.max(0.85, Math.min(2, 7.4 / n));
+              const wide = w.word.includes(' ') || n > 9;
               return (
                 <button
                   key={w.id}
@@ -519,13 +528,29 @@ const QaedahPage: React.FC<{
                   title={hist.length > 0
                     ? `${hist.filter(a => a.correct).length} correct · ${hist.filter(a => !a.correct).length} wrong`
                     : 'Not practised yet'}
-                  className={`flex flex-col items-center justify-center rounded-xl border py-2.5 px-1 shadow-sm transition-all active:scale-95 ${
+                  style={{
+                    containerType: 'inline-size',
+                    fontSize: `${size}rem`,
+                    // A two-word phrase gets a card twice as wide, so it reads at
+                    // the same size as a single word instead of shrinking to fit.
+                    ...(wide ? { gridColumn: 'span 2' } : {}),
+                  }}
+                  className={`flex flex-col items-center justify-center rounded-xl border py-3.5 px-1.5 shadow-sm transition-all active:scale-95 ${
                     isPicked
                       ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-400 dark:border-teal-500 ring-2 ring-teal-400/50'
                       : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 hover:border-teal-300'
                   }`}
                 >
-                  <span style={{ ...HAFS, fontSize: `${size}rem`, lineHeight: 1.5, direction: 'rtl', whiteSpace: 'nowrap' }}>
+                  {/* cqw = 1% of the CARD's width, so the word grows with the
+                      card however many columns the grid ends up with. A browser
+                      without container queries drops this line as invalid and
+                      inherits the card's rem size instead. */}
+                  <span style={{
+                    ...HAFS,
+                    fontSize: `clamp(1rem, ${(135 / n).toFixed(1)}cqw, 2.75rem)`,
+                    lineHeight: 1.5, direction: 'rtl', whiteSpace: 'nowrap',
+                    maxWidth: '100%', overflow: 'hidden',
+                  }}>
                     {w.word}
                   </span>
                   {/* Read history — green = read it right, red = got it wrong */}
@@ -792,7 +817,10 @@ const QaedahPage: React.FC<{
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className={`min-h-[60vh] ${childMode && view === 'challenge' ? '' : 'max-w-3xl mx-auto'}`}>
+    <div className={`min-h-[60vh] ${
+      childMode && view === 'challenge' ? ''
+        : view === 'words'              ? 'max-w-6xl mx-auto'   // the word grid fills the page
+        :                                 'max-w-3xl mx-auto'}`}>
       {view === 'list'      && renderList()}
       {view === 'words'     && renderWords()}
       {view === 'challenge' && renderChallenge()}
