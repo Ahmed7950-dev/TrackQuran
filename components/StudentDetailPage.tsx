@@ -1,7 +1,7 @@
 import React, { useState, useMemo, Fragment, useEffect } from 'react';
 import { Student, SurahMetadata, TimePeriod, AttendanceStatus, RecitationAchievement, TafsirReview, AttendanceRecord, MemorizationAchievement, TafsirMemorizationReview, TajweedCompletion, Mistake } from '../types';
 import { getStudentCompletions } from '../services/tajweedService';
-import { listQaedahCompletions, QaedahCompletion } from '../services/qaedahService';
+import { listQaedahCompletions, deleteQaedahCompletion, QaedahCompletion } from '../services/qaedahService';
 import { TOTAL_QURAN_PAGES, MILESTONES } from '../constants';
 import LottieIcon from './LottieIcon';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -278,6 +278,16 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         return age;
     };
     
+    // Finished Qaedah reading challenges. They belong on the calendar next to
+    // the recitation and hifz achievements, and — like those — a day with one
+    // counts as a day the student turned up.
+    const [qaedahDone, setQaedahDone] = useState<QaedahCompletion[]>([]);
+    useEffect(() => {
+        let alive = true;
+        listQaedahCompletions(student.id).then(rows => { if (alive) setQaedahDone(rows); });
+        return () => { alive = false; };
+    }, [student.id]);
+
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const attendanceData = useMemo(() => {
         // FIX: Add explicit type to fix type inference issue with generic function.
@@ -292,6 +302,11 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         const implicitPresentCount = [
             ...(filterByTimePeriod(student.recitationAchievements, timePeriod) as RecitationAchievement[]),
             ...(filterByTimePeriod(student.memorizationAchievements, timePeriod) as MemorizationAchievement[]),
+            // A finished Qaedah challenge is a lesson too. Its rows live in their
+            // own table, so they are mapped onto the { date } shape the others use.
+            ...(filterByTimePeriod(
+                qaedahDone.map(q => ({ ...q, date: q.completedAt })), timePeriod,
+            ) as { date: string }[]),
         ].reduce((seen, ach) => {
             const ds = new Date(ach.date).toDateString();
             if (!explicitDateStrings.has(ds) && !seen.has(ds)) seen.add(ds);
@@ -303,7 +318,7 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             absent: attendance.filter(a => a.status === AttendanceStatus.Absent).length,
             rescheduled: attendance.filter(a => a.status === AttendanceStatus.Rescheduled).length,
         };
-    }, [student.attendance, student.recitationAchievements, student.memorizationAchievements, timePeriod]);
+    }, [student.attendance, student.recitationAchievements, student.memorizationAchievements, qaedahDone, timePeriod]);
 
     // Fix: Replaced 'a.useMemo' with 'useMemo'.
     const readingComputed = useMemo(() =>
@@ -585,15 +600,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
         label: string;
         badgeCls: string;
     };
-
-    // Finished Qaedah reading challenges — they belong on the calendar next to
-    // the recitation and hifz achievements.
-    const [qaedahDone, setQaedahDone] = useState<QaedahCompletion[]>([]);
-    useEffect(() => {
-        let alive = true;
-        listQaedahCompletions(student.id).then(rows => { if (alive) setQaedahDone(rows); });
-        return () => { alive = false; };
-    }, [student.id]);
 
     const calEntriesMap = useMemo(() => {
         type RawSeg = { startSurah: number; startAyah: number; endSurah: number; endAyah: number };
@@ -1475,8 +1481,16 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
                                         onDelete={() => del(t('studentDetail.tafsirHifz'), () => ({ ...student, tafsirMemorizationReviews: student.tafsirMemorizationReviews.filter(x => x.id !== a.id) }))} />
                                 ))}
                                 {qd.map(q => (
-                                    <Row key={q.id ?? q.lessonId} icon="🔤" badgeCls="bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
-                                        title={t('studentDetail.qaedahLog')} detail={q.lessonTitle} />
+                                    <Row key={q.id} icon="🔤" badgeCls="bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
+                                        title={t('studentDetail.qaedahLog')}
+                                        detail={`${q.topicTitle}${q.wordsCount ? ` · ${q.correctCount}/${q.wordsCount}` : ''}`}
+                                        onDelete={() => {
+                                            if (!window.confirm(t('studentDetail.confirmDeleteLog', { label: t('studentDetail.qaedahLog') }))) return;
+                                            // Its own table, so this deletes the row rather than
+                                            // patching the student; drop it locally either way.
+                                            setQaedahDone(prev => prev.filter(x => x.id !== q.id));
+                                            void deleteQaedahCompletion(q.id);
+                                        }} />
                                 ))}
                                 {acts.map(a => (
                                     <Row key={a.id} icon={ACTIVITY_STYLE[a.activity!.kind].icon} badgeCls={ACTIVITY_STYLE[a.activity!.kind].badgeCls}

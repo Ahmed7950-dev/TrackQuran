@@ -275,6 +275,13 @@ export async function logQaedahCompletion(input: {
   if (error) console.error('logQaedahCompletion:', error.message);
 }
 
+/** Remove one finished challenge — the tutor deleting it from the day logbook. */
+export async function deleteQaedahCompletion(id: string): Promise<boolean> {
+  const { error } = await supabase.from('qaedah_completions').delete().eq('id', id);
+  if (error) { console.error('deleteQaedahCompletion:', error.message); return false; }
+  return true;
+}
+
 /**
  * Which DAYS each of these students finished a Qaedah challenge on. One request
  * for the whole roster — the missed-lesson prompt needs it for a handful of
