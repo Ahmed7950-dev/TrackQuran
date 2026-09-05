@@ -275,6 +275,33 @@ export async function logQaedahCompletion(input: {
   if (error) console.error('logQaedahCompletion:', error.message);
 }
 
+/**
+ * Which DAYS each of these students finished a Qaedah challenge on. One request
+ * for the whole roster — the missed-lesson prompt needs it for a handful of
+ * students at once, and a per-student call would be a request each.
+ * Returns studentId → set of `toDateString()` days.
+ */
+export async function listQaedahCompletionDays(
+  studentIds: string[],
+  since: Date,
+): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  if (studentIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from('qaedah_completions')
+    .select('student_id, completed_at')
+    .in('student_id', studentIds)
+    .gte('completed_at', since.toISOString());
+  if (error) { console.error('listQaedahCompletionDays:', error.message); return out; }
+  for (const r of (data ?? []) as { student_id: string; completed_at: string }[]) {
+    const day = new Date(r.completed_at).toDateString();
+    const set = out.get(r.student_id) ?? new Set<string>();
+    set.add(day);
+    out.set(r.student_id, set);
+  }
+  return out;
+}
+
 /** Finished challenges for a student — one calendar badge each. */
 export async function listQaedahCompletions(studentId: string): Promise<QaedahCompletion[]> {
   const { data, error } = await supabase
