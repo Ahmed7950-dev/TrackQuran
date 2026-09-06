@@ -9,7 +9,7 @@ const StudentProfileIcon: React.FC<{ src?: string; size?: number; mode?: 'always
   const [hover, setHover] = useState(false);
   if (!src) return null;
   if (mode === 'always') {
-    return <LottieIcon src={src} size={size} loop autoplay playOnHover={false} className={`inline-block align-middle flex-shrink-0 ${className ?? ''}`} />;
+    return <LottieIcon src={src} size={size} loop autoplay playOnHover={false} adaptDarkStrokes className={`inline-block align-middle flex-shrink-0 ${className ?? ''}`} />;
   }
   return (
     <span
@@ -17,7 +17,7 @@ const StudentProfileIcon: React.FC<{ src?: string; size?: number; mode?: 'always
       onMouseLeave={() => setHover(false)}
       className={`inline-flex align-middle flex-shrink-0 ${className ?? ''}`}
     >
-      <LottieIcon src={src} size={size} loop play={play ?? hover} playOnHover={false} />
+      <LottieIcon src={src} size={size} loop play={play ?? hover} playOnHover={false} adaptDarkStrokes />
     </span>
   );
 };
