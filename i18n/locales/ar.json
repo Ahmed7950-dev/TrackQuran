@@ -28,7 +28,11 @@
     "youngGems": "الجواهر الصغيرة (٤-١٥)",
     "aspiringScholars": "علماء المستقبل (١٦-٣٥)",
     "devotedLearners": "المتعلمون المخلصون (٣٦+)",
-    "noStudents": "لا يوجد طلاب في هذه الفئة."
+    "noStudents": "لا يوجد طلاب في هذه الفئة.",
+    "upcomingLesson": "الدرس القادم",
+    "lessonInProgress": "الدرس جارٍ الآن",
+    "lessonEndsAt": "جارٍ الآن · ينتهي {{time}}",
+    "openStudentPage": "فتح صفحة {{name}}"
   },
   "studentCard": {
     "yearsOld": "{{age}} سنة",

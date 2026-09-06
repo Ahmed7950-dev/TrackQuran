@@ -28,7 +28,11 @@
     "youngGems": "Young Gems (4-15)",
     "aspiringScholars": "Aspiring Scholars (16-35)",
     "devotedLearners": "Devoted Learners (36+)",
-    "noStudents": "No students in this category."
+    "noStudents": "No students in this category.",
+    "upcomingLesson": "Upcoming lesson",
+    "lessonInProgress": "Lesson in progress",
+    "lessonEndsAt": "On now · ends {{time}}",
+    "openStudentPage": "Open {{name}}’s page"
   },
   "studentCard": {
     "yearsOld": "{{age}} years old",

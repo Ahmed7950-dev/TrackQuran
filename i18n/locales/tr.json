@@ -28,7 +28,11 @@
     "youngGems": "Genç Yetenekler (4-15)",
     "aspiringScholars": "Yükselen Alimler (16-35)",
     "devotedLearners": "Adanmış Öğrenciler (36+)",
-    "noStudents": "Bu kategoride öğrenci yok."
+    "noStudents": "Bu kategoride öğrenci yok.",
+    "upcomingLesson": "Yaklaşan ders",
+    "lessonInProgress": "Ders devam ediyor",
+    "lessonEndsAt": "Şu anda · bitiş {{time}}",
+    "openStudentPage": "{{name}} sayfasını aç"
   },
   "studentCard": {
     "yearsOld": "{{age}} yaşında",
