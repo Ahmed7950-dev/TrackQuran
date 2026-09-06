@@ -2030,6 +2030,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const stripArabicDiacritics = (str: string): string =>
         str.replace(/[\u064B-\u065F\u0610-\u061A\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '');
 
+    /**
+     * Fold Arabic to its MATCHING form: no diacritics or waqf marks, alef and
+     * yeh variants unified, tatweel and zero-width joiners gone, runs of space
+     * collapsed. Two things depend on the last two:
+     *   ٱلْمُفْلِحُونَ is written with alef wasla, so a tutor typing المفلحون matched
+     *   nothing until ٱ folds to ا;
+     *   a waqf sign sits between words (ٱلْأَرْضِ ۚ وَهُوَ) and leaves a double space
+     *   once stripped, which would break a two-word phrase.
+     */
+    const foldArabic = (str: string): string =>
+        stripArabicDiacritics(str)
+            .replace(/[\u0671\u0622\u0623\u0625]/g, '\u0627')   // ٱ آ أ إ → ا
+            .replace(/\u0649/g, '\u064A')                          // ى → ي
+            .replace(/[\u0640\u200B-\u200F\u061C]/g, '')  // tatweel, joiners, ALM
+            .replace(/\s+/g, ' ')
+            .trim();
+
     // Normalize string for comparison (lowercase for non-Arabic, trim for Arabic)
     const normalizeString = (str: string): string => {
         const trimmed = str.trim();
@@ -2311,9 +2328,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
      */
     const searchVerseText = async (term: string): Promise<boolean> => {
         const arabic = containsArabic(term);
+        const needle = foldArabic(term);
+        const words = needle.split(' ').filter(Boolean);
+        /** The verse must contain the phrase as typed; failing that, every word
+         *  of it. quran.com's search is an OR over the words, which is what put
+         *  verses holding only one of them in the results. */
+        const holdsPhrase = (text: string) => foldArabic(text).includes(needle);
+        const holdsEveryWord = (text: string) => {
+            const t = foldArabic(text);
+            return words.every(w => t.includes(w));
+        };
         if (arabic) {
-            const needle = stripArabicDiacritics(term);
-            const localHits = verses.filter(v => stripArabicDiacritics(v.text_uthmani).includes(needle));
+            const localHits = verses.filter(v => holdsPhrase(v.text_uthmani));
             if (localHits.length === 1) { setScrollToVerseKey(localHits[0].verse_key); return true; }
             if (localHits.length > 1) {
                 setSearchResults(localHits.map(v => ({ verse_key: v.verse_key, text: v.text_uthmani })));
@@ -2324,11 +2350,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // Whole Qur'an. Diacritics are stripped from Arabic queries — partially
         // vowelled input returns far fewer results, or none.
         try {
-            const apiTerm = arabic ? stripArabicDiacritics(term) : term;
+            const apiTerm = arabic ? foldArabic(term) : term;
             const response = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(apiTerm)}&size=20`);
             if (!response.ok) throw new Error('Search API failed');
             const data = await response.json();
-            const results = (data.search?.results ?? []) as { verse_key: string }[];
+            let results = (data.search?.results ?? []) as { verse_key: string; text?: string }[];
+            // Keep only the verses that really hold what was typed. The API
+            // returns the whole verse in `text`, so this is decidable here; an
+            // English query is left alone, since it matched a translation.
+            if (arabic && words.length > 1) {
+                const phrase = results.filter(r => holdsPhrase(r.text ?? ''));
+                results = phrase.length > 0 ? phrase : results.filter(r => holdsEveryWord(r.text ?? ''));
+            }
             // The surah on screen first: during live logging the word is nearly
             // always in it, and the API returns matches in its own order.
             results.sort((a, b) => {
