@@ -442,7 +442,14 @@
     "confirmRemoveMemorizationRange": "Are you sure you want to remove the memorization from {{startSurah}}, Ayah {{startAyah}} to {{endSurah}}, Ayah {{endAyah}}?",
     "tajweedColors": "Tajweed colors",
     "tajweedInfo": "What do these colors mean?",
-    "tajweedInfoTitle": "Tajweed colors"
+    "tajweedInfoTitle": "Tajweed colors",
+    "searchInVerses": "Search verses for “{{query}}”",
+    "searchInVersesHint": "This surah first, then the whole Qur’an",
+    "goToVerseTitle": "Go to a verse in {{surah}}",
+    "goToVerseLabel": "Verse number (1–{{max}})",
+    "goToVerseGo": "Go",
+    "goToVerseCancel": "Cancel",
+    "goToVerseHint": "Double-click any surah in the bar to jump straight to a verse."
   },
   "lettersTrainer": {
     "pageTitle": "Arabic Letter Distinction Trainer",

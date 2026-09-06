@@ -442,7 +442,14 @@
     "confirmRemoveMemorizationRange": "هل أنت متأكد من رغبتك في إزالة الحفظ من سورة {{startSurah}}، آية {{startAyah}} إلى سورة {{endSurah}}، آية {{endAyah}}؟",
     "tajweedColors": "ألوان التجويد",
     "tajweedInfo": "ماذا تعني هذه الألوان؟",
-    "tajweedInfoTitle": "ألوان التجويد"
+    "tajweedInfoTitle": "ألوان التجويد",
+    "searchInVerses": "ابحث في الآيات عن «{{query}}»",
+    "searchInVersesHint": "هذه السورة أولًا ثم المصحف كله",
+    "goToVerseTitle": "الانتقال إلى آية في {{surah}}",
+    "goToVerseLabel": "رقم الآية (1–{{max}})",
+    "goToVerseGo": "انتقل",
+    "goToVerseCancel": "إلغاء",
+    "goToVerseHint": "انقر نقرًا مزدوجًا على أي سورة في الشريط للانتقال مباشرة إلى آية."
   },
   "lettersTrainer": {
     "pageTitle": "مدرّب التمييز بين الحروف العربية",

@@ -442,7 +442,14 @@
     "confirmRemoveMemorizationRange": "{{startSurah}}, Ayah {{startAyah}}'dan {{endSurah}}, Ayah {{endAyah}}'a kadar olan ezberlemeyi kaldırmak istediğinizden emin misiniz?",
     "tajweedColors": "Tecvid renkleri",
     "tajweedInfo": "Bu renkler ne anlama geliyor?",
-    "tajweedInfoTitle": "Tecvid renkleri"
+    "tajweedInfoTitle": "Tecvid renkleri",
+    "searchInVerses": "“{{query}}” için ayetlerde ara",
+    "searchInVersesHint": "Önce bu sure, sonra tüm Kur’an",
+    "goToVerseTitle": "{{surah}} içinde bir ayete git",
+    "goToVerseLabel": "Ayet numarası (1–{{max}})",
+    "goToVerseGo": "Git",
+    "goToVerseCancel": "İptal",
+    "goToVerseHint": "Bir ayete doğrudan gitmek için çubuktaki sureye çift tıkla."
   },
   "lettersTrainer": {
     "pageTitle": "Arapça Harf Ayırt Etme Eğitimi",

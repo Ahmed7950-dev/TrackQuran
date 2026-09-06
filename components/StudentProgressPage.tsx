@@ -942,6 +942,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [error, setError] = useState<string | null>(null);
     const [searchInput, setSearchInput] = useState('');
     const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
+    // Double-clicking a surah in the nav bar asks which verse to open.
+    const [verseJumpSurah, setVerseJumpSurah] = useState<number | null>(null);
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(
         savedViewOnMount?.verse ?? (studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null));
     const didResumeRef = useRef(false); // resume to the last-log position only once, on first open
@@ -2035,6 +2037,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return containsArabic(trimmed) ? trimmed : trimmed.toLowerCase();
     };
     
+    /** Pure edit-distance ratio. calculateSimilarity below returns 0.8 for ANY
+     *  containment, which is right for a typeahead and wrong for "is this the
+     *  whole name?" — قل contains ق, so it scored 0.8 against surah Qaf and the
+     *  word search never ran. */
+    const levenshteinRatio = (a: string, b: string): number => {
+        const s1 = normalizeString(a), s2 = normalizeString(b);
+        if (s1 === s2) return 1;
+        const len1 = s1.length, len2 = s2.length;
+        if (len1 === 0 || len2 === 0) return 0;
+        const m: number[][] = [];
+        for (let i = 0; i <= len1; i++) m[i] = [i];
+        for (let j = 0; j <= len2; j++) m[0][j] = j;
+        for (let i = 1; i <= len1; i++)
+            for (let j = 1; j <= len2; j++)
+                m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1,
+                                   m[i - 1][j - 1] + (s1[i - 1] === s2[j - 1] ? 0 : 1));
+        return 1 - m[len1][len2] / Math.max(len1, len2);
+    };
+
     // Fuzzy string matching using Levenshtein distance
     const calculateSimilarity = (str1: string, str2: string): number => {
         const s1 = normalizeString(str1);
@@ -2127,6 +2148,41 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
         
         return bestMatch;
+    };
+
+    /**
+     * Is this term a surah NAME, confidently? Whole-name comparison only.
+     *
+     * findBestMatchingSurah scores a mere SUBSTRING of a name 0.95, which is why
+     * searching for a word stopped working: قل is inside القلم, من is inside
+     * المؤمنون, نور is inside النور — every one of them jumped to a surah instead
+     * of searching the text. This asks the stricter question, and the text search
+     * runs before the loose fuzzy match rather than after it.
+     */
+    const confidentSurahMatch = (term: string): typeof QURAN_METADATA[0] | null => {
+        const arabic = containsArabic(term);
+        const ar = stripArabicDiacritics(term.trim()).replace(/^سورة\s*/, '');
+        const lat = normalizeString(term).replace(/^surah\s+/, '').replace(/^surat\s+/, '');
+        const noAl = (x: string) => x.replace(/^ال/, '').replace(/^al[- ]/, '');
+        let best: { surah: typeof QURAN_METADATA[0]; score: number } | null = null;
+        for (const surah of QURAN_METADATA) {
+            const nameAr = stripArabicDiacritics(surah.name).replace(/^سورة\s*/, '');
+            const variants = [
+                normalizeString(surah.englishName),
+                normalizeString(surah.transliteratedName),
+                normalizeString(surah.transliteratedName).replace(/-/g, ' '),
+                normalizeString(surah.transliteratedName).replace(/-/g, ''),
+            ];
+            // Exact, give or take the definite article
+            if (arabic ? (ar === nameAr || noAl(ar) === noAl(nameAr))
+                       : variants.some(v => v === lat || noAl(v) === noAl(lat))) return surah;
+            // Near-miss for a typo — still the WHOLE name, never a fragment of it
+            const score = arabic
+                ? levenshteinRatio(ar, nameAr)
+                : Math.max(...variants.map(v => Math.max(levenshteinRatio(lat, v), levenshteinRatio(noAl(lat), noAl(v)))));
+            if (score > (best?.score ?? 0)) best = { surah, score };
+        }
+        return best && best.score >= 0.8 ? best.surah : null;
     };
 
     // Top-N surah matches for the live search typeahead (same scoring as
@@ -2233,13 +2289,82 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         }
 
         if (raw.length >= 2) {
-            for (const m of getTopSurahMatches(raw, 5)) {
+            const named = confidentSurahMatch(raw);
+            // An exact name goes first; anything else is a word to look for, so
+            // the text search leads and the fuzzy name guesses follow it.
+            if (named) out.push({ key: `su-${named.number}`, icon: '📖', label: `${named.number}. ${named.transliteratedName}`, sub: `${named.name} · ${named.englishName}`, go: () => openSurah(named.number) });
+            out.push({ key: 'text', icon: '🔎', label: t('liveSession.searchInVerses', { query: raw }),
+                       sub: t('liveSession.searchInVersesHint'), go: () => { void runTextSearchFromSuggestion(raw); } });
+            for (const m of getTopSurahMatches(raw, 4)) {
+                if (named && m.surah.number === named.number) continue;
                 out.push({ key: `su-${m.surah.number}`, icon: '📖', label: `${m.surah.number}. ${m.surah.transliteratedName}`, sub: `${m.surah.name} · ${m.surah.englishName}`, go: () => openSurah(m.surah.number) });
             }
         }
         return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchInput, selectedSurahId]);
+
+    /**
+     * Find a verse by the words inside it: the loaded surah first (instant, and
+     * during live logging the word is nearly always on screen), then the whole
+     * Qur'an through quran.com. Returns false when nothing matched.
+     */
+    const searchVerseText = async (term: string): Promise<boolean> => {
+        const arabic = containsArabic(term);
+        if (arabic) {
+            const needle = stripArabicDiacritics(term);
+            const localHits = verses.filter(v => stripArabicDiacritics(v.text_uthmani).includes(needle));
+            if (localHits.length === 1) { setScrollToVerseKey(localHits[0].verse_key); return true; }
+            if (localHits.length > 1) {
+                setSearchResults(localHits.map(v => ({ verse_key: v.verse_key, text: v.text_uthmani })));
+                setIsSearchResultsModalOpen(true);
+                return true;
+            }
+        }
+        // Whole Qur'an. Diacritics are stripped from Arabic queries — partially
+        // vowelled input returns far fewer results, or none.
+        try {
+            const apiTerm = arabic ? stripArabicDiacritics(term) : term;
+            const response = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(apiTerm)}&size=20`);
+            if (!response.ok) throw new Error('Search API failed');
+            const data = await response.json();
+            const results = (data.search?.results ?? []) as { verse_key: string }[];
+            // The surah on screen first: during live logging the word is nearly
+            // always in it, and the API returns matches in its own order.
+            results.sort((a, b) => {
+                const sa = parseInt(a.verse_key, 10), sb = parseInt(b.verse_key, 10);
+                const here = (n: number) => (n === selectedSurahId ? 0 : 1);
+                return here(sa) - here(sb) || sa - sb
+                    || parseInt(a.verse_key.split(':')[1], 10) - parseInt(b.verse_key.split(':')[1], 10);
+            });
+            if (results && results.length > 0) {
+                if (results.length === 1) {
+                    const verseKey = results[0].verse_key;
+                    const [surahNum] = verseKey.split(':').map(Number);
+                    if (selectedSurahId !== surahNum) setSelectedSurahId(surahNum);
+                    setScrollToVerseKey(verseKey);
+                } else {
+                    setSearchResults(results);
+                    setIsSearchResultsModalOpen(true);
+                }
+                return true;
+            }
+        } catch (searchError) {
+            console.error('Word search failed:', searchError);
+        }
+        return false;
+    };
+
+    /** The typeahead's "search the text" row — same path as pressing Enter. */
+    const runTextSearchFromSuggestion = async (term: string) => {
+        setShowSearchSuggestions(false);
+        setIsSearchResultsModalOpen(false);
+        setSearchResults([]);
+        setIsSearching(true);
+        const hit = await searchVerseText(term);
+        setIsSearching(false);
+        if (!hit) showToast(t('liveSession.searchNotFound', { query: term }));
+    };
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2338,61 +2463,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
         }
         
-        // Search by surah name with fuzzy matching
-        const surahMatch = findBestMatchingSurah(term);
-        if (surahMatch && surahMatch.score > 0.4) {
-            setSelectedSurahId(surahMatch.surah.number);
+        // A surah by NAME — but only when the term really is the name. A word
+        // that merely appears inside one (قل in القلم) belongs to the text search
+        // below, which is what made searching for a word stop working.
+        const exactSurah = confidentSurahMatch(term);
+        if (exactSurah) {
+            handleSurahSelection(exactSurah.number);
             setIsSearching(false);
-            if (surahMatch.score < 0.9) {
-                showToast(`Found: ${surahMatch.surah.englishName} (${surahMatch.surah.transliteratedName})`);
-            }
             return;
         }
-        
-        // Local-first text search: scan the currently loaded surah (diacritic-
-        // insensitive). During live logging the word being searched is almost
-        // always in the surah on screen — this jumps instantly, no network.
-        if (containsArabic(term)) {
-            const strippedTerm = stripArabicDiacritics(term);
-            const localHits = verses.filter(v => stripArabicDiacritics(v.text_uthmani).includes(strippedTerm));
-            if (localHits.length === 1) {
-                setScrollToVerseKey(localHits[0].verse_key);
-                setIsSearching(false);
-                return;
-            }
-            if (localHits.length > 1) {
-                setSearchResults(localHits.map(v => ({ verse_key: v.verse_key, text: v.text_uthmani })));
-                setIsSearchResultsModalOpen(true);
-                setIsSearching(false);
-                return;
-            }
+
+        // Words inside a verse — the loaded surah first, then the whole Qur'an.
+        if (await searchVerseText(term)) {
+            setIsSearching(false);
+            return;
         }
 
-        // Global text search (quran.com). Strip diacritics from Arabic queries —
-        // partially-vowelled input returns far fewer/none results otherwise.
-        try {
-            const apiTerm = containsArabic(term) ? stripArabicDiacritics(term) : term;
-            const response = await fetch(`https://api.quran.com/api/v4/search?q=${encodeURIComponent(apiTerm)}&size=20`);
-            if (!response.ok) throw new Error('Search API failed');
-            const data = await response.json();
-            const results = data.search?.results;
-            if (results && results.length > 0) {
-                if (results.length === 1) {
-                    const verseKey = results[0].verse_key; 
-                    const [surahNum] = verseKey.split(':').map(Number);
-                    if (selectedSurahId !== surahNum) setSelectedSurahId(surahNum); 
-                    setScrollToVerseKey(verseKey);
-                } else { 
-                    setSearchResults(results); 
-                    setIsSearchResultsModalOpen(true); 
-                }
-                setIsSearching(false); 
-                return;
-            }
-        } catch (searchError) { 
-            console.error("Word search failed:", searchError); 
+        // Nothing in the text: fall back to the loose fuzzy name match, so a
+        // half-typed or misspelt surah name still lands somewhere sensible.
+        const surahMatch = findBestMatchingSurah(term);
+        if (surahMatch && surahMatch.score > 0.4) {
+            handleSurahSelection(surahMatch.surah.number);
+            setIsSearching(false);
+            showToast(`Found: ${surahMatch.surah.englishName} (${surahMatch.surah.transliteratedName})`);
+            return;
         }
-        
+
         // If nothing found, try to suggest similar surahs
         const suggestions: string[] = [];
         const allMatches = QURAN_METADATA.map(s => ({
@@ -3473,6 +3569,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     id={`surah-nav-${surahStatuses[0].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[0].id)}
+                                    onDoubleClick={() => setVerseJumpSurah(surahStatuses[0].id)}
+                                    title={t('liveSession.goToVerseHint')}
                                     className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[0].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`} />
@@ -3491,6 +3589,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <div className="flex items-center gap-1 sm:gap-2 pb-0.5">
                                     {surahStatuses.slice(1, -1).map(({ id, transliteratedName, status, memStatus }) => (
                                         <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
+                                            onDoubleClick={() => setVerseJumpSurah(id)}
+                                            title={t('liveSession.goToVerseHint')}
                                             className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
                                             <span className="font-mono text-xs">{id}</span>
                                             <div className={`w-px h-4 ${getDividerClass(id, status, memStatus)}`} />
@@ -3511,6 +3611,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     id={`surah-nav-${surahStatuses[surahStatuses.length - 1].id}`}
                                     onClick={() => handleSurahSelection(surahStatuses[surahStatuses.length - 1].id)}
+                                    onDoubleClick={() => setVerseJumpSurah(surahStatuses[surahStatuses.length - 1].id)}
+                                    title={t('liveSession.goToVerseHint')}
                                     className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[surahStatuses.length - 1].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`} />
@@ -3941,6 +4043,55 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     </div>
                 </div>
             )}
+            {/* ── Go to a verse — double-clicking a surah in the nav bar ────── */}
+            {verseJumpSurah !== null && (() => {
+                const surah = QURAN_METADATA.find(x => x.number === verseJumpSurah);
+                if (!surah) return null;
+                const go = (raw: string) => {
+                    const n = parseInt(normalizeDigits(raw.trim()), 10);
+                    if (isNaN(n)) return;
+                    const ayah = Math.max(1, Math.min(n, surah.numberOfAyahs));
+                    if (selectedSurahId !== surah.number) setSelectedSurahId(surah.number);
+                    setScrollToVerseKey(`${surah.number}:${ayah}`);
+                    setVerseJumpSurah(null);
+                    if (ayah !== n) showToast(`${surah.transliteratedName} ${ayah}`);
+                };
+                return (
+                    <div className="fixed inset-0 bg-black/50 z-[210] flex items-center justify-center p-4"
+                         onClick={() => setVerseJumpSurah(null)}>
+                        <form
+                            onClick={e => e.stopPropagation()}
+                            onSubmit={e => { e.preventDefault(); go(new FormData(e.currentTarget).get('ayah') as string ?? ''); }}
+                            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-5 w-full max-w-xs"
+                        >
+                            <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
+                                {t('liveSession.goToVerseTitle', { surah: surah.transliteratedName })}
+                            </h3>
+                            <p className="mt-0.5 text-xs font-semibold text-slate-400 dark:text-slate-500" dir="auto">{surah.name}</p>
+                            <label className="block mt-4">
+                                <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">
+                                    {t('liveSession.goToVerseLabel', { max: surah.numberOfAyahs })}
+                                </span>
+                                <input
+                                    name="ayah" type="number" min={1} max={surah.numberOfAyahs} autoFocus
+                                    inputMode="numeric" placeholder={`1–${surah.numberOfAyahs}`}
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white text-center text-lg font-black focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none"
+                                />
+                            </label>
+                            <div className="flex gap-2 mt-4">
+                                <button type="submit"
+                                    className="flex-1 py-2.5 rounded-xl bg-teal-600 dark:bg-orange-600 text-white font-black hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors">
+                                    {t('liveSession.goToVerseGo')}
+                                </button>
+                                <button type="button" onClick={() => setVerseJumpSurah(null)}
+                                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 font-bold hover:border-slate-400 transition-colors">
+                                    {t('liveSession.goToVerseCancel')}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                );
+            })()}
             <SearchResultsModal isOpen={isSearchResultsModalOpen} onClose={() => setIsSearchResultsModalOpen(false)} results={searchResults} query={searchInput} onSelect={handleSelectSearchResult} />
             <ConfirmationModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} })} onConfirm={confirmModalState.onConfirm} title={confirmModalState.title} message={confirmModalState.message} />
 
