@@ -285,8 +285,19 @@ const TajweedExercisePage: React.FC<{
   const words = item ? allWords.slice(item.from, item.to + 1) : [];
   const hit = new Set(item?.words ?? []);
 
+  // How big the phrase can be drawn. Three times the old size is right for a
+  // short one and impossible for a long one, so the size comes from the LENGTH:
+  // ~400/chars of the card's width fills about two lines, clamped so a very
+  // short phrase stops at 12rem (3× where it started) and a long one never
+  // drops below 2.5rem. cqw measures the card, not the window, so it holds at
+  // any width; a browser without container queries inherits the rem fallback
+  // on the card instead.
+  const shownChars = Math.max(8, words.join(' ').replace(/[ً-ٟؐ-ؚٰۖ-ۜ۟-ۧ۩-ۭ]/g, '').length);
+  const verseFont = `clamp(2.5rem, ${(400 / shownChars).toFixed(1)}cqw, 12rem)`;
+  const verseFallback = `${Math.max(2.5, Math.min(12, 44 / shownChars * 2.4)).toFixed(2)}rem`;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-10">
+    <div className="max-w-5xl mx-auto px-4 pb-36">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={onExit}
           className="px-4 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 flex-shrink-0">
@@ -316,16 +327,20 @@ const TajweedExercisePage: React.FC<{
       )}
 
       {/* The verse */}
-      <div dir="rtl" className={`rounded-3xl border-2 bg-white dark:bg-gray-800 px-5 py-8 mb-2 transition-colors ${
+      <div dir="rtl"
+        style={{ containerType: 'inline-size', fontSize: verseFallback }}
+        className={`rounded-3xl border-2 bg-white dark:bg-gray-800 px-5 py-6 mb-2 transition-colors ${
         flash === 'ok' ? 'border-emerald-400' : flash === 'no' ? 'border-red-400' : 'border-slate-200 dark:border-gray-700'}`}>
-        <p className="font-quranic text-center leading-[2.1]" style={{ fontSize: 'clamp(2.1rem, 8vw, 4rem)' }}>
+        {/* Three times the size it was: a phrase this short can carry it, and
+            the tutor is often reading it out over a call. */}
+        <p className="font-quranic text-center leading-[1.7]" style={{ fontSize: verseFont }}>
           {item?.trimmedStart && <span className="text-slate-300 dark:text-gray-600">… </span>}
           {words.map((w, i) => (
             <React.Fragment key={i}>
               <span style={showHint && hit.has(item!.from + i) && rule
                 ? { color: rule.color, fontWeight: 700 }
                 : undefined}>
-                {renderWordWithMarks(w, `tj${idx}-${i}`, 2.1)}
+                {renderWordWithMarks(w, `tj${idx}-${i}`, 1.7)}
               </span>
               {i < words.length - 1 ? ' ' : ''}
             </React.Fragment>
@@ -335,7 +350,8 @@ const TajweedExercisePage: React.FC<{
       </div>
       <p className="text-center text-xs font-bold text-slate-400 dark:text-slate-500 mb-5">{item?.verseKey}</p>
 
-      <div className="flex items-center justify-center gap-3">
+      <div className="fixed inset-x-0 bottom-0 z-20 flex flex-col items-center gap-1 px-4 pt-6 pb-2 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-gray-900 dark:via-gray-900/95">
+        <div className="flex items-center justify-center gap-3 w-full max-w-2xl">
         <button onClick={() => advance(false)} aria-keyshortcuts="N"
           className="flex-1 max-w-[15rem] py-4 rounded-2xl bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white font-black text-lg shadow-lg ring-1 ring-white/15 transition-all active:scale-95 flex items-center justify-center gap-2.5">
           <span>✗ {t('tajweedExercise.wrong')}</span>
@@ -346,10 +362,11 @@ const TajweedExercisePage: React.FC<{
           <span>✓ {t('tajweedExercise.correct')}</span>
           <kbd className="hidden sm:flex items-center justify-center w-6 h-6 rounded-md bg-black/25 text-[11px] font-bold ring-1 ring-white/20">M</kbd>
         </button>
+        </div>
+        <p className="text-center text-[11px] text-slate-400" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+          {t('tajweedExercise.keysHint')}
+        </p>
       </div>
-      <p className="text-center text-[11px] text-slate-400 mt-3" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-        {t('tajweedExercise.keysHint')}
-      </p>
     </div>
   );
 };
