@@ -193,6 +193,34 @@ export interface TajweedExerciseItem {
   rule: TajweedExerciseRuleId;
   /** Word indices carrying it, for the highlight. */
   words: number[];
+  /** The slice of the verse worth showing — the rule plus a couple of words of
+   *  context either side. Inclusive, in `splitVerseWords` indices. A whole verse
+   *  is a wall of text on a drill card; the rule is what the student is reading
+   *  for. `trimmedStart` / `trimmedEnd` say where the verse continues. */
+  from: number;
+  to: number;
+  trimmedStart: boolean;
+  trimmedEnd: boolean;
+}
+
+/** Words of context kept on each side of the rule. */
+const CONTEXT_WORDS = 2;
+
+/**
+ * The occurrence to show: the first matched word plus any matched words running
+ * straight on from it (iqlāb and the idghāms span two), then the context.
+ */
+export function excerptRange(
+  matched: number[], wordCount: number,
+): { from: number; to: number; span: number[] } {
+  const sorted = [...matched].sort((a, b) => a - b);
+  const span = [sorted[0]];
+  for (let i = 1; i < sorted.length && sorted[i] === span[span.length - 1] + 1; i++) span.push(sorted[i]);
+  return {
+    from: Math.max(0, span[0] - CONTEXT_WORDS),
+    to: Math.min(wordCount - 1, span[span.length - 1] + CONTEXT_WORDS),
+    span,
+  };
 }
 
 export interface TajweedRuleReport {
@@ -216,8 +244,10 @@ const SURAH_COUNT = 114;
 const SCAN_BATCH = 8;
 /** Per-rule pool cap — a run never needs more than a few times its quota. */
 const POOL_CAP = 120;
-/** Very long verses make a poor drill card; Al-Baqarah 282 is 129 words. */
-const MAX_WORDS = 22;
+/** Only a window of the verse is shown, so length barely matters now — this cap
+ *  just keeps the pool away from the handful of enormous verses (2:282 is 129
+ *  words) where a two-word window would lose the reader completely. */
+const MAX_WORDS = 45;
 
 const shuffle = <T,>(arr: T[], rnd: () => number): T[] => {
   const a = arr.slice();
@@ -270,7 +300,11 @@ export async function buildTajweedExercise(
       const key = `${id}|${v.verse_key}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      pool.push({ verseKey: v.verse_key, text: v.text_uthmani, rule: id, words: hit });
+      const { from, to, span } = excerptRange(hit, words.length);
+      pool.push({
+        verseKey: v.verse_key, text: v.text_uthmani, rule: id, words: span,
+        from, to, trimmedStart: from > 0, trimmedEnd: to < words.length - 1,
+      });
     }
   };
 

@@ -280,7 +280,9 @@ const TajweedExercisePage: React.FC<{
   // ── Running ───────────────────────────────────────────────────────────────
   const item = items[idx];
   const rule = item ? tajweedExerciseRule(item.rule) : undefined;
-  const words = item ? splitVerseWords(item.text) : [];
+  const allWords = item ? splitVerseWords(item.text) : [];
+  // Only the part of the verse the rule lives in — see excerptRange.
+  const words = item ? allWords.slice(item.from, item.to + 1) : [];
   const hit = new Set(item?.words ?? []);
 
   return (
@@ -316,17 +318,19 @@ const TajweedExercisePage: React.FC<{
       {/* The verse */}
       <div dir="rtl" className={`rounded-3xl border-2 bg-white dark:bg-gray-800 px-5 py-8 mb-2 transition-colors ${
         flash === 'ok' ? 'border-emerald-400' : flash === 'no' ? 'border-red-400' : 'border-slate-200 dark:border-gray-700'}`}>
-        <p className="font-quranic text-center leading-[2.4]" style={{ fontSize: 'clamp(1.5rem, 5.5vw, 2.6rem)' }}>
+        <p className="font-quranic text-center leading-[2.1]" style={{ fontSize: 'clamp(2.1rem, 8vw, 4rem)' }}>
+          {item?.trimmedStart && <span className="text-slate-300 dark:text-gray-600">… </span>}
           {words.map((w, i) => (
             <React.Fragment key={i}>
-              <span style={showHint && hit.has(i) && rule
+              <span style={showHint && hit.has(item!.from + i) && rule
                 ? { color: rule.color, fontWeight: 700 }
                 : undefined}>
-                {renderWordWithMarks(w, `tj${idx}-${i}`, 2.4)}
+                {renderWordWithMarks(w, `tj${idx}-${i}`, 2.1)}
               </span>
               {i < words.length - 1 ? ' ' : ''}
             </React.Fragment>
           ))}
+          {item?.trimmedEnd && <span className="text-slate-300 dark:text-gray-600"> …</span>}
         </p>
       </div>
       <p className="text-center text-xs font-bold text-slate-400 dark:text-slate-500 mb-5">{item?.verseKey}</p>
