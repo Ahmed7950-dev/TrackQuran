@@ -13,7 +13,7 @@ export enum AttendanceStatus {
  *  attendance stats pick them up for free. `detail` is a short human line; the
  *  optional numbers let the day view show a score without re-querying. */
 export interface ActivityLog {
-  kind: 'fluency' | 'tajweed' | 'letters' | 'letters-tajweed' | 'game';
+  kind: 'fluency' | 'tajweed' | 'letters' | 'letters-tajweed' | 'game' | 'tajweed-exercise';
   title: string;        // e.g. "Fluency test — level 4"
   detail?: string;      // e.g. "52.3s · 2 buzzes"
   /** Source row id (fluency_results.id, tajweed lesson id, challenge id …) so a

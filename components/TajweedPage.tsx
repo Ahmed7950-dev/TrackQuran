@@ -12,6 +12,8 @@ import { useAuth } from '../context/AuthProvider';
 import { listLessons, deleteLesson, updateLesson, getCompletedLessonIds, markLessonCompleted } from '../services/tajweedService';
 import CreateLessonModal from './CreateLessonModal';
 import TajweedLessonViewer from './TajweedLessonViewer';
+import TajweedExercisePage from './TajweedExercisePage';
+import { useI18n } from '../context/I18nProvider';
 
 interface Props {
   students: Student[];
@@ -25,6 +27,7 @@ interface Props {
 
 const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogActivity, readOnly = false }) => {
   const { currentUser } = useAuth();
+  const { t } = useI18n();
   // In readOnly mode (student portal) never show admin controls even if the
   // teacher happens to open the link in their authenticated browser.
   const isAdmin = !readOnly && currentUser?.role === 'admin';
@@ -36,6 +39,8 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
   const [editing,       setEditing]       = useState<TajweedLesson | null>(null);
   const [viewing,       setViewing]       = useState<TajweedLesson | null>(null);
   const [completedIds,  setCompletedIds]  = useState<Set<string>>(new Set());
+  // The exercises section takes over the page while it is open.
+  const [exercising,    setExercising]    = useState(false);
 
   // ── Drag state (admin only) ────────────────────────────────────────────────
   const dragIdx    = useRef<number | null>(null);
@@ -101,6 +106,17 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
     );
   }
 
+  if (exercising) {
+    return (
+      <TajweedExercisePage
+        students={students}
+        preSelectedStudentId={preSelectedStudentId}
+        onLogActivity={onLogActivity}
+        onExit={() => setExercising(false)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
@@ -125,6 +141,21 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
           </button>
         )}
       </div>
+
+      {/* ── Exercises ── */}
+      <button
+        onClick={() => setExercising(true)}
+        className="group w-full text-left rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-fuchsia-50/60 dark:from-violet-900/25 dark:to-fuchsia-900/15 p-4 sm:p-5 flex items-center gap-4 hover:shadow-lg hover:-translate-y-0.5 transition-all"
+      >
+        <span className="flex-shrink-0 w-12 h-12 rounded-2xl bg-violet-500 text-white text-2xl flex items-center justify-center shadow-sm">🎯</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-lg font-black text-slate-800 dark:text-slate-100">{t('tajweedExercise.openTitle')}</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('tajweedExercise.openSub')}</span>
+        </span>
+        <span className="flex-shrink-0 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-bold group-hover:bg-violet-700 transition-colors">
+          {t('tajweedExercise.open')}
+        </span>
+      </button>
 
       {/* ── Empty state ── */}
       {lessons.length === 0 && (

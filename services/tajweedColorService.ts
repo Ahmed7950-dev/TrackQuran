@@ -113,7 +113,7 @@ const IDGHAM_NO_SET = new Set(['ل', 'ر']);
 const HAMZA_SET = new Set(['ء', 'أ', 'إ', 'ؤ', 'ئ', 'آ']);
 const VOWELS = ['َ', 'ُ', 'ِ']; // fatha, damma, kasra
 
-const isArabicLetter = (ch: string | undefined): boolean => {
+export const isArabicLetterUnit = (ch: string | undefined): boolean => {
   if (!ch) return false;
   const c = ch.charCodeAt(0);
   if (c >= 0x0621 && c <= 0x064A) return true;
@@ -126,10 +126,10 @@ const isArabicLetter = (ch: string | undefined): boolean => {
 
 interface Unit { wi: number; ui: number; u: string; base: string }
 
-const segmentWord = (w: string): string[] => {
+export const segmentWord = (w: string): string[] => {
   const units: string[] = [];
   for (const ch of w) {
-    if (isArabicLetter(ch)) units.push(ch);
+    if (isArabicLetterUnit(ch)) units.push(ch);
     else if (units.length) units[units.length - 1] += ch;
     else units.push(ch);
   }
@@ -144,7 +144,7 @@ const segmentWord = (w: string): string[] => {
 // Match utils/quranicMarks.splitVerseWords: standalone waqf-sign tokens merge
 // into the preceding word, so word indices line up with the reader's.
 const STANDALONE_WAQF_RE = /^[ۖ-ۜ]+$/;
-const splitWords = (textUthmani: string): string[] => {
+export const splitTajweedWords = (textUthmani: string): string[] => {
   const raw = textUthmani.split(' ');
   const out: string[] = [];
   for (const w of raw) {
@@ -167,13 +167,13 @@ const splitWords = (textUthmani: string): string[] => {
  */
 export function analyzeVerseTajweed(verse: string, turkish = false): Map<string, TajweedRule> {
   const flat: Unit[] = [];
-  splitWords(verse).forEach((w, wi) => segmentWord(w).forEach((u, ui) => flat.push({ wi, ui, u, base: u[0] })));
+  splitTajweedWords(verse).forEach((w, wi) => segmentWord(w).forEach((u, ui) => flat.push({ wi, ui, u, base: u[0] })));
   const L = flat.length;
   const out: (TajweedRule | undefined)[] = new Array(L);
   const set = (i: number, r: TajweedRule, force = false) => { if (i >= 0 && i < L && (force || !out[i])) out[i] = r; };
   const marks = (i: number) => flat[i].u.slice(1);
   const has = (i: number, ch: string) => i >= 0 && i < L && marks(i).includes(ch);
-  const isLetterUnit = (i: number) => isArabicLetter(flat[i].base);
+  const isLetterUnit = (i: number) => isArabicLetterUnit(flat[i].base);
   const isSilentUnit = (i: number) => has(i, SILENT0) || has(i, SILENT2);
   const isWaqfUnit = (i: number) => i >= 0 && i < L && !isLetterUnit(i);
   const hasSukun = (i: number) => has(i, SUKUN) || has(i, SUKUN_Q);
