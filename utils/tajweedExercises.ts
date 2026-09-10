@@ -203,8 +203,10 @@ export interface TajweedExerciseItem {
   trimmedEnd: boolean;
 }
 
-/** Words of context kept on each side of the rule. */
-const CONTEXT_WORDS = 2;
+/** Words of context kept on each side of the rule. A rule that already spans
+ *  two words (iqlāb, the idghāms) gets one word of context instead of two: the
+ *  card draws the excerpt on a single line, so every extra word costs size. */
+const contextFor = (spanWords: number) => (spanWords >= 2 ? 1 : 2);
 
 /**
  * The occurrence to show: the first matched word plus any matched words running
@@ -216,9 +218,10 @@ export function excerptRange(
   const sorted = [...matched].sort((a, b) => a - b);
   const span = [sorted[0]];
   for (let i = 1; i < sorted.length && sorted[i] === span[span.length - 1] + 1; i++) span.push(sorted[i]);
+  const pad = contextFor(span.length);
   return {
-    from: Math.max(0, span[0] - CONTEXT_WORDS),
-    to: Math.min(wordCount - 1, span[span.length - 1] + CONTEXT_WORDS),
+    from: Math.max(0, span[0] - pad),
+    to: Math.min(wordCount - 1, span[span.length - 1] + pad),
     span,
   };
 }

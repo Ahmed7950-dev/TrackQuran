@@ -13,7 +13,7 @@
 // day counts as attended and the calendar shows it like any other challenge.
 // -----------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Student, ActivityLog } from '../types';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { useI18n } from '../context/I18nProvider';
@@ -23,6 +23,11 @@ import {
 } from '../utils/tajweedExercises';
 
 const LENGTHS = [10, 15, 20] as const;
+
+/** 12rem — three times what the verse started at, for the shortest phrases. */
+const MAX_VERSE_PX = 192;
+/** Below this a long phrase is no longer worth reading off a screen. */
+const MIN_VERSE_PX = 28;
 
 type Phase = 'setup' | 'loading' | 'running' | 'done';
 
@@ -52,6 +57,10 @@ const TajweedExercisePage: React.FC<{
 
   const [cfg, setCfg] = useState<RunConfig | null>(null);
   const runNoRef = useRef(0);
+
+  // ── Fitting the phrase to the line ────────────────────────────────────────
+  const verseBoxRef  = useRef<HTMLDivElement>(null);
+  const verseTextRef = useRef<HTMLParagraphElement>(null);
 
   const ruleName = useCallback(
     (id: TajweedExerciseRuleId) => t(`tajweedExercise.rule.${id}`),
@@ -104,6 +113,58 @@ const TajweedExercisePage: React.FC<{
       setPhase('done');
     }
   }, [items.length, idx, correct, cfg, ruleName, studentId, onLogActivity, t]);
+
+  /**
+   * Fit the line to the card, measuring THE LINE ITSELF and writing the size
+   * straight to the node. An estimate from a plain-text ruler was 20% out on
+   * half the cards — renderWordWithMarks adds joiners and overlay spans, and
+   * the marks move the advance width around — so only the drawn element knows
+   * how wide it really is.
+   *
+   * Imperative on purpose: sizing through state meant every measurement caused
+   * a render, the render resized the card, the ResizeObserver measured again,
+   * and React stopped it with "maximum update depth exceeded". Nothing here
+   * re-renders, and the loop is bounded twice over (a proportional jump, then
+   * at most a dozen 4% steps).
+   */
+  const fitVerse = useCallback(() => {
+    const box = verseBoxRef.current, line = verseTextRef.current;
+    if (!box || !line) return;
+    const style = getComputedStyle(box);
+    const avail = box.clientWidth - parseFloat(style.paddingInlineStart || '0')
+                                 - parseFloat(style.paddingInlineEnd || '0') - 6;
+    if (avail <= 0) return;                        // laid out while hidden
+    let size = MAX_VERSE_PX;
+    line.style.fontSize = `${size}px`;
+    const drawn = line.scrollWidth;
+    if (drawn > avail) {
+      size = Math.max(MIN_VERSE_PX, Math.floor(size * avail / drawn));
+      line.style.fontSize = `${size}px`;
+      let guard = 0;
+      while (line.scrollWidth > avail && size > MIN_VERSE_PX && guard++ < 12) {
+        size = Math.max(MIN_VERSE_PX, size - Math.max(1, Math.ceil(size * 0.04)));
+        line.style.fontSize = `${size}px`;
+      }
+    }
+  }, []);
+
+  useLayoutEffect(() => { fitVerse(); }, [fitVerse, idx, items, phase, showHint]);
+
+  // Watch the CARD, not the window: the first measurement can land while the
+  // card has no width yet (a hidden tab, a font still loading), and a window
+  // listener would never hear about it changing.
+  useEffect(() => {
+    const box = verseBoxRef.current;
+    if (!box) return;
+    const ro = new ResizeObserver(() => fitVerse());
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [fitVerse, phase]);
+  // The Quranic font arrives after first paint and changes every width.
+  useEffect(() => {
+    const fonts = (document as unknown as { fonts?: { ready?: Promise<unknown> } }).fonts;
+    fonts?.ready?.then(() => fitVerse()).catch(() => { /* no Font Loading API */ });
+  }, [fitVerse]);
 
   // Same keys as the other challenges: N = wrong, M = correct.
   useEffect(() => {
@@ -285,19 +346,12 @@ const TajweedExercisePage: React.FC<{
   const words = item ? allWords.slice(item.from, item.to + 1) : [];
   const hit = new Set(item?.words ?? []);
 
-  // How big the phrase can be drawn. Three times the old size is right for a
-  // short one and impossible for a long one, so the size comes from the LENGTH:
-  // ~400/chars of the card's width fills about two lines, clamped so a very
-  // short phrase stops at 12rem (3× where it started) and a long one never
-  // drops below 2.5rem. cqw measures the card, not the window, so it holds at
-  // any width; a browser without container queries inherits the rem fallback
-  // on the card instead.
-  const shownChars = Math.max(8, words.join(' ').replace(/[ً-ٟؐ-ؚٰۖ-ۜ۟-ۧ۩-ۭ]/g, '').length);
-  const verseFont = `clamp(2.5rem, ${(400 / shownChars).toFixed(1)}cqw, 12rem)`;
-  const verseFallback = `${Math.max(2.5, Math.min(12, 44 / shownChars * 2.4)).toFixed(2)}rem`;
+  // The phrase stays on ONE line and takes the width it is given: the size is
+  // whatever makes it fit, capped at 12rem so a two-word excerpt doesn't turn
+  // into a billboard, and floored at 28px so a long one is still readable.
 
   return (
-    <div className="max-w-5xl mx-auto px-4 pb-36">
+    <div className="w-full px-2 sm:px-4 pb-36">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={onExit}
           className="px-4 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 flex-shrink-0">
@@ -326,21 +380,19 @@ const TajweedExercisePage: React.FC<{
         </div>
       )}
 
-      {/* The verse */}
-      <div dir="rtl"
-        style={{ containerType: 'inline-size', fontSize: verseFallback }}
-        className={`rounded-3xl border-2 bg-white dark:bg-gray-800 px-5 py-6 mb-2 transition-colors ${
+      {/* The verse — ONE line, as big as that line allows. */}
+      <div ref={verseBoxRef} dir="rtl"
+        className={`rounded-3xl border-2 bg-white dark:bg-gray-800 px-4 py-6 mb-2 overflow-hidden transition-colors ${
         flash === 'ok' ? 'border-emerald-400' : flash === 'no' ? 'border-red-400' : 'border-slate-200 dark:border-gray-700'}`}>
-        {/* Three times the size it was: a phrase this short can carry it, and
-            the tutor is often reading it out over a call. */}
-        <p className="font-quranic text-center leading-[1.7]" style={{ fontSize: verseFont }}>
+        <p ref={verseTextRef} className="font-quranic text-center leading-[1.35] whitespace-nowrap"
+           style={{ fontSize: `${MAX_VERSE_PX}px` }}>
           {item?.trimmedStart && <span className="text-slate-300 dark:text-gray-600">… </span>}
           {words.map((w, i) => (
             <React.Fragment key={i}>
               <span style={showHint && hit.has(item!.from + i) && rule
                 ? { color: rule.color, fontWeight: 700 }
                 : undefined}>
-                {renderWordWithMarks(w, `tj${idx}-${i}`, 1.7)}
+                {renderWordWithMarks(w, `tj${idx}-${i}`, 1.35)}
               </span>
               {i < words.length - 1 ? ' ' : ''}
             </React.Fragment>
