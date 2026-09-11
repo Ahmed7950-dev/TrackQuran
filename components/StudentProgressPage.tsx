@@ -489,6 +489,58 @@ const SurahProgressBar: React.FC<{
     );
 };
 
+/** One segment per page of the open surah, in the same colour language as the
+ *  surah bar above it: green = memorized, orange = read, purple = homework,
+ *  blue = tafsir — a lighter shade when the page is only partly covered.
+ *  Clicking a segment opens that page. */
+const PageProgressBar: React.FC<{
+    pages: number[];
+    title: string;
+    statusOf: (page: number) => 'mem' | 'mem-part' | 'read' | 'read-part' | 'homework' | 'tafsir' | 'none';
+    onSelectPage: (page: number) => void;
+    isOpen?: (page: number) => boolean;
+}> = ({ pages, title, statusOf, onSelectPage, isOpen }) => {
+    const CLS: Record<ReturnType<typeof statusOf>, string> = {
+        'mem':       'bg-green-500 dark:bg-green-600 hover:bg-green-600',
+        'mem-part':  'bg-green-300 dark:bg-green-800 hover:bg-green-400',
+        'read':      'bg-orange-400 dark:bg-orange-600 hover:bg-orange-500',
+        'read-part': 'bg-orange-200 dark:bg-orange-900 hover:bg-orange-300',
+        'homework':  'bg-purple-400 dark:bg-purple-600 hover:bg-purple-500',
+        'tafsir':    'bg-blue-400 dark:bg-blue-600 hover:bg-blue-500',
+        'none':      'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600',
+    };
+    if (pages.length === 0) return null;
+    return (
+        <div className="mt-3">
+            <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{title}</h4>
+            <div className="flex flex-wrap gap-1">
+                {pages.map(page => {
+                    const open = isOpen?.(page);
+                    return (
+                        <div key={page} className="relative group flex-grow" style={{ minWidth: '1.5%' }}>
+                            <button
+                                type="button"
+                                aria-label={`Page ${page}`}
+                                onClick={() => onSelectPage(page)}
+                                className={`h-5 w-full block rounded-sm text-[9px] font-bold tabular-nums text-white/90 leading-5 overflow-hidden transition-colors cursor-pointer ${CLS[statusOf(page)]} ${
+                                    open ? 'ring-2 ring-teal-500 dark:ring-amber-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
+                            >
+                                {page}
+                            </button>
+                            <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 dark:bg-black text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 left-1/2 -translate-x-1/2">
+                                Page {page}
+                                <svg className="absolute text-gray-800 dark:text-black h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255">
+                                    <polygon className="fill-current" points="0,0 127.5,127.5 255,0"/>
+                                </svg>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 const SearchResultsModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -1685,6 +1737,81 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const ss = r.startSurah ?? r.surah; const es = r.endSurah ?? r.surah;
             return surahId >= ss && surahId <= es;
         });
+
+    // ── Pages of the open surah ────────────────────────────────────────────
+    // The same four categories as the surah bar, one page at a time. A page is
+    // "part" when a log touches it without covering it — getRecitedPagesSet only
+    // counts pages read end to end, and a half-read page should not look the
+    // same as an untouched one.
+    const surahPages = useMemo(() => {
+        const info = QURAN_METADATA.find(x => x.number === selectedSurahId);
+        if (!info) return [] as number[];
+        const first = getPageOfAyah(selectedSurahId, 1);
+        const last  = getPageOfAyah(selectedSurahId, info.numberOfAyahs);
+        const out: number[] = [];
+        for (let p = first; p <= last; p++) out.push(p);
+        return out;
+    }, [selectedSurahId]);
+
+    /** Every page an inclusive verse range touches. */
+    const pagesTouchedBy = useCallback((
+        ranges: Array<{ startSurah?: number; startAyah?: number; endSurah?: number; endAyah?: number; surah?: number; ayah?: number }>,
+    ): Set<number> => {
+        const set = new Set<number>();
+        for (const r of ranges) {
+            const ss = r.startSurah ?? r.surah, sa = r.startAyah ?? r.ayah ?? 1;
+            const es = r.endSurah ?? r.surah,   ea = r.endAyah ?? r.ayah ?? 1;
+            if (ss === undefined || es === undefined) continue;
+            const from = getPageOfAyah(ss, sa), to = getPageOfAyah(es, ea);
+            for (let p = Math.min(from, to); p <= Math.max(from, to); p++) set.add(p);
+        }
+        return set;
+    }, []);
+
+    const pageStatusSets = useMemo(() => ({
+        memFull:  getMemorizedPagesSet(student),
+        readFull: getRecitedPagesSet(student),
+        memPart:  pagesTouchedBy(student.memorizationAchievements ?? []),
+        readPart: pagesTouchedBy(student.recitationAchievements ?? []),
+        homework: pagesTouchedBy(homeworkRanges.map(r => ({
+            startSurah: r.startSurah, startAyah: r.startAyah, endSurah: r.endSurah, endAyah: r.endAyah }))),
+        tafsir:   pagesTouchedBy(student.tafsirReviews ?? []),
+    }), [student, homeworkRanges, pagesTouchedBy]);
+
+    /** Same priority the surah bar uses: hifz, then reading, then homework, then tafsir. */
+    const pageStatus = useCallback((page: number): 'mem' | 'mem-part' | 'read' | 'read-part' | 'homework' | 'tafsir' | 'none' => {
+        const s = pageStatusSets;
+        if (s.memFull.has(page))  return 'mem';
+        if (s.readFull.has(page)) return 'read';
+        if (s.memPart.has(page))  return 'mem-part';
+        if (s.readPart.has(page)) return 'read-part';
+        if (s.homework.has(page)) return 'homework';
+        if (s.tafsir.has(page))   return 'tafsir';
+        return 'none';
+    }, [pageStatusSets]);
+
+    /** Open a page: its first verse in the surah on screen.
+     *
+     *  The window itself is left to the shared scroll effect, which aligns to
+     *  the same 5-page grid every other jump here uses. That effect also tries
+     *  to scroll, 120ms after the key is set — too early when the jump moves
+     *  the window, because the new verses are still being fetched and the
+     *  element does not exist yet. So the scroll is retried here until the
+     *  verse actually appears (2s, then give up: the right pages are on screen
+     *  either way). */
+    const goToPage = useCallback((page: number) => {
+        const entry = pageVerseList.find(([p]) => p === page);
+        const ayah = entry && entry[1] === selectedSurahId ? entry[2] : 1;
+        const key = `${selectedSurahId}:${ayah}`;
+        setScrollToVerseKey(key);
+        let tries = 0;
+        const findAndScroll = () => {
+            const el = document.getElementById(`verse-container-${key}`);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+            if (tries++ < 20) window.setTimeout(findAndScroll, 100);
+        };
+        window.setTimeout(findAndScroll, 150);
+    }, [selectedSurahId]);
 
     // Surahs with a log dated TODAY get a stronger shade of their category
     // color, so today's work stands out from older sessions at a glance.
@@ -3521,6 +3648,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading"
                     hasHomework={surahHasHomework} hasTafsir={surahHasTafsir}
                     onSelectSurah={handleSurahSelection}
+                />
+                <PageProgressBar
+                    pages={surahPages}
+                    title={t('liveSession.pagesOfSurah', { surah: selectedSurahInfo?.transliteratedName ?? '' })}
+                    statusOf={pageStatus}
+                    onSelectPage={goToPage}
+                    isOpen={p => p >= currentPageRange.start && p <= currentPageRange.end}
                 />
                 <MilestoneTracker completedPages={new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)])} />
             </div>

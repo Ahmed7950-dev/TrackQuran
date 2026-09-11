@@ -453,7 +453,8 @@
     "goToVerseLabel": "Verse number (1–{{max}})",
     "goToVerseGo": "Go",
     "goToVerseCancel": "Cancel",
-    "goToVerseHint": "Double-click any surah in the bar to jump straight to a verse."
+    "goToVerseHint": "Double-click any surah in the bar to jump straight to a verse.",
+    "pagesOfSurah": "Pages of {{surah}}"
   },
   "lettersTrainer": {
     "pageTitle": "Arabic Letter Distinction Trainer",

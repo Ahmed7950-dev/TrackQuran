@@ -453,7 +453,8 @@
     "goToVerseLabel": "Ayet numarası (1–{{max}})",
     "goToVerseGo": "Git",
     "goToVerseCancel": "İptal",
-    "goToVerseHint": "Bir ayete doğrudan gitmek için çubuktaki sureye çift tıkla."
+    "goToVerseHint": "Bir ayete doğrudan gitmek için çubuktaki sureye çift tıkla.",
+    "pagesOfSurah": "{{surah}} sayfaları"
   },
   "lettersTrainer": {
     "pageTitle": "Arapça Harf Ayırt Etme Eğitimi",

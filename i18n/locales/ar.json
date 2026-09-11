@@ -453,7 +453,8 @@
     "goToVerseLabel": "رقم الآية (1–{{max}})",
     "goToVerseGo": "انتقل",
     "goToVerseCancel": "إلغاء",
-    "goToVerseHint": "انقر نقرًا مزدوجًا على أي سورة في الشريط للانتقال مباشرة إلى آية."
+    "goToVerseHint": "انقر نقرًا مزدوجًا على أي سورة في الشريط للانتقال مباشرة إلى آية.",
+    "pagesOfSurah": "صفحات {{surah}}"
   },
   "lettersTrainer": {
     "pageTitle": "مدرّب التمييز بين الحروف العربية",
