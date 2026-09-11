@@ -500,14 +500,19 @@ const PageProgressBar: React.FC<{
     onSelectPage: (page: number) => void;
     isOpen?: (page: number) => boolean;
 }> = ({ pages, title, statusOf, onSelectPage, isOpen }) => {
+    // Background AND page-number colour together: white reads on the saturated
+    // fills but disappears on the pale ones — an untouched page's number was
+    // white on light slate, i.e. invisible in light and reading mode.
+    // Light mode fills are pale, dark mode fills are deep, so the number flips
+    // with them: a dark tint of its own hue on light, a near-white one on dark.
     const CLS: Record<ReturnType<typeof statusOf>, string> = {
-        'mem':       'bg-green-500 dark:bg-green-600 hover:bg-green-600',
-        'mem-part':  'bg-green-300 dark:bg-green-800 hover:bg-green-400',
-        'read':      'bg-orange-400 dark:bg-orange-600 hover:bg-orange-500',
-        'read-part': 'bg-orange-200 dark:bg-orange-900 hover:bg-orange-300',
-        'homework':  'bg-purple-400 dark:bg-purple-600 hover:bg-purple-500',
-        'tafsir':    'bg-blue-400 dark:bg-blue-600 hover:bg-blue-500',
-        'none':      'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600',
+        'mem':       'bg-green-500 dark:bg-green-700 hover:bg-green-600 text-green-950 dark:text-green-50',
+        'mem-part':  'bg-green-300 dark:bg-green-800 hover:bg-green-400 text-green-950 dark:text-green-50',
+        'read':      'bg-orange-400 dark:bg-orange-700 hover:bg-orange-500 text-orange-950 dark:text-orange-50',
+        'read-part': 'bg-orange-200 dark:bg-orange-900 hover:bg-orange-300 text-orange-950 dark:text-orange-50',
+        'homework':  'bg-purple-400 dark:bg-purple-700 hover:bg-purple-500 text-purple-950 dark:text-purple-50',
+        'tafsir':    'bg-blue-400 dark:bg-blue-700 hover:bg-blue-500 text-blue-950 dark:text-blue-50',
+        'none':      'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600 text-slate-600 dark:text-slate-200',
     };
     if (pages.length === 0) return null;
     return (
@@ -522,7 +527,7 @@ const PageProgressBar: React.FC<{
                                 type="button"
                                 aria-label={`Page ${page}`}
                                 onClick={() => onSelectPage(page)}
-                                className={`h-5 w-full block rounded-sm text-[9px] font-bold tabular-nums text-white/90 leading-5 overflow-hidden transition-colors cursor-pointer ${CLS[statusOf(page)]} ${
+                                className={`h-5 w-full block rounded-sm text-[9px] font-bold tabular-nums leading-5 overflow-hidden transition-colors cursor-pointer ${CLS[statusOf(page)]} ${
                                     open ? 'ring-2 ring-teal-500 dark:ring-amber-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
                             >
                                 {page}
