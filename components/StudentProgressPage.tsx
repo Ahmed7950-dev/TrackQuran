@@ -500,38 +500,39 @@ const PageProgressBar: React.FC<{
     onSelectPage: (page: number) => void;
     isOpen?: (page: number) => boolean;
 }> = ({ pages, title, statusOf, onSelectPage, isOpen }) => {
-    // Background AND page-number colour together: white reads on the saturated
-    // fills but disappears on the pale ones — an untouched page's number was
-    // white on light slate, i.e. invisible in light and reading mode.
-    // Light mode fills are pale, dark mode fills are deep, so the number flips
-    // with them: a dark tint of its own hue on light, a near-white one on dark.
+    // The same four categories as the surah bar above, in the same shades. The
+    // page number is not drawn inside — at one surah-segment wide there is no
+    // room for it — it comes up in the tooltip on hover.
     const CLS: Record<ReturnType<typeof statusOf>, string> = {
-        'mem':       'bg-green-500 dark:bg-green-700 hover:bg-green-600 text-green-950 dark:text-green-50',
-        'mem-part':  'bg-green-300 dark:bg-green-800 hover:bg-green-400 text-green-950 dark:text-green-50',
-        'read':      'bg-orange-400 dark:bg-orange-700 hover:bg-orange-500 text-orange-950 dark:text-orange-50',
-        'read-part': 'bg-orange-200 dark:bg-orange-900 hover:bg-orange-300 text-orange-950 dark:text-orange-50',
-        'homework':  'bg-purple-400 dark:bg-purple-700 hover:bg-purple-500 text-purple-950 dark:text-purple-50',
-        'tafsir':    'bg-blue-400 dark:bg-blue-700 hover:bg-blue-500 text-blue-950 dark:text-blue-50',
-        'none':      'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600 text-slate-600 dark:text-slate-200',
+        'mem':       'bg-green-500 dark:bg-green-700 hover:bg-green-600',
+        'mem-part':  'bg-green-300 dark:bg-green-800 hover:bg-green-400',
+        'read':      'bg-orange-400 dark:bg-orange-700 hover:bg-orange-500',
+        'read-part': 'bg-orange-200 dark:bg-orange-900 hover:bg-orange-300',
+        'homework':  'bg-purple-400 dark:bg-purple-700 hover:bg-purple-500',
+        'tafsir':    'bg-blue-400 dark:bg-blue-700 hover:bg-blue-500',
+        'none':      'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600',
     };
     if (pages.length === 0) return null;
     return (
         <div className="mt-3">
             <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{title}</h4>
-            <div className="flex flex-wrap gap-1">
+            {/* Centred, and each segment exactly one surah-segment wide: that bar
+                divides the same row into 114 with a 4px gap, so one segment is
+                (100% − 113×4px) ÷ 114. A short surah therefore draws a short bar
+                instead of stretching a handful of pages across the screen. */}
+            <div className="flex flex-wrap justify-center gap-1">
                 {pages.map(page => {
                     const open = isOpen?.(page);
                     return (
-                        <div key={page} className="relative group flex-grow" style={{ minWidth: '1.5%' }}>
+                        <div key={page} className="relative group flex-none"
+                             style={{ width: 'max(6px, calc((100% - 452px) / 114))' }}>
                             <button
                                 type="button"
                                 aria-label={`Page ${page}`}
                                 onClick={() => onSelectPage(page)}
-                                className={`h-5 w-full block rounded-sm text-[9px] font-bold tabular-nums leading-5 overflow-hidden transition-colors cursor-pointer ${CLS[statusOf(page)]} ${
-                                    open ? 'ring-2 ring-teal-500 dark:ring-amber-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
-                            >
-                                {page}
-                            </button>
+                                className={`h-4 w-full block rounded-sm transition-colors cursor-pointer ${CLS[statusOf(page)]} ${
+                                    open ? 'ring-2 ring-teal-500 dark:ring-amber-400' : ''}`}
+                            />
                             <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 dark:bg-black text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 left-1/2 -translate-x-1/2">
                                 Page {page}
                                 <svg className="absolute text-gray-800 dark:text-black h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255">
