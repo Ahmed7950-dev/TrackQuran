@@ -32,7 +32,8 @@
     "upcomingLesson": "Yaklaşan ders",
     "lessonInProgress": "Ders devam ediyor",
     "lessonEndsAt": "Şu anda · bitiş {{time}}",
-    "openStudentPage": "{{name}} sayfasını aç"
+    "openStudentPage": "{{name}} sayfasını aç",
+    "familyLesson": "{{family}} ailesi"
   },
   "studentCard": {
     "yearsOld": "{{age}} yaşında",

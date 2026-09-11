@@ -32,7 +32,8 @@
     "upcomingLesson": "Upcoming lesson",
     "lessonInProgress": "Lesson in progress",
     "lessonEndsAt": "On now · ends {{time}}",
-    "openStudentPage": "Open {{name}}’s page"
+    "openStudentPage": "Open {{name}}’s page",
+    "familyLesson": "{{family}} family"
   },
   "studentCard": {
     "yearsOld": "{{age}} years old",

@@ -41,7 +41,7 @@ function rowToSession(r: SessionRow): LessonSession {
  * was still outside the truncated page. Every unbounded read pages instead.
  */
 const PAGE = 1000;
-async function pageAll<T>(
+export async function pageAll<T>(
   run: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
 ): Promise<T[]> {
   const out: T[] = [];

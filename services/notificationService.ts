@@ -127,10 +127,22 @@ export async function createNotification(input: {
  * stored in metadata) so repeated app loads don't spam, while next month's
  * renewal still fires a fresh reminder.
  */
+/** The reminder's wording. Siblings share one subscription, so a family reads
+ *  as a family: "The Al-Hassan family have their subscription renewed …". */
+export const renewalReminderBody = (name: string, isFamily?: boolean): string =>
+  isFamily
+    ? `The ${name} family have their subscription renewed tomorrow, make sure they don't have any unscheduled lessons.`
+    : `${name} has his subscription renewed tomorrow, make sure they don't have any unscheduled lessons.`;
+
 export async function ensureSubscriptionRenewalReminder(input: {
   teacherId:    string;
   studentId:    string;
+  /** The student's name, or the FAMILY's name when isFamily is set. */
   studentName:  string;
+  /** Siblings share one subscription: the reminder names the family and is
+   *  written once, against the family's lowest member id so the "already sent"
+   *  check keeps matching. */
+  isFamily?:    boolean;
   renewalDate:  string; // YYYY-MM-DD of the upcoming renewal (tomorrow)
 }): Promise<void> {
   try {
@@ -150,7 +162,7 @@ export async function ensureSubscriptionRenewalReminder(input: {
       bookingId:  null,
       type:       'subscription_renewal_reminder',
       title:      'Subscription renews tomorrow',
-      body:       `${input.studentName} has his subscription renewed tomorrow, make sure they don't have any unscheduled lessons.`,
+      body:       renewalReminderBody(input.studentName, input.isFamily),
       metadata:   { renewalDate: input.renewalDate },
     });
   } catch {

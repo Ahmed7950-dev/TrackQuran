@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
@@ -49,6 +49,7 @@ import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import { renewalReminderOccurrence } from './utils/renewal';
+import { getFamilyGroupsByStudent, familyRenewalUpdates, type FamilyGroup } from './services/familyGroupService';
 import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
 import LetterRaceGame from './components/LetterRaceGame';
@@ -543,14 +544,88 @@ const App: React.FC = () => {
     if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
   };
   const handleUpdateArabicStudent = async (student: ArabicStudent) => {
+    const before = arabicStudents.find(s => s.id === student.id)?.subscriptionRenewalDate;
     setArabicStudents(prev => prev.map(s => s.id === student.id ? student : s));
     if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
+    // One subscription per family — see propagateRenewalDate.
+    if (student.subscriptionRenewalDate !== before) {
+      void propagateRenewalDate(student.id, student.subscriptionRenewalDate);
+    }
   };
   const handleDeleteArabicStudent = async (studentId: string) => {
     setArabicStudents(prev => prev.filter(s => s.id !== studentId));
     setSelectedArabicStudentId(null);
     if (currentUser?.role === 'teacher') await deleteArabicStudent(currentUser.id, studentId);
   };
+
+  // studentId → their family (both subjects). Drives the shared renewal date,
+  // the family-worded reminder and the pinned profiles on the lesson card.
+  const [familyGroups, setFamilyGroups] = useState<Map<string, FamilyGroup>>(new Map());
+  // Set from currentUserId below — the helpers here are defined before it.
+  const currentUserIdRef = useRef<string | null>(null);
+  const familyGroupsRef = useRef(familyGroups);
+  useEffect(() => { familyGroupsRef.current = familyGroups; }, [familyGroups]);
+
+  /**
+   * Day-before renewal reminders. Siblings share one subscription, so a family
+   * gets ONE reminder naming the family rather than one per child — and it is
+   * always attached to the same member (the lowest id) so the "already sent"
+   * check in the service keeps matching across reloads.
+   */
+  const remindRenewals = useCallback((
+    teacherId: string,
+    list: Array<{ id: string; name: string; studentType?: string; subscriptionRenewalDate?: string }>,
+  ) => {
+    const groups = familyGroupsRef.current;
+    const doneFamilies = new Set<string>();
+    for (const s of list) {
+      if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
+      const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
+      if (!occ) continue;
+      const family = groups.get(s.id);
+      if (family) {
+        if (doneFamilies.has(family.familyLinkId)) continue;
+        doneFamilies.add(family.familyLinkId);
+        ensureSubscriptionRenewalReminder({
+          teacherId,
+          studentId: [...family.memberIds].sort()[0],
+          studentName: family.familyName,
+          isFamily: true,
+          renewalDate: occ,
+        });
+      } else {
+        ensureSubscriptionRenewalReminder({ teacherId, studentId: s.id, studentName: s.name, renewalDate: occ });
+      }
+    }
+  }, []);
+
+  /**
+   * One subscription per family: setting a renewal date on any member writes
+   * the same date to the others, whichever subject they study. Only runs when
+   * the date actually changed, so an ordinary save never rewrites siblings.
+   */
+  const propagateRenewalDate = useCallback((
+    studentId: string, renewalDate: string | undefined,
+  ) => {
+    const teacherId = currentUserIdRef.current;
+    if (!teacherId) return;
+    const groups = familyGroupsRef.current;
+    setStudents(prev => {
+      const updates = familyRenewalUpdates(groups, studentId, renewalDate, prev);
+      if (updates.length === 0) return prev;
+      updates.forEach(u => void saveStudent(teacherId, u));
+      const byId = new Map(updates.map(u => [u.id, u]));
+      return prev.map(s => byId.get(s.id) ?? s);
+    });
+    setArabicStudents(prev => {
+      const updates = familyRenewalUpdates(groups, studentId, renewalDate, prev);
+      if (updates.length === 0) return prev;
+      updates.forEach(u => void saveArabicStudent(teacherId, u));
+      const byId = new Map(updates.map(u => [u.id, u]));
+      return prev.map(s => byId.get(s.id) ?? s);
+    });
+  }, []);
+
 
   const [isFamilyLinkModalOpen,    setIsFamilyLinkModalOpen]    = useState(false);
   const [isAddStudentModalOpen,    setIsAddStudentModalOpen]    = useState(false);
@@ -769,6 +844,7 @@ const App: React.FC = () => {
   // refresh (which creates a new object reference but same id/role) never
   // triggers a redundant re-fetch that could return empty and clear the list.
   const currentUserId   = currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? (currentUser as { id: string }).id : null;
+  useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   const currentUserRole = currentUser?.role ?? null;
   useEffect(() => {
     if (currentUserRole !== 'teacher' || !currentUserId) {
@@ -778,15 +854,12 @@ const App: React.FC = () => {
       return;
     }
     const teacherId = currentUserId;
+    getFamilyGroupsByStudent(teacherId).then(setFamilyGroups).catch(() => setFamilyGroups(new Map()));
     getStudents(teacherId).then(students => {
       setStudents(students);
       // Preply subscription reminders: notify the tutor the day before each
       // 28-day renewal (deduped per occurrence in the service).
-      for (const s of students) {
-        if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
-        const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
-        if (occ) ensureSubscriptionRenewalReminder({ teacherId, studentId: s.id, studentName: s.name, renewalDate: occ });
-      }
+      remindRenewals(teacherId, students);
     });
     getTajweedRules(teacherId).then(setTajweedRules);
     // Fetch arabic students then compute total vocab counts (lesson words + custom list words)
@@ -796,11 +869,7 @@ const App: React.FC = () => {
     ]).then(async ([students, lessonWordCounts]) => {
       setArabicStudents(students);
       // Arabic students get the same day-before renewal reminder as Quran ones.
-      for (const s of students) {
-        if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
-        const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
-        if (occ) ensureSubscriptionRenewalReminder({ teacherId, studentId: s.id, studentName: s.name, renewalDate: occ });
-      }
+      remindRenewals(teacherId, students);
       const customCounts = await getCustomVocabWordCountsForStudents(students.map(s => s.id));
       const totals: Record<string, number> = {};
       for (const s of students) {
@@ -986,9 +1055,14 @@ const App: React.FC = () => {
   };
 
   const handleUpdateStudent = (updatedStudent: Student) => {
+    const before = students.find(s => s.id === updatedStudent.id)?.subscriptionRenewalDate;
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
       saveStudent(currentUser.id, updatedStudent); // async, fire & forget
+      // One subscription per family — see propagateRenewalDate.
+      if (updatedStudent.subscriptionRenewalDate !== before) {
+        void propagateRenewalDate(updatedStudent.id, updatedStudent.subscriptionRenewalDate);
+      }
 
       // ── Auto-sync shared report ───────────────────────────────────────────
       // Debounce so rapid taps (e.g. marking several mistakes) only trigger
@@ -1588,6 +1662,7 @@ const App: React.FC = () => {
             />
           ) : (
             <ArabicDashboard
+            familyGroups={familyGroups}
               teacherId={currentUser.id}
               students={arabicStudents}
               archivedIds={archive.arabic}
@@ -2149,6 +2224,7 @@ const App: React.FC = () => {
         ) : (
           <Dashboard
             students={students}
+            familyGroups={familyGroups}
             archivedIds={archive.quran}
             onToggleArchive={(id, archived) => handleToggleArchive('quran', id, archived)}
             onSelectStudent={(id) => { setSelectedStudentId(id); setCurrentStudentView('details'); }}

@@ -494,6 +494,8 @@ const GroupHeader: React.FC<{ label: string; count: number }> = ({ label, count 
 interface DashboardProps {
   students: Student[];
   onSelectStudent: (studentId: string) => void;
+  /** studentId → their family, for the pinned profiles on the lesson card. */
+  familyGroups?: Map<string, import('../services/familyGroupService').FamilyGroup>;
   quranMetadata: SurahMetadata[];
   onFamilyLinks?: () => void;
   onAddStudent: () => void;
@@ -505,7 +507,7 @@ interface DashboardProps {
   onToggleArchive?: (studentId: string, archived: boolean) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId, onApproveStudent, onRejectStudent, archivedIds = [], onToggleArchive }) => {
+const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranMetadata, onFamilyLinks, onAddStudent, teacherId, onApproveStudent, onRejectStudent, archivedIds = [], onToggleArchive, familyGroups }) => {
   const [showArchived, setShowArchived] = useState(false);
   const archivedSet = useMemo(() => new Set(archivedIds), [archivedIds]);
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
@@ -594,6 +596,19 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     [nextLessons, nowTick],
   );
   const lessonInProgress = !!nextLesson && nowTick >= nextLesson.date.getTime();
+
+  // Siblings sit the same lesson, so the card pins the whole family rather than
+  // whichever member the session happens to name. Only members on this roster
+  // resolve here — an Arabic sibling appears on the Arabic dashboard's card.
+  const lessonFamily = useMemo(() => {
+    if (!nextLesson || !familyGroups) return null;
+    const group = familyGroups.get(nextLesson.student.id);
+    if (!group) return null;
+    const members = group.memberIds
+      .map(id => students.find(s => s.id === id))
+      .filter((s): s is Student => !!s);
+    return members.length > 1 ? { name: group.familyName, members } : null;
+  }, [nextLesson, familyGroups, students]);
 
   const highlightedStudentId = nextLesson?.student.id ?? null;
 
@@ -752,18 +767,36 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         >
           <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
 
-            {/* Avatar */}
-            <div className="flex-shrink-0">
-              {nextLesson.student.profileIcon ? (
-                <StudentProfileIcon
-                  src={nextLesson.student.profileIcon} size={76} mode="hover" play
-                  className="w-[76px] h-[76px] rounded-2xl bg-white/70 dark:bg-black/20 ring-2 ring-white/80 dark:ring-white/10 shadow-sm"
-                />
-              ) : (
-                <div className={`w-[76px] h-[76px] rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-sm ring-2 ring-white/80 dark:ring-white/10 ${
-                  lessonInProgress ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                  {nextLesson.student.name.charAt(0).toUpperCase()}
-                </div>
+            {/* Avatars — the whole family when the lesson is a family's */}
+            <div className="flex-shrink-0 flex items-center gap-2">
+              {(lessonFamily?.members ?? [nextLesson.student]).slice(0, 4).map(member => (
+                <button
+                  key={member.id}
+                  type="button"
+                  onClick={e => { e.stopPropagation(); onSelectStudent(member.id); }}
+                  title={member.name}
+                  className="group/av flex flex-col items-center gap-1 focus:outline-none"
+                >
+                  {member.profileIcon ? (
+                    <StudentProfileIcon
+                      src={member.profileIcon} size={76} mode="hover" play
+                      className="w-[76px] h-[76px] rounded-2xl bg-white/70 dark:bg-black/20 ring-2 ring-white/80 dark:ring-white/10 shadow-sm group-hover/av:ring-white transition-all"
+                    />
+                  ) : (
+                    <div className={`w-[76px] h-[76px] rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-sm ring-2 ring-white/80 dark:ring-white/10 group-hover/av:ring-white transition-all ${
+                      lessonInProgress ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  {lessonFamily && (
+                    <span className="max-w-[76px] truncate text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                      {member.name.split(' ')[0]}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {lessonFamily && lessonFamily.members.length > 4 && (
+                <span className="text-xs font-black text-slate-400">+{lessonFamily.members.length - 4}</span>
               )}
             </div>
 
@@ -781,7 +814,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
               )}
 
               <h3 className="mt-1.5 text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
-                {nextLesson.student.name}
+                {lessonFamily ? t('dashboard.familyLesson', { family: lessonFamily.name }) : nextLesson.student.name}
               </h3>
 
               <p className="mt-0.5 text-sm font-bold text-slate-600 dark:text-slate-300">
