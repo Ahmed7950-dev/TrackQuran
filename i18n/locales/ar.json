@@ -33,7 +33,8 @@
     "lessonInProgress": "الدرس جارٍ الآن",
     "lessonEndsAt": "جارٍ الآن · ينتهي {{time}}",
     "openStudentPage": "فتح صفحة {{name}}",
-    "familyLesson": "عائلة {{family}}"
+    "familyLesson": "عائلة {{family}}",
+    "generateMeetFamily": "إنشاء رابط اجتماع واحد"
   },
   "studentCard": {
     "yearsOld": "{{age}} سنة",

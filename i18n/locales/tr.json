@@ -33,7 +33,8 @@
     "lessonInProgress": "Ders devam ediyor",
     "lessonEndsAt": "Şu anda · bitiş {{time}}",
     "openStudentPage": "{{name}} sayfasını aç",
-    "familyLesson": "{{family}} ailesi"
+    "familyLesson": "{{family}} ailesi",
+    "generateMeetFamily": "Tek Meet bağlantısı oluştur"
   },
   "studentCard": {
     "yearsOld": "{{age}} yaşında",

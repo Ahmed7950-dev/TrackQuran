@@ -11,6 +11,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import StudentProfileIcon from './StudentProfileIcon';
+import { familyHeading } from './Dashboard';
 import { ensureShareToken } from '../services/arabicService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { getFamilyLinkIdForStudent } from '../services/lessonSessionService';
@@ -228,19 +229,33 @@ const ArabicDashboard: React.FC<Props> = ({
   }, [teacherId]);
 
   // ── Meet link ─────────────────────────────────────────────────────────────
+  /** The sessions this lesson covers: its own, or every family member's session
+   *  at the same time — siblings share one room, so they share one link. */
+  function familySessionIds(): string[] {
+    if (!nextLesson?.sessionId) return [];
+    const members = lessonFamily?.members.map(m => m.id);
+    if (!members) return [nextLesson.sessionId];
+    const at = nextLesson.date.getTime();
+    return sessions
+      .filter(s => members.includes(s.studentId)
+        && Math.abs(new Date(s.startAt).getTime() - at) < 60_000)
+      .map(s => s.id);
+  }
+
   async function handleGenerateMeetLink() {
     if (!nextLesson) return;
     setMeetGenerating(true);
     try {
       const url = await createGoogleMeetLink(
-        nextLesson.student.name,
+        lessonFamily ? familyHeading(lessonFamily.name) : nextLesson.student.name,
         nextLesson.date.toISOString(),
       );
       if (!url) { alert('Could not generate Meet link. Make sure Google Calendar is connected.'); return; }
 
-      if (nextLesson.sessionId) {
-        await updateSessionMeetUrl(nextLesson.sessionId, url);
-        setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: url } : s));
+      const ids = familySessionIds();
+      if (ids.length > 0) {
+        await Promise.all(ids.map(id => updateSessionMeetUrl(id, url)));
+        setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, meetUrl: url } : s));
       } else if (nextLesson.bookingId) {
         await updateBookingMeetUrl(nextLesson.bookingId, url);
         setBookings(prev => prev.map(b => b.id === nextLesson.bookingId ? { ...b, meetUrl: url } : b));
@@ -259,9 +274,10 @@ const ArabicDashboard: React.FC<Props> = ({
 
   async function handleClearMeetLink() {
     if (!nextLesson) return;
-    if (nextLesson.sessionId) {
-      await updateSessionMeetUrl(nextLesson.sessionId, null);
-      setSessions(prev => prev.map(s => s.id === nextLesson.sessionId ? { ...s, meetUrl: undefined } : s));
+    const ids = familySessionIds();
+    if (ids.length > 0) {
+      await Promise.all(ids.map(id => updateSessionMeetUrl(id, null)));
+      setSessions(prev => prev.map(s => ids.includes(s.id) ? { ...s, meetUrl: undefined } : s));
     } else if (nextLesson.bookingId) {
       await updateBookingMeetUrl(nextLesson.bookingId, null);
       setBookings(prev => prev.map(b => b.id === nextLesson.bookingId ? { ...b, meetUrl: undefined } : b));
@@ -372,103 +388,127 @@ const ArabicDashboard: React.FC<Props> = ({
       )}
 
       {/* ── Next Lesson card ─────────────────────────────────────────────────
-          Same as the Quran dashboard: the card opens the student, the Meet
-          controls keep their own click. ── */}
-      {nextLesson && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onSelectStudent(nextLesson.student.id)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectStudent(nextLesson.student.id); } }}
-          title={t('dashboard.openStudentPage', { name: nextLesson.student.name })}
-          className={`group rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${lessonInProgress
-            ? 'bg-gradient-to-r from-emerald-50 via-emerald-50 to-green-50 dark:from-emerald-900/25 dark:via-emerald-900/15 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700 focus:ring-emerald-500'
-            : 'bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 dark:from-amber-900/25 dark:via-amber-900/15 dark:to-orange-900/20 border-amber-200 dark:border-amber-700 focus:ring-amber-500'}`}
-        >
-          <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          Same as the Quran dashboard: one student's card opens them, a family's
+          card is inert and only its avatars and Meet controls act. ── */}
+      {nextLesson && (() => {
+        const cardTone = lessonInProgress
+          ? 'bg-gradient-to-r from-emerald-50 via-emerald-50 to-green-50 dark:from-emerald-900/25 dark:via-emerald-900/15 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700 focus:ring-emerald-500'
+          : 'bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 dark:from-amber-900/25 dark:via-amber-900/15 dark:to-orange-900/20 border-amber-200 dark:border-amber-700 focus:ring-amber-500';
 
-            {/* Avatars — the whole family when the lesson is a family's */}
-            <div className="flex-shrink-0 flex items-center gap-2">
-              {(lessonFamily?.members ?? [nextLesson.student]).slice(0, 4).map(member => (
-                <button
-                  key={member.id}
-                  type="button"
-                  onClick={e => { e.stopPropagation(); onSelectStudent(member.id); }}
-                  title={member.name}
-                  className="group/av flex flex-col items-center gap-1 focus:outline-none"
-                >
-                  {member.profileIcon ? (
-                    <StudentProfileIcon
-                      src={member.profileIcon} size={76} mode="hover" play
-                      className="w-[76px] h-[76px] rounded-2xl bg-white/70 dark:bg-black/20 ring-2 ring-white/80 dark:ring-white/10 shadow-sm group-hover/av:ring-white transition-all"
-                    />
-                  ) : (
-                    <div className={`w-[76px] h-[76px] rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-sm ring-2 ring-white/80 dark:ring-white/10 group-hover/av:ring-white transition-all ${
-                      lessonInProgress ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                      {member.name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  {lessonFamily && (
-                    <span className="max-w-[76px] truncate text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                      {member.name.split(' ')[0]}
-                    </span>
-                  )}
+        const statusChip = lessonInProgress ? (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+            {t('dashboard.lessonInProgress')}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-[11px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+            📅 {t('dashboard.upcomingLesson')}
+          </span>
+        );
+
+        const whenLine = (
+          <p className="mt-0.5 text-sm font-bold text-slate-600 dark:text-slate-300">
+            {lessonInProgress
+              ? t('dashboard.lessonEndsAt', { time: nextLesson.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+              : formatSessionDate(nextLesson.date.toISOString())}
+            {nextLesson.title && (
+              <span className="font-medium text-slate-400 dark:text-slate-500"> · {nextLesson.title}</span>
+            )}
+          </p>
+        );
+
+        const meetControls = (
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+            {nextLesson.meetUrl ? (
+              <>
+                <button onClick={handleCopyMeetLink} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                  {meetCopied ? '✓ Copied!' : (<><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>)}
                 </button>
-              ))}
-              {lessonFamily && lessonFamily.members.length > 4 && (
-                <span className="text-xs font-black text-slate-400">+{lessonFamily.members.length - 4}</span>
-              )}
-            </div>
-
-            {/* Who and when */}
-            <div className="min-w-0 flex-1">
-              {lessonInProgress ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                  {t('dashboard.lessonInProgress')}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-[11px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                  📅 {t('dashboard.upcomingLesson')}
-                </span>
-              )}
-
-              <h3 className="mt-1.5 text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
-                {lessonFamily ? t('dashboard.familyLesson', { family: lessonFamily.name }) : nextLesson.student.name}
-              </h3>
-
-              <p className="mt-0.5 text-sm font-bold text-slate-600 dark:text-slate-300">
-                {lessonInProgress
-                  ? t('dashboard.lessonEndsAt', { time: nextLesson.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
-                  : formatSessionDate(nextLesson.date.toISOString())}
-                {nextLesson.title && (
-                  <span className="font-medium text-slate-400 dark:text-slate-500"> · {nextLesson.title}</span>
-                )}
-              </p>
-            </div>
-
-            {/* Actions — their own click space */}
-            <div className="flex flex-wrap items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
-              {nextLesson.meetUrl ? (
-                <>
-                  <button onClick={handleCopyMeetLink} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                    {meetCopied ? '✓ Copied!' : (<><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy Link</>)}
-                  </button>
-                  <a href={nextLesson.meetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-                    Join Lesson
-                  </a>
-                  <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                  </button>
-                </>
-              ) : (
-                <button onClick={handleGenerateMeetLink} disabled={meetGenerating} className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
-                  {meetGenerating ? 'Generating…' : 'Generate Meet Link'}
+                <a href={nextLesson.meetUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                  Join Lesson
+                </a>
+                <button onClick={handleClearMeetLink} title="Remove link" className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                 </button>
-              )}
-              {/* Where the card goes when clicked */}
+              </>
+            ) : (
+              <button onClick={handleGenerateMeetLink} disabled={meetGenerating} className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-semibold transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                {meetGenerating ? 'Generating…' : (lessonFamily ? t('dashboard.generateMeetFamily') : 'Generate Meet Link')}
+              </button>
+            )}
+          </div>
+        );
+
+        const avatar = (member: ArabicStudent, withName: boolean) => (
+          <button
+            key={member.id}
+            type="button"
+            onClick={e => { e.stopPropagation(); onSelectStudent(member.id); }}
+            title={t('dashboard.openStudentPage', { name: member.name })}
+            className="group/av flex flex-col items-center gap-1 focus:outline-none"
+          >
+            {member.profileIcon ? (
+              <StudentProfileIcon
+                src={member.profileIcon} size={76} mode="hover" play
+                className="w-[76px] h-[76px] rounded-2xl bg-white/70 dark:bg-black/20 ring-2 ring-white/80 dark:ring-white/10 shadow-sm group-hover/av:ring-white transition-all"
+              />
+            ) : (
+              <div className={`w-[76px] h-[76px] rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-sm ring-2 ring-white/80 dark:ring-white/10 group-hover/av:ring-white transition-all ${
+                lessonInProgress ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                {member.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            {withName && (
+              <span className="max-w-[92px] truncate text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                {member.name.split(' ')[0]}
+              </span>
+            )}
+          </button>
+        );
+
+        if (lessonFamily) {
+          return (
+            <div className={`rounded-2xl border overflow-hidden ${cardTone}`}>
+              <div className="p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="min-w-0">
+                    <h3 className="text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
+                      {familyHeading(lessonFamily.name, t)}
+                    </h3>
+                    <div className="mt-1">{statusChip}</div>
+                    {whenLine}
+                  </div>
+                  {meetControls}
+                </div>
+                <div className="mt-4 flex flex-wrap items-start justify-center gap-4">
+                  {lessonFamily.members.map(m => avatar(m, true))}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelectStudent(nextLesson.student.id)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectStudent(nextLesson.student.id); } }}
+            title={t('dashboard.openStudentPage', { name: nextLesson.student.name })}
+            className={`group rounded-2xl border overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${cardTone}`}
+          >
+            <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex-shrink-0">{avatar(nextLesson.student, false)}</div>
+              <div className="min-w-0 flex-1">
+                {statusChip}
+                <h3 className="mt-1.5 text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
+                  {nextLesson.student.name}
+                </h3>
+                {whenLine}
+              </div>
+              {meetControls}
               <span className="hidden sm:flex items-center gap-1 ps-1 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5 group-hover:translate-x-0.5 transition-transform">
                   <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -476,8 +516,8 @@ const ArabicDashboard: React.FC<Props> = ({
               </span>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Active / archived counter — doubles as the archive toggle ──────── */}
       <button

@@ -33,7 +33,8 @@
     "lessonInProgress": "Lesson in progress",
     "lessonEndsAt": "On now · ends {{time}}",
     "openStudentPage": "Open {{name}}’s page",
-    "familyLesson": "{{family}} family"
+    "familyLesson": "{{family}} family",
+    "generateMeetFamily": "Generate one Meet link"
   },
   "studentCard": {
     "yearsOld": "{{age}} years old",
