@@ -50,6 +50,7 @@ import StudentRoute from './components/StudentRoute';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import { renewalReminderOccurrence } from './utils/renewal';
 import { getFamilyGroupsByStudent, familyRenewalUpdates, type FamilyGroup } from './services/familyGroupService';
+import { loadFamilySettings, familySharesSubscription, type FamilySettingsMap } from './services/familySettingsService';
 import AirplaneGame from './components/AirplaneGame';
 import FlappyLettersGame from './components/FlappyLettersGame';
 import LetterRaceGame from './components/LetterRaceGame';
@@ -561,10 +562,15 @@ const App: React.FC = () => {
   // studentId → their family (both subjects). Drives the shared renewal date,
   // the family-worded reminder and the pinned profiles on the lesson card.
   const [familyGroups, setFamilyGroups] = useState<Map<string, FamilyGroup>>(new Map());
+  // Which of those families pay for ONE Preply subscription (set per family in
+  // the family links modal). Off by default: separate accounts are common.
+  const [familySettings, setFamilySettings] = useState<FamilySettingsMap>({});
   // Set from currentUserId below — the helpers here are defined before it.
   const currentUserIdRef = useRef<string | null>(null);
   const familyGroupsRef = useRef(familyGroups);
   useEffect(() => { familyGroupsRef.current = familyGroups; }, [familyGroups]);
+  const familySettingsRef = useRef(familySettings);
+  useEffect(() => { familySettingsRef.current = familySettings; }, [familySettings]);
 
   /**
    * Day-before renewal reminders. Siblings share one subscription, so a family
@@ -582,7 +588,11 @@ const App: React.FC = () => {
       if (s.studentType !== 'preply' || !s.subscriptionRenewalDate) continue;
       const occ = renewalReminderOccurrence(s.subscriptionRenewalDate);
       if (!occ) continue;
-      const family = groups.get(s.id);
+      const group = groups.get(s.id);
+      // A family that does NOT share a subscription is billed per child, so
+      // each child keeps their own reminder.
+      const family = group && familySharesSubscription(familySettingsRef.current, group.familyLinkId)
+        ? group : null;
       if (family) {
         if (doneFamilies.has(family.familyLinkId)) continue;
         doneFamilies.add(family.familyLinkId);
@@ -610,6 +620,10 @@ const App: React.FC = () => {
     const teacherId = currentUserIdRef.current;
     if (!teacherId) return;
     const groups = familyGroupsRef.current;
+    // Separate Preply accounts → separate dates. Only a family marked as
+    // sharing one subscription propagates.
+    const group = groups.get(studentId);
+    if (!group || !familySharesSubscription(familySettingsRef.current, group.familyLinkId)) return;
     setStudents(prev => {
       const updates = familyRenewalUpdates(groups, studentId, renewalDate, prev);
       if (updates.length === 0) return prev;
@@ -855,6 +869,7 @@ const App: React.FC = () => {
     }
     const teacherId = currentUserId;
     getFamilyGroupsByStudent(teacherId).then(setFamilyGroups).catch(() => setFamilyGroups(new Map()));
+    loadFamilySettings(teacherId).then(setFamilySettings).catch(() => setFamilySettings({}));
     getStudents(teacherId).then(students => {
       setStudents(students);
       // Preply subscription reminders: notify the tutor the day before each

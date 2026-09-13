@@ -12,6 +12,10 @@ import {
   FamilyLink, FamilyMember,
   getFamilyLinks, saveFamilyLink, deleteFamilyLink,
 } from '../services/familyLinkService';
+import {
+  loadFamilySettings, setFamilySharedSubscription, familySharesSubscription,
+  type FamilySettingsMap,
+} from '../services/familySettingsService';
 import { getStudentReportId, createOrUpdateSharedReport } from '../services/dataService';
 import { ensureShareToken } from '../services/arabicService';
 
@@ -47,6 +51,10 @@ const FamilyLinkModal: React.FC<Props> = ({
 }) => {
   // ── ALL hooks must be declared before any conditional return ─────────────
   const [links, setLinks] = useState<FamilyLink[]>([]);
+  // Which families pay for ONE Preply subscription. Off by default: siblings
+  // often have their own accounts with their own renewal dates.
+  const [famSettings, setFamSettings] = useState<FamilySettingsMap>({});
+  const [savingShared, setSavingShared] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -61,6 +69,7 @@ const FamilyLinkModal: React.FC<Props> = ({
     if (!teacherId) return;
     setLoading(true);
     getFamilyLinks(teacherId).then(ls => { setLinks(ls); setLoading(false); });
+    loadFamilySettings(teacherId).then(setFamSettings);
   }, [teacherId]);
 
   useEffect(() => { if (isOpen) reload(); }, [isOpen, reload]);
@@ -245,6 +254,39 @@ const FamilyLinkModal: React.FC<Props> = ({
                             </span>
                           ))}
                         </div>
+
+                        {/* One Preply account for the family, or one each?
+                            Off by default — siblings often have separate
+                            accounts with their own renewal dates, and this is
+                            what decides whether setting one member's date
+                            writes it to the rest. */}
+                        <label className="mt-2.5 inline-flex items-start gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={familySharesSubscription(famSettings, link.id)}
+                            disabled={savingShared === link.id}
+                            onChange={async e => {
+                              const next = e.target.checked;
+                              setSavingShared(link.id);
+                              setFamSettings(prev => next
+                                ? { ...prev, [link.id]: { sharedSubscription: true } }
+                                : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== link.id)));
+                              const saved = await setFamilySharedSubscription(teacherId, link.id, next);
+                              setFamSettings(saved);
+                              setSavingShared(null);
+                            }}
+                            className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-gray-500 text-teal-600 focus:ring-teal-500 flex-shrink-0"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+                              One subscription for the family
+                            </span>
+                            <span className="block text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                              Setting a renewal date on any member sets it for all of them, and the
+                              reminder names the family. Leave off when each child has their own Preply account.
+                            </span>
+                          </span>
+                        </label>
                       </div>
 
                       <div className="flex items-center gap-1 flex-shrink-0">
