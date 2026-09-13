@@ -471,20 +471,22 @@ const ArabicDashboard: React.FC<Props> = ({
         if (lessonFamily) {
           return (
             <div className={`rounded-2xl border overflow-hidden ${cardTone}`}>
-              <div className="p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="min-w-0">
-                    <h3 className="text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
-                      {familyHeading(lessonFamily.name, t)}
-                    </h3>
-                    <div className="mt-1">{statusChip}</div>
-                    {whenLine}
-                  </div>
-                  {meetControls}
+              {/* One row: who it is on the left, the avatars in the MIDDLE of the
+                  container, the Meet controls on the right. The grid's equal
+                  1fr sides are what centre the avatars on the card rather than
+                  between the two blocks. Stacks on a phone. */}
+              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4">
+                <div className="min-w-0">
+                  <h3 className="text-2xl sm:text-3xl font-black leading-tight text-slate-900 dark:text-white truncate">
+                    {familyHeading(lessonFamily.name, t)}
+                  </h3>
+                  <div className="mt-1">{statusChip}</div>
+                  {whenLine}
                 </div>
-                <div className="mt-4 flex flex-wrap items-start justify-center gap-4">
+                <div className="flex flex-wrap items-start justify-center gap-4">
                   {lessonFamily.members.map(m => avatar(m, true))}
                 </div>
+                <div className="flex justify-center sm:justify-end">{meetControls}</div>
               </div>
             </div>
           );
