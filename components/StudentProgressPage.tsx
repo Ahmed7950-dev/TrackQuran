@@ -1033,6 +1033,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
+    // Phones: font size, auto-scroll and search collapse to small icons; this
+    // is the one whose controls are open on the line under them.
+    const [mobileTool, setMobileTool] = useState<'font' | 'scroll' | 'search' | null>(null);
+    const toggleMobileTool = (tool: 'font' | 'scroll' | 'search') => setMobileTool(cur => (cur === tool ? null : tool));
     const [currentAyah, setCurrentAyah] = useState(1);
     const currentAyahRef        = useRef(1);
     const carouselContainerRef  = useRef<HTMLDivElement>(null);
@@ -1077,6 +1081,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
 
     const [hiddenRanges, setHiddenRanges] = useState<{ start: Progress; end: Progress }[]>([]);
+    // Hifz mode: a tap on a verse hides it (blurred) or brings it back, so the
+    // student can test themselves. Letter taps don't log anything meanwhile.
+    // Leaving the mode reveals everything again.
+    const [hifzMode, setHifzMode] = useState(false);
+    const toggleHifzMode = () => {
+        if (hifzMode) setHiddenRanges([]);
+        setHifzMode(!hifzMode);
+    };
+    const toggleVerseHidden = (verse: Progress) => setHiddenRanges(prev => {
+        const idx = prev.findIndex(r => isVerseAfterOrEqual(verse, r.start) && isVerseAfterOrEqual(r.end, verse));
+        return idx > -1 ? prev.filter((_, i) => i !== idx) : [...prev, { start: verse, end: verse }];
+    });
     const [longPressStart, setLongPressStart] = useState<Progress | null>(null);
     
     // Letter error marking state
@@ -3262,7 +3278,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     mistake={mistake}
                                     isEditing={isEditing}
                                     errorText={errorTextInput}
-                                    onLetterClick={listenActive ? () => {} : handleLetterClick}
+                                    onLetterClick={listenActive || hifzMode ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
                                     ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
@@ -3276,7 +3292,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     clickState={clickState}
                                     isFocused={highlightedLetterKey === letterKey}
                                     isCursorActive={cursorLetterKey === letterKey || localCursorKey === letterKey}
-                                    onLongPress={!listenActive ? handleLetterLongPress : undefined}
+                                    onLongPress={!listenActive && !hifzMode ? handleLetterLongPress : undefined}
                                     vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseKey]}
                                 />
                             );
@@ -3293,12 +3309,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     key={`text-${verse.verse_key}`}
                     className={`px-1 py-1 rounded-md transition-all duration-300
                         ${VERSE_BG[vColor.base]} ${vColor.underline ? VERSE_UNDERLINE : ''}
-                        ${isVerseHidden ? 'opacity-0' : 'opacity-100'}
-                        ${listenActive ? 'cursor-pointer' : ''}
+                        ${isVerseHidden && !hifzMode ? 'opacity-0' : 'opacity-100'}
+                        ${listenActive || hifzMode ? 'cursor-pointer' : ''}
                         ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
                     // readOnly: use CAPTURE phase so LetterWithError's stopPropagation() (bubble phase) can't block us
                     // Skip audio if the click originated inside the Tadabbur note section
-                    onClickCapture={listenActive ? (e) => {
+                    // Hifz mode wins over everything: capture the tap before any letter sees it.
+                    style={isVerseHidden && hifzMode ? { filter: 'blur(0.45em)', opacity: 0.5 } : undefined}
+                    onClickCapture={hifzMode ? (e) => {
+                        if ((e.target as Element).closest?.('[data-tadabbur]')) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleVerseHidden({ surah: surahNum, ayah: ayahNum });
+                    } : listenActive ? (e) => {
                         if ((e.target as Element).closest?.('[data-tadabbur]')) return;
                         const audio = readOnlyAudioRef.current;
                         if (!audio) return;
@@ -3312,7 +3335,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         }
                         playVerse(surahNum, ayahNum, false);   // verse text = this ayah only
                     } : undefined}
-                    onClick={!readOnly ? (e) => handleVerseContainerClick(e, surahNum, ayahNum) : undefined}
+                    onClick={!readOnly && !hifzMode ? (e) => handleVerseContainerClick(e, surahNum, ayahNum) : undefined}
                     onMouseEnter={!readOnly ? () => { hoveredVerse.current = { surah: surahNum, ayah: ayahNum }; } : undefined}
                     onMouseLeave={!readOnly ? () => { hoveredVerse.current = null; } : undefined}
                 >
@@ -3797,29 +3820,39 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Right: tool controls. On phones this is its own full-width
                             row under the surah button, everything compact; from sm it goes
                             back to the inline cluster. ── */}
-                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-2 flex-shrink-0 w-full sm:w-auto min-w-0">
+                        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-start gap-1 sm:gap-2 flex-shrink-0 w-full sm:w-auto min-w-0">
+                            {/* Phones: small icons — tap to open that control on the line below */}
+                            <button onClick={() => toggleMobileTool('font')} aria-label="Text size" title="Text size"
+                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors text-[13px] font-bold ${mobileTool === 'font' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                A<span className="text-[10px]">A</span>
+                            </button>
+                            <button onClick={() => toggleMobileTool('scroll')} aria-label={t('liveSession.toggleAutoScrollPlay')} title={t('liveSession.toggleAutoScrollPlay')}
+                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>
+                            </button>
+
                             {/* Font size */}
-                            <div className="flex items-center bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 sm:gap-1">
-                                <button onClick={handleDecreaseFontSize} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
+                            <div className={`${mobileTool === 'font' ? 'flex' : 'hidden'} sm:flex order-last sm:order-none w-full sm:w-auto justify-center items-center bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 gap-3 sm:gap-1`}>
+                                <button onClick={handleDecreaseFontSize} className="w-9 h-8 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
                                 <span className="text-slate-600 dark:text-slate-300 font-semibold w-5 sm:w-7 text-center text-sm">A</span>
-                                <button onClick={handleIncreaseFontSize} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
+                                <button onClick={handleIncreaseFontSize} className="w-9 h-8 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
                             </div>
 
                             {/* Auto-scroll */}
-                            <div className={`flex items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'w-auto sm:w-32' : 'w-auto'}`}>
+                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} sm:flex order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
                                 <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                     {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                                 </button>
-                                {isAutoScrolling && (<div className="flex items-center justify-center gap-1 flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
+                                {isAutoScrolling && (<div className="flex items-center justify-center gap-1 sm:flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
                             </div>
 
-                            {/* ── Right-side compact controls ── */}
-                            <div className="flex items-center gap-1.5">
+                            {/* ── Right-side compact controls (on phones they join the icon row) ── */}
+                            <div className="contents sm:flex items-center gap-1.5">
                                 {/* Focus / word-by-word mode toggle */}
                                 <button
                                     onClick={() => setFocusMode(p => !p)}
                                     title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
-                                    className={`h-7 px-2.5 flex items-center justify-center rounded-md text-[11px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                    className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center rounded-lg sm:rounded-md text-[11px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
                                 >
                                     🔍
                                 </button>
@@ -3829,14 +3862,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <button
                                         onClick={() => setShowToolsMenu(p => !p)}
                                         title="Tools"
-                                        className={`h-7 px-2.5 flex items-center gap-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${
+                                        aria-label="Tools"
+                                        className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-md text-xs font-semibold transition-colors duration-200 ${
                                             showToolsMenu || showTranslation || showTajweed || teacherNote
                                                 ? 'bg-teal-600 text-white shadow-md'
                                                 : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30'
                                         }`}
                                     >
-                                        Tools
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="w-2.5 h-2.5 opacity-70"><path d="M6 8L1 3h10L6 8z"/></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 sm:hidden"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
+                                        <span className="hidden sm:inline">Tools</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="hidden sm:block w-2.5 h-2.5 opacity-70"><path d="M6 8L1 3h10L6 8z"/></svg>
                                     </button>
 
                                     {showToolsMenu && (
@@ -3884,10 +3919,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Hifz mode — tap verses to hide them and recite from memory */}
+                                <button
+                                    onClick={toggleHifzMode}
+                                    title={hifzMode ? 'Hifz mode on — tap a verse to hide or show it. Tap here to leave (shows all verses).' : 'Hifz mode — tap verses to hide them'}
+                                    aria-label="Hifz mode"
+                                    aria-pressed={hifzMode}
+                                    className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center gap-1 rounded-lg sm:rounded-md text-xs font-semibold transition-colors duration-200 ${hifzMode ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 dark:ring-emerald-700' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
+                                >
+                                    <span className="text-sm leading-none">🙈</span>
+                                    <span className="hidden sm:inline">Hifz</span>
+                                </button>
                             </div>
 
+                            {/* Phones: search icon */}
+                            <button onClick={() => toggleMobileTool('search')} aria-label={t('liveSession.search')}
+                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${mobileTool === 'search' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                            </button>
+
                             {/* Search — with instant typeahead (pages, verses, surah names) */}
-                            <div className="relative flex-1 sm:flex-none min-w-0">
+                            <div className={`${mobileTool === 'search' ? 'block' : 'hidden'} sm:block relative order-last sm:order-none w-full sm:w-auto sm:flex-none min-w-0`}>
                                 <form onSubmit={handleSearch} className="flex gap-1 sm:gap-2 items-center">
                                     <input type="text" value={searchInput}
                                         onChange={e => { setSearchInput(e.target.value); setShowSearchSuggestions(true); }}
@@ -4053,7 +4106,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             clickState={cs}
                                                                             isFocused={highlightedLetterKey === lk}
                                                                             isCursorActive={cursorLetterKey === lk || localCursorKey === lk}
-                                                                            onLongPress={!listenActive ? handleLetterLongPress : undefined}
+                                                                            onLongPress={!listenActive && !hifzMode ? handleLetterLongPress : undefined}
                                                                             vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseLk]}
                                                                             focusMode
                                                                         />
