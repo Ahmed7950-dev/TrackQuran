@@ -7,12 +7,22 @@
 // the per-lesson Vocabulary tab uses (including the "review later" group).
 //
 // Rendered for BOTH sides: the tutor's student page and the student portal
-// (ArabicStudentDetailPage backs both), so it takes no tutor-only props.
+// (ArabicStudentDetailPage backs both). The tutor additionally gets the
+// homework basket; the student gets a card for homework waiting for them.
+//
+// Every flashcard answer is recorded ("I know" = correct, "Review later" =
+// wrong) and the last ten draw the red/green strength bar beside each word.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArabicLesson, ArabicStudent, VocabWord } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import { getVocabWordsForLessons, saveVocabMistakes } from '../services/arabicService';
+import {
+  getVocabStrength, recordVocabReview, withReview, StrengthMap,
+  listVocabHomework, VocabHomework, isHomeworkExpired, homeworkUrl,
+} from '../services/vocabHomeworkService';
+import StrengthBar from './VocabStrengthBar';
+import HomeworkBasket, { useHomeworkBasket } from './VocabHomeworkBasket';
 import WordFlightGame from './WordFlightGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
@@ -25,14 +35,18 @@ const shuffleArray = <T,>(arr: T[]): T[] => {
   return a;
 };
 
-type Phase = 'idle' | 'active' | 'wrong' | 'complete';
+type Phase = 'idle' | 'active' | 'complete';
 
 interface Props {
   lessons: ArabicLesson[];       // already filtered to the student's dialect(s)
   student: ArabicStudent;
+  /** Tutor side: row clicks fill the homework basket. Student side: pending homework card. */
+  studentMode?: boolean;
+  /** Start of the student's next lesson — the suggested homework deadline. */
+  nextLessonAt?: Date | null;
 }
 
-const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
+const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, studentMode = false, nextLessonAt = null }) => {
   const { t } = useI18n();
   const [words, setWords]     = useState<VocabWord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +63,33 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
   const [flipped, setFlipped]       = useState(false);
   const [reviewingSaved, setReviewingSaved] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+
+  // Last ten flashcard answers per word → the strength bar.
+  const [strength, setStrength] = useState<StrengthMap>(new Map());
+  useEffect(() => {
+    let live = true;
+    getVocabStrength(student.id).then(m => { if (live) setStrength(m); });
+    return () => { live = false; };
+  }, [student.id]);
+  const recordAnswer = (w: VocabWord, correct: boolean) => {
+    setStrength(prev => withReview(prev, w.id, correct));
+    recordVocabReview(student.id, w, correct);
+  };
+
+  // Homework basket (tutor) — the draft plus every homework already sent.
+  const basket = useHomeworkBasket(student, !studentMode);
+  const [basketOpen, setBasketOpen] = useState(false);
+
+  // Homework waiting for the student (portal).
+  const [pendingHomework, setPendingHomework] = useState<VocabHomework[]>([]);
+  useEffect(() => {
+    if (!studentMode) return;
+    let live = true;
+    listVocabHomework(student.id).then(list => {
+      if (live) setPendingHomework(list.filter(h => h.status === 'assigned' && !isHomeworkExpired(h)));
+    });
+    return () => { live = false; };
+  }, [student.id, studentMode]);
 
   // "Review later" group — a SEPARATE set from the per-lesson lists, because
   // this surface spans the whole course. Per student, in localStorage.
@@ -194,46 +235,41 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
     persistProgress(deck, 0, [], savedRun);
     setPhase('active');
   };
-  const restart = () => {
-    const deck: VocabWord[] = shuffleArray(reviewingSaved ? savedWords : practicePool) as VocabWord[];
-    setShuffled(deck); setCardIndex(0);
-    persistProgress(deck, 0, [], reviewingSaved);
-    setPhase('active');
-  };
-
-  const advance = () => {
+  const advance = (wrong: VocabWord[] = wrongWords) => {
     if (cardIndex + 1 >= shuffled.length) {
       clearProgress();
       setPhase('complete');
       // Wrong words feed the existing mistakes-review flow (grouped per lesson).
-      if (!reviewingSaved && wrongWords.length > 0) {
-        saveVocabMistakes(student.id, wrongWords.map(w => ({ wordId: w.id, lessonId: w.lessonId }))).catch(console.error);
+      if (!reviewingSaved && wrong.length > 0) {
+        saveVocabMistakes(student.id, wrong.map(w => ({ wordId: w.id, lessonId: w.lessonId }))).catch(console.error);
       }
     } else {
-      persistProgress(shuffled, cardIndex + 1, wrongWords, reviewingSaved);
+      persistProgress(shuffled, cardIndex + 1, wrong, reviewingSaved);
       setCardIndex(i => i + 1);
     }
   };
   const handleKnow = () => {
     const w = shuffled[cardIndex];
+    if (w) recordAnswer(w, true);
     if (reviewingSaved && w && revisionIds.has(w.id)) {
       const next = new Set(revisionIds); next.delete(w.id); persistRevision(next);
     }
     advance();
   };
+  // "Review later" is the student NOT knowing the word: it counts as a wrong
+  // answer on the strength bar and lands in the "need more practice" list.
   const handleSaveForRevision = () => {
     const w = shuffled[cardIndex];
-    if (w && !revisionIds.has(w.id)) persistRevision(new Set<string>(revisionIds).add(w.id));
+    let wrong = wrongWords;
+    if (w) {
+      recordAnswer(w, false);
+      if (!revisionIds.has(w.id)) persistRevision(new Set<string>(revisionIds).add(w.id));
+      if (!wrong.some(x => x.id === w.id)) wrong = [...wrong, w];
+    }
+    setWrongWords(wrong);
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 900);
-    advance();
-  };
-  const handleNotSure = () => {
-    const w = shuffled[cardIndex];
-    const nextWrong = wrongWords.some(x => x.id === w.id) ? wrongWords : [...wrongWords, w];
-    setWrongWords(nextWrong);
-    persistProgress(shuffled, cardIndex, nextWrong, reviewingSaved);
-    setPhase('wrong');
+    advance(wrong);
   };
 
   if (loading) {
@@ -279,12 +315,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-5 mt-4">
-          <button onClick={() => { setFlipped(true); handleNotSure(); }}
-            className="flex flex-col items-center justify-center gap-2 py-4 sm:py-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all shadow-sm">
-            <span className="text-2xl sm:text-3xl">😕</span>
-            <span className="text-red-600 dark:text-red-400 font-bold text-xs sm:text-base text-center leading-tight">{t('arabicLessonDetail.notSure')}</span>
-          </button>
+        <div className="grid grid-cols-2 gap-2 sm:gap-5 mt-4">
           <button onClick={handleSaveForRevision}
             className="relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all shadow-sm">
             {savedFlash && <span className="absolute -top-2 right-2 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow animate-pulse">{t('arabicLessonDetail.savedForRevision')}</span>}
@@ -299,30 +330,6 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
             <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs sm:text-base">{t('arabicLessonDetail.iKnow')}</span>
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // ── Flashcard: wrong ──────────────────────────────────────────────────────
-  if (phase === 'wrong') {
-    const word = shuffled[cardIndex];
-    return (
-      <div className="max-w-3xl mx-auto p-4 sm:p-10 space-y-6">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-6 sm:p-12 text-center shadow-sm space-y-5">
-          <div className="text-5xl">😕</div>
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">{word?.english}</p>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-5 space-y-2">
-            <p className="text-sm font-semibold text-red-500 uppercase tracking-wide">{t('arabicLessonDetail.theArabicWordIs')}</p>
-            <p className="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word?.arabic}</p>
-            {word?.transliteration && <p className="text-base text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>}
-          </div>
-        </div>
-        <button onClick={restart} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-lg">
-          🔄 {t('arabicLessonDetail.startOver')}
-        </button>
-        <button onClick={() => setPhase('idle')} className="w-full py-3 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
-          {t('arabicLessonDetail.backToWordList')}
-        </button>
       </div>
     );
   }
@@ -401,6 +408,25 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
           </p>
         )}
       </div>
+
+      {/* Homework waiting for the student */}
+      {studentMode && pendingHomework.map(hw => (
+        <a key={hw.id} href={homeworkUrl(hw.id)}
+          className="flex items-center gap-3 rounded-2xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 px-4 py-3 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+          <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-2xl">🧺</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-violet-800 dark:text-violet-200">
+              Vocabulary homework · {hw.words.length} word{hw.words.length === 1 ? '' : 's'}
+            </span>
+            <span className="block text-xs text-violet-600/80 dark:text-violet-300/70">
+              {hw.deadline
+                ? `Due ${new Date(hw.deadline).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                : 'No deadline'}
+            </span>
+          </span>
+          <span className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold">Start →</span>
+        </a>
+      ))}
 
       {/* Practice launcher — runs on the SELECTED lessons (or everything) */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-5 space-y-3">
@@ -482,6 +508,24 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
               </span>
             </button>
           )}
+
+          {!studentMode && (
+            <button onClick={() => setBasketOpen(true)}
+              className="flex items-center gap-3 rounded-xl border border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10 px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">
+              <span className="relative flex-shrink-0 w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-2xl">
+                🧺
+                {basket.words.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center">{basket.words.length}</span>
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-violet-800 dark:text-violet-200 truncate">Homework Basket</span>
+                <span className="block text-xs text-violet-600/70 dark:text-violet-300/60">
+                  {basket.words.length ? `${basket.words.length} word${basket.words.length === 1 ? '' : 's'} ready to send` : 'Tap words in the table to add them'}
+                </span>
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -500,9 +544,10 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
           <table className="w-full text-sm table-fixed">
             <colgroup>
               <col style={{ width: '26px' }} />
-              <col style={{ width: '28%' }} />
-              <col style={{ width: '30%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '24%' }} />
               <col />
+              <col className="w-[76px] sm:w-[124px]" />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-100 dark:border-gray-700">
@@ -510,6 +555,8 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
                 <th className="text-right px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Arabic</th>
                 <th className="text-left px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Translit.</th>
                 <th className="text-left px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">English</th>
+                <th title="The last 10 flashcard answers, oldest → newest"
+                  className="text-center px-1 sm:px-2 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Strength</th>
               </tr>
             </thead>
             <tbody>
@@ -520,7 +567,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
                   <React.Fragment key={lesson.id}>
                     {/* Lesson header row — doubles as the lesson selector */}
                     <tr className={isPicked ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-slate-50 dark:bg-gray-700/50'}>
-                      <td colSpan={4} className="px-1.5 sm:px-4 py-2 border-y border-slate-100 dark:border-gray-700">
+                      <td colSpan={5} className="px-1.5 sm:px-4 py-2 border-y border-slate-100 dark:border-gray-700">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={isPicked} onChange={() => toggleLesson(lesson.id)}
                             className="w-4 h-4 rounded border-slate-300 dark:border-gray-500 text-amber-500 focus:ring-amber-400 flex-shrink-0" />
@@ -533,28 +580,54 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student }) => {
                         </label>
                       </td>
                     </tr>
-                    {items.map(w => (
+                    {items.map(w => {
+                      const inBasket = basket.ids.has(w.id);
+                      return (
                       // Learnt words get a clearly GREEN row (plus a green left
-                      // edge) so the eye can pick them out at a glance.
-                      <tr key={w.id} className={`border-b border-slate-50 dark:border-gray-700/50 ${
-                        learnt
-                          ? 'bg-emerald-100/80 dark:bg-emerald-900/30 border-l-[3px] border-l-emerald-400 dark:border-l-emerald-600'
-                          : ''
-                      }`}>
+                      // edge) so the eye can pick them out at a glance. On the
+                      // tutor side a tap puts the word in (or takes it out of)
+                      // the homework basket.
+                      <tr key={w.id}
+                        onClick={studentMode ? undefined : () => basket.toggle(w)}
+                        title={studentMode ? undefined : (inBasket ? 'In the homework basket — tap to remove' : 'Tap to add to the homework basket')}
+                        className={`border-b border-slate-50 dark:border-gray-700/50 ${
+                        inBasket
+                          ? 'bg-violet-100/80 dark:bg-violet-900/30 border-l-[3px] border-l-violet-500'
+                          : learnt
+                            ? 'bg-emerald-100/80 dark:bg-emerald-900/30 border-l-[3px] border-l-emerald-400 dark:border-l-emerald-600'
+                            : ''
+                      } ${studentMode ? '' : 'cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20'}`}>
                         <td className="px-0.5 py-2 text-center align-top">
-                          {revisionIds.has(w.id) && <span title="Saved to review later" className="text-xs">🔖</span>}
+                          {inBasket
+                            ? <span title="In the homework basket" className="text-xs">🧺</span>
+                            : revisionIds.has(w.id) && <span title="Saved to review later" className="text-xs">🔖</span>}
                         </td>
                         <td className={`px-1.5 sm:px-4 py-2 text-right font-semibold text-base break-words align-top ${learnt ? 'text-emerald-900 dark:text-emerald-100' : 'text-slate-800 dark:text-slate-100'}`} dir="rtl">{w.arabic}</td>
                         <td className={`px-1.5 sm:px-4 py-2 italic break-words align-top text-xs sm:text-sm ${learnt ? 'text-emerald-700/80 dark:text-emerald-300/80' : 'text-slate-500 dark:text-slate-400'}`}>{w.transliteration}</td>
                         <td className={`px-1.5 sm:px-4 py-2 break-words align-top text-xs sm:text-sm ${learnt ? 'text-emerald-900 dark:text-emerald-100' : 'text-slate-700 dark:text-slate-200'}`}>{w.english}</td>
+                        <td className="px-1 sm:px-2 py-2 align-top">
+                          <StrengthBar answers={strength.get(w.id) ?? []} />
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </React.Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {basketOpen && !studentMode && (
+        <HomeworkBasket
+          basket={basket}
+          student={student}
+          courseWords={words}
+          savedWords={savedWords}
+          nextLessonAt={nextLessonAt}
+          onClose={() => setBasketOpen(false)}
+        />
       )}
 
       {showWordFlight && (

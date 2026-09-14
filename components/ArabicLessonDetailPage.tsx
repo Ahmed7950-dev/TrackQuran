@@ -36,6 +36,7 @@ import {
   saveArabicStudentNote,
   getLessonProgressForStudent, markLessonProgress, markLessonDone, logLessonRevision,
 } from '../services/arabicService';
+import { recordVocabReview } from '../services/vocabHomeworkService';
 import { createNotification } from '../services/notificationService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2188,7 +2189,7 @@ interface VocabTabProps {
   preSelectedStudentId?: string;
 }
 
-type ChallengePhase = 'idle' | 'active' | 'wrong' | 'complete';
+type ChallengePhase = 'idle' | 'active' | 'complete';
 
 const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, preSelectedStudentId }) => {
   const { t } = useI18n();
@@ -2208,7 +2209,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
     .map(w => ({ prompt: w.english.trim(), answer: w.arabic.trim() }));
 
-  // Challenge state — "I know / Not sure" button flow
+  // Challenge state — "I know / Review later" button flow
   const [phase, setPhase]           = useState<ChallengePhase>('idle');
   const [shuffled, setShuffled]     = useState<VocabWord[]>([]);
   const [cardIndex, setCardIndex]   = useState(0);
@@ -2266,19 +2267,14 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     setPhase('active');
   };
 
-  const restartChallenge = () => {
-    setShuffled(shuffleArray(reviewingSaved ? savedWords : words)); setCardIndex(0);
-    setPhase('active');
-  };
-
   /** Advance to the next card, or finish the run. */
-  const advanceCard = () => {
+  const advanceCard = (wrong: VocabWord[] = wrongWords) => {
     if (cardIndex + 1 >= shuffled.length) {
       setPhase('complete');
       // A revision-only run doesn't re-schedule the whole lesson's spaced rep.
       if (!reviewingSaved && selectedStudentId) saveSpacedRep();
-      if (!reviewingSaved && selectedStudentId && wrongWords.length > 0) {
-        saveVocabMistakes(selectedStudentId, wrongWords.map(w => ({ wordId: w.id, lessonId }))).catch(console.error);
+      if (!reviewingSaved && selectedStudentId && wrong.length > 0) {
+        saveVocabMistakes(selectedStudentId, wrong.map(w => ({ wordId: w.id, lessonId }))).catch(console.error);
       }
     } else {
       setCardIndex(i => i + 1);
@@ -2287,6 +2283,8 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   /** "I know" — in a revision run this also clears the word from the list. */
   const handleKnow = () => {
+    const current = shuffled[cardIndex];
+    if (current && selectedStudentId) recordVocabReview(selectedStudentId, current, true);
     if (reviewingSaved) {
       const word = shuffled[cardIndex];
       if (word && revisionIds.has(word.id)) {
@@ -2296,25 +2294,20 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
     advanceCard();
   };
 
-  /** "Review later" — add the word to the revision list and move on (no penalty). */
+  /** "Review later" — the student didn't know it: a wrong answer on the
+   *  strength bar, saved to the revision list, and the run moves on. */
   const handleSaveForRevision = () => {
     const word = shuffled[cardIndex];
-    if (word && !revisionIds.has(word.id)) persistRevision(new Set<string>(revisionIds).add(word.id));
+    let wrong = wrongWords;
+    if (word) {
+      if (selectedStudentId) recordVocabReview(selectedStudentId, word, false);
+      if (!revisionIds.has(word.id)) persistRevision(new Set<string>(revisionIds).add(word.id));
+      if (!wrong.some(w => w.id === word.id)) wrong = [...wrong, word];
+    }
+    setWrongWords(wrong);
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 900);
-    advanceCard();
-  };
-
-  /** "Not Sure" — record word as wrong, show answer, then restart */
-  const handleNotSure = () => {
-    const word = shuffled[cardIndex];
-    setWrongWords(prev => prev.some(w => w.id === word.id) ? prev : [...prev, word]);
-    setPhase('wrong');
-  };
-
-  /** After user acknowledges wrong answer, restart challenge */
-  const handleRestartAfterWrong = () => {
-    restartChallenge();
+    advanceCard(wrong);
   };
 
   // Saves spaced-repetition progress for BOTH modes (arabic + transliteration)
@@ -2379,7 +2372,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
 
   if (loading) return <LoadingSpinner />;
 
-  // ── Challenge: active (I know / Not Sure) ────────────────────────────────
+  // ── Challenge: active (Review later / I know) ────────────────────────────────
   if (phase === 'active') {
     const word = shuffled[cardIndex];
     return (
@@ -2415,24 +2408,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 sm:gap-5 mt-4">
-          {/* Not Sure button */}
-          <button onClick={() => { setFlipped(true); handleNotSure(); }}
-            className="group flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 hover:border-red-300 dark:hover:border-red-700 transition-all shadow-sm">
-            <svg className="w-10 h-10 text-red-500 dark:text-red-400 group-hover:scale-110 transition-transform" viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="m54.47021 44.459c-2.59771-3.29311-13.30316-6.74373-15.55609-7.442a35.687 35.687 0 0 0 -.44635-3.85693 12.1115 12.1115 0 0 0 3.38965-6.10737 5.33833 5.33833 0 0 0 1.84158-6.63125 15.86778 15.86778 0 0 0 .36444-5.08649 16.08178 16.08178 0 0 0 -.94532-4.11816 6.18869 6.18869 0 0 0 1.4795-3.11133 1.33544 1.33544 0 0 0 -1.48828-1.52734 8.02887 8.02887 0 0 1 -5.05225-.86622 16.30427 16.30427 0 0 0 -12.35547-.001c-4.8548 2.27275-8.21593 8.78178-6.477 15.20617a5.49549 5.49549 0 0 0 2.29738 6.25192 13.10539 13.10539 0 0 0 3.20392 5.97485 36.27915 36.27915 0 0 0 -.44855 3.87927c-2.33026.69617-12.78967 3.95831-15.37744 7.14783-2.33938 2.88471-3.17727 13.09956-3.26516 14.25483a1 1 0 0 0 1.99414.15235c.22558-2.9668 1.17236-11.11036 2.82422-13.14747 1.8833-2.32128 10.26562-5.23535 14.084-6.39648 4.48152 5.49784 7.01416 5.12012 7.01416 5.12012 2.58008 0 5.8335-3.56934 7.12256-5.11719 3.8584 1.2207 12.34472 4.27539 14.22607 6.66016 1.58057 2.0039 2.38037 9.96582 2.55518 12.86523a.9999.9999 0 0 0 1.99609-.12012c-.06789-1.13086-.72902-11.1289-2.98098-13.98338zm-27.91992-36.93752c3.77491-1.76757 8.80274-.873 10.72119.03125a10.468 10.468 0 0 0 5.10452 1.10743 3.22376 3.22376 0 0 1 -.9043 1.3623 1.31716 1.31716 0 0 0 -.37939 1.50293 14.12089 14.12089 0 0 1 .98 3.99512 13.867 13.867 0 0 1 -.21192 4.02051 8.966 8.966 0 0 1 -1.46142-4.7295 1.33542 1.33542 0 0 0 -1.71827-1.248 26.0117 26.0117 0 0 1 -14.38281.04882 1.33147 1.33147 0 0 0 -1.70508 1.22461 8.1478 8.1478 0 0 1 -1.65531 4.61325c-.84566-4.62851 1.40407-9.95686 5.61279-11.92872zm-3.16015 18.81934a1.00094 1.00094 0 0 0 -.51319-.69141 3.49381 3.49381 0 0 1 -1.86071-3.53717c.83685-.27554 3.10076-2.95691 3.51013-6.36712a28.05229 28.05229 0 0 0 13.92138-.042c.25144 2.58886 2.09919 6.708 3.75013 6.66693a3.66306 3.66306 0 0 1 -1.78675 3.254.997.997 0 0 0 -.44433.67578 9.49692 9.49692 0 0 1 -4.66455 6.68067c-.15918.084-3.93995 2.01074-7.17725.34375a10.52343 10.52343 0 0 1 -4.73486-6.98343zm8.15771 15.81348c-1.30658-.007-3.72931-2.3042-5.337-4.23743a29.60949 29.60949 0 0 1 .32122-3.21136c2.96526 1.91969 7.07172 1.5756 10.1026-.18537a31.34117 31.34117 0 0 1 .348 3.41767c-3.73339 4.37668-5.43482 4.21649-5.43482 4.21649z"/>
-              <path d="m49.66748 56.4375h-9a1 1 0 0 1 0-2h9a1 1 0 0 1 0 2z"/>
-              <path d="m53.43457 35.35938a3.85156 3.85156 0 0 1 1.83154-3.74708c1.03077-.67968 1.16651-1.00683 1.082-1.48242-.27333-1.53729-3.3849-1.28819-2.98242.17481a1 1 0 0 1 -1.92869.52931c-1.16431-4.24423 6.13532-5.23283 6.87988-1.05566.354 1.98438-1.20166 3.00977-1.94873 3.50293a1.86228 1.86228 0 0 0 -.94043 1.916.99987.99987 0 0 1 -1.99315.16211z"/>
-              <circle cx="54.485" cy="38.02" r=".954"/>
-              <path d="m7.76953 36.84277a3.84848 3.84848 0 0 1 1.832-3.74707c1.03028-.67968 1.166-1.00683 1.08155-1.48242-.27323-1.53336-3.38463-1.293-2.98243.17481a1 1 0 0 1 -1.92871.52929c-1.16634-4.2477 6.1361-5.22843 6.87989-1.05566.35351 1.98242-1.20118 3.00976-1.94825 3.50293a1.86185 1.86185 0 0 0 -.94091 1.916.99988.99988 0 0 1 -1.99314.16212z"/>
-              <circle cx="8.82" cy="39.503" r=".954"/>
-              <path d="m11.06055 13.2627a3.84842 3.84842 0 0 1 1.832-3.74707c1.03027-.67969 1.166-1.00684 1.08154-1.48243-.27243-1.52894-3.38594-1.296-2.98291.17481a1 1 0 0 1 -1.92868.52929c-1.16597-4.2463 6.1365-5.22917 6.88037-1.05566.35352 1.98242-1.20117 3.00977-1.94824 3.50293a1.86186 1.86186 0 0 0 -.94092 1.916.99987.99987 0 0 1 -1.99316.16213z"/>
-              <circle cx="12.111" cy="15.923" r=".954"/>
-              <path d="m50.2583 15.958a3.84738 3.84738 0 0 1 1.832-3.748c1.03028-.67969 1.166-1.00683 1.08155-1.48242-.273-1.53231-3.38546-1.29425-2.98292.1748a1 1 0 0 1 -1.92871.5293c-1.16663-4.24892 6.13698-5.22647 6.88041-1.05568.35351 1.98437-1.20167 3.01074-1.94874 3.5039a1.86009 1.86009 0 0 0 -.94043 1.916.99987.99987 0 0 1 -1.99316.1621z"/>
-              <circle cx="51.309" cy="18.618" r=".954"/>
-            </svg>
-            <span className="text-red-600 dark:text-red-400 font-bold text-sm sm:text-base text-center leading-tight">{t('arabicLessonDetail.notSure')}</span>
-          </button>
+        <div className="grid grid-cols-2 gap-3 sm:gap-5 mt-4">
           {/* Review later — save to the personal revision list, keep going */}
           <button onClick={handleSaveForRevision}
             className="group relative flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 hover:border-rose-300 dark:hover:border-rose-700 transition-all shadow-sm">
@@ -2452,37 +2428,6 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             <span className="text-emerald-700 dark:text-emerald-400 font-bold text-base">{t('arabicLessonDetail.iKnow')}</span>
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // ── Challenge: wrong — show answer then restart ────────────────────────────
-  if (phase === 'wrong') {
-    const word = shuffled[cardIndex];
-    return (
-      <div className="max-w-3xl mx-auto p-10 space-y-8">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-12 text-center shadow-sm space-y-6">
-          <div className="text-5xl">😕</div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{word.english}</p>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 space-y-2">
-            <p className="text-sm font-semibold text-red-500 uppercase tracking-wide">{t('arabicLessonDetail.theArabicWordIs')}</p>
-            <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
-            {word.transliteration && (
-              <p className="text-base text-slate-500 dark:text-slate-400 italic">{word.transliteration}</p>
-            )}
-          </div>
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
-            <p className="text-base font-semibold text-amber-700 dark:text-amber-300">❗ {t('arabicLessonDetail.challengeWarning')}</p>
-          </div>
-        </div>
-        <button onClick={handleRestartAfterWrong}
-          className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors text-xl">
-          🔄 {t('arabicLessonDetail.startOver')}
-        </button>
-        <button onClick={() => setPhase('idle')}
-          className="w-full py-4 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base">
-          {t('arabicLessonDetail.backToWordList')}
-        </button>
       </div>
     );
   }

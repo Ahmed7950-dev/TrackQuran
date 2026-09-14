@@ -59,6 +59,7 @@ import GunTunePage from './components/GunTunePage';
 import ZombieTunePage from './components/ZombieTunePage';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
+import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -501,6 +502,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (craneRoomId) return <CraneBuilderJoinPage roomId={craneRoomId} />;
+
+  // ── Arabic vocabulary homework — the link the tutor sends, no auth ─────────
+  const vocabHomeworkId = (() => {
+    const m = window.location.pathname.match(/^\/vocab-homework\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (vocabHomeworkId) return <VocabHomeworkPage homeworkId={vocabHomeworkId} />;
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);

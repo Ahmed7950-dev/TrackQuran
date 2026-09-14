@@ -5,17 +5,13 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, VocabAttempt, VocabMistakeDetail, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
+import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import StudentProfileIcon from './StudentProfileIcon';
 import { createGoogleMeetLink } from '../services/googleCalendarService';
 import { saveInstantMeeting } from '../services/instantMeetingService';
 import {
   getArabicLessons,
-  getAllVocabAttemptsForStudent,
-  getVocabWordCountsByLesson,
-  getVocabMistakesForStudent,
-  removeVocabMistakes,
   getLessonLogsForStudent,
   getArabicStudentNote,
   getVocabWords,
@@ -23,7 +19,6 @@ import {
 import {
   getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
 } from '../services/examService';
-import { getVocabularyLists, VocabList } from '../services/vocabularyService';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
@@ -132,605 +127,28 @@ const InfoRow: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, 
     </div>
   ) : null;
 
-// ── Mini flashcard challenge for wrong words ──────────────────────────────────
-
-interface MiniChallengeProps {
-  words: VocabMistakeDetail[];
-  lessonTitle: string;
-  onComplete: (correctWordIds: string[]) => void;
-  onCancel: () => void;
-}
-
-function shuffleArr<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-type MiniPhase = 'active' | 'wrong' | 'done';
-
-const MiniChallenge: React.FC<MiniChallengeProps> = ({ words, lessonTitle, onComplete, onCancel }) => {
-  const { t } = useI18n();
-  const [phase, setPhase] = useState<MiniPhase>('active');
-  const [shuffled, setShuffled] = useState<VocabMistakeDetail[]>(() => shuffleArr(words));
-  const [cardIndex, setCardIndex] = useState(0);
-
-  const currentWord = shuffled[cardIndex];
-
-  function restart() {
-    setShuffled(shuffleArr(words));
-    setCardIndex(0);
-    setPhase('active');
-  }
-
-  function handleKnow() {
-    if (cardIndex + 1 >= shuffled.length) {
-      setPhase('done');
-    } else {
-      setCardIndex(i => i + 1);
-    }
-  }
-
-  function handleNotSure() {
-    setPhase('wrong');
-  }
-
-  // ── Done: all words answered "I Know" in a row ──────────────────────────
-  if (phase === 'done') {
-    return (
-      <div className="max-w-lg mx-auto space-y-5">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center space-y-5 shadow-sm">
-          <div className="text-6xl">🎉</div>
-          <div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{t('arabicStudentDetail.allCorrect')}</h3>
-            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">{lessonTitle}</p>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {words.length === 1
-              ? t('arabicStudentDetail.allCorrectMsg_one', { count: words.length })
-              : t('arabicStudentDetail.allCorrectMsg_other', { count: words.length })}
-          </p>
-          <button
-            onClick={() => onComplete(words.map(w => w.id))}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm transition-colors">
-            {t('arabicStudentDetail.done')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Wrong: show Arabic answer, then restart ─────────────────────────────
-  if (phase === 'wrong') {
-    return (
-      <div className="max-w-lg mx-auto space-y-5">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center shadow-sm space-y-5">
-          <div className="text-4xl">😕</div>
-          <p className="text-xl font-bold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-5 space-y-2">
-            <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">{t('arabicStudentDetail.theArabicWordIs')}</p>
-            <p className="text-4xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{currentWord.arabic}</p>
-            {currentWord.transliteration && (
-              <p className="text-sm text-slate-500 dark:text-slate-400 italic">{currentWord.transliteration}</p>
-            )}
-          </div>
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3">
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-              ❗ {t('arabicStudentDetail.challengeWarning')}
-            </p>
-          </div>
-        </div>
-        <button onClick={restart}
-          className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors">
-          🔄 {t('arabicStudentDetail.startOver')}
-        </button>
-        <button onClick={onCancel}
-          className="w-full py-2.5 bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-sm">
-          {t('arabicStudentDetail.backToWrongWords')}
-        </button>
-      </div>
-    );
-  }
-
-  // ── Active: show English, I Know / Not Sure buttons ─────────────────────
-  return (
-    <div className="max-w-lg mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-bold text-slate-800 dark:text-slate-100">{t('arabicStudentDetail.practisingWrongWords')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{lessonTitle}</p>
-        </div>
-        <button onClick={onCancel}
-          className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-          {t('arabicStudentDetail.cancel')}
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-1.5 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-amber-400 rounded-full transition-all duration-300"
-            style={{ width: `${(cardIndex / shuffled.length) * 100}%` }}
-          />
-        </div>
-        <span className="text-xs text-slate-400 font-mono">{cardIndex + 1}/{shuffled.length}</span>
-      </div>
-
-      {/* Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-12 px-8 text-center shadow-sm space-y-3">
-        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-          {t('arabicStudentDetail.doYouKnowArabicFor')}
-        </p>
-        <p className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{currentWord.english}</p>
-      </div>
-
-      {/* Buttons */}
-      <div className="grid grid-cols-2 gap-4">
-        <button onClick={handleNotSure}
-          className="py-5 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-lg">
-          😕 {t('arabicStudentDetail.notSure')}
-        </button>
-        <button onClick={handleKnow}
-          className="py-5 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-bold rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-lg">
-          ✓ {t('arabicStudentDetail.iKnow')}
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // ── Student's Progress Tab ────────────────────────────────────────────────────
+// The lesson-history calendar. (The spaced-repetition schedule and the wrong
+// words list used to live here; word strength now shows beside every word in
+// the Lessons Vocabulary tab instead.)
 
 interface ProgressTabProps {
-  student: ArabicStudent;
   lessons: ArabicLesson[];
-  onMistakesUpdated: () => void;
   lessonLogs: ArabicLessonLog[];
   calendarDate: Date;
   onMonthChange: (d: Date) => void;
 }
 
-const ProgressTab: React.FC<ProgressTabProps> = ({ student, lessons, onMistakesUpdated, lessonLogs, calendarDate, onMonthChange }) => {
-  const { t } = useI18n();
-  const [attempts, setAttempts] = useState<VocabAttempt[]>([]);
-  const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
-  const [mistakes, setMistakes] = useState<VocabMistakeDetail[]>([]);
-  const [vocabLists, setVocabLists] = useState<VocabList[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Mini challenge state
-  const [challengeWords, setChallengeWords] = useState<VocabMistakeDetail[] | null>(null);
-  const [challengeLessonTitle, setChallengeLessonTitle] = useState('');
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const [att, wc, mis, vls] = await Promise.all([
-        getAllVocabAttemptsForStudent(student.id),
-        getVocabWordCountsByLesson(),
-        getVocabMistakesForStudent(student.id),
-        getVocabularyLists(student.id),
-      ]);
-      setAttempts(att);
-      setWordCounts(wc);
-      setMistakes(mis);
-      setVocabLists(vls);
-      setLoading(false);
-    })();
-  }, [student.id]);
-
-  async function handleChallengeComplete(correctWordIds: string[]) {
-    if (correctWordIds.length > 0) {
-      await removeVocabMistakes(student.id, correctWordIds);
-      setMistakes(prev => prev.filter(m => !correctWordIds.includes(m.id)));
-      onMistakesUpdated();
-    }
-    setChallengeWords(null);
-    setChallengeLessonTitle('');
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-4 border-amber-300 border-t-amber-600 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (challengeWords) {
-    return (
-      <div className="py-4">
-        <MiniChallenge
-          words={challengeWords}
-          lessonTitle={challengeLessonTitle}
-          onComplete={handleChallengeComplete}
-          onCancel={() => { setChallengeWords(null); setChallengeLessonTitle(''); }}
-        />
-      </div>
-    );
-  }
-
-  // ── Lessons with vocabulary ───────────────────────────────────────────────
-  const lessonsWithVocab = lessons.filter(l => (wordCounts[l.id] ?? 0) > 0);
-
-  // ── Custom vocab lists that have at least one completed SRS attempt ────────
-  // srs_attempts is a JSON array of ISO date strings stored directly on the list row
-  const listsWithAttempts = vocabLists.filter(list =>
-    (list.srs_attempts ?? []).length > 0
-  );
-
-  // Build a LessonTimeline from a vocab list's srs_attempts array
-  function getListTimeline(list: VocabList): LessonTimeline | null {
-    const srs = list.srs_attempts ?? [];
-    if (srs.length === 0) return null;
-    const firstDone = new Date(srs[0]);
-    const cols: TimelineCol[] = TIMELINE_DELAYS.map((days, i) => {
-      const attemptNum = i + 2; // slots 2,3,4,5
-      const scheduledDate = addDays(firstDone, days);
-      const completedAt = srs[i + 1] ?? null; // srs[1]=2nd session, srs[2]=3rd, …
-      const todayFlag = !completedAt && isSameDay(scheduledDate, today);
-      const isOverdue  = !completedAt && !todayFlag && scheduledDate < today;
-      return { attemptNumber: attemptNum, scheduledDate, completedAt, isToday: todayFlag, isOverdue };
-    });
-    const allComplete = cols.every(c => !!c.completedAt);
-    return { firstDone, cols, allComplete };
-  }
-
-  // ── Spaced-rep timeline per lesson ───────────────────────────────────────
-  const TIMELINE_DELAYS = [1, 3, 7, 14]; // days after first attempt
-
-  function formatDate(d: Date): string {
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  }
-
-  function addDays(base: Date, days: number): Date {
-    const d = new Date(base);
-    d.setDate(d.getDate() + days);
-    return d;
-  }
-
-  function isSameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear()
-      && a.getMonth() === b.getMonth()
-      && a.getDate() === b.getDate();
-  }
-
-  const today = new Date();
-
-  interface TimelineCol {
-    attemptNumber: number;
-    scheduledDate: Date;
-    completedAt: string | null;
-    isToday: boolean;
-    isOverdue: boolean;
-  }
-
-  interface LessonTimeline {
-    firstDone: Date;
-    cols: TimelineCol[];
-    allComplete: boolean;
-  }
-
-  function getSpacedRepTimeline(lessonId: string): LessonTimeline | null {
-    const lessonAttempts = attempts.filter(a => a.lessonId === lessonId);
-    if (lessonAttempts.length === 0) return null;
-
-    // First done = earliest completedAt among attemptNumber===1
-    const firstDoneList = lessonAttempts
-      .filter(a => a.attemptNumber === 1 && a.completedAt)
-      .map(a => a.completedAt as string)
-      .sort();
-    if (firstDoneList.length === 0) return null;
-    const firstDone = new Date(firstDoneList[0]);
-
-    // Attempts 2-5 represent the +1, +3, +7, +14 day checkpoints
-    // Dates are ALWAYS calculated from firstDone regardless of DB scheduledAt
-    const cols: TimelineCol[] = TIMELINE_DELAYS.map((days, i) => {
-      const attemptNum = i + 2; // 2,3,4,5
-      const scheduledDate = addDays(firstDone, days);
-      const completedEntry = lessonAttempts.find(
-        a => a.attemptNumber === attemptNum && a.completedAt
-      );
-      const todayFlag  = !completedEntry && isSameDay(scheduledDate, today);
-      const isOverdue  = !completedEntry && !todayFlag && scheduledDate < today;
-      return {
-        attemptNumber: attemptNum,
-        scheduledDate,
-        completedAt: completedEntry?.completedAt ?? null,
-        isToday: todayFlag,
-        isOverdue,
-      };
-    });
-
-    const allComplete = cols.every(c => !!c.completedAt);
-    return { firstDone, cols, allComplete };
-  }
-
-  // Items due today (for the reminder banner) — lessons + custom vocab lists
-  const dueTodayLessons = lessonsWithVocab.filter(l => {
-    const t = getSpacedRepTimeline(l.id);
-    return t?.cols.some(c => c.isToday);
-  });
-  const dueTodayLists = listsWithAttempts.filter(list => {
-    const t = getListTimeline(list);
-    return t?.cols.some(c => c.isToday);
-  });
-
-  // ── Wrong words grouped by lesson ────────────────────────────────────────
-  const mistakesByLesson = mistakes.reduce<Record<string, VocabMistakeDetail[]>>((acc, m) => {
-    if (!acc[m.lessonId]) acc[m.lessonId] = [];
-    acc[m.lessonId].push(m);
-    return acc;
-  }, {});
-
-  const lessonLookup = Object.fromEntries(lessons.map(l => [l.id, l]));
-
-  // ── Shared helper: render the 4 SRS timeline cells for a row ─────────────
-  function SRSCols(timeline: LessonTimeline | null) {
-    if (!timeline) {
-      return [2, 3, 4, 5].map(n => (
-        <td key={n} className="px-1 sm:px-3 py-3 text-center">
-          <span className="text-slate-300 dark:text-slate-600">—</span>
-        </td>
-      ));
-    }
-    return timeline.cols.map(col => {
-      const cellBg = col.isToday ? 'bg-emerald-100 dark:bg-emerald-900/40' : '';
-      return (
-        <td key={col.attemptNumber} className={`px-1 sm:px-3 py-3 text-center ${cellBg}`}>
-          {col.completedAt ? (
-            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] sm:text-xs font-semibold rounded-full">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-              </svg>
-              Done
-            </span>
-          ) : col.isToday ? (
-            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-              📅 {formatDate(col.scheduledDate)}
-            </span>
-          ) : col.isOverdue ? (
-            <span className="text-xs font-semibold text-red-500 dark:text-red-400">
-              ⚠ {formatDate(col.scheduledDate)}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {formatDate(col.scheduledDate)}
-            </span>
-          )}
-        </td>
-      );
-    });
-  }
-
-  return (
-    <div className="space-y-8">
-
-      {/* ── Lesson History Calendar ───────────────────────────────────────── */}
-      <ArabicLessonCalendar
-        logs={lessonLogs}
-        lessons={lessons}
-        calendarDate={calendarDate}
-        onMonthChange={onMonthChange}
-      />
-
-      {/* ── Spaced-Repetition Timeline ───────────────────────────────────── */}
-      <section>
-        <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
-          <span className="inline-block w-1.5 h-5 bg-amber-400 rounded-full" />
-          {t('arabicStudentDetail.srsTitle')}
-        </h2>
-        <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-          {t('arabicStudentDetail.srsDescription')}
-          <span className="ml-1 text-emerald-500 font-semibold">{t('arabicStudentDetail.srsGreen')}</span> ·
-          <span className="ml-1 text-red-400 font-semibold">{t('arabicStudentDetail.srsRed')}</span>
-        </p>
-
-        {/* Today reminder banner */}
-        {(dueTodayLessons.length > 0 || dueTodayLists.length > 0) && (
-          <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
-            <span className="text-xl flex-shrink-0">📅</span>
-            <div>
-              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Flashcard session due today!</p>
-              <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-                {[
-                  ...dueTodayLessons.map(l => l.title),
-                  ...dueTodayLists.map(l => `📋 ${l.name}`),
-                ].join(' · ')}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {lessonsWithVocab.length === 0 && listsWithAttempts.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center">
-            <p className="text-slate-400 dark:text-slate-500 text-sm">No vocabulary tracked yet. Complete a flashcard session to start the schedule.</p>
-          </div>
-        ) : (
-          // Fits the container at every width — tighter padding on phones and a
-          // wrapping lesson column instead of a sideways scroll.
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-gray-700">
-                  <th className="text-left px-2 sm:px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colLessonList')}</th>
-                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colFirstDone')}</th>
-                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col1day')}</th>
-                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col3days')}</th>
-                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col7days')}</th>
-                  <th className="text-center px-1 sm:px-3 py-3 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.col14days')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* ── Lesson rows ── */}
-                {lessonsWithVocab.map((lesson) => {
-                  const timeline = getSpacedRepTimeline(lesson.id);
-                  const allComplete = timeline?.allComplete ?? false;
-                  const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
-                  return (
-                    <tr key={lesson.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
-                      <td className="px-2 sm:px-5 py-3 font-semibold text-slate-700 dark:text-slate-200">
-                        <div className="flex items-center gap-2">
-                          {allComplete && (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
-                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {lesson.title}
-                        </div>
-                      </td>
-                      <td className="px-1 sm:px-3 py-3 text-center">
-                        {timeline
-                          ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
-                          : <span className="text-slate-300 dark:text-slate-600">—</span>
-                        }
-                      </td>
-                      {SRSCols(timeline)}
-                    </tr>
-                  );
-                })}
-
-                {/* ── Separator row when both sections are present ── */}
-                {lessonsWithVocab.length > 0 && listsWithAttempts.length > 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-2 sm:px-5 py-2 bg-slate-50 dark:bg-gray-700/50 border-y border-slate-100 dark:border-gray-700">
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t('arabicStudentDetail.customVocabLists')}</span>
-                    </td>
-                  </tr>
-                )}
-
-                {/* ── Custom vocab list rows ── */}
-                {listsWithAttempts.map((list) => {
-                  const timeline = getListTimeline(list);
-                  const allComplete = timeline?.allComplete ?? false;
-                  const rowBg = allComplete ? 'bg-emerald-50 dark:bg-emerald-900/20' : '';
-                  return (
-                    <tr key={list.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${rowBg}`}>
-                      <td className="px-2 sm:px-5 py-3 font-semibold text-slate-700 dark:text-slate-200">
-                        <div className="flex items-center gap-2">
-                          {allComplete && (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 flex-shrink-0">
-                              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                          {/* Teal badge to distinguish vocab lists from lessons */}
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex-shrink-0">
-                            LIST
-                          </span>
-                          {list.name}
-                        </div>
-                      </td>
-                      <td className="px-1 sm:px-3 py-3 text-center">
-                        {timeline
-                          ? <span className="text-slate-600 dark:text-slate-300 text-xs font-medium">{formatDate(timeline.firstDone)}</span>
-                          : <span className="text-slate-300 dark:text-slate-600">—</span>
-                        }
-                      </td>
-                      {SRSCols(timeline)}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* ── Wrong Words ──────────────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-base font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
-          <span className="inline-block w-1.5 h-5 bg-red-400 rounded-full" />
-          {t('arabicStudentDetail.wrongWords')}
-          {mistakes.length > 0 && (
-            <span className="ml-1 px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold rounded-full">
-              {mistakes.length}
-            </span>
-          )}
-        </h2>
-
-        {mistakes.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 text-center">
-            <p className="text-2xl mb-2">🌟</p>
-            <p className="text-slate-600 dark:text-slate-300 font-semibold">No wrong words!</p>
-            <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">All vocabulary has been answered correctly.</p>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {(Object.entries(mistakesByLesson) as Array<[string, VocabMistakeDetail[]]>).map(([lessonId, words]) => {
-              const lesson = lessonLookup[lessonId];
-              const lessonTitle = lesson?.title ?? `Lesson (${lessonId.slice(0, 6)}…)`;
-              // Sort by miss count descending
-              const sorted = [...words].sort((a, b) => b.missCount - a.missCount);
-              return (
-                <div key={lessonId} className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
-                  {/* Lesson header */}
-                  <div className="flex items-center justify-between px-5 py-3 bg-red-50/60 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wide">
-                        {lessonTitle}
-                      </span>
-                      <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-semibold rounded-full">
-                        {sorted.length === 1
-                          ? t('arabicStudentDetail.wordCount_one', { count: sorted.length })
-                          : t('arabicStudentDetail.wordCount_other', { count: sorted.length })}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setChallengeWords(sorted);
-                        setChallengeLessonTitle(lessonTitle);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-                      </svg>
-                      {t('arabicStudentDetail.practice')}
-                    </button>
-                  </div>
-
-                  {/* Words table */}
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-gray-700">
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colArabic')}</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colTranslit')}</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colEnglish')}</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('arabicStudentDetail.colMissed')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map((word, i) => (
-                        <tr key={word.id} className={`border-b border-slate-50 dark:border-gray-700/50 last:border-0 ${i % 2 === 0 ? '' : 'bg-slate-50/40 dark:bg-gray-700/20'}`}>
-                          <td className="px-4 py-2.5 text-center font-bold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</td>
-                          <td className="px-4 py-2.5 text-center text-slate-500 dark:text-slate-400 italic">{word.transliteration}</td>
-                          <td className="px-4 py-2.5 text-center text-slate-700 dark:text-slate-200">{word.english}</td>
-                          <td className="px-4 py-2.5 text-center">
-                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                              word.missCount >= 5 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
-                              word.missCount >= 3 ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
-                              'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                            }`}>
-                              {word.missCount}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-};
+const ProgressTab: React.FC<ProgressTabProps> = ({ lessons, lessonLogs, calendarDate, onMonthChange }) => (
+  <div className="space-y-8">
+    <ArabicLessonCalendar
+      logs={lessonLogs}
+      lessons={lessons}
+      calendarDate={calendarDate}
+      onMonthChange={onMonthChange}
+    />
+  </div>
+);
 
 // ── Exams tab (tutor) ─────────────────────────────────────────────────────────
 
@@ -1056,7 +474,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
-  const [progressKey, setProgressKey] = useState(0); // bump to reload ProgressTab
   const [deepLinkLessonId, setDeepLinkLessonId] = useState<string | null>(null);
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
@@ -1114,6 +531,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   useEffect(() => {
     if (teacherId) getTeacherAvailability(teacherId).then(setAvailabilitySlots);
   }, [teacherId]);
+
+  // The suggested homework deadline: the start of the next lesson still ahead.
+  const nextLessonAt = useMemo(() => {
+    const now = Date.now();
+    return upcomingLessons
+      .map(l => new Date(l.startAt))
+      .filter(d => d.getTime() > now)
+      .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+  }, [upcomingLessons]);
 
   const completedCount = student.completedLessonIds.length;
   const pct            = progressPercent(student);
@@ -1426,7 +852,12 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
       {/* ── Lessons Vocabulary section (tutor + student portal) ── */}
       {activeSection === 'vocabulary' && (
-        <ArabicLessonsVocabularyTab lessons={dialectLessons} student={student} />
+        <ArabicLessonsVocabularyTab
+          lessons={dialectLessons}
+          student={student}
+          studentMode={studentMode}
+          nextLessonAt={nextLessonAt}
+        />
       )}
 
       {/* ── Exams section (tutor only) ── */}
@@ -1445,10 +876,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       {/* ── Student's Progress section ── */}
       {activeSection === 'progress' && (
         <ProgressTab
-          key={progressKey}
-          student={student}
           lessons={dialectLessons}
-          onMistakesUpdated={() => setProgressKey(k => k + 1)}
           lessonLogs={lessonLogs}
           calendarDate={calendarDate}
           onMonthChange={setCalendarDate}

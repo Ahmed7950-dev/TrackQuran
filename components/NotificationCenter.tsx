@@ -52,6 +52,8 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'subscription_renewal_reminder': return { emoji: '💳', color: 'text-violet-500' };
     case 'student_join_request':         return { emoji: '🙋', color: 'text-teal-500' };
     case 'lesson_scheduled':             return { emoji: '📅', color: 'text-indigo-500' };
+    case 'vocab_homework_assigned':      return { emoji: '🧺', color: 'text-violet-500' };
+    case 'vocab_homework_completed':     return { emoji: '🧺', color: 'text-emerald-500' };
     default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }
@@ -138,6 +140,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       setNotifications(prev =>
         prev.map(x => x.id === n.id ? { ...x, isRead: true } : x),
       );
+    }
+    if (n.type === 'vocab_homework_assigned' && n.metadata?.url) {
+      setOpen(false);
+      window.location.href = n.metadata.url;
+      return;
     }
     if (n.type === 'homework_submitted' && n.metadata?.lessonId && onNavigate) {
       setOpen(false);
@@ -233,6 +240,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                         {n.body}
                       </p>
+                      {n.type === 'vocab_homework_assigned' && n.metadata?.url && (
+                        <span className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-[11px] font-bold">
+                          Start homework →
+                        </span>
+                      )}
                     </div>
                     {/* Unread dot */}
                     {!n.isRead && (
