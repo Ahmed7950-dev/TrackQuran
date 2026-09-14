@@ -390,6 +390,7 @@ const LetterWithError: React.FC<{
                 onMouseUp={cancelLongPress}
                 onMouseLeave={cancelLongPress}
                 onTouchStart={startLongPress}
+                onTouchMove={cancelLongPress}   // a swipe (focus mode, page scroll) is not a long-press
                 onTouchEnd={cancelLongPress}
                 onTouchCancel={cancelLongPress}
                 title={tajweedTitle}
@@ -1035,8 +1036,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [focusMode, setFocusMode] = useState(false);
     // Phones: font size, auto-scroll and search collapse to small icons; this
     // is the one whose controls are open on the line under them.
-    const [mobileTool, setMobileTool] = useState<'font' | 'scroll' | 'search' | null>(null);
-    const toggleMobileTool = (tool: 'font' | 'scroll' | 'search') => setMobileTool(cur => (cur === tool ? null : tool));
+    const [mobileTool, setMobileTool] = useState<'font' | 'scroll' | null>(null);
+    const toggleMobileTool = (tool: 'font' | 'scroll') => setMobileTool(cur => (cur === tool ? null : tool));
     const [currentAyah, setCurrentAyah] = useState(1);
     const currentAyahRef        = useRef(1);
     const carouselContainerRef  = useRef<HTMLDivElement>(null);
@@ -1632,6 +1633,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         let animId: number;
         let initialized = false;
         let frameCount  = 0;
+        // Finger / mouse drag and trackpad swipes. While a drag is on, the strip
+        // follows the pointer exactly; letting go hands the last speed to the
+        // same momentum the arrow keys use.
+        let dragging = false;
 
         const loop = () => {
             const strip     = carouselStripRef.current;
@@ -1654,7 +1659,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         scrollVelocityRef.current = 0;
                         setIsAutoScrolling(false);
                     }
-                } else if (scrollKeyHeldRef.current === 'left')  scrollVelocityRef.current =  SPEED;
+                } else if (dragging) scrollVelocityRef.current = 0;
+                else if (scrollKeyHeldRef.current === 'left')  scrollVelocityRef.current =  SPEED;
                 else if   (scrollKeyHeldRef.current === 'right') scrollVelocityRef.current = -SPEED;
                 else                                             scrollVelocityRef.current *= FRICTION;
 
@@ -1698,10 +1704,96 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') scrollKeyHeldRef.current = null;
         };
 
+        // ── Swipe / drag / trackpad ──────────────────────────────────────────
+        const container = carouselContainerRef.current;
+        const bounds = () => {
+            const strip = carouselStripRef.current;
+            const minT = strip && container ? -(Math.max(0, strip.offsetWidth - container.offsetWidth)) : 0;
+            return { minT, maxT: 0 };
+        };
+        const moveTo = (t: number) => {
+            const strip = carouselStripRef.current;
+            if (!strip) return;
+            const { minT, maxT } = bounds();
+            scrollTransformRef.current = Math.max(minT, Math.min(maxT, t));
+            strip.style.transform = `translateX(${scrollTransformRef.current}px)`;
+            if (progressBarFillRef.current && minT !== 0) {
+                const pct = (scrollTransformRef.current - minT) / (maxT - minT);
+                progressBarFillRef.current.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+            }
+        };
+        const DRAG_THRESHOLD = 8;      // px before a press counts as a swipe, not a tap on a letter
+        let pointerId: number | null = null;
+        let startX = 0, startY = 0, startT = 0, lastX = 0, lastTime = 0, velocity = 0;
+        let moved = false;
+        const onPointerDown = (e: PointerEvent) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            pointerId = e.pointerId;
+            startX = lastX = e.clientX; startY = e.clientY;
+            startT = scrollTransformRef.current;
+            lastTime = performance.now(); velocity = 0; moved = false;
+        };
+        const onPointerMove = (e: PointerEvent) => {
+            if (e.pointerId !== pointerId) return;
+            const dx = e.clientX - startX, dy = e.clientY - startY;
+            if (!moved) {
+                if (Math.abs(dx) < DRAG_THRESHOLD || Math.abs(dx) < Math.abs(dy)) {
+                    // Mostly vertical → let the page scroll; give up on this press.
+                    if (Math.abs(dy) >= DRAG_THRESHOLD) pointerId = null;
+                    return;
+                }
+                moved = true;
+                dragging = true;
+                if (isAutoScrollingRef.current) setIsAutoScrolling(false);
+                try { container?.setPointerCapture(e.pointerId); } catch { /* already released */ }
+            }
+            const now = performance.now();
+            const dt = Math.max(1, now - lastTime);
+            velocity = ((e.clientX - lastX) / dt) * 16;   // px per frame at 60fps
+            lastX = e.clientX; lastTime = now;
+            moveTo(startT + dx);
+        };
+        const endDrag = (e: PointerEvent) => {
+            if (e.pointerId !== pointerId) return;
+            pointerId = null;
+            if (!dragging) return;
+            dragging = false;
+            // A stale last sample (finger paused before lifting) shouldn't fling.
+            scrollVelocityRef.current = performance.now() - lastTime > 80 ? 0 : Math.max(-60, Math.min(60, velocity));
+        };
+        // Swallow the click that ends a swipe so it doesn't mark a letter.
+        const onClickCapture = (e: MouseEvent) => {
+            if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; }
+        };
+        const onWheel = (e: WheelEvent) => {
+            if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;   // vertical: page scroll
+            e.preventDefault();
+            if (isAutoScrollingRef.current) setIsAutoScrolling(false);
+            scrollVelocityRef.current = 0;
+            moveTo(scrollTransformRef.current - e.deltaX);
+        };
+        if (container) {
+            container.style.touchAction = 'pan-y';   // horizontal swipes are ours
+            container.addEventListener('pointerdown', onPointerDown);
+            container.addEventListener('pointermove', onPointerMove);
+            container.addEventListener('pointerup', endDrag);
+            container.addEventListener('pointercancel', endDrag);
+            container.addEventListener('click', onClickCapture, true);
+            container.addEventListener('wheel', onWheel, { passive: false });
+        }
+
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup',   onKeyUp);
         return () => {
             cancelAnimationFrame(animId);
+            if (container) {
+                container.removeEventListener('pointerdown', onPointerDown);
+                container.removeEventListener('pointermove', onPointerMove);
+                container.removeEventListener('pointerup', endDrag);
+                container.removeEventListener('pointercancel', endDrag);
+                container.removeEventListener('click', onClickCapture, true);
+                container.removeEventListener('wheel', onWheel);
+            }
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup',   onKeyUp);
             scrollKeyHeldRef.current  = null;
@@ -1834,6 +1926,26 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         };
         window.setTimeout(findAndScroll, 150);
     }, [selectedSurahId]);
+
+    /** Phone toolbar's verse box: go to that verse of the open surah. */
+    const jumpToVerseNumber = (raw: string): boolean => {
+        const n = parseInt(normalizeDigits(raw.trim()), 10);
+        const total = selectedSurahInfo?.numberOfAyahs ?? 0;
+        if (isNaN(n) || !total) return false;
+        const ayah = Math.max(1, Math.min(n, total));
+        if (ayah !== n) showToast(`${selectedSurahInfo?.transliteratedName} ${ayah}`);
+        if (focusMode) { scrollToAyah(ayah); return true; }
+        const key = `${selectedSurahId}:${ayah}`;
+        setScrollToVerseKey(key);
+        let tries = 0;
+        const findAndScroll = () => {
+            const el = document.getElementById(`verse-container-${key}`);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+            if (tries++ < 20) window.setTimeout(findAndScroll, 100);
+        };
+        window.setTimeout(findAndScroll, 150);
+        return true;
+    };
 
     // Surahs with a log dated TODAY get a stronger shade of their category
     // color, so today's work stands out from older sessions at a glance.
@@ -3485,10 +3597,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 onClick={() => setAudioMenuOpen(o => !o)}
                                 title="Recitation settings"
                                 aria-label="Recitation settings"
-                                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none"
+                                className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none max-sm:min-w-[2rem] max-sm:px-1 max-sm:gap-0.5 max-sm:bg-slate-200 dark:max-sm:bg-gray-700 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${readOnly ? 'max-sm:rounded-s-lg' : ''}`}
                             >
                                 <span className="text-sm leading-none">🎙️</span>
-                                <span>{readOnlySpeed}×</span>
+                                <span className={readOnlySpeed === 1 ? 'max-sm:hidden' : 'max-sm:text-[9px]'}>{readOnlySpeed}×</span>
                                 {verseRepeat > 1 && <span className="text-amber-600 dark:text-amber-400">↻{verseRepeat}</span>}
                             </button>
                             {audioMenuOpen && (
@@ -3692,27 +3804,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <div className="px-2 py-2 sm:p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls.
                         Wraps on narrow screens so the right-side controls stay reachable. */}
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    {/* Phones: row 1 = surah selector + verse number box; row 2 = one
+                        joined bar of icons (recitation first) with search taking the rest. */}
+                    <div className="flex flex-wrap items-center gap-2 max-sm:gap-x-0 max-sm:gap-y-1.5 min-w-0">
                         {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
                         {readOnly ? (
-                        <div className="relative flex items-center gap-1.5 flex-shrink-0" dir="ltr">
+                        <div className="relative flex items-center gap-1.5 flex-shrink-0 max-sm:contents" dir="ltr">
                             {recitationSettings}
                         </div>
                         ) : (
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0 max-sm:contents">
                             {/* Listen mode: verse taps play recitation instead of logging */}
-                            <div className="relative flex items-center gap-1.5" dir="ltr">
+                            <div className="relative flex items-center gap-1.5 max-sm:contents" dir="ltr">
                                 <button
                                     onClick={() => setTutorListen(o => !o)}
                                     title={tutorListen ? 'Listening — tap to return to mistake logging' : 'Listen mode: tap verses to hear the recitation'}
                                     aria-label="Toggle listen mode"
-                                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm shadow-sm leading-none transition-colors ${tutorListen ? 'bg-teal-600 text-white ring-2 ring-teal-300 dark:ring-teal-700' : 'bg-slate-100 dark:bg-gray-700/60 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
+                                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm shadow-sm leading-none transition-colors max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 max-sm:rounded-s-lg ${tutorListen ? 'bg-teal-600 text-white ring-2 ring-teal-300 dark:ring-teal-700' : 'bg-slate-100 dark:bg-gray-700/60 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
                                 >
                                     🎧
                                 </button>
                                 {recitationSettings}
                             </div>
-                            <div className={`flex items-center gap-1 rounded-full px-2 py-1 h-10 transition-colors duration-300 ${errorType === 'reading' ? 'bg-red-100 dark:bg-red-900/40 ring-1 ring-red-400' : errorType === 'tajweed' ? 'bg-green-100 dark:bg-green-900/40 ring-1 ring-green-400' : 'bg-slate-200 dark:bg-gray-700'}`}>
+                            <div className={`flex items-center gap-1 rounded-full px-2 py-1 h-10 transition-colors duration-300 max-sm:h-9 max-sm:rounded-none max-sm:ring-0 max-sm:px-1 max-sm:order-3 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 ${errorType === 'reading' ? 'bg-red-100 dark:bg-red-900/40 ring-1 ring-red-400' : errorType === 'tajweed' ? 'bg-green-100 dark:bg-green-900/40 ring-1 ring-green-400' : 'bg-slate-200 dark:bg-gray-700'}`}>
                                 <button
                                     onClick={() => setErrorType('reading')}
                                     className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${errorType === 'reading' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-900/30'}`}
@@ -3744,7 +3858,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Middle (phones): current surah button → vertical picker ── */}
                         <button
                             onClick={() => setSurahPickerOpen(true)}
-                            className="sm:hidden flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
+                            className="sm:hidden order-1 flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
                             aria-label="Choose surah"
                         >
                             <span className="flex items-center gap-1.5 min-w-0">
@@ -3757,6 +3871,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
                             </svg>
                         </button>
+
+                        {/* Phones: verse number → jump straight to it */}
+                        <form
+                            className="sm:hidden order-1 ms-1.5 flex-shrink-0"
+                            onSubmit={e => {
+                                e.preventDefault();
+                                const input = e.currentTarget.elements.namedItem('verse') as HTMLInputElement;
+                                if (jumpToVerseNumber(input.value)) { input.value = ''; input.blur(); }
+                            }}
+                        >
+                            <input
+                                name="verse" type="number" inputMode="numeric" enterKeyHint="go"
+                                min={1} max={selectedSurahInfo?.numberOfAyahs}
+                                placeholder="Ayah"
+                                aria-label={t('liveSession.goToVerseHint')}
+                                className="w-16 h-8 px-2 rounded-full text-center text-sm font-bold bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                        </form>
+                        <div className="sm:hidden order-2 basis-full h-0" aria-hidden="true" />
 
                         {/* ── Middle (sm+): surah pills — first & last pinned, middle scrolls ── */}
                         <div className="hidden flex-1 sm:flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
@@ -3820,14 +3953,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Right: tool controls. On phones this is its own full-width
                             row under the surah button, everything compact; from sm it goes
                             back to the inline cluster. ── */}
-                        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-start gap-1 sm:gap-2 flex-shrink-0 w-full sm:w-auto min-w-0">
+                        <div className="max-sm:contents flex flex-nowrap items-center gap-2 flex-shrink-0 min-w-0">
                             {/* Phones: small icons — tap to open that control on the line below */}
                             <button onClick={() => toggleMobileTool('font')} aria-label="Text size" title="Text size"
-                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors text-[13px] font-bold ${mobileTool === 'font' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                className={`sm:hidden order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors text-[13px] font-bold ${mobileTool === 'font' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
                                 A<span className="text-[10px]">A</span>
                             </button>
                             <button onClick={() => toggleMobileTool('scroll')} aria-label={t('liveSession.toggleAutoScrollPlay')} title={t('liveSession.toggleAutoScrollPlay')}
-                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                className={`sm:hidden order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>
                             </button>
 
@@ -3852,18 +3985,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <button
                                     onClick={() => setFocusMode(p => !p)}
                                     title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
-                                    className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center rounded-lg sm:rounded-md text-[11px] font-bold transition-colors duration-200 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                    className={`sm:h-7 sm:px-2.5 flex items-center justify-center sm:rounded-md text-[11px] font-bold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
                                 >
                                     🔍
                                 </button>
 
                                 {/* ── "Tools" combined dropdown ── */}
-                                <div className="relative" ref={toolsMenuRef}>
+                                <div className="relative max-sm:order-3" ref={toolsMenuRef}>
                                     <button
                                         onClick={() => setShowToolsMenu(p => !p)}
                                         title="Tools"
                                         aria-label="Tools"
-                                        className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-md text-xs font-semibold transition-colors duration-200 ${
+                                        className={`sm:h-7 sm:px-2.5 flex items-center justify-center gap-1.5 sm:rounded-md text-xs font-semibold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${
                                             showToolsMenu || showTranslation || showTajweed || teacherNote
                                                 ? 'bg-teal-600 text-white shadow-md'
                                                 : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30'
@@ -3926,29 +4059,22 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     title={hifzMode ? 'Hifz mode on — tap a verse to hide or show it. Tap here to leave (shows all verses).' : 'Hifz mode — tap verses to hide them'}
                                     aria-label="Hifz mode"
                                     aria-pressed={hifzMode}
-                                    className={`w-8 h-8 sm:w-auto sm:h-7 sm:px-2.5 flex items-center justify-center gap-1 rounded-lg sm:rounded-md text-xs font-semibold transition-colors duration-200 ${hifzMode ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 dark:ring-emerald-700' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
+                                    className={`sm:h-7 px-1.5 sm:px-2.5 flex items-center justify-center sm:rounded-md transition-colors duration-200 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${hifzMode ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 dark:ring-emerald-700' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
                                 >
-                                    <span className="text-sm leading-none">🙈</span>
-                                    <span className="hidden sm:inline">Hifz</span>
+                                    <span className="italic font-bold text-[17px] leading-none tracking-wide" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>
                                 </button>
                             </div>
 
-                            {/* Phones: search icon */}
-                            <button onClick={() => toggleMobileTool('search')} aria-label={t('liveSession.search')}
-                                className={`sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${mobileTool === 'search' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-                            </button>
-
                             {/* Search — with instant typeahead (pages, verses, surah names) */}
-                            <div className={`${mobileTool === 'search' ? 'block' : 'hidden'} sm:block relative order-last sm:order-none w-full sm:w-auto sm:flex-none min-w-0`}>
-                                <form onSubmit={handleSearch} className="flex gap-1 sm:gap-2 items-center">
+                            <div className="relative max-sm:order-3 max-sm:flex-1 max-sm:min-w-[33%] sm:flex-none min-w-0">
+                                <form onSubmit={handleSearch} className="flex gap-0 sm:gap-2 items-center">
                                     <input type="text" value={searchInput}
                                         onChange={e => { setSearchInput(e.target.value); setShowSearchSuggestions(true); }}
                                         onFocus={() => { if (searchInput.trim()) setShowSearchSuggestions(true); }}
                                         onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
                                         onKeyDown={e => { if (e.key === 'Escape') setShowSearchSuggestions(false); }}
-                                        placeholder={t('liveSession.searchPlaceholder')} className="w-full sm:w-36 min-w-0 px-2 py-1.5 sm:py-2 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
-                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2 sm:p-2.5 rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600 flex-shrink-0" aria-label={t('liveSession.search')}>
+                                        placeholder={t('liveSession.searchPlaceholder')} className="w-full sm:w-36 min-w-0 px-2 py-1.5 sm:py-2 max-sm:h-9 max-sm:rounded-none max-sm:border-x-0 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
+                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2 sm:p-2.5 max-sm:h-9 max-sm:rounded-none max-sm:rounded-e-lg rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600 flex-shrink-0" aria-label={t('liveSession.search')}>
                                         {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
                                     </button>
                                 </form>
