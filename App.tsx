@@ -67,7 +67,8 @@ import CalendarPage from './components/CalendarPage';
 import GCalOAuthCallback from './components/GCalOAuthCallback';
 import AccountSettingsPage from './components/AccountSettingsPage';
 import NotificationCenter from './components/NotificationCenter';
-import { getStoredToken, wasConnected, silentRefresh, scheduleAutoRefresh, cancelAutoRefresh } from './services/googleCalendarService';
+import { getStoredToken, refreshAccessToken, wasConnected, silentRefresh, scheduleAutoRefresh, cancelAutoRefresh } from './services/googleCalendarService';
+import { syncGCalSessions } from './services/lessonSessionService';
 import { getTeacherAvailability, AvailabilitySlot } from './services/availabilityService';
 
 const useTheme = () => {
@@ -868,6 +869,38 @@ const App: React.FC = () => {
   const currentUserId   = currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? (currentUser as { id: string }).id : null;
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   const currentUserRole = currentUser?.role ?? null;
+
+  // Keep lesson sessions in step with Google Calendar wherever the tutor is in
+  // the app — not only while the Calendar page is open. Student portals, the
+  // "next lesson" homework deadline and the dashboards all read these rows, so
+  // a lesson moved (or deleted and re-created, as Preply does) must reach them.
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !currentUserId) return;
+    let cancelled = false;
+    let running = false;
+    let lastRun = 0;
+    const run = async () => {
+      // Tab switches fire often; one sync a minute is plenty.
+      if (running || cancelled || Date.now() - lastRun < 60_000) return;
+      running = true;
+      lastRun = Date.now();
+      try {
+        const token = getStoredToken() ?? await refreshAccessToken();
+        if (!token || cancelled) return;
+        const { pruned } = await syncGCalSessions(currentUserId, token);
+        if (pruned) console.info(`[gcal sync] removed ${pruned} lesson(s) no longer in Google Calendar`);
+      } catch (e) {
+        console.warn('[gcal sync] skipped:', e);   // offline / token expired / a calendar failed to load
+      } finally {
+        running = false;
+      }
+    };
+    run();
+    const id = window.setInterval(run, 5 * 60 * 1000);
+    const onFocus = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { cancelled = true; clearInterval(id); document.removeEventListener('visibilitychange', onFocus); };
+  }, [currentUserId, currentUserRole]);
   useEffect(() => {
     if (currentUserRole !== 'teacher' || !currentUserId) {
       setStudents([]);

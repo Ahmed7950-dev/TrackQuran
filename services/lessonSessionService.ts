@@ -95,7 +95,16 @@ export async function getStudentUpcomingSessions(studentId: string): Promise<Les
     .gte('start_at', since)
     .order('start_at', { ascending: true });
   if (error) throw error;
-  return (data as SessionRow[]).map(rowToSession);
+  // One student can't have two lessons starting at the same minute: those are
+  // copies of one lesson linked from two Google events. Show it once, keeping
+  // the copy that has a Meet link.
+  const byStart = new Map<number, LessonSession>();
+  for (const s of (data as SessionRow[]).map(rowToSession)) {
+    const key = Math.floor(new Date(s.startAt).getTime() / 60_000);
+    const kept = byStart.get(key);
+    if (!kept || (!kept.meetUrl && s.meetUrl)) byStart.set(key, s);
+  }
+  return [...byStart.values()].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 }
 
 /**
@@ -326,6 +335,77 @@ export async function autoSyncGCalLinks(
     console.warn('[autoSyncGCalLinks] skipped:', e);
     return 0;
   }
+}
+
+/**
+ * Upcoming Google-linked sessions whose event no longer exists in Google.
+ *
+ * Preply doesn't move a rescheduled lesson — it deletes the event and creates
+ * a new one with a new id. autoSyncGCalLinks links the new event by title, but
+ * the old row stayed behind, so the student portals kept showing the old time
+ * next to the new one. Only rows that START inside the fetched window (and
+ * after `now` — past lessons are history) are considered, and cancelled rows
+ * are left alone. Pure — exported for testing.
+ */
+export function planStaleSessionPrune(
+  rows: Array<Pick<SessionRow, 'id' | 'gcal_event_id' | 'start_at' | 'status'>>,
+  events: import('./googleCalendarService').GCalEvent[],
+  windowEnd: Date,
+  now: Date = new Date(),
+): string[] {
+  const live = new Set(events.map(e => e.id));
+  return rows
+    .filter(r => r.gcal_event_id && r.status !== 'cancelled')
+    .filter(r => {
+      const t = new Date(r.start_at).getTime();
+      return t > now.getTime() && t < windowEnd.getTime();
+    })
+    .filter(r => !live.has(r.gcal_event_id!))
+    .map(r => r.id);
+}
+
+/** How far ahead the background sync keeps sessions in step with Google. */
+export const GCAL_SYNC_DAYS = 60;
+
+/**
+ * Bring the lesson sessions in line with the tutor's Google Calendar: link new
+ * occurrences, refresh moved ones, and delete upcoming sessions whose event was
+ * deleted. Runs from the tutor's browser (the Google token lives there).
+ */
+export async function syncGCalSessions(
+  teacherId: string,
+  token: string,
+): Promise<{ changed: number; pruned: number }> {
+  const { fetchGCalEventsComplete } = await import('./googleCalendarService');
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + GCAL_SYNC_DAYS * 24 * 60 * 60 * 1000);
+  // Throws unless EVERY calendar loaded in full — a half-loaded calendar
+  // must never be read as "these lessons were deleted".
+  const events = await fetchGCalEventsComplete(token, now, windowEnd);
+  const changed = await autoSyncGCalLinks(teacherId, events);
+
+  const rows = await pageAll<Pick<SessionRow, 'id' | 'gcal_event_id' | 'start_at' | 'status'>>((from, to) => supabase
+    .from('arabic_lesson_sessions')
+    .select('id, gcal_event_id, start_at, status')
+    .eq('teacher_id', teacherId)
+    .not('gcal_event_id', 'is', null)
+    .gt('start_at', now.toISOString())
+    .lt('start_at', windowEnd.toISOString())
+    .range(from, to));
+  const stale = planStaleSessionPrune(rows, events, windowEnd, now);
+
+  // Safety valve: if most upcoming lessons look deleted, something else is
+  // going on (a different Google account connected, an unshared calendar) —
+  // don't wipe the schedule over it.
+  if (stale.length > 10 && stale.length > rows.length * 0.5) {
+    console.warn(`[syncGCalSessions] ${stale.length}/${rows.length} sessions have no Google event — not deleting.`);
+    return { changed, pruned: 0 };
+  }
+  for (let i = 0; i < stale.length; i += 100) {
+    const { error } = await supabase.from('arabic_lesson_sessions').delete().in('id', stale.slice(i, i + 100));
+    if (error) throw error;
+  }
+  return { changed, pruned: stale.length };
 }
 
 /**

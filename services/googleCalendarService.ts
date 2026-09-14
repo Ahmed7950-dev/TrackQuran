@@ -395,27 +395,62 @@ async function fetchCalendarIds(token: string): Promise<string[]> {
   return ids;
 }
 
+/**
+ * Every event of one calendar in the window. Google pages at 250 events — a
+ * busy tutor's 60-day window passes that, and reading only the first page
+ * silently dropped the later lessons — so this follows nextPageToken.
+ * `strict` throws when a page fails instead of returning what it has.
+ */
 async function fetchEventsFromCalendar(
   token: string,
   calendarId: string,
   timeMin: Date,
   timeMax: Date,
+  strict = false,
 ): Promise<GCalEvent[]> {
-  const params = new URLSearchParams({
-    timeMin:      timeMin.toISOString(),
-    timeMax:      timeMax.toISOString(),
-    singleEvents: 'true',
-    orderBy:      'startTime',
-    maxResults:   '250',
-  });
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!res.ok) return [];
-  const data = await res.json() as { items?: GCalEvent[] };
-  return data.items ?? [];
+  const out: GCalEvent[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const params = new URLSearchParams({
+      timeMin:      timeMin.toISOString(),
+      timeMax:      timeMax.toISOString(),
+      singleEvents: 'true',
+      orderBy:      'startTime',
+      maxResults:   '250',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) {
+      // A calendar Google won't list at all (gone, or free/busy-only access)
+      // never showed any events, so it can't hide one. Anything else — an
+      // expired token, rate limit, server error, a failed later page — leaves
+      // the result incomplete.
+      const unreadable = page === 0 && (res.status === 403 || res.status === 404 || res.status === 410);
+      if (strict && !unreadable) throw new Error(`GCal events ${res.status} for ${calendarId}`);
+      return out;
+    }
+    const data = await res.json() as { items?: GCalEvent[]; nextPageToken?: string };
+    out.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+    if (!pageToken) return out;
+  }
+  if (strict) throw new Error(`GCal events: too many pages for ${calendarId}`);
+  return out;
 }
+
+const mergeEvents = (lists: GCalEvent[][]): GCalEvent[] => {
+  const seen = new Set<string>();
+  const all:  GCalEvent[] = [];
+  for (const events of lists) {
+    for (const ev of events) {
+      if (!seen.has(ev.id)) { seen.add(ev.id); all.push(ev); }
+    }
+  }
+  return all;
+};
 
 export async function fetchGCalEvents(
   token: string,
@@ -423,17 +458,24 @@ export async function fetchGCalEvents(
   timeMax: Date,
 ): Promise<GCalEvent[]> {
   const calendarIds = await fetchCalendarIds(token);
-  const results     = await Promise.all(
+  return mergeEvents(await Promise.all(
     calendarIds.map(id => fetchEventsFromCalendar(token, id, timeMin, timeMax)),
-  );
-  const seen = new Set<string>();
-  const all:  GCalEvent[] = [];
-  for (const events of results) {
-    for (const ev of events) {
-      if (!seen.has(ev.id)) { seen.add(ev.id); all.push(ev); }
-    }
-  }
-  return all;
+  ));
+}
+
+/**
+ * Like fetchGCalEvents, but THROWS unless every calendar loaded completely.
+ * Use it wherever a missing event is taken to mean "deleted in Google".
+ */
+export async function fetchGCalEventsComplete(
+  token: string,
+  timeMin: Date,
+  timeMax: Date,
+): Promise<GCalEvent[]> {
+  const calendarIds = await fetchCalendarIds(token);
+  return mergeEvents(await Promise.all(
+    calendarIds.map(id => fetchEventsFromCalendar(token, id, timeMin, timeMax, true)),
+  ));
 }
 
 /**
