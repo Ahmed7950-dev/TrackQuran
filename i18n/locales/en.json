@@ -585,7 +585,9 @@
     "letterHunt": "🔍 Letter hunt",
     "letterHuntHint": "15 rounds — hear a letter, find it in a 10×10 grid",
     "formDrill": "⏱️ Letter-form drill",
-    "formDrillHint": "Chosen letters in every position with short vowels, 3s each"
+    "formDrillHint": "Chosen letters in every position with short vowels, 3s each",
+    "letterMatch": "🔗 Letter shapes match",
+    "letterMatchHint": "Match each isolated letter to its beginning, middle or end shape — timer, lives, share a link"
   },
   "arabicPortal": {
     "loading": "Loading your page…",

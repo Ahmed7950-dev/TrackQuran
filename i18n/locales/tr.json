@@ -1083,7 +1083,9 @@
     "letterHunt": "🔍 Harf avı",
     "letterHuntHint": "15 tur — harfi dinle, 10×10 tabloda bul",
     "formDrill": "⏱️ Şekil alıştırması",
-    "formDrillHint": "Seçilen harfler her konumda, harekeyle, 3 sn"
+    "formDrillHint": "Seçilen harfler her konumda, harekeyle, 3 sn",
+    "letterMatch": "🔗 Harf şekli eşleştirme",
+    "letterMatchHint": "Her yalın harfi baş, orta veya son şekliyle eşleştir — süre, can ve paylaşılabilir bağlantı"
   },
   "landing": {
     "announcementBar": "✦ Ücretsiz deneme dersi — Taahhütte bulunmadan öğretmeninizle tanışın. Kart gerekmez.",

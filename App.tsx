@@ -60,6 +60,7 @@ import ZombieTunePage from './components/ZombieTunePage';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import VocabHomeworkPage from './components/VocabHomeworkPage';
+import { LetterMatchPage } from './components/LetterMatchChallenge';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -510,6 +511,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (vocabHomeworkId) return <VocabHomeworkPage homeworkId={vocabHomeworkId} />;
+
+  // ── Letter shapes match — the student plays, the signed-in tutor watches ───
+  const letterMatchId = (() => {
+    const m = window.location.pathname.match(/^\/letter-match\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterMatchId) return <LetterMatchPage challengeId={letterMatchId} />;
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);

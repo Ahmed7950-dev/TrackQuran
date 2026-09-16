@@ -10,6 +10,8 @@ import LetterRaceGame from './LetterRaceGame';
 import ReadingBattleGame from './ReadingBattleGame';
 import FlappyLettersGame from './FlappyLettersGame';
 import OddLetterGame from './OddLetterGame';
+import { LetterMatchSetup } from './LetterMatchChallenge';
+import { getFormMisses, clearFormMisses, FormMisses, MatchForm } from '../services/letterMatchService';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -106,7 +108,7 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch';
 type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt';
 
 const AlphabetTrainerPage: React.FC<{
@@ -158,6 +160,14 @@ const AlphabetTrainerPage: React.FC<{
     ?? students.find(x => x.id === logToId)
     ?? null;
   useEffect(() => { setMisses(readMisses(logTarget?.id)); }, [logTarget?.id]);
+  // Wrong matches from the letter-shapes challenge, per shape. Only the shape
+  // selected in the table shows them (see missedFor).
+  const [formMisses, setFormMisses] = useState<FormMisses>({});
+  const reloadFormMisses = useCallback(() => {
+    if (!logTarget?.id || isStudentView) { setFormMisses({}); return; }
+    getFormMisses(logTarget.id).then(setFormMisses).catch(() => setFormMisses({}));
+  }, [logTarget?.id, isStudentView]);
+  useEffect(() => { reloadFormMisses(); }, [reloadFormMisses]);
   const bumpMiss = (letter: string) => {
     setMisses(prev => {
       const next = { ...prev, [letter]: (prev[letter] ?? 0) + 1 };
@@ -223,6 +233,11 @@ const AlphabetTrainerPage: React.FC<{
   });
   const [shaking, setShaking] = useState(false);
   const [letterForm, setLetterForm] = useState<LetterForm>('isolated');
+  /** Misses shown on a letter: the practice tally, plus the shape challenge's
+   *  wrong matches for the shape currently selected in the table. */
+  const missedFor = (letter: string): number =>
+    (misses[letter] ?? 0)
+    + (letterForm !== 'isolated' ? formMisses[letterForm as MatchForm]?.[letter] ?? 0 : 0);
   const gameRef            = useRef<TowerDefenseRef>(null);
   const consecutiveCorrect = useRef(0);  // streak counter — Bilal spawns on every 3rd in a row
 
@@ -332,6 +347,11 @@ const AlphabetTrainerPage: React.FC<{
   const pressTimer = useRef<number | null>(null);
   const longFired  = useRef(false);
   const clearMiss = (letter: string) => {
+    if (letterForm !== 'isolated' && logTarget?.id && formMisses[letterForm as MatchForm]?.[letter]) {
+      const form = letterForm as MatchForm;
+      setFormMisses(prev => { const f = { ...(prev[form] ?? {}) }; delete f[letter]; return { ...prev, [form]: f }; });
+      clearFormMisses(logTarget.id, form, letter);
+    }
     setMisses(prev => {
       const next = { ...prev };
       delete next[letter];
@@ -475,7 +495,7 @@ const AlphabetTrainerPage: React.FC<{
       <p className={`text-center mb-4 ${childMode ? 'text-base font-bold text-blue-700' : 'text-sm text-slate-500 dark:text-slate-400'}`}>
         {childMode ? t('alphabetTrainer.instrChild') : t('alphabetTrainer.instrAdult')}
       </p>
-      {Object.values(misses).some((n: number) => n > 0) && (
+      {LETTERS.some(l => missedFor(l) > 0) && (
         <p className="text-center mb-3 text-xs text-slate-500 dark:text-slate-400">
           <span className="inline-block align-middle me-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black">n</span>
           {t('alphabetTrainer.missesLegend')} · {t('alphabetTrainer.longPressReset')}
@@ -484,6 +504,11 @@ const AlphabetTrainerPage: React.FC<{
               onClick={() => {
                 setMisses({});
                 try { localStorage.setItem(MISS_KEY(logTarget?.id), '{}'); } catch { /* private mode */ }
+                if (letterForm !== 'isolated' && logTarget?.id) {
+                  const form = letterForm as MatchForm;
+                  setFormMisses(prev => ({ ...prev, [form]: {} }));
+                  clearFormMisses(logTarget.id, form);
+                }
               }}
               className="ms-2 underline font-semibold text-slate-400 hover:text-red-600"
             >{t('alphabetTrainer.clearMisses')}</button>
@@ -556,7 +581,7 @@ const AlphabetTrainerPage: React.FC<{
         {LETTERS.map((letter, i) => {
           const p  = priorities[i];
           const cc = CHILD_CARD_COLORS[i % CHILD_CARD_COLORS.length];
-          const missed = misses[letter] ?? 0;
+          const missed = missedFor(letter);
           const ms = missStyle(missed);
           // Painted as a layer INSIDE the card: it tints whatever background the
           // card already has (priority amber, child colour, dark mode) without
@@ -1032,6 +1057,14 @@ const AlphabetTrainerPage: React.FC<{
               className="px-5 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >{t('alphabetTrainer.formDrill')}</button>
           )}
+          {!childMode && !isStudentView && (
+            <button
+              onClick={() => { if (unique > 0) setView('lettermatch'); }}
+              disabled={unique === 0}
+              title={t('alphabetTrainer.letterMatchHint')}
+              className="px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >{t('alphabetTrainer.letterMatch')}</button>
+          )}
         </div>
       </div>
     </div>
@@ -1352,6 +1385,24 @@ const AlphabetTrainerPage: React.FC<{
       )}
       {view === 'oddletter' && (
         <OddLetterGame onExit={() => finishGame('Odd Letter')} />
+      )}
+      {view === 'lettermatch' && (
+        <LetterMatchSetup
+          letters={selectedLetters}
+          initialForm={letterForm}
+          student={logTarget}
+          onExit={() => { reloadFormMisses(); setView('select'); }}
+          onCompleted={c => {
+            reloadFormMisses();
+            if (!logTarget || !onLogActivity || c.studentId !== logTarget.id) return;
+            onLogActivity(logTarget.id, {
+              kind: 'letters',
+              title: `${c.letters.length} letter${c.letters.length === 1 ? '' : 's'} revised through letter shapes match`,
+              detail: `${c.correct ?? 0}/${c.letters.length} matched · ${c.mistakes ?? 0} mistake${c.mistakes === 1 ? '' : 's'} · ${c.form} · ${c.letters.join(' ')}`,
+              sourceId: `LetterMatch:${c.id}`,
+            }, logTarget.name);
+          }}
+        />
       )}
       {view === 'formdrill' && (
         <LetterFormDrill

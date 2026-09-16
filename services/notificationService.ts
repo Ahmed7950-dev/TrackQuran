@@ -29,7 +29,8 @@ export type NotificationType =
   | 'student_join_request'
   | 'lesson_scheduled'
   | 'vocab_homework_assigned'
-  | 'vocab_homework_completed';
+  | 'vocab_homework_completed'
+  | 'letter_match_completed';
 
 export interface BookingNotification {
   id:         string;

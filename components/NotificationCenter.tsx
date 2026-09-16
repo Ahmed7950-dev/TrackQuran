@@ -54,6 +54,7 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'lesson_scheduled':             return { emoji: '📅', color: 'text-indigo-500' };
     case 'vocab_homework_assigned':      return { emoji: '🧺', color: 'text-violet-500' };
     case 'vocab_homework_completed':     return { emoji: '🧺', color: 'text-emerald-500' };
+    case 'letter_match_completed':       return { emoji: '🔗', color: 'text-sky-500' };
     default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }
