@@ -333,6 +333,16 @@ function buildCoveredVerseKeys(achievements: AchRange[]): Set<string> {
   return covered;
 }
 
+/** Pages with at least one verse covered — any page the logs touched, even partly. */
+export function touchedPageSet(achievements: AchRange[]): Set<number> {
+  const pages = new Set<number>();
+  for (const key of buildCoveredVerseKeys(achievements)) {
+    const [s, a] = key.split(':').map(Number);
+    pages.add(getPageOfAyah(s, a));
+  }
+  return pages;
+}
+
 /** Pages where every verse on the page is covered by at least one achievement */
 export function fullyRecitedPageSet(achievements: AchRange[]): Set<number> {
   const map     = getPageVerseMap();

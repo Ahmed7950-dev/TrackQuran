@@ -1,13 +1,17 @@
 import React from 'react';
 import { RecitationAchievement, MemorizationAchievement, Mistake } from '../types';
 import { useI18n } from '../context/I18nProvider';
-import { fullyRecitedPageSet, getPageOfAyah } from '../services/dataService';
+import { touchedPageSet, getPageOfAyah } from '../services/dataService';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Overall mistakes ratio over time — the SAME metric as the "mistakes rate"
-// stat card above the chart (marked letters on read pages ÷ fully read pages),
-// replayed cumulatively at each progress-log date so the last point matches
-// the headline number. Rose color; the exact ratio printed above every dot.
+// Mistakes per page, DAY BY DAY — not a running average. Each point is that
+// day's own lesson: the mistakes marked that day divided by the pages read that
+// day. 3 mistakes on one page and 5 on the next → 8 ÷ 2 = 4 for the day.
+//
+//   pages read that day = pages the day's reading / hifz logs touched (a partly
+//                         read page counts), plus any page a mistake was marked
+//                         on that day — it was read even if no log covers it.
+//   mistakes            = letters marked red that day (reading or tajweed);
+//                         yellow ones are fixed and don't count.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MistakeRatioChartProps {
@@ -19,37 +23,46 @@ interface MistakeRatioChartProps {
 const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchievements, memorizationAchievements, mistakes }) => {
   const { t, language } = useI18n();
 
-  // X axis: every calendar date with logged progress — plus the latest mistake
-  // date when it falls after the last progress log, so the chart always ends
-  // at the same value the stat card shows.
   const mistakeEntries = Object.entries(mistakes).filter(([k]) => {
     const [su, a] = k.split(':').map(Number);
     return !isNaN(su) && !isNaN(a);
   });
+
+  // mistakes per day, and the pages they sit on
+  const mistakesByDay = new Map<string, number>();
+  const mistakePagesByDay = new Map<string, Set<number>>();
+  for (const [k, m] of mistakeEntries) {
+    if (!m.errorType) continue;                     // yellow = fixed, not counted
+    const day = (m.date ?? '').slice(0, 10);
+    if (!day) continue;
+    const [su, a] = k.split(':').map(Number);
+    mistakesByDay.set(day, (mistakesByDay.get(day) ?? 0) + 1);
+    const set = mistakePagesByDay.get(day) ?? new Set<number>();
+    set.add(getPageOfAyah(su, a));
+    mistakePagesByDay.set(day, set);
+  }
+
+  // X axis: every day with a reading/hifz log or a marked mistake.
   const dateKeys = [...new Set([
     ...recitationAchievements.map(a => a.date.slice(0, 10)),
     ...memorizationAchievements.map(a => a.date.slice(0, 10)),
+    ...mistakesByDay.keys(),
   ])].sort();
-  const lastMistakeDate = mistakeEntries.reduce((mx, [, m]) => {
-    const d = (m.date ?? '').slice(0, 10);
-    return d > mx ? d : mx;
-  }, '');
-  if (dateKeys.length && lastMistakeDate > dateKeys[dateKeys.length - 1]) dateKeys.push(lastMistakeDate);
 
-  // Cumulative ratio at the end of each date — identical semantics to the
-  // stat card: numerator = marked LETTERS on read pages (all error types),
-  // denominator = fully read pages (recited ∪ memorized) as of that date.
   const dataPoints = dateKeys.map(dateKey => {
-    const rec = recitationAchievements.filter(a => a.date.slice(0, 10) <= dateKey);
-    const mem = memorizationAchievements.filter(a => a.date.slice(0, 10) <= dateKey);
-    const pages = new Set<number>([...fullyRecitedPageSet(rec as any), ...fullyRecitedPageSet(mem as any)]);
-    const n = mistakeEntries.filter(([k, m]) => {
-      if (!m.errorType) return false;               // yellow = fixed, not counted
-      if ((m.date ?? '').slice(0, 10) > dateKey) return false;
-      const [su, a] = k.split(':').map(Number);
-      return pages.has(getPageOfAyah(su, a));
-    }).length;
-    return { date: new Date(dateKey), ratio: pages.size > 0 ? Math.round((n / pages.size) * 100) / 100 : 0 };
+    const rec = recitationAchievements.filter(a => a.date.slice(0, 10) === dateKey);
+    const mem = memorizationAchievements.filter(a => a.date.slice(0, 10) === dateKey);
+    const pages = new Set<number>([
+      ...touchedPageSet(rec as any), ...touchedPageSet(mem as any),
+      ...(mistakePagesByDay.get(dateKey) ?? []),
+    ]);
+    const n = mistakesByDay.get(dateKey) ?? 0;
+    return {
+      date: new Date(dateKey),
+      ratio: pages.size > 0 ? Math.round((n / pages.size) * 10) / 10 : 0,
+      pages: pages.size,
+      mistakes: n,
+    };
   });
 
   if (dataPoints.length < 2) {
@@ -118,11 +131,13 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
           {dataPoints.map((d, i) => (
             <g key={`dot-${i}`}>
               <circle cx={xScale(d.date)} cy={yScale(d.ratio)} r="4"
-                className="fill-rose-500 dark:fill-rose-400 stroke-slate-50 dark:stroke-gray-900/50" strokeWidth="2" />
+                className="fill-rose-500 dark:fill-rose-400 stroke-slate-50 dark:stroke-gray-900/50" strokeWidth="2">
+                <title>{`${d.mistakes} mistake${d.mistakes === 1 ? '' : 's'} on ${d.pages} page${d.pages === 1 ? '' : 's'} = ${d.ratio} per page`}</title>
+              </circle>
               {/* the exact ratio, printed small above every dot */}
               <text x={xScale(d.date)} y={yScale(d.ratio) - 8} textAnchor="middle"
                 className="fill-rose-600 dark:fill-rose-300" fontSize="7.5" fontWeight="700">
-                {d.ratio.toFixed(2)}
+                {d.ratio}
               </text>
             </g>
           ))}
@@ -135,7 +150,7 @@ const MistakeRatioChart: React.FC<MistakeRatioChartProps> = ({ recitationAchieve
               <text key={`ty-${tick.y}`} x="-10" y={tick.y} dy="0.32em" textAnchor="end">{tick.value}</text>
             ))}
             <text transform={`translate(-35, ${chartHeight / 2}) rotate(-90)`} textAnchor="middle"
-              className="font-semibold fill-rose-600 dark:fill-rose-300">Mistakes ratio</text>
+              className="font-semibold fill-rose-600 dark:fill-rose-300">Mistakes per page</text>
           </g>
 
           <g className="fill-slate-500 dark:fill-slate-400">
