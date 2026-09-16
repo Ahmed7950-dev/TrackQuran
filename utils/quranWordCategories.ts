@@ -296,15 +296,15 @@ export const fathatanStopSpelling = (word: string): FathatanStopSpelling | null 
 export const isHamzatWaslPair = (a: string, b: string): boolean =>
   isQuranWord(a) && b.startsWith(WASLA) && !a.includes(WAQF_LAZIM);
 
-/** TA MARBUTA — 1,937 drillable pairs. wordA's last LETTER is ة (word-final in
- *  100% of its 2,344 occurrences) — but never its last CHARACTER: a haraka/tanween
- *  always follows, so `endsWith('ة')` is false every time.
- *  The pair is the item because the drill is the /t/ reading in continuation; the
- *  285 pairs whose wordA carries a waqf sign (2:7 غِشَـٰوَةٌۖ وَلَهُمۡ) are dropped, because
- *  stopping there is legitimate and then the ة is read /h/ — the tutor would have
- *  no way to say which of the two readings "Correct" meant. */
+/** TA MARBUTA — the ة word comes LAST (wordB), so the item ends on it and the
+ *  student has to stop there: the ة is then read as a sakin هـ (رَحۡمَةً → رَحۡمَهۡ).
+ *  wordA is simply the word before it in the same verse, which puts the stop in
+ *  context. wordB's last LETTER is ة (word-final in 100% of its 2,344
+ *  occurrences) — but never its last CHARACTER: a haraka/tanween, and sometimes a
+ *  waqf sign, always follows, so `endsWith('ة')` is false every time. A waqf sign
+ *  on wordB is fine — stopping there is exactly what is being tested. */
 export const isTaMarbutaPair = (a: string, b: string): boolean =>
-  lastLetter(a) === TA_MARBUTA && isQuranWord(b) && !WAQF_RE.test(a);
+  isQuranWord(a) && lastLetter(b) === TA_MARBUTA;
 
 /** wordA's last PRONOUNCED sound is a madd letter — the first of the two saakins
  *  in ٱهۡدِنَا ٱلصِّرَٰطَ, and the one that gets DROPPED (ḥadhf ḥarf al-madd).
