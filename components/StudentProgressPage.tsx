@@ -711,6 +711,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** Tutor-side listen mode: verse taps play recitation instead of logging. */
     const [tutorListen, setTutorListen] = useState(false);
     const listenActive = readOnly || tutorListen;
+    // Key for this student's per-device preferences (reading position, scroll
+    // speed). The student portal passes a placeholder `student` whose id is the
+    // same for EVERY link ('shared-report-quran'), so there the real id comes
+    // from notesStudentId — otherwise one student's saved spot opened another's.
+    const prefsId = (readOnly && notesStudentId) || student.id;
     /** Times each verse plays before moving on (verse-by-verse reciters). */
     const [verseRepeat, setVerseRepeat] = useState<number>(() => {
         try { const v = parseInt(localStorage.getItem('quranVerseRepeat') ?? '1', 10); return [1, 2, 3, 5].includes(v) ? v : 1; } catch { return 1; }
@@ -985,10 +990,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Where this tutor/student was last reading. Restored ahead of the
     // last-logged verse so leaving the Quran tab and coming back reopens the
     // same page, not wherever the last achievement happened to end.
-    const viewKey = `quranful:quranView:${student.id}`;
+    //
+    // The student's link keeps it for the current VISIT only (sessionStorage):
+    // switching tabs or refreshing stays put, but opening the link again lands
+    // on the last logged verse. Kept across visits, an old scroll position — or
+    // a spot the tutor's live letter-focus jumped them to — beat the last log
+    // and the portal opened on what looked like a random surah.
+    const viewKey = `quranful:quranView:${prefsId}`;
+    const viewStore = (): Storage => (readOnly ? sessionStorage : localStorage);
     const readSavedView = (): { surah: number; verse: string } | null => {
         try {
-            const raw = localStorage.getItem(`quranful:quranView:${student.id}`);
+            const raw = viewStore().getItem(viewKey);
             if (!raw) return null;
             const v = JSON.parse(raw);
             return (typeof v?.surah === 'number' && typeof v?.verse === 'string') ? v : null;
@@ -1050,7 +1062,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const progressBarFillRef    = useRef<HTMLDivElement>(null);
     // Refs that mirror state values so the RAF loop can read them without stale closures
     const isAutoScrollingRef    = useRef(false);
-    const scrollSpeedRef        = useRef(readScrollSpeed(student.id));
+    const scrollSpeedRef        = useRef(readScrollSpeed(prefsId));
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
     const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -1067,7 +1079,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [tafsirError, setTafsirError] = useState<string | null>(null);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isAutoScrolling, setIsAutoScrolling] = useState(false);
-    const [scrollSpeed, setScrollSpeed] = useState(() => readScrollSpeed(student.id)); // 1-100, restored per student
+    const [scrollSpeed, setScrollSpeed] = useState(() => readScrollSpeed(prefsId)); // 1-100, restored per student
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearchResultsModalOpen, setIsSearchResultsModalOpen] = useState(false);
@@ -1152,17 +1164,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const applyScrollSpeed = (next: number) => {
         setScrollSpeed(next);
         scrollSpeedRef.current = next;   // the running scroll loop reads the ref
-        try { localStorage.setItem(SCROLL_SPEED_KEY(student.id), String(next)); } catch { /* private mode */ }
+        try { localStorage.setItem(SCROLL_SPEED_KEY(prefsId), String(next)); } catch { /* private mode */ }
     };
     const handleIncreaseSpeed = () => applyScrollSpeed(Math.min(100, scrollSpeedRef.current + 5));
     const handleDecreaseSpeed = () => applyScrollSpeed(Math.max(1, scrollSpeedRef.current - 5));
 
     // Switching students inside the same mount: pick up that student's speed.
     useEffect(() => {
-        const stored = readScrollSpeed(student.id);
+        const stored = readScrollSpeed(prefsId);
         scrollSpeedRef.current = stored;
         setScrollSpeed(stored);
-    }, [student.id]);
+    }, [prefsId]);
 
     // ── Close tajweed menu on outside click ──────────────────────────────────
     useEffect(() => {
@@ -2226,7 +2238,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
             if (!topVerse) return;
             try {
-                localStorage.setItem(viewKey, JSON.stringify({ surah: selectedSurahIdRef.current, verse: topVerse }));
+                viewStore().setItem(viewKey, JSON.stringify({ surah: selectedSurahIdRef.current, verse: topVerse }));
             } catch { /* private mode / quota */ }
         };
         const onScroll = () => { if (timer === null) timer = window.setTimeout(save, 400); };
