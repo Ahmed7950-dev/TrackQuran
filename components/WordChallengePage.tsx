@@ -315,7 +315,10 @@ const WordChallengePage: React.FC<{
             {catName(item.category)}
           </span>
           {item.variant && (
-            <span className="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-[11px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">
+            <span dir={item.category === 'fathatanStop' ? 'rtl' : undefined}
+              className={`px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 font-black text-amber-700 dark:text-amber-300 ${
+                // The stop tags are Arabic spellings (ـًا → ـَا) — readable size, no uppercase.
+                item.category === 'fathatanStop' ? 'font-quranic text-xl leading-none py-1.5' : 'text-[11px] uppercase tracking-wide'}`}>
               {t(`wordChallenge.variant.${item.variant}`)}
             </span>
           )}

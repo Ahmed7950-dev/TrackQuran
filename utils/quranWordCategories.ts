@@ -248,6 +248,37 @@ export const endsWithTanween = (word: string): boolean => {
   return t >= 0 && TANWEEN_TAIL_RE.test(word.slice(t + 1));
 };
 
+/** STOPPING ON TANWEEN FATHA — waqf turns the tanween into an alif: عَلِيمًا is
+ *  read عَلِيمَا, هُدًى is read هُدَا, مَآءً is read مَآءَا.
+ *  The word's LAST sounded letter carries the fathatan (so it isn't one tanween
+ *  among later letters), and that letter is not ta marbuta: ـةً stops on a
+ *  sakin هـ (رَحۡمَةً → رَحۡمَهۡ), the one exception to the rule. */
+/** Index (into letterSpans(word)) of the letter carrying the stop fathatan, or -1. */
+const fathatanStopIndex = (toks: LetterSpan[], word: string): number => {
+  if (!endsWithTanween(word)) return -1;
+  for (let i = toks.length - 1; i >= 0; i--) {
+    if (toks[i].marks.includes(FATHATAN)) return toks[i].ch === TA_MARBUTA ? -1 : i;
+    if ([...TANWEEN].some(m => toks[i].marks.includes(m))) return -1;   // a dammatan/kasratan ending
+  }
+  return -1;
+};
+export const isFathatanStopWord = (word: string): boolean =>
+  fathatanStopIndex(letterSpans(word), word) >= 0;
+
+/** How the stop is spelt — the item's tag shows the student what to read:
+ *  ـًا (alif written), ـًى (alif maksura), or ءً after an alif with no second
+ *  alif written (مَآءً, جَزَآءً). */
+export type FathatanStopSpelling = 'stopAlif' | 'stopMaksura' | 'stopHamza';
+export const fathatanStopSpelling = (word: string): FathatanStopSpelling | null => {
+  const toks = letterSpans(word);
+  const i = fathatanStopIndex(toks, word);
+  if (i < 0) return null;
+  const after = toks[i + 1]?.ch;
+  if (after === ALEF) return 'stopAlif';
+  if (after === ALEF_MAKSURA) return 'stopMaksura';
+  return 'stopHamza';
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TWO-WORD PREDICATES — the phenomenon only exists across the join, so the item
 // must show BOTH words.
@@ -482,7 +513,7 @@ export const wordFitsLesson = (word: string, ceiling: number): boolean => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CategoryId =
-  | 'fatha' | 'kasra' | 'damma' | 'longVowel' | 'shadda' | 'sukoon' | 'tanween'
+  | 'fatha' | 'kasra' | 'damma' | 'longVowel' | 'shadda' | 'sukoon' | 'tanween' | 'fathatanStop'
   | 'hamzatWasl' | 'taMarbuta' | 'iltiqaa' | 'jalalah';
 
 /** 'letters' = the plain rule (any word containing a chosen letter) used when no
@@ -501,6 +532,9 @@ export interface WordCategory {
   matchPair?: (a: string, b: string) => boolean;
   /** Optional sub-label for an item, e.g. the jalālah's heavy/light. */
   variantOf?: (words: string[]) => string | null;
+  /** Deal the variants out in turn instead of in their natural proportion, so a
+   *  rare spelling (ـًى, ءً among thousands of ـًا) still shows up in a run. */
+  balanceVariants?: boolean;
   /** True when a CHOSEN letter is the one carrying this category's mark. The
    *  builder prefers these words; it never requires them, so a rare letter still
    *  gets a full run out of the plain "contains the letter" match. */
@@ -520,6 +554,11 @@ export const WORD_CATEGORIES: readonly WordCategory[] = [
     focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u0652\u06E1]/) },
   { id: 'tanween',    group: 'basic', arity: 1, lesson: 8, matchWord: hasTanween,
     focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u064B-\u064D]/) },
+  // Same lesson as tanween: the stopping rule is taught with it, and the words
+  // stay free of shaddah like the rest of that lesson's run.
+  { id: 'fathatanStop', group: 'basic', arity: 1, lesson: 8, matchWord: isFathatanStopWord,
+    focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u064B]/),
+    variantOf: ws => (ws.length === 1 ? fathatanStopSpelling(ws[0]) : null), balanceVariants: true },
   { id: 'shadda',     group: 'basic', arity: 1, lesson: 9, matchWord: hasShadda,
     focusWord: (w, ls) => markOnChosenLetter(w, ls, /[\u0651]/) },
   { id: 'hamzatWasl', group: 'basic', arity: 2, lesson: 10, matchPair: isHamzatWaslPair },
@@ -681,6 +720,10 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
     for (const id of cats) {
       const p = pools.get(id)!;
       if (p.focus.length + p.strict.length < (quota.get(id) ?? 0)) return false;
+      // A balanced category's rare variants are spread thinly through the text:
+      // stopping at the first 20 ـًا words would never reach a هُدًى or a مَآءً.
+      // Verses are cached after the first run, so the full pass is cheap.
+      if (CATEGORY_BY_ID.get(id)?.balanceVariants) return false;
     }
     return plain.strict.length >= count;   // enough for the last-resort top-up too
   };
@@ -701,7 +744,8 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
           if (!cat.matchWord(w) || !fits(w)) continue;
           const tier: Tier = !hasLetter(w) ? 'loose'
             : cat.focusWord?.(w, letters) ? 'focus' : 'strict';
-          push(pool, { words: [w], category: id }, tier);
+          const variant = cat.variantOf?.([w]) ?? undefined;
+          push(pool, { words: [w], category: id, ...(variant ? { variant } : {}) }, tier);
         }
       } else if (cat.arity === 2 && cat.matchPair) {
         for (let i = 0; i < words.length - 1; i++) {
@@ -748,13 +792,28 @@ export async function buildChallengeItems(opts: BuildOptions): Promise<Challenge
   if (cats.length === 0) {
     take(shuffle(plain.strict, rnd), count);
   } else {
+    // Round-robin over the variants of an already-shuffled list.
+    const dealVariants = (list: ChallengeItem[]): ChallengeItem[] => {
+      const groups = new Map<string, ChallengeItem[]>();
+      for (const it of list) {
+        const g = groups.get(it.variant ?? '') ?? [];
+        g.push(it);
+        groups.set(it.variant ?? '', g);
+      }
+      const queues = shuffle([...groups.values()], rnd);
+      const out: ChallengeItem[] = [];
+      for (let round = 0; out.length < list.length; round++) {
+        for (const q of queues) if (round < q.length) out.push(q[round]);
+      }
+      return out;
+    };
     const shuffled = new Map<CategoryId, Pool>(
       cats.map(id => {
         const p = pools.get(id)!;
-        return [id, {
-          focus: shuffle(p.focus, rnd), strict: shuffle(p.strict, rnd),
-          loose: shuffle(p.loose, rnd), keys: p.keys,
-        }];
+        const mix = CATEGORY_BY_ID.get(id)?.balanceVariants
+          ? (l: ChallengeItem[]) => dealVariants(shuffle(l, rnd))
+          : (l: ChallengeItem[]) => shuffle(l, rnd);
+        return [id, { focus: mix(p.focus), strict: mix(p.strict), loose: mix(p.loose), keys: p.keys }];
       }),
     );
     for (const id of cats) {

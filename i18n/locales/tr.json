@@ -1429,7 +1429,10 @@
       "heavy": "Kalın",
       "light": "İnce",
       "madd": "Med harfi düşer",
-      "tanween": "Tenvin"
+      "tanween": "Tenvin",
+      "stopAlif": "ـًا ← ـَا",
+      "stopMaksura": "ـًى ← ـَا",
+      "stopHamza": "ءً ← ءَا"
     },
     "cat": {
       "letters": "Harflerin",
@@ -1440,6 +1443,7 @@
       "shadda": "Şedde",
       "sukoon": "Sükûn (cezm)",
       "tanween": "Tenvin",
+      "fathatanStop": "Fethateynde vakf → elif",
       "hamzatWasl": "Vasıl hemzesi",
       "taMarbuta": "Yuvarlak te ile biter",
       "iltiqaa": "İki sâkinin karşılaşması",

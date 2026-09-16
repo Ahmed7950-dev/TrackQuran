@@ -1429,7 +1429,10 @@
       "heavy": "Heavy",
       "light": "Light",
       "madd": "Dropped madd",
-      "tanween": "Tanween"
+      "tanween": "Tanween",
+      "stopAlif": "ـًا ← ـَا",
+      "stopMaksura": "ـًى ← ـَا",
+      "stopHamza": "ءً ← ءَا"
     },
     "cat": {
       "letters": "Your letters",
@@ -1440,6 +1443,7 @@
       "shadda": "Shaddah",
       "sukoon": "Sukoon",
       "tanween": "Tanween",
+      "fathatanStop": "Stopping on tanween fatha → alif",
       "hamzatWasl": "Hamzatul-wasl",
       "taMarbuta": "Ends with ta marbuta",
       "iltiqaa": "Iltiqaa as-sakinayn",

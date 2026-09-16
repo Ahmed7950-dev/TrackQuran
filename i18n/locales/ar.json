@@ -1429,7 +1429,10 @@
       "heavy": "تفخيم",
       "light": "ترقيق",
       "madd": "حذف حرف المد",
-      "tanween": "تنوين"
+      "tanween": "تنوين",
+      "stopAlif": "ـًا ← ـَا",
+      "stopMaksura": "ـًى ← ـَا",
+      "stopHamza": "ءً ← ءَا"
     },
     "cat": {
       "letters": "حروفك",
@@ -1440,6 +1443,7 @@
       "shadda": "الشدّة",
       "sukoon": "السكون",
       "tanween": "التنوين",
+      "fathatanStop": "الوقف على تنوين الفتح ← ألف",
       "hamzatWasl": "همزة الوصل",
       "taMarbuta": "تنتهي بتاء مربوطة",
       "iltiqaa": "التقاء الساكنين",
