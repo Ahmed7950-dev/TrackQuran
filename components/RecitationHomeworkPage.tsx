@@ -13,9 +13,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersesForSurah } from '../services/dataService';
-import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
+import { splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { audioUrl } from './VerseAudioPlayer';
-import { QURAN_METADATA } from '../constants';
+import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
   RecitationHomework, RECORDER_BITRATE, getRecitationHomework, pickRecorderMime,
   portalHomeworkUrl, rangeLabel, saveVerseRecording, submitRecitationHomework, versesOfRange,
@@ -30,6 +30,38 @@ const fmtSecs = (ms: number): string => {
 };
 
 type TakeState = 'idle' | 'recording' | 'saving';
+type ReciteTheme = 'morning' | 'night';
+
+/** The Turkish script needs its own text source; this page reads the Uthmani text. */
+const FONT_OPTIONS = QURANIC_FONTS.filter(f => f.name !== TURKISH_FONT);
+
+// "Mushaf Morning" (day) and "Night Study" (night) — from the design canvas.
+const PALETTES = {
+  morning: {
+    page: '#F4EEDF', card: '#FFFBF2', cardBorder: '#E6DAC0', stage: '#FFFDF7', stageBorder: '#E3C98E',
+    ink: '#1F2A24', verseInk: '#14201A', muted: '#5B6259', faint: '#8C846F',
+    gold: '#B8872E', goldInk: '#8A6A24', goldSoft: '#FFF4DC', goldHalo: '#F4E5C2',
+    primary: '#1F5E4A', onPrimary: '#FFFBF2', track: '#E9DFC9',
+    chipDone: '#1F5E4A', chipDoneInk: '#FFFBF2', chipIdle: '#FFFBF2', chipIdleBorder: '#DCCFB3', chipIdleInk: '#6B6556',
+    record: '#B5452F', recordRing: '#F3D9D2', recordInk: '#FFFBF2', recording: '#C8492F', recordingSoft: '#F6D2C9',
+    mine: '#2F7A62', mineRing: '#DDE8E2', mineInk: '#FFFBF2',
+    ghost: '#FFFBF2', ghostBorder: '#D8CBAE', ghostInk: '#3E4640',
+    hint: '#EFF5F1', hintInk: '#1F5E4A', tip: '#1F2A24', tipInk: '#FFFBF2',
+    noticeBg: '#FFF4DC', noticeBorder: '#E9D2A0', noticeInk: '#6E5116',
+  },
+  night: {
+    page: '#0F1728', card: '#151F35', cardBorder: '#22304D', stage: '#111A2D', stageBorder: '#2A3857',
+    ink: '#E8ECF3', verseInk: '#F4F1E8', muted: '#A3AEC2', faint: '#8E9BB3',
+    gold: '#D9B25F', goldInk: '#F1D595', goldSoft: '#2A2A1E', goldHalo: 'rgba(217,178,95,0.16)',
+    primary: '#5CC8B0', onPrimary: '#0B1F1B', track: '#24324F',
+    chipDone: '#1F4F4A', chipDoneInk: '#A8E8DA', chipIdle: '#131C30', chipIdleBorder: '#2B3A5A', chipIdleInk: '#9FB0C8',
+    record: '#E0677A', recordRing: '#3A2230', recordInk: '#1A0B10', recording: '#EF5B6E', recordingSoft: '#4A2432',
+    mine: '#8FA8FF', mineRing: '#22354F', mineInk: '#0E1630',
+    ghost: '#151F35', ghostBorder: '#2B3A5A', ghostInk: '#C9D2E1',
+    hint: '#1A2A3F', hintInk: '#9FB0C8', tip: '#E8ECF3', tipInk: '#0F1728',
+    noticeBg: '#2A2418', noticeBorder: '#4A3D22', noticeInk: '#F1D595',
+  },
+} as const;
 
 const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitationId }) => {
   const [rec, setRec] = useState<RecitationHomework | null | undefined>(undefined);
@@ -43,6 +75,43 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [minePlaying, setMinePlaying] = useState(false);
   /** Takes recorded in this visit, playable instantly before the upload's URL. */
   const localUrls = useRef<Record<string, string>>({});
+
+  // Day / night, remembered on this device (defaults to the app's own theme).
+  const [theme, setTheme] = useState<ReciteTheme>(() => {
+    try {
+      const saved = localStorage.getItem('reciteTheme');
+      if (saved === 'morning' || saved === 'night') return saved;
+      return localStorage.getItem('theme') === 'dark' ? 'night' : 'morning';
+    } catch { return 'morning'; }
+  });
+  useEffect(() => { try { localStorage.setItem('reciteTheme', theme); } catch { /* private mode */ } }, [theme]);
+
+  // Quran font — the same setting the portal and live logging page use.
+  const [quranFont, setQuranFont] = useState<string>(() => {
+    const f = currentQuranicFont();
+    return FONT_OPTIONS.some(o => o.name === f) ? f : 'Hafs';
+  });
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--quranic-font', quranFont);
+  }, [quranFont]);
+  // Saved only when the student picks one — just opening this page must not
+  // overwrite a portal choice it can't show (the Turkish script).
+  const pickFont = (name: string) => {
+    setQuranFont(name);
+    try { localStorage.setItem('quranicFont', name); } catch { /* private mode */ }
+  };
+
+  // The design's display and body faces.
+  useEffect(() => {
+    const id = 'recite-fonts';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Figtree:wght@400;500;600;700&display=swap';
+    document.head.appendChild(link);
+  }, []);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -186,16 +255,19 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   // ── Screens ───────────────────────────────────────────────────────────────
+  const P = PALETTES[theme];
+  const DISPLAY = "'Fraunces', Georgia, serif";
+  const BODY = "'Figtree', system-ui, sans-serif";
+
   const shell = (children: React.ReactNode) => (
-    <div className="min-h-[100dvh] bg-gradient-to-b from-[#f7f2e6] via-[#f3ecdc] to-[#ebe1cb] dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 text-slate-800 dark:text-slate-100">
-      {children}
-    </div>
+    <div className="min-h-[100dvh]" style={{ background: P.page, color: P.ink, fontFamily: BODY }}>{children}</div>
   );
-  if (rec === undefined) return shell(<p className="text-center py-24 text-slate-400">Loading your homework…</p>);
+  if (rec === undefined) return shell(<p className="text-center py-24" style={{ color: P.faint }}>Loading your homework…</p>);
   if (!rec) return shell(
-    <div className="text-center py-24 px-4"><p className="text-5xl mb-3">🎙</p>
-      <p className="font-black">Homework not found</p>
-      <p className="text-sm text-slate-500">It may have been removed — ask your teacher for a new link.</p></div>,
+    <div className="text-center py-24 px-4">
+      <p className="font-bold text-lg" style={{ fontFamily: DISPLAY }}>Homework not found</p>
+      <p className="text-sm" style={{ color: P.muted }}>It may have been removed — ask your teacher for a new link.</p>
+    </div>,
   );
 
   const recordedCount = verses.filter(([vs, va]) => rec.recordings[`${vs}:${va}`]).length;
@@ -207,221 +279,301 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const surahName = QURAN_METADATA.find(m => m.number === s);
   const portalLink = rec.reportId ? portalHomeworkUrl(rec.reportId, rec.homeworkId) : null;
   const pct = verses.length ? recordedCount / verses.length : 0;
+  const multiSurah = rec.startSurah !== rec.endSurah;
 
-  const statusBanner =
-    rec.status === 'submitted' ? { cls: 'from-sky-500 to-indigo-500', icon: '📨', text: 'Submitted — your teacher will listen and review it.' }
-    : rec.status === 'passed' ? { cls: 'from-emerald-500 to-teal-500', icon: '✅', text: 'Passed! Your teacher reviewed this homework.' }
-    : rec.status === 'needs_revision' ? { cls: 'from-amber-500 to-orange-500', icon: '🔁', text: 'Needs revision — check the mistakes in your Quran page, then record the verses again and resubmit.' }
+  const eyebrow = rec.status === 'submitted' ? 'Submitted' : rec.status === 'passed' ? 'Passed'
+    : rec.status === 'needs_revision' ? 'Needs revision' : 'Recitation homework';
+  const subline = rec.status === 'submitted' ? 'Your teacher will listen and review it.'
+    : rec.status === 'passed' ? 'Your teacher reviewed this homework — well done.'
+    : allRecorded ? `All ${verses.length} verses recorded — listen back once more, then send it to your teacher`
+    : `${recordedCount} of ${verses.length} verses recorded`;
+  const notice = rec.status === 'needs_revision'
+    ? 'Your teacher left notes on this homework. Look at the mistakes in your Quran page, then record the verses again and resubmit.'
+    : rec.status === 'passed' && portalLink ? 'See any notes your teacher left in your Quran page.'
     : null;
 
-  // ── Icons ──
-  const Icon = {
-    mic: <svg viewBox="0 0 24 24" fill="currentColor" className="w-9 h-9"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Z"/><path d="M18.5 11.5a.75.75 0 0 0-1.5 0 5 5 0 0 1-10 0 .75.75 0 0 0-1.5 0 6.5 6.5 0 0 0 5.75 6.46V20.5H9a.75.75 0 0 0 0 1.5h6a.75.75 0 0 0 0-1.5h-2.25v-2.54a6.5 6.5 0 0 0 5.75-6.46Z"/></svg>,
-    stop: <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>,
-    play: <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M7.5 5.2v13.6a1 1 0 0 0 1.52.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7.5 5.2Z"/></svg>,
-    pause: <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>,
-    prev: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15 5l-7 7 7 7"/></svg>,
-    next: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>,
+  // ── Pieces ──
+  const svg = (children: React.ReactNode, size = 24, fill = false) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill={fill ? 'currentColor' : 'none'}
+      stroke={fill ? 'none' : 'currentColor'} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+  );
+  const I = {
+    mic: svg(<><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M19 10v1a7 7 0 0 1-14 0v-1" /><path d="M12 18v4" /></>, 34),
+    stop: svg(<rect x="6" y="6" width="12" height="12" rx="2.5" />, 28, true),
+    play: svg(<path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" />, 32, true),
+    pause: svg(<><rect x="6.5" y="5" width="4" height="14" rx="1.2" /><rect x="13.5" y="5" width="4" height="14" rx="1.2" /></>, 30, true),
+    send: svg(<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></>, 26),
+    prev: svg(<path d="m15 18-6-6 6-6" />),
+    next: svg(<path d="m9 18 6-6-6-6" />),
+    speaker: svg(<><path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></>, 18),
+    sun: svg(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>, 20),
+    moon: svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />, 20),
   };
-  const SoundBars: React.FC<{ on: boolean; cls?: string }> = ({ on, cls = 'bg-current' }) => (
-    <span className="inline-flex items-end gap-[3px] h-4" aria-hidden>
-      {[0, 1, 2, 3].map(i => (
-        <span key={i} className={`w-[3px] rounded-full ${cls} ${on ? 'rh-bar' : ''}`}
-          style={{ height: on ? undefined : '35%', animationDelay: `${i * 0.12}s` }} />
-      ))}
-    </span>
-  );
 
-  // Progress ring
-  const R = 26, C = 2 * Math.PI * R;
-  const ring = (
-    <div className="relative w-16 h-16 flex-shrink-0">
-      <svg viewBox="0 0 64 64" className="w-16 h-16 -rotate-90">
-        <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" className="stroke-black/10 dark:stroke-white/10" />
-        <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" strokeLinecap="round"
-          className="stroke-emerald-500 transition-all duration-500" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-black tabular-nums">{recordedCount}/{verses.length}</span>
-    </div>
-  );
-
-  const pill = 'inline-flex items-center justify-center gap-2.5 rounded-2xl font-bold transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100';
-  /** Round icon buttons carry no text — the label shows on hover (and is the
-   *  button's accessible name). */
-  const withTip = (tip: string, button: React.ReactNode, below = false, alignEnd = false) => (
+  /** Icon-only buttons: the label shows on hover and is the accessible name. */
+  const withTip = (tip: string, button: React.ReactNode, place: 'above' | 'below' | 'below-end' = 'above') => (
     <span className="group relative inline-flex">
       {button}
       <span role="tooltip"
-        className={`pointer-events-none absolute ${alignEnd ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${below ? 'top-full mt-2' : 'bottom-full mb-2'} z-30 whitespace-nowrap rounded-lg bg-slate-900 dark:bg-slate-100 px-2.5 py-1 text-xs font-bold text-white dark:text-slate-900 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100`}>
+        className={`pointer-events-none absolute z-40 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-[13px] font-semibold shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 ${
+          place === 'above' ? 'bottom-full mb-3 left-1/2 -translate-x-1/2' : place === 'below' ? 'top-full mt-3 left-1/2 -translate-x-1/2' : 'top-full mt-3 right-0'}`}
+        style={{ background: P.tip, color: P.tipInk }}>
         {tip}
       </span>
     </span>
   );
-  const roundBtn = 'relative w-[4.25rem] h-[4.25rem] sm:w-20 sm:h-20 rounded-full text-white flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100';
+
+  const bigRound = 'relative flex items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed disabled:active:scale-100 w-[4.75rem] h-[4.75rem] sm:w-[5.75rem] sm:h-[5.75rem]';
+  const smallRound = 'flex items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 w-12 h-12 sm:w-14 sm:h-14';
+
+  const ring = (size: number, stroke: number) => {
+    const r = (size - stroke) / 2 - 1;
+    const c = 2 * Math.PI * r;
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={P.track} strokeWidth={stroke} />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+            stroke={rec.status === 'needs_revision' ? P.gold : P.primary}
+            strokeDasharray={c} strokeDashoffset={c * (1 - pct)} transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            style={{ transition: 'stroke-dashoffset .5s ease' }} />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center font-bold tabular-nums" style={{ fontSize: size > 60 ? 17 : 13 }}>
+          {recordedCount}/{verses.length}
+        </span>
+      </div>
+    );
+  };
+
+  const bars = (color: string, on: boolean) => (
+    <span aria-hidden="true" className="inline-flex items-center gap-[3px] h-5">
+      {[0.45, 0.8, 1, 0.6, 0.9, 0.5, 0.75].map((h, i) => (
+        <span key={i} className={`w-[3px] rounded-full ${on ? 'rh-bar' : ''}`}
+          style={{ background: color, height: on ? undefined : `${h * 100}%`, animationDelay: `${i * 0.09}s` }} />
+      ))}
+    </span>
+  );
+
+  const liveLine = take === 'recording'
+    ? { color: P.recording, text: `Recording · ${fmtSecs(elapsed)}` }
+    : take === 'saving' ? { color: P.faint, text: 'Saving your recording…' }
+    : minePlaying ? { color: P.mine, text: `Playing your recitation${takeMs ? ` · ${fmtSecs(takeMs)}` : ''}` }
+    : null;
 
   return shell(
-    <div className="w-full px-3 sm:px-6 lg:px-10 py-4 sm:py-6 space-y-4 sm:space-y-5">
+    <div className="w-full px-3 sm:px-8 lg:px-14 py-4 sm:py-8 flex flex-col gap-3 sm:gap-6 min-h-[100dvh]">
       <style>{`
-        @keyframes rh-bar { 0%,100% { height: 25% } 50% { height: 100% } }
+        @keyframes rh-bar { 0%,100% { height: 30% } 50% { height: 100% } }
         .rh-bar { animation: rh-bar .8s ease-in-out infinite; }
-        @keyframes rh-pulse { 0% { transform: scale(1); opacity: .55 } 100% { transform: scale(1.65); opacity: 0 } }
-        .rh-pulse { animation: rh-pulse 1.4s ease-out infinite; }
+        @keyframes rh-halo { 0% { transform: scale(1); opacity: .45 } 100% { transform: scale(1.55); opacity: 0 } }
+        .rh-halo { animation: rh-halo 1.3s ease-out infinite; }
       `}</style>
 
-      {/* ── Top: title + progress, stretched across ── */}
-      <section className="rounded-3xl bg-white/80 dark:bg-gray-800/80 backdrop-blur border border-white dark:border-gray-700 shadow-[0_8px_30px_-12px_rgba(120,90,40,0.25)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-4">
-          {ring}
+      {/* ── Header: progress, title, tools, submit, verse chips ── */}
+      <header className="rounded-[24px] sm:rounded-[28px] px-4 sm:px-8 py-4 sm:py-6 flex flex-col gap-3 sm:gap-5"
+        style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-6">
+          <span className="hidden sm:block">{ring(76, 8)}</span>
+          <span className="sm:hidden">{ring(52, 6)}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-teal-700 dark:text-teal-400">Recitation homework</p>
-            <h1 className="text-xl sm:text-2xl font-black leading-tight">{rangeLabel(rec)}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {rec.studentName ? `${rec.studentName} · ` : ''}{recordedCount === verses.length ? 'All verses recorded' : `${verses.length - recordedCount} verse${verses.length - recordedCount === 1 ? '' : 's'} left to record`}
+            <p className="text-[11px] sm:text-[13px] font-bold uppercase tracking-[0.15em]" style={{ color: rec.status === 'needs_revision' ? P.gold : P.goldInk }}>{eyebrow}</p>
+            <h1 className="m-0 text-[20px] sm:text-[clamp(1.6rem,2.6vw,2.25rem)] font-bold leading-tight break-words" style={{ fontFamily: DISPLAY }}>{rangeLabel(rec)}</h1>
+            <p className="hidden sm:block text-[15px] mt-0.5" style={{ color: P.muted }}>
+              {rec.studentName ? `${rec.studentName} · ` : ''}{subline}
             </p>
           </div>
+
+          {/* Tools: day/night + font. On phones they get their own row under the title. */}
+          <div className="order-last sm:order-none basis-full sm:basis-auto flex items-center justify-end gap-2 sm:gap-3 -mt-1 sm:mt-0">
+          {withTip(theme === 'morning' ? 'Night mode' : 'Day mode',
+            <button onClick={() => setTheme(t => (t === 'morning' ? 'night' : 'morning'))}
+              aria-label={theme === 'morning' ? 'Switch to night mode' : 'Switch to day mode'}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-colors"
+              style={{ background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk }}>
+              {theme === 'morning' ? I.moon : I.sun}
+            </button>, 'below')}
+
+          {/* Quran font */}
+          <span className="relative inline-flex">
+            {withTip('Quran font',
+              <button onClick={() => setFontMenuOpen(o => !o)} aria-label="Choose the Quran font" aria-expanded={fontMenuOpen}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-colors"
+                style={{ background: fontMenuOpen ? P.goldSoft : P.ghost, border: `1.5px solid ${fontMenuOpen ? P.gold : P.ghostBorder}`, color: P.ghostInk }}>
+                <span className="font-quranic text-[22px] leading-none" style={{ marginTop: -4 }}>ع</span>
+              </button>, 'below')}
+            {fontMenuOpen && (
+              <>
+                <span className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
+                <span role="menu" className="absolute right-0 top-full mt-3 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-2xl p-2 shadow-2xl"
+                  style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
+                  <span className="block px-3 pt-1 pb-2 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: P.faint }}>Quran font</span>
+                  {FONT_OPTIONS.map(f => (
+                    <button key={f.name} role="menuitemradio" aria-checked={quranFont === f.name}
+                      onClick={() => { pickFont(f.name); setFontMenuOpen(false); }}
+                      className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition-colors"
+                      style={{ background: quranFont === f.name ? P.goldSoft : 'transparent', color: P.ink }}>
+                      <span className="min-w-0 text-[13px] font-semibold truncate">{f.displayName}</span>
+                      <span dir="rtl" className="flex-shrink-0 whitespace-nowrap text-[20px] leading-none" style={{ fontFamily: `'${f.name}', serif`, color: P.verseInk }}>بِسۡمِ ٱللَّهِ</span>
+                    </button>
+                  ))}
+                </span>
+              </>
+            )}
+          </span>
+          </div>
+
+          {/* Submit */}
           {editable && withTip(
-            submitting ? 'Submitting…' : allRecorded ? 'Submit homework'
+            submitting ? 'Submitting…' : allRecorded ? (rec.status === 'needs_revision' ? 'Resubmit homework' : 'Submit homework')
               : `Record all verses to submit (${verses.length - recordedCount} left)`,
             <button onClick={submit} disabled={!allRecorded || submitting || take !== 'idle'}
               aria-label={allRecorded ? 'Submit homework' : 'Record all verses to submit'}
-              className={`${roundBtn} bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-xl shadow-emerald-600/35 hover:shadow-emerald-600/55 hover:brightness-105`}>
-              {submitting
-                ? <span className="w-8 h-8 rounded-full border-4 border-white/40 border-t-white animate-spin" />
-                : <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 translate-x-0.5"><path d="M3.48 3.1a1 1 0 0 1 1.08-.13l16 8a1 1 0 0 1 0 1.78l-16 8A1 1 0 0 1 3.2 19.6L5.6 12 3.2 4.4a1 1 0 0 1 .28-1.3ZM7.3 13l-1.6 5.02L17.76 12 5.7 5.98 7.3 11H13a1 1 0 1 1 0 2H7.3Z"/></svg>}
-            </button>,
-            true, true,
-          )}
+              className="relative flex items-center justify-center rounded-full w-[3.25rem] h-[3.25rem] sm:w-[4.5rem] sm:h-[4.5rem] transition-all active:scale-95 disabled:cursor-not-allowed"
+              style={allRecorded
+                ? { background: P.primary, color: P.onPrimary, border: `5px solid ${P.goldHalo}`, boxShadow: `0 0 0 8px ${theme === 'night' ? 'rgba(92,200,176,0.14)' : 'rgba(31,94,74,0.12)'}` }
+                : { background: P.chipIdle, color: P.faint, border: `2px solid ${P.chipIdleBorder}` }}>
+              {submitting ? <span className="w-7 h-7 rounded-full border-4 border-current border-t-transparent animate-spin" /> : I.send}
+            </button>, 'below-end')}
         </div>
-        {rec.note && (
-          <p className="mt-3 text-sm rounded-2xl bg-amber-50/80 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100 px-4 py-2.5 whitespace-pre-wrap">📝 {rec.note}</p>
+
+        {notice && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3 text-[14px] sm:text-[15px] leading-snug"
+            style={{ background: P.noticeBg, border: `1px solid ${P.noticeBorder}`, color: P.noticeInk }}>
+            <span className="flex-1 min-w-[14rem]">{notice}</span>
+            {portalLink && <a href={portalLink} className="font-bold whitespace-nowrap" style={{ color: P.noticeInk }}>Open my Quran page →</a>}
+          </div>
+        )}
+        {rec.purgedAt && (
+          <p className="text-xs" style={{ color: P.faint }}>The recordings of this homework were cleared after the review to save space.</p>
         )}
 
-        {/* Verse chips — the whole width */}
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
+        {/* Verse chips — centred, grouped by surah */}
+        <nav aria-label="Verses" className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
           {verses.map(([vs, va], i) => {
             const done = !!rec.recordings[`${vs}:${va}`];
             const current = i === idx;
-            const newSurah = i > 0 && verses[i - 1][0] !== vs;
+            const newSurah = i === 0 || verses[i - 1][0] !== vs;
             return (
               <React.Fragment key={`${vs}:${va}`}>
-                {(i === 0 || newSurah) && rec.startSurah !== rec.endSurah && (
-                  <span className="self-center px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">
-                    {QURAN_METADATA.find(m => m.number === vs)?.transliteratedName}
-                  </span>
+                {multiSurah && newSurah && (
+                  <>
+                    {i > 0 && <span className="hidden sm:block w-px h-7 mx-2" style={{ background: P.cardBorder }} />}
+                    <span className="hidden sm:inline text-[12px] font-bold uppercase tracking-[0.12em] pr-1" style={{ color: P.faint }}>
+                      {QURAN_METADATA.find(m => m.number === vs)?.transliteratedName}
+                    </span>
+                  </>
                 )}
                 <button onClick={() => take === 'idle' && setIdx(i)}
-                  title={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} ${va}${done ? ' · recorded' : ''}`}
-                  className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full text-sm font-black tabular-nums transition-all ${
-                    done ? 'bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-md shadow-emerald-600/20'
-                      : 'bg-white dark:bg-gray-700 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-gray-600 hover:border-teal-400'
-                  } ${current ? 'ring-4 ring-offset-2 ring-offset-white dark:ring-offset-gray-800 ring-amber-400 scale-110' : ''}`}>
+                  aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${done ? ', recorded' : ''}${current ? ', current' : ''}`}
+                  aria-current={current ? 'step' : undefined}
+                  className="rounded-full text-[14px] sm:text-[16px] font-bold tabular-nums transition-all w-[38px] h-[38px] sm:w-[46px] sm:h-[46px]"
+                  style={current
+                    ? { background: P.goldSoft, color: P.goldInk, border: `3px solid ${P.gold}`, boxShadow: `0 0 0 4px ${P.goldHalo}` }
+                    : done
+                      ? { background: P.chipDone, color: P.chipDoneInk, border: 'none' }
+                      : { background: P.chipIdle, color: P.chipIdleInk, border: `1.5px solid ${P.chipIdleBorder}` }}>
                   {va}
-                  {done && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-emerald-600 text-[10px] leading-4 shadow">✓</span>
-                  )}
                 </button>
               </React.Fragment>
             );
           })}
-        </div>
-      </section>
+        </nav>
+      </header>
 
-      {statusBanner && (
-        <div className={`rounded-2xl bg-gradient-to-r ${statusBanner.cls} text-white px-5 py-3.5 shadow-lg flex flex-wrap items-center gap-x-4 gap-y-2`}>
-          <span className="text-xl">{statusBanner.icon}</span>
-          <span className="font-bold flex-1 min-w-[12rem]">{statusBanner.text}</span>
-          {portalLink && (rec.status === 'passed' || rec.status === 'needs_revision') && (
-            <a href={portalLink} className={`${pill} px-4 py-2 bg-white/20 hover:bg-white/30 text-sm`}>Open my Quran page →</a>
-          )}
-        </div>
-      )}
-      {rec.purgedAt && (
-        <p className="text-xs text-slate-500">The recordings of this homework were cleared after the review to save space.</p>
-      )}
-
-      {/* ── The verse — full width; tap to hear Al-Minshawi ── */}
-      <section className="rounded-[2rem] bg-[#fffdf7] dark:bg-gray-800 border border-amber-100 dark:border-gray-700 shadow-[0_20px_50px_-24px_rgba(120,90,40,0.35)] overflow-hidden">
-        <div className="flex items-center justify-between px-5 sm:px-8 pt-4 sm:pt-5">
-          <span className="inline-flex items-center gap-2 rounded-full bg-amber-100/80 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-3 py-1 text-xs sm:text-sm font-black">
-            {surahName?.transliteratedName} <span className="opacity-50">•</span> Verse {a}
-          </span>
-          <span className="text-xs sm:text-sm font-bold text-slate-400 tabular-nums">{idx + 1} of {verses.length}</span>
-        </div>
+      {/* ── The verse — tap to hear Al-Minshawi ── */}
+      <main className="flex-grow flex flex-col rounded-[24px] sm:rounded-[32px] p-2.5 sm:p-3.5" style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
         <button onClick={playMinshawi} disabled={take === 'recording' || !text}
-          className={`group block w-full px-4 sm:px-10 pt-2 pb-6 sm:pb-8 text-center transition-colors ${minshawiPlaying ? 'bg-teal-50/60 dark:bg-teal-900/10' : 'hover:bg-amber-50/40 dark:hover:bg-gray-700/30'}`}>
+          aria-label={`Play Al-Minshawi reciting ${surahName?.transliteratedName} verse ${a}`}
+          className="flex-grow flex flex-col items-center justify-center gap-4 sm:gap-6 rounded-[18px] sm:rounded-[22px] px-3 sm:px-10 py-6 sm:py-10 transition-colors"
+          style={{ background: P.stage, border: `${theme === 'morning' ? 2 : 1}px solid ${minshawiPlaying ? P.primary : P.stageBorder}` }}>
+          <span className="flex items-center gap-3 text-[12px] sm:text-[14px] font-semibold tracking-[0.06em]" style={{ color: P.goldInk }}>
+            <span className="hidden sm:block w-10 h-px" style={{ background: P.gold }} />
+            {surahName?.transliteratedName} · Verse {a}
+            <span className="hidden sm:block w-10 h-px" style={{ background: P.gold }} />
+          </span>
           {text ? (
-            <p dir="rtl" className={`font-quranic break-words transition-colors ${minshawiPlaying ? 'text-teal-900 dark:text-teal-100' : 'text-slate-900 dark:text-slate-100'}`}
-              style={{ fontSize: 'clamp(2.1rem, 5.4vw, 5.75rem)', lineHeight: 2.5 }}>
+            <p dir="rtl" lang="ar" className="font-quranic m-0 text-center break-words"
+              style={{ color: P.verseInk, fontSize: 'clamp(2.4rem, 6.2vw, 6.5rem)', lineHeight: 2.1 }}>
               {splitVerseWords(text).map((w, i, arr) => (
-                <React.Fragment key={i}>{renderWordWithMarks(w, `r${i}`, 2.5)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
+                <React.Fragment key={i}>{renderWordWithMarks(w, `r${i}`, 2.1)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
               ))}
               {' '}
-              <span className="inline-flex items-center justify-center rounded-full border-[3px] border-amber-400 text-amber-700 dark:text-amber-300 align-middle font-sans font-black whitespace-nowrap"
-                style={{ minWidth: '1.6em', height: '1.6em', padding: '0 0.3em', fontSize: '0.42em', lineHeight: 1 }}>{toArabicDigits(a)}</span>
+              <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap"
+                style={{ minWidth: '1.35em', height: '1.35em', padding: '0 0.25em', fontSize: '0.4em', lineHeight: 1, border: `3px solid ${P.gold}`, color: P.goldInk, fontFamily: BODY, fontWeight: 700 }}>
+                {toArabicDigits(a)}
+              </span>
             </p>
           ) : (
-            <p className="py-16 text-slate-400">Loading the verse…</p>
+            <p className="py-16" style={{ color: P.faint }}>Loading the verse…</p>
           )}
-          <span className={`mt-1 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
-            minshawiPlaying ? 'bg-teal-600 text-white' : 'bg-white dark:bg-gray-700 text-slate-500 dark:text-slate-300 shadow-sm group-hover:text-teal-700'}`}>
-            <SoundBars on={minshawiPlaying} cls={minshawiPlaying ? 'bg-white' : 'bg-teal-500'} />
-            {minshawiPlaying ? 'Al-Minshawi is reciting · tap to stop' : 'Tap the verse to listen to Al-Minshawi'}
+          <span className="inline-flex items-center gap-2.5 rounded-full px-4 py-2 text-[13px] sm:text-[15px] font-semibold"
+            style={minshawiPlaying ? { background: P.primary, color: P.onPrimary } : { background: P.hint, color: P.hintInk }}>
+            {minshawiPlaying ? bars(P.onPrimary, true) : I.speaker}
+            {minshawiPlaying ? 'Al-Minshawi is reciting · tap to stop' : 'Tap the verse to hear Al-Minshawi'}
           </span>
         </button>
-      </section>
+      </main>
 
-      {/* ── Controls dock — stays at the bottom of the screen while a long verse scrolls ── */}
-      <section className="sticky bottom-2 sm:bottom-4 z-20 rounded-3xl bg-white/85 dark:bg-gray-800/85 backdrop-blur border border-white dark:border-gray-700 shadow-[0_12px_40px_-18px_rgba(120,90,40,0.35)] px-2.5 sm:px-6 py-3 sm:py-5">
-        <div className="flex items-center justify-center gap-3 sm:gap-8">
-          {/* Previous */}
+      {/* ── Controls — pinned to the bottom while a long verse scrolls ── */}
+      <footer className="sticky bottom-2 sm:bottom-5 z-30 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
+        style={{
+          background: P.card,
+          border: `1px solid ${take === 'recording' ? P.recordingSoft : P.cardBorder}`,
+          boxShadow: theme === 'night' ? '0 18px 40px -20px rgba(0,0,0,.8)' : '0 18px 40px -22px rgba(120,90,40,.45)',
+        }}>
+        {liveLine && (
+          <div aria-live="polite" className="flex items-center gap-3 text-[14px] font-bold tabular-nums" style={{ color: liveLine.color }}>
+            {take === 'recording' && <span className="w-2.5 h-2.5 rounded-full" style={{ background: P.recording }} />}
+            {liveLine.text}
+            {(take === 'recording' || minePlaying) && bars(liveLine.color, true)}
+          </div>
+        )}
+        <div className="flex items-center justify-center gap-4 sm:gap-7">
           {withTip('Previous verse',
             <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || take !== 'idle'} aria-label="Previous verse"
-              className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-gray-600`}>
-              {Icon.prev}
+              className={smallRound} style={{ background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk }}>
+              {I.prev}
             </button>)}
 
-          {/* Record */}
           {take === 'recording'
             ? withTip('Stop recording',
-              <button onClick={stopRecording} aria-label="Stop recording"
-                className={`${roundBtn} bg-gradient-to-br from-red-500 to-rose-700 shadow-xl shadow-red-600/40`}>
-                <span className="absolute inset-0 rounded-full bg-red-500 rh-pulse" />
-                <span className="relative">{Icon.stop}</span>
+              <button onClick={stopRecording} aria-label="Stop recording" className={bigRound}
+                style={{ background: P.recording, color: P.recordInk === '#1A0B10' ? '#fff' : P.recordInk, border: `7px solid ${P.recordingSoft}` }}>
+                <span className="absolute -inset-2 rounded-full rh-halo" style={{ background: P.recording }} />
+                <span className="relative">{I.stop}</span>
               </button>)
             : withTip(take === 'saving' ? 'Saving…' : hasTake ? 'Record again' : 'Record my recitation',
-              <button onClick={startRecording} disabled={!editable || take === 'saving' || !text} aria-label={hasTake ? 'Record again' : 'Record my recitation'}
-                className={`${roundBtn} bg-gradient-to-br from-rose-400 via-rose-500 to-pink-600 shadow-xl shadow-rose-500/40 hover:shadow-rose-500/60 hover:brightness-105`}>
-                {take === 'saving'
-                  ? <span className="w-8 h-8 rounded-full border-4 border-white/40 border-t-white animate-spin" />
-                  : Icon.mic}
+              <button onClick={startRecording} disabled={!editable || take === 'saving' || !text}
+                aria-label={hasTake ? 'Record again' : 'Record my recitation'} className={bigRound}
+                style={{
+                  background: P.record, color: P.recordInk, border: `6px solid ${P.recordRing}`,
+                  boxShadow: theme === 'morning' ? '0 14px 30px -12px rgba(181,69,47,.7)' : '0 14px 30px -12px rgba(224,103,122,.5)',
+                  opacity: !editable || !text ? 0.45 : 1,
+                }}>
+                {take === 'saving' ? <span className="w-8 h-8 rounded-full border-4 border-current border-t-transparent animate-spin" /> : I.mic}
               </button>)}
 
-          {/* My recitation */}
           {withTip(
-            !hasTake ? 'Not recorded yet' : minePlaying ? 'Stop' : `Listen to my recitation${takeMs ? ` (${fmtSecs(takeMs)})` : ''}`,
-            <button onClick={playMine} disabled={!hasTake || take !== 'idle'} aria-label={hasTake ? 'Listen to my recitation' : 'Not recorded yet'}
-              className={`${roundBtn} bg-gradient-to-br from-indigo-400 via-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:brightness-105 ${minePlaying ? 'ring-4 ring-indigo-300/70' : ''}`}>
-              {minePlaying ? <span className="scale-125">{Icon.pause}</span> : <span className="scale-125 translate-x-0.5">{Icon.play}</span>}
+            !hasTake ? 'Not recorded yet' : minePlaying ? 'Pause' : `Listen to my recitation${takeMs ? ` (${fmtSecs(takeMs)})` : ''}`,
+            <button onClick={playMine} disabled={!hasTake || take !== 'idle'}
+              aria-label={!hasTake ? 'My recitation — not recorded yet' : minePlaying ? 'Pause my recitation' : 'Listen to my recitation'}
+              className={bigRound}
+              style={{
+                background: P.mine, color: P.mineInk, border: `6px solid ${P.mineRing}`,
+                opacity: hasTake ? 1 : 0.45,
+                boxShadow: minePlaying ? `0 0 0 8px ${theme === 'night' ? 'rgba(143,168,255,.16)' : 'rgba(47,122,98,.14)'}` : undefined,
+              }}>
+              {minePlaying ? I.pause : <span className="translate-x-0.5">{I.play}</span>}
             </button>)}
 
-          {/* Next */}
           {withTip('Next verse',
             <button onClick={() => setIdx(i => Math.min(verses.length - 1, i + 1))} disabled={idx >= verses.length - 1 || take !== 'idle'} aria-label="Next verse"
-              className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full text-white bg-gradient-to-br from-teal-500 to-teal-700 shadow-md shadow-teal-700/25 hover:brightness-110`}>
-              {Icon.next}
+              className={smallRound} style={{ background: P.primary, color: P.onPrimary, border: 'none' }}>
+              {I.next}
             </button>)}
         </div>
-
-        {take === 'recording' && (
-          <p className="mt-2 text-center text-sm font-black tabular-nums text-red-600">● Recording {fmtSecs(elapsed)}</p>
-        )}
-        <p className="hidden sm:block mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
-          {take === 'recording' ? 'Recite the verse, then tap the red button to stop.'
-            : hasTake ? 'Happy with it? Go to the next verse. Not yet? Record again — it replaces this one.'
-            : 'Tap the verse to listen as many times as you like, then tap the microphone and recite it.'}
-        </p>
-        {error && <p className="mt-2 text-center text-sm font-semibold text-red-600">{error}</p>}
-      </section>
+        {error && <p className="text-center text-[14px] font-semibold" style={{ color: P.recording }}>{error}</p>}
+      </footer>
     </div>,
   );
 };
