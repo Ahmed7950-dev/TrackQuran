@@ -92,20 +92,76 @@ export interface LetterMatchResult {
   durationMs: number;
 }
 
+export interface LetterMatchAttempt {
+  id: string;
+  challengeId: string;
+  attemptNo: number;
+  correct: number;
+  total: number;
+  mistakes: number;
+  wrongLetters: Record<string, number>;
+  unmatched: string[];
+  endedReason: EndReason;
+  durationMs: number;
+  completedAt: string;
+}
+
+interface AttemptRow {
+  id: string; challenge_id: string; attempt_no: number; correct: number; total: number; mistakes: number;
+  wrong_letters: Record<string, number> | null; unmatched: string[] | null; ended_reason: EndReason;
+  duration_ms: number; completed_at: string;
+}
+
+const attemptFromRow = (r: AttemptRow): LetterMatchAttempt => ({
+  id: r.id, challengeId: r.challenge_id, attemptNo: r.attempt_no, correct: r.correct, total: r.total,
+  mistakes: r.mistakes, wrongLetters: r.wrong_letters ?? {}, unmatched: r.unmatched ?? [],
+  endedReason: r.ended_reason, durationMs: r.duration_ms, completedAt: r.completed_at,
+});
+
+export const attemptResult = (a: LetterMatchAttempt): LetterMatchResult => ({
+  correct: a.correct, mistakes: a.mistakes, wrongLetters: a.wrongLetters,
+  unmatched: a.unmatched, endedReason: a.endedReason, durationMs: a.durationMs,
+});
+
+/** Every attempt of a challenge, oldest first. */
+export async function listLetterMatchAttempts(challengeId: string): Promise<LetterMatchAttempt[]> {
+  const { data, error } = await supabase.from('letter_match_attempts').select('*')
+    .eq('challenge_id', challengeId).order('attempt_no', { ascending: true });
+  if (error) { console.error('listLetterMatchAttempts:', error.message); return []; }
+  return (data as AttemptRow[]).map(attemptFromRow);
+}
+
+/** A student's challenges, newest first, each with its attempt count. */
+export async function listLetterMatchesForStudent(studentId: string): Promise<Array<LetterMatchChallenge & { attempts: number }>> {
+  const { data, error } = await supabase.from('letter_match_challenges')
+    .select('*, letter_match_attempts(count)').eq('student_id', studentId)
+    .order('created_at', { ascending: false }).limit(30);
+  if (error) { console.error('listLetterMatchesForStudent:', error.message); return []; }
+  return (data as Array<Row & { letter_match_attempts?: Array<{ count: number }> }>)
+    .map(r => ({ ...fromRow(r), attempts: r.letter_match_attempts?.[0]?.count ?? 0 }));
+}
+
 /**
- * Save the result (first finish only), add the wrong matches to the student's
- * per-shape tally, and tell the tutor. Returns the stored row, or null when it
- * had already been completed (the result then isn't counted twice).
+ * Save one finished attempt: a new attempts row, the challenge row's latest
+ * result, the wrong matches added to the student's per-shape tally, and a note
+ * to the tutor. Every attempt counts — a redo is real practice.
  */
-export async function completeLetterMatch(ch: LetterMatchChallenge, r: LetterMatchResult): Promise<LetterMatchChallenge | null> {
-  const { data, error } = await supabase.from('letter_match_challenges').update({
+export async function completeLetterMatch(ch: LetterMatchChallenge, r: LetterMatchResult): Promise<LetterMatchAttempt | null> {
+  const { count } = await supabase.from('letter_match_attempts')
+    .select('id', { count: 'exact', head: true }).eq('challenge_id', ch.id);
+  const attemptNo = (count ?? 0) + 1;
+  const { data, error } = await supabase.from('letter_match_attempts').insert({
+    challenge_id: ch.id, attempt_no: attemptNo, correct: r.correct, total: ch.letters.length,
+    mistakes: r.mistakes, wrong_letters: r.wrongLetters, unmatched: r.unmatched,
+    ended_reason: r.endedReason, duration_ms: r.durationMs,
+  }).select('*').single();
+  if (error) { console.error('completeLetterMatch attempt:', error.message); return null; }
+
+  await supabase.from('letter_match_challenges').update({
     status: 'completed', correct: r.correct, mistakes: r.mistakes, wrong_letters: r.wrongLetters,
     unmatched: r.unmatched, ended_reason: r.endedReason, duration_ms: r.durationMs,
     completed_at: new Date().toISOString(),
-  }).eq('id', ch.id).neq('status', 'completed').select('*').maybeSingle();
-  if (error) { console.error('completeLetterMatch:', error.message); return null; }
-  if (!data) return null;
-  const done = fromRow(data as Row);
+  }).eq('id', ch.id);
 
   if (Object.keys(r.wrongLetters).length) {
     const { error: e } = await supabase.rpc('bump_letter_form_misses', {
@@ -119,11 +175,11 @@ export async function completeLetterMatch(ch: LetterMatchChallenge, r: LetterMat
   await createNotification({
     teacherId: ch.teacherId, studentId: ch.studentId, recipient: 'tutor', bookingId: null,
     type: 'letter_match_completed',
-    title: 'Letter shapes challenge done',
+    title: attemptNo > 1 ? `Letter shapes challenge — attempt ${attemptNo}` : 'Letter shapes challenge done',
     body: `${ch.studentName ?? 'Your student'} matched ${r.correct} of ${total} letters with ${r.mistakes} mistake${r.mistakes === 1 ? '' : 's'}${why}.`,
-    metadata: { challengeId: ch.id },
+    metadata: { challengeId: ch.id, attempt: String(attemptNo) },
   });
-  return done;
+  return attemptFromRow(data as AttemptRow);
 }
 
 /** Wrong-match tallies for one student: shape → letter → count. */

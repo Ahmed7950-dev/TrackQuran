@@ -1392,14 +1392,14 @@ const AlphabetTrainerPage: React.FC<{
           initialForm={letterForm}
           student={logTarget}
           onExit={() => { reloadFormMisses(); setView('select'); }}
-          onCompleted={c => {
+          onCompleted={(c, attempt) => {
             reloadFormMisses();
             if (!logTarget || !onLogActivity || c.studentId !== logTarget.id) return;
             onLogActivity(logTarget.id, {
               kind: 'letters',
               title: `${c.letters.length} letter${c.letters.length === 1 ? '' : 's'} revised through letter shapes match`,
-              detail: `${c.correct ?? 0}/${c.letters.length} matched · ${c.mistakes ?? 0} mistake${c.mistakes === 1 ? '' : 's'} · ${c.form} · ${c.letters.join(' ')}`,
-              sourceId: `LetterMatch:${c.id}`,
+              detail: `${attempt.correct}/${attempt.total} matched · ${attempt.mistakes} mistake${attempt.mistakes === 1 ? '' : 's'} · ${c.form} · attempt ${attempt.attemptNo} · ${c.letters.join(' ')}`,
+              sourceId: `LetterMatch:${c.id}:${attempt.attemptNo}`,
             }, logTarget.name);
           }}
         />

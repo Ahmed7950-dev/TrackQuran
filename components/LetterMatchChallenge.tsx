@@ -23,7 +23,8 @@ import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 import {
   EndReason, LetterMatchChallenge, LetterMatchResult, MatchForm,
   completeLetterMatch, createLetterMatch, getLetterMatch, letterMatchChannel,
-  letterMatchUrl, markLetterMatchStarted,
+  letterMatchUrl, markLetterMatchStarted, LetterMatchAttempt, listLetterMatchAttempts,
+  listLetterMatchesForStudent, attemptResult,
 } from '../services/letterMatchService';
 
 export const GROUP_SIZE = 10;
@@ -267,11 +268,65 @@ export const MatchResults: React.FC<{
   );
 };
 
-const resultOfRow = (c: LetterMatchChallenge): LetterMatchResult | null =>
-  c.status !== 'completed' ? null : {
-    correct: c.correct ?? 0, mistakes: c.mistakes ?? 0, wrongLetters: c.wrongLetters ?? {},
-    unmatched: c.unmatched ?? [], endedReason: c.endedReason ?? 'done', durationMs: c.durationMs ?? 0,
-  };
+const fmtWhen = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** Every attempt of a challenge, newest first, with the best one marked and the
+ *  change since the first attempt. */
+export const AttemptHistory: React.FC<{ attempts: LetterMatchAttempt[]; form: MatchForm; title?: string }> = ({ attempts, form, title = 'Attempts' }) => {
+  if (attempts.length === 0) return null;
+  const best = [...attempts].sort((a, b) => (b.correct - a.correct) || (a.mistakes - b.mistakes) || (a.durationMs - b.durationMs))[0];
+  const first = attempts[0], last = attempts[attempts.length - 1];
+  const dCorrect = last.correct - first.correct, dMistakes = last.mistakes - first.mistakes;
+  const endLabel = (r: EndReason) => (r === 'time' ? "⏱ time's up" : r === 'lives' ? '💔 out of lives' : '✓ finished');
+  return (
+    <section className="max-w-2xl mx-auto mt-6 rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-gray-700">
+        <h3 className="text-sm font-black text-slate-700 dark:text-slate-200">{title} <span className="text-slate-400 font-bold">({attempts.length})</span></h3>
+        {attempts.length > 1 && (
+          <span className="ml-auto text-xs font-bold text-slate-500 dark:text-slate-400">
+            Since attempt 1:{' '}
+            <span className={dCorrect > 0 ? 'text-emerald-600' : dCorrect < 0 ? 'text-red-600' : ''}>{dCorrect >= 0 ? '+' : ''}{dCorrect} matched</span>
+            {' · '}
+            <span className={dMistakes < 0 ? 'text-emerald-600' : dMistakes > 0 ? 'text-red-600' : ''}>{dMistakes >= 0 ? '+' : ''}{dMistakes} mistakes</span>
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-slate-100 dark:divide-gray-700">
+        {[...attempts].reverse().map(a => {
+          const wrong = Object.entries(a.wrongLetters).sort((x, y) => y[1] - x[1]);
+          return (
+            <div key={a.id} className={`px-4 py-3 ${a.id === best.id && attempts.length > 1 ? 'bg-emerald-50/60 dark:bg-emerald-900/15' : ''}`}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-sm font-black text-slate-700 dark:text-slate-200">#{a.attemptNo}</span>
+                {a.id === best.id && attempts.length > 1 && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide">Best</span>
+                )}
+                <span className="text-xs text-slate-400">{fmtWhen(a.completedAt)}</span>
+                <span className="ml-auto flex items-center gap-2 text-xs font-bold">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✓ {a.correct}/{a.total}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300">✗ {a.mistakes}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 tabular-nums">{fmtClock(a.durationMs)}</span>
+                  <span className="text-slate-400 font-semibold">{endLabel(a.endedReason)}</span>
+                </span>
+              </div>
+              {wrong.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5" dir="rtl">
+                  {wrong.map(([l, n]) => (
+                    <span key={l} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200">
+                      <span style={{ fontFamily: LETTER_FONT, fontSize: '1.3rem', lineHeight: 1.3 }}>{shapeOf(l, 'isolated')} {shapeOf(l, form)}</span>
+                      <span className="text-[11px] font-black">×{n}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
 // ── Player: the game itself (runs on the student's device) ──────────────────
 
@@ -392,13 +447,16 @@ const Player: React.FC<{
 
 export const LetterMatchWatch: React.FC<{
   challenge: LetterMatchChallenge;
-  onCompleted?: (c: LetterMatchChallenge) => void;
+  /** A NEW attempt was saved while watching (not the ones that already existed). */
+  onCompleted?: (c: LetterMatchChallenge, attempt: LetterMatchAttempt) => void;
 }> = ({ challenge, onCompleted }) => {
   const [snap, setSnap] = useState<MatchSnap | null>(null);
-  const [row, setRow] = useState(challenge);
+  const [attempts, setAttempts] = useState<LetterMatchAttempt[] | null>(null);
   const receivedAt = useRef(0);
   const [, tick] = useState(0);
-  const completedFired = useRef(false);
+  const knownCount = useRef<number | null>(null);
+  const onCompletedRef = useRef(onCompleted);
+  onCompletedRef.current = onCompleted;
 
   useEffect(() => {
     const ch = createGameChannel(letterMatchChannel(challenge.id), 'guest');
@@ -413,47 +471,61 @@ export const LetterMatchWatch: React.FC<{
     return () => { window.clearInterval(iv); ch.unsubscribe(); };
   }, [challenge.id]);
 
-  // The saved row is the source of truth for the result — poll until it lands.
+  // Saved attempts are the source of truth — polled, faster right after a run ends.
   useEffect(() => {
-    if (row.status === 'completed') return;
-    const iv = window.setInterval(async () => {
-      const fresh = await getLetterMatch(challenge.id);
-      if (fresh) setRow(fresh);
-    }, snap?.ph === 'over' ? 1500 : 5000);
-    return () => window.clearInterval(iv);
-  }, [challenge.id, row.status, snap?.ph]);
+    let live = true;
+    const load = async () => {
+      const list = await listLetterMatchAttempts(challenge.id);
+      if (!live) return;
+      setAttempts(list);
+      if (knownCount.current === null) knownCount.current = list.length;
+      else if (list.length > knownCount.current) {
+        knownCount.current = list.length;
+        onCompletedRef.current?.(challenge, list[list.length - 1]);
+      }
+    };
+    load();
+    const iv = window.setInterval(load, snap?.ph === 'over' ? 1500 : 4000);
+    return () => { live = false; window.clearInterval(iv); };
+  }, [challenge, snap?.ph]);
 
-  useEffect(() => {
-    if (row.status === 'completed' && !completedFired.current) {
-      completedFired.current = true;
-      onCompleted?.(row);
-    }
-  }, [row, onCompleted]);
+  const fresh = snap && Date.now() - receivedAt.current < 6000;
+  const playingNow = !!fresh && snap!.ph !== 'over';
+  const latest = attempts && attempts.length ? attempts[attempts.length - 1] : null;
+  const history = attempts && <AttemptHistory attempts={attempts} form={challenge.form} />;
 
-  const saved = resultOfRow(row);
-  if (saved) return <MatchResults letters={row.letters} form={row.form} result={saved} studentName={row.studentName} />;
-  if (snap?.ph === 'over' && snap.result) {
-    return <MatchResults letters={row.letters} form={row.form} result={snap.result} studentName={row.studentName} />;
-  }
-  if (!snap) {
+  if (playingNow) {
+    const left = snap!.timeLeftMs === null ? null : Math.max(0, snap!.timeLeftMs - (Date.now() - receivedAt.current));
     return (
-      <div className="text-center py-10">
-        <p className="text-4xl mb-2 animate-pulse">👀</p>
-        <p className="font-bold text-slate-600 dark:text-slate-300">Waiting for {row.studentName ?? 'your student'} to start…</p>
-        <p className="text-xs text-slate-400 mt-1">The board appears here as soon as they begin.</p>
+      <div>
+        <ShakeStyle />
+        <p className="text-center text-xs font-bold mb-2 text-emerald-600">
+          ● Live — {challenge.studentName ?? 'student'} is playing{attempts && attempts.length ? ` attempt ${attempts.length + 1}` : ''}
+        </p>
+        <StatusBar snap={snap!} timeLeftMs={left} />
+        <Board snap={snap!} />
+        {history}
       </div>
     );
   }
-  const stale = Date.now() - receivedAt.current > 6000;
-  const left = snap.timeLeftMs === null ? null : Math.max(0, snap.timeLeftMs - (Date.now() - receivedAt.current));
+  if (latest) {
+    return (
+      <div>
+        <MatchResults letters={challenge.letters} form={challenge.form} result={attemptResult(latest)} studentName={challenge.studentName} />
+        <p className="text-center text-xs text-slate-400 mt-3">Watching — if {challenge.studentName ?? 'the student'} tries again, the board appears here.</p>
+        {history}
+      </div>
+    );
+  }
+  if (snap?.ph === 'over' && snap.result) {
+    return <MatchResults letters={challenge.letters} form={challenge.form} result={snap.result} studentName={challenge.studentName} />;
+  }
   return (
-    <div>
-      <ShakeStyle />
-      <p className={`text-center text-xs font-bold mb-2 ${stale ? 'text-amber-600' : 'text-emerald-600'}`}>
-        {stale ? '⚠ Connection quiet — the student may have left the page' : `● Live — ${row.studentName ?? 'student'} is playing`}
-      </p>
-      <StatusBar snap={snap} timeLeftMs={left} />
-      <Board snap={snap} />
+    <div className="text-center py-10">
+      <p className="text-4xl mb-2 animate-pulse">👀</p>
+      <p className="font-bold text-slate-600 dark:text-slate-300">Waiting for {challenge.studentName ?? 'your student'} to start…</p>
+      <p className="text-xs text-slate-400 mt-1">The board appears here as soon as they begin.</p>
+      {snap && !fresh && <p className="text-xs text-amber-600 mt-2">⚠ Connection quiet — the student may have left the page</p>}
     </div>
   );
 };
@@ -473,8 +545,16 @@ export const LetterMatchSetup: React.FC<{
   initialForm: MatchForm | 'isolated';
   student: { id: string; name: string } | null;
   onExit: () => void;
-  onCompleted?: (c: LetterMatchChallenge) => void;
+  onCompleted?: (c: LetterMatchChallenge, attempt: LetterMatchAttempt) => void;
 }> = ({ letters, initialForm, student, onExit, onCompleted }) => {
+  // This student's earlier challenges — open one to see its attempts or watch a redo.
+  const [previous, setPrevious] = useState<Array<LetterMatchChallenge & { attempts: number }>>([]);
+  useEffect(() => {
+    if (!student) return;
+    listLetterMatchesForStudent(student.id).then(setPrevious);
+  }, [student?.id]);
+  const [playRun, setPlayRun] = useState(0);
+  const [playAttempts, setPlayAttempts] = useState<LetterMatchAttempt[]>([]);
   const [form, setForm] = useState<MatchForm | null>(initialForm === 'isolated' ? null : initialForm);
   const [timer, setTimer] = useState<number | null>(120);
   const [customTimer, setCustomTimer] = useState('');
@@ -583,6 +663,35 @@ export const LetterMatchSetup: React.FC<{
             className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black disabled:opacity-40">
             {busy ? 'Creating…' : 'Create challenge link'}
           </button>
+
+          {previous.length > 0 && (
+            <section className="pt-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">{student?.name}'s previous challenges</p>
+              <div className="rounded-2xl border border-slate-200 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700 overflow-hidden">
+                {previous.map(c => (
+                  <button key={c.id} onClick={() => { setChallenge(c); setMode('watch'); setPlayResult(null); }}
+                    className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{FORM_LABEL[c.form].en}</span>
+                    <span dir="rtl" className="text-lg text-slate-600 dark:text-slate-300 truncate max-w-[12rem]" style={{ fontFamily: LETTER_FONT }}>
+                      {c.letters.slice(0, 8).map(l => shapeOf(l, 'isolated')).join(' ')}{c.letters.length > 8 ? ' …' : ''}
+                    </span>
+                    <span className="text-xs text-slate-400">{fmtWhen(c.createdAt)}</span>
+                    <span className="ml-auto flex items-center gap-2 text-xs font-bold">
+                      {c.attempts > 0 ? (
+                        <>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">latest ✓ {c.correct ?? 0}/{c.letters.length}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300">{c.attempts} attempt{c.attempts === 1 ? '' : 's'}</span>
+                        </>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">not played yet</span>
+                      )}
+                      <span className="text-sky-600">Open →</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       ) : (
         <div className="space-y-5">
@@ -611,13 +720,23 @@ export const LetterMatchSetup: React.FC<{
           </div>
 
           {mode === 'play' && !playResult ? (
-            <Player challenge={challenge} onDone={async r => {
+            <Player key={playRun} challenge={challenge} onDone={async r => {
               setPlayResult(r);
               const done = await completeLetterMatch(challenge, r);
-              if (done) onCompleted?.(done);
+              if (done) {
+                onCompleted?.(challenge, done);
+                setPlayAttempts(await listLetterMatchAttempts(challenge.id));
+              }
             }} />
           ) : playResult ? (
-            <MatchResults letters={challenge.letters} form={challenge.form} result={playResult} studentName={challenge.studentName} />
+            <div>
+              <MatchResults letters={challenge.letters} form={challenge.form} result={playResult} studentName={challenge.studentName} />
+              <div className="mt-4 flex justify-center">
+                <button onClick={() => { setPlayResult(null); setPlayRun(n => n + 1); }}
+                  className="px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black">🔁 Try again</button>
+              </div>
+              <AttemptHistory attempts={playAttempts} form={challenge.form} />
+            </div>
           ) : (
             <LetterMatchWatch challenge={challenge} onCompleted={onCompleted} />
           )}
@@ -643,12 +762,17 @@ export const LetterMatchPage: React.FC<{ challengeId: string }> = ({ challengeId
   const [stage, setStage] = useState<'intro' | 'playing' | 'done'>('intro');
   const [result, setResult] = useState<LetterMatchResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [attempts, setAttempts] = useState<LetterMatchAttempt[]>([]);
+  const [run, setRun] = useState(0);
 
   useEffect(() => {
     document.title = 'Letter shapes challenge';
     (async () => {
-      const [c, session] = await Promise.all([getLetterMatch(challengeId), supabase.auth.getSession()]);
+      const [c, session, list] = await Promise.all([
+        getLetterMatch(challengeId), supabase.auth.getSession(), listLetterMatchAttempts(challengeId),
+      ]);
       setChallenge(c);
+      setAttempts(list);
       if (c && session.data.session?.user.id === c.teacherId) setIsTutor(true);
     })();
   }, [challengeId]);
@@ -677,46 +801,70 @@ export const LetterMatchPage: React.FC<{ challengeId: string }> = ({ challengeId
 
   if (isTutor) return shell(<>{header}<LetterMatchWatch challenge={challenge} /></>);
 
-  const saved = resultOfRow(challenge);
-  if (stage !== 'playing' && (result || saved)) {
+  const startRun = () => {
+    markLetterMatchStarted(challenge.id);
+    setResult(null);
+    setRun(n => n + 1);
+    setStage('playing');
+  };
+  const tryAgainButton = (
+    <button onClick={startRun} className="w-full py-4 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-lg font-black">
+      🔁 Try again
+    </button>
+  );
+
+  // Just finished a run
+  if (stage === 'done' && result) {
     return shell(<>{header}
-      <MatchResults letters={challenge.letters} form={challenge.form} result={(result ?? saved)!} studentName={challenge.studentName} />
-      <p className="text-center text-sm text-slate-500 mt-4">
+      <MatchResults letters={challenge.letters} form={challenge.form} result={result} studentName={challenge.studentName} />
+      <p className="text-center text-sm text-slate-500 my-4">
         {saving ? 'Sending your result to your teacher…' : '✓ Your teacher has your result.'}
       </p>
+      <div className="max-w-md mx-auto">{tryAgainButton}</div>
+      <AttemptHistory attempts={attempts} form={challenge.form} title="Your attempts" />
     </>);
   }
 
   if (stage === 'intro') {
+    const last = attempts[attempts.length - 1];
     return shell(<>{header}
       <div className="max-w-md mx-auto text-center space-y-5">
         {challenge.studentName && <p className="text-slate-500 dark:text-slate-400">Assalamu alaikum, {challenge.studentName}!</p>}
-        <div className="flex justify-center gap-6 items-center" dir="rtl" style={{ fontFamily: LETTER_FONT }}>
-          <span className="text-5xl text-slate-700 dark:text-slate-200">{shapeOf('ب', 'isolated')}</span>
-          <span className="text-2xl text-emerald-500">⟵</span>
-          <span className="text-5xl text-sky-600">{shapeOf('ب', challenge.form)}</span>
-        </div>
-        <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-          Tap a letter on the <b>Isolated</b> side, then tap the same letter in its <b>{FORM_LABEL[challenge.form].en.toLowerCase()}</b> shape.
-          You can also drag from one to the other.
-        </p>
+        {last ? (
+          <MatchResults letters={challenge.letters} form={challenge.form} result={attemptResult(last)} studentName={challenge.studentName} />
+        ) : (
+          <>
+            <div className="flex justify-center gap-6 items-center" dir="rtl" style={{ fontFamily: LETTER_FONT }}>
+              <span className="text-5xl text-slate-700 dark:text-slate-200">{shapeOf('ب', 'isolated')}</span>
+              <span className="text-2xl text-emerald-500">⟵</span>
+              <span className="text-5xl text-sky-600">{shapeOf('ب', challenge.form)}</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              Tap a letter on the <b>Isolated</b> side, then tap the same letter in its <b>{FORM_LABEL[challenge.form].en.toLowerCase()}</b> shape.
+              You can also drag from one to the other.
+            </p>
+          </>
+        )}
         <div className="grid grid-cols-3 gap-2 text-sm font-bold">
           <div className="rounded-xl bg-white dark:bg-gray-800 py-3 border border-slate-200 dark:border-gray-700">{challenge.letters.length} letters</div>
           <div className="rounded-xl bg-white dark:bg-gray-800 py-3 border border-slate-200 dark:border-gray-700">{challenge.timerSeconds ? `⏱ ${fmtClock(challenge.timerSeconds * 1000)}` : 'No timer'}</div>
           <div className="rounded-xl bg-white dark:bg-gray-800 py-3 border border-slate-200 dark:border-gray-700">{challenge.lives ? `❤️ ${challenge.lives}` : 'Unlimited lives'}</div>
         </div>
-        <button onClick={() => { markLetterMatchStarted(challenge.id); setStage('playing'); }}
-          className="w-full py-4 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-lg font-black">Start ▶</button>
+        {last ? tryAgainButton : (
+          <button onClick={startRun} className="w-full py-4 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-lg font-black">Start ▶</button>
+        )}
       </div>
+      <AttemptHistory attempts={attempts} form={challenge.form} title="Your attempts" />
     </>);
   }
 
   return shell(<>{header}
-    <Player challenge={challenge} onDone={async r => {
+    <Player key={run} challenge={challenge} onDone={async r => {
       setResult(r);
       setSaving(true);
       window.setTimeout(() => setStage('done'), 1200);
       await completeLetterMatch(challenge, r);
+      setAttempts(await listLetterMatchAttempts(challenge.id));
       setSaving(false);
     }} />
   </>);
