@@ -136,6 +136,8 @@ export interface QuranHomework {
   note?: string;
   assignedAt: string;
   isDone: boolean;
+  /** Set when the student records each verse (quran_recitation_homework.id). */
+  recitationId?: string;
 }
 
 // ── Tajweed lesson ──────────────────────────────────────────────────────────

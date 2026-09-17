@@ -30,7 +30,10 @@ export type NotificationType =
   | 'lesson_scheduled'
   | 'vocab_homework_assigned'
   | 'vocab_homework_completed'
-  | 'letter_match_completed';
+  | 'letter_match_completed'
+  | 'quran_recitation_assigned'
+  | 'quran_recitation_submitted'
+  | 'quran_recitation_reviewed';
 
 export interface BookingNotification {
   id:         string;

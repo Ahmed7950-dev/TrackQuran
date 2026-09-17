@@ -61,6 +61,12 @@ import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
+import RecitationHomeworkPage from './components/RecitationHomeworkPage';
+import RecitationReviewPanel from './components/RecitationReviewPanel';
+import {
+  RecitationHomework, createRecitationHomework, deleteRecitationHomework, getRecitationHomework,
+  listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations, recitationUrl,
+} from './services/recitationHomeworkService';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -519,6 +525,13 @@ const App: React.FC = () => {
   })();
   if (letterMatchId) return <LetterMatchPage challengeId={letterMatchId} />;
 
+  // ── Recitation homework — the student records each verse, no auth ─────────
+  const recitationId = (() => {
+    const m = window.location.pathname.match(/^\/recite\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (recitationId) return <RecitationHomeworkPage recitationId={recitationId} />;
+
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   // Navigation state is persisted to localStorage (see effect below) so a page
@@ -530,6 +543,9 @@ const App: React.FC = () => {
   // Verse key the tutor's Quran view should jump to (homework "go to" button),
   // with a nonce so tapping the same homework twice still navigates.
   const [quranHomeworkJump, setQuranHomeworkJump] = useState<{ key: string; n: number } | null>(null);
+  // Recitation homework of the student in view (by id), and the one under review.
+  const [recitations, setRecitations] = useState<Record<string, RecitationHomework>>({});
+  const [reviewRec, setReviewRec] = useState<RecitationHomework | null>(null);
   const [sessionStudentId, setSessionStudentId] = useState<string | null>(null);
   const [tajweedRules, setTajweedRules] = useState<string[]>([]);
   const { currentTheme, toggleTheme } = useTheme();
@@ -877,6 +893,27 @@ const App: React.FC = () => {
   const currentUserId   = currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? (currentUser as { id: string }).id : null;
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   const currentUserRole = currentUser?.role ?? null;
+
+  // Recitation homework of the student in view — for the homework tab's status
+  // chips and review buttons. Refreshed when the tab opens so a fresh submission shows.
+  const hwStudentId = sessionStudentId ?? selectedStudentId;
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !hwStudentId) { setRecitations({}); return; }
+    let live = true;
+    listRecitationHomework(hwStudentId).then(list => {
+      if (live) setRecitations(Object.fromEntries(list.map(r => [r.id, r])));
+    });
+    return () => { live = false; };
+  }, [currentUserRole, hwStudentId, activeTab]);
+
+  // Recordings are only kept for a while: 30 days after the review, 60 if never
+  // submitted. Checked once per app load; the audio goes, the row stays.
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !currentUserId) return;
+    purgeOldRecitations(currentUserId)
+      .then(n => { if (n) console.info(`[recitations] cleared the recordings of ${n} old homework(s)`); })
+      .catch(() => {});
+  }, [currentUserId, currentUserRole]);
 
   // Keep lesson sessions in step with Google Calendar wherever the tutor is in
   // the app — not only while the Calendar page is open. Student portals, the
@@ -1432,9 +1469,12 @@ const App: React.FC = () => {
     handleUpdateStudent(updatedStudent);
   };
 
-  const handleLogHomework = async (studentId: string, range: { start: Progress; end: Progress }, note: string) => {
+  const handleLogHomework = async (
+    studentId: string, range: { start: Progress; end: Progress }, note: string, opts?: { recite?: boolean },
+  ) => {
     const student = students.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
+    const reportId = await getStudentReportId(currentUser.id, studentId);
     const newHomework: QuranHomework = {
       id: `hw-${Date.now()}`,
       startSurah: range.start.surah,
@@ -1445,12 +1485,25 @@ const App: React.FC = () => {
       assignedAt: new Date().toISOString(),
       isDone:     false,
     };
+    // Recitation homework: the recordings row, and a notification with the link.
+    if (opts?.recite) {
+      const rec = await createRecitationHomework({
+        homeworkId: newHomework.id, teacherId: currentUser.id, studentId, studentName: student.name,
+        reportId: reportId ?? null,
+        startSurah: newHomework.startSurah, startAyah: newHomework.startAyah,
+        endSurah: newHomework.endSurah, endAyah: newHomework.endAyah, note: newHomework.note,
+      });
+      if (rec) {
+        newHomework.recitationId = rec.id;
+        setRecitations(prev => ({ ...prev, [rec.id]: rec }));
+        notifyRecitationAssigned(rec);
+      }
+    }
     const updatedHomework = [...(student.quranHomework || []), newHomework];
     const updatedStudent = { ...student, quranHomework: updatedHomework };
     handleUpdateStudent(updatedStudent);
 
     // Also push into the shared report so students see it immediately on their portal
-    const reportId = await getStudentReportId(currentUser.id, studentId);
     if (reportId) {
       await updateQuranHomeworkInReport(reportId, updatedHomework);
       // Broadcast so the student's already-open portal updates live
@@ -1460,6 +1513,16 @@ const App: React.FC = () => {
         payload: { quranHomework: updatedHomework },
       });
     }
+  };
+
+  /** Open a submitted recitation homework for review: the student's Quran page
+   *  at the first verse, with the recordings panel on top. */
+  const openRecitationReview = (rec: RecitationHomework) => {
+    setSelectedArabicStudentId(null);
+    setSessionStudentId(rec.studentId);
+    setActiveTab('main');
+    setQuranHomeworkJump(prev => ({ key: `${rec.startSurah}:${rec.startAyah}`, n: (prev?.n ?? 0) + 1 }));
+    setReviewRec(rec);
   };
 
   // Mark a homework item done (tutor side) and push it to the student's portal.
@@ -1610,6 +1673,7 @@ const App: React.FC = () => {
                 teacherId={currentUser.id}
                 recipient="tutor"
                 onNavigate={(sid, lid) => {
+                  if (lid.startsWith('recite:')) { getRecitationHomework(lid.slice(7)).then(r => { if (r) openRecitationReview(r); }); return; }
                   setSelectedArabicStudentId(sid);
                   setActiveTab('main');
                   setHwDeepLink({ studentId: sid, lessonId: lid });
@@ -1836,6 +1900,7 @@ const App: React.FC = () => {
                   teacherId={currentUser.id}
                   recipient="tutor"
                   onNavigate={(sid, lid) => {
+                    if (lid.startsWith('recite:')) { getRecitationHomework(lid.slice(7)).then(r => { if (r) openRecitationReview(r); }); return; }
                     setSelectedArabicStudentId(sid);
                     setActiveTab('main');
                     setHwDeepLink({ studentId: sid, lessonId: lid });
@@ -2121,6 +2186,9 @@ const App: React.FC = () => {
             return `${s} ${hw.startAyah} → ${e} ${hw.endAyah}`;
           };
           const removeHomework = async (homeworkId: string) => {
+            const gone = hw_all.find(hw => hw.id === homeworkId);
+            const rec = gone?.recitationId ? recitations[gone.recitationId] : undefined;
+            if (rec) deleteRecitationHomework(rec);   // its recordings too
             const updated = hw_all.filter(hw => hw.id !== homeworkId);
             handleUpdateStudent({ ...hw_student, quranHomework: updated });
             const reportId = await getStudentReportId(currentUser.id, hw_student.id);
@@ -2171,6 +2239,30 @@ const App: React.FC = () => {
                         Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                         {hw.isDone && ' · ✅ Done'}
                       </p>
+                      {hw.recitationId && (() => {
+                        const rec = recitations[hw.recitationId];
+                        const n = rec ? Object.keys(rec.recordings).length : 0;
+                        const chip = !rec ? { cls: 'bg-slate-100 text-slate-500', text: '🎙 Recording homework' }
+                          : rec.status === 'submitted' ? { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300', text: '📨 Submitted — ready to review' }
+                          : rec.status === 'passed' ? { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', text: '✅ Passed' }
+                          : rec.status === 'needs_revision' ? { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', text: '🔁 Needs revision — waiting for new recordings' }
+                          : { cls: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300', text: `🎙 Recording… ${n} verse${n === 1 ? '' : 's'} so far` };
+                        return (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${chip.cls}`}>{chip.text}</span>
+                            <button onClick={() => navigator.clipboard?.writeText(recitationUrl(hw.recitationId!)).catch(() => {})}
+                              className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100">
+                              🔗 Copy recording link
+                            </button>
+                            {rec && n > 0 && (
+                              <button onClick={() => openRecitationReview(rec)}
+                                className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-600 text-white hover:bg-teal-700">
+                                🎧 Review recitation
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => goToHomework(hw)}
@@ -2237,6 +2329,19 @@ const App: React.FC = () => {
             onSaveTutorBillInfo={handleSaveTutorBillInfo}
           />
         ) : sessionStudent ? (
+          <>
+          {reviewRec && reviewRec.studentId === sessionStudent.id && (
+            <RecitationReviewPanel
+              rec={reviewRec}
+              onJumpToVerse={key => setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }))}
+              onClose={() => setReviewRec(null)}
+              onReviewed={done => {
+                setRecitations(prev => ({ ...prev, [done.id]: done }));
+                if (done.status === 'passed') handleMarkHomeworkDone(done.studentId, done.homeworkId);
+                setReviewRec(null);
+              }}
+            />
+          )}
           <StudentProgressPage
             student={sessionStudent}
             students={students}
@@ -2266,6 +2371,7 @@ const App: React.FC = () => {
             onLetterFocus={handleLetterFocus}
             onCursorMove={handleCursorMove}
           />
+          </>
         ) : selectedStudent ? (
           currentStudentView === 'mistakes' ? (
             <MistakesReviewPage student={selectedStudent} onBack={() => setCurrentStudentView('details')} teacherId={currentUser?.role === 'teacher' ? currentUser.id : undefined} onStudentUpdate={handleUpdateStudent} />

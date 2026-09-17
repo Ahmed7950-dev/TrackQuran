@@ -42,7 +42,7 @@ interface StudentProgressPageProps {
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
-  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string) => void;
+  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string, opts?: { recite?: boolean }) => void;
   /**
    * When set, immediately navigates the Quran view to this verse key ("surah:ayah").
    * Useful for jumping to homework verses from outside the component.
@@ -985,6 +985,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [selectedLogType, setSelectedLogType] = useState<LogType | null>(null);
     const [logQuality, setLogQuality] = useState<number>(8);
     const [homeworkNote, setHomeworkNote] = useState<string>('');
+    /** Recitation homework: the student records every verse for review. */
+    const [homeworkRecite, setHomeworkRecite] = useState(false);
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
     // Where this tutor/student was last reading. Restored ahead of the
@@ -3038,8 +3040,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             onLogTafseerRange(student.id, pendingLogRange);
             showToast('Tafseer logged');
         } else if (selectedLogType === 'homework') {
-            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim());
-            showToast('Homework assigned 📝');
+            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim(), { recite: homeworkRecite });
+            showToast(homeworkRecite ? 'Recitation homework assigned 🎙' : 'Homework assigned 📝');
         }
         setPendingLogRange(null);
         setLogTypeStep(null);
@@ -4508,7 +4510,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     {/* ── Homework ── */}
                                     {onLogHomework && (
                                         <LogOption src="/animations/homework.json" label="Homework" color="purple"
-                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setLogTypeStep('homework-note'); }} />
+                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setHomeworkRecite(false); setLogTypeStep('homework-note'); }} />
                                     )}
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
@@ -4535,7 +4537,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         <button
                                             key={c.label}
                                             type="button"
-                                            onClick={() => setHomeworkNote(n => n.trim() ? `${n.trim()}\n${c.text}` : c.text)}
+                                            onClick={() => {
+                                                setHomeworkNote(n => n.trim() ? `${n.trim()}\n${c.text}` : c.text);
+                                                // Preparing reading is exactly what the recording homework is for.
+                                                if (c.label.includes('Prepare')) setHomeworkRecite(true);
+                                            }}
                                             className="px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/70 transition-colors active:scale-95"
                                         >
                                             {c.label}
@@ -4548,8 +4554,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onChange={e => setHomeworkNote(e.target.value)}
                                     placeholder="Write instructions for the student (optional)…"
                                     rows={4}
-                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 mb-4"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-800 dark:text-slate-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 mb-3"
                                 />
+                                <label className={`flex items-start gap-3 rounded-xl border-2 px-3 py-2.5 mb-4 cursor-pointer transition-colors ${homeworkRecite ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-slate-200 dark:border-gray-600'}`}>
+                                    <input type="checkbox" checked={homeworkRecite} onChange={e => setHomeworkRecite(e.target.checked)}
+                                        className="mt-0.5 w-4 h-4 rounded text-teal-600 focus:ring-teal-500" />
+                                    <span className="text-sm">
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">🎙 Student records each verse</span>
+                                        <span className="block text-xs text-slate-500 dark:text-slate-400">They listen to Al-Minshawi, record every verse and submit; you review and log mistakes here.</span>
+                                    </span>
+                                </label>
                                 <div className="flex gap-3">
                                     <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
                                     <button onClick={() => confirmLog()} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>

@@ -55,6 +55,9 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'vocab_homework_assigned':      return { emoji: '🧺', color: 'text-violet-500' };
     case 'vocab_homework_completed':     return { emoji: '🧺', color: 'text-emerald-500' };
     case 'letter_match_completed':       return { emoji: '🔗', color: 'text-sky-500' };
+    case 'quran_recitation_assigned':
+    case 'quran_recitation_submitted':
+    case 'quran_recitation_reviewed':    return { emoji: '🎙', color: 'text-teal-500' };
     default:                             return { emoji: '🔔', color: 'text-slate-500' };
   }
 }
@@ -141,6 +144,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       setNotifications(prev =>
         prev.map(x => x.id === n.id ? { ...x, isRead: true } : x),
       );
+    }
+    // Recitation homework: the tutor opens the review; the student follows the link.
+    if (n.type === 'quran_recitation_submitted' && n.metadata?.recitationId && onNavigate) {
+      setOpen(false);
+      onNavigate(n.studentId, `recite:${n.metadata.recitationId}`);
+      return;
+    }
+    if ((n.type === 'quran_recitation_assigned' || n.type === 'quran_recitation_reviewed') && n.metadata?.url) {
+      setOpen(false);
+      window.location.href = n.metadata.url;
+      return;
     }
     if (n.type === 'vocab_homework_assigned' && n.metadata?.url) {
       setOpen(false);
@@ -241,6 +255,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                         {n.body}
                       </p>
+                      {(n.type === 'quran_recitation_assigned' || n.type === 'quran_recitation_reviewed') && n.metadata?.url && (
+                        <span className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-bold">
+                          {n.type === 'quran_recitation_assigned' ? 'Start recording →' : 'See my mistakes →'}
+                        </span>
+                      )}
+                      {n.type === 'quran_recitation_submitted' && (
+                        <span className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-bold">
+                          Review recitation →
+                        </span>
+                      )}
                       {n.type === 'vocab_homework_assigned' && n.metadata?.url && (
                         <span className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-[11px] font-bold">
                           Start homework →

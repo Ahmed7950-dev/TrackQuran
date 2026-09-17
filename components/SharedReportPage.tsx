@@ -25,6 +25,7 @@ import { GameInviteContext, GameInvitePopup } from './GameInvite';
 import StudentProgressPage from './StudentProgressPage';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
+import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,35 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     const tid = setTimeout(() => document.addEventListener('click', handler, true), 0);
     return () => { clearTimeout(tid); document.removeEventListener('click', handler, true); };
   }, [isFontMenuOpen]);
+
+  // Recitation homework rows (status + recordings) for this student's cards.
+  const [recitations, setRecitations] = useState<Record<string, RecitationHomework>>({});
+  useEffect(() => {
+    if (!report?.student_id) return;
+    listRecitationHomework(report.student_id)
+      .then(list => setRecitations(Object.fromEntries(list.map(r => [r.id, r]))))
+      .catch(() => {});
+  }, [report?.student_id, activeTab]);
+
+  // ?hw=<homeworkId> (the "see my mistakes" notification): open the Quran page
+  // on that homework, with its note, once the report has loaded.
+  const hwParamDone = useRef(false);
+  useEffect(() => {
+    if (hwParamDone.current || !report) return;
+    const hwId = new URLSearchParams(window.location.search).get('hw');
+    if (!hwId) { hwParamDone.current = true; return; }
+    const hw = (report.report_data.quranHomework ?? []).find(h => h.id === hwId);
+    hwParamDone.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('hw');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    if (!hw) return;
+    changeTab('quran');
+    setHomeworkModal(hw);
+    setNoteVisible(true);
+    jumpToVerse(`${hw.startSurah}:${hw.startAyah}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report]);
 
   useEffect(() => {
     getSharedReport(reportId).then(r => {
@@ -1092,6 +1122,24 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                   </p>
                                 </div>
                               </div>
+                              {hw.recitationId && (() => {
+                                const rec = recitations[hw.recitationId];
+                                const status = rec?.status ?? 'assigned';
+                                const n = rec ? Object.keys(rec.recordings).length : 0;
+                                const label = status === 'submitted' ? '📨 Submitted — your teacher will review it'
+                                  : status === 'passed' ? '✅ Passed'
+                                  : status === 'needs_revision' ? '🔁 Needs revision — see the mistakes, then record again'
+                                  : n > 0 ? `🎙 ${n} verse${n === 1 ? '' : 's'} recorded so far` : '🎙 Record your recitation of these verses';
+                                return (
+                                  <a href={`/recite/${hw.recitationId}`}
+                                    className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 transition-colors">
+                                    <span className="text-sm font-bold">{label}</span>
+                                    <span className="text-sm font-black flex-shrink-0">
+                                      {status === 'submitted' || status === 'passed' ? 'Open →' : n > 0 ? 'Continue →' : 'Start →'}
+                                    </span>
+                                  </a>
+                                );
+                              })()}
                               <div className="flex gap-2 mt-4">
                                 <button
                                   onClick={() => {
