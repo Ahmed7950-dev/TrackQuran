@@ -220,7 +220,6 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     stop: <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>,
     play: <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M7.5 5.2v13.6a1 1 0 0 0 1.52.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7.5 5.2Z"/></svg>,
     pause: <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>,
-    speaker: <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M13.5 4.06a.75.75 0 0 0-1.22-.58L7.2 7.5H4.5A1.5 1.5 0 0 0 3 9v6a1.5 1.5 0 0 0 1.5 1.5h2.7l5.08 4.02a.75.75 0 0 0 1.22-.58V4.06Z"/><path d="M16.3 8.2a.75.75 0 0 1 1.06.02 5.47 5.47 0 0 1 0 7.56.75.75 0 1 1-1.08-1.04 3.97 3.97 0 0 0 0-5.48.75.75 0 0 1 .02-1.06Z"/><path d="M18.6 5.9a.75.75 0 0 1 1.06.02 8.72 8.72 0 0 1 0 12.16.75.75 0 1 1-1.08-1.04 7.22 7.22 0 0 0 0-10.08.75.75 0 0 1 .02-1.06Z"/></svg>,
     prev: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15 5l-7 7 7 7"/></svg>,
     next: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>,
   };
@@ -247,6 +246,18 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   );
 
   const pill = 'inline-flex items-center justify-center gap-2.5 rounded-2xl font-bold transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100';
+  /** Round icon buttons carry no text — the label shows on hover (and is the
+   *  button's accessible name). */
+  const withTip = (tip: string, button: React.ReactNode, below = false, alignEnd = false) => (
+    <span className="group relative inline-flex">
+      {button}
+      <span role="tooltip"
+        className={`pointer-events-none absolute ${alignEnd ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${below ? 'top-full mt-2' : 'bottom-full mb-2'} z-30 whitespace-nowrap rounded-lg bg-slate-900 dark:bg-slate-100 px-2.5 py-1 text-xs font-bold text-white dark:text-slate-900 shadow-lg opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100`}>
+        {tip}
+      </span>
+    </span>
+  );
+  const roundBtn = 'relative w-[4.25rem] h-[4.25rem] sm:w-20 sm:h-20 rounded-full text-white flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100';
 
   return shell(
     <div className="w-full px-3 sm:px-6 lg:px-10 py-4 sm:py-6 space-y-4 sm:space-y-5">
@@ -268,12 +279,17 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
               {rec.studentName ? `${rec.studentName} · ` : ''}{recordedCount === verses.length ? 'All verses recorded' : `${verses.length - recordedCount} verse${verses.length - recordedCount === 1 ? '' : 's'} left to record`}
             </p>
           </div>
-          {editable && (
+          {editable && withTip(
+            submitting ? 'Submitting…' : allRecorded ? 'Submit homework'
+              : `Record all verses to submit (${verses.length - recordedCount} left)`,
             <button onClick={submit} disabled={!allRecorded || submitting || take !== 'idle'}
-              className={`${pill} w-full sm:w-auto px-6 py-3.5 text-white bg-gradient-to-r from-emerald-500 to-teal-600 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:brightness-105`}>
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.48 3.1a1 1 0 0 1 1.08-.13l16 8a1 1 0 0 1 0 1.78l-16 8A1 1 0 0 1 3.2 19.6L5.6 12 3.2 4.4a1 1 0 0 1 .28-1.3ZM7.3 13l-1.6 5.02L17.76 12 5.7 5.98 7.3 11H13a1 1 0 1 1 0 2H7.3Z"/></svg>
-              {submitting ? 'Submitting…' : allRecorded ? 'Submit homework' : 'Submit when all are recorded'}
-            </button>
+              aria-label={allRecorded ? 'Submit homework' : 'Record all verses to submit'}
+              className={`${roundBtn} bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 shadow-xl shadow-emerald-600/35 hover:shadow-emerald-600/55 hover:brightness-105`}>
+              {submitting
+                ? <span className="w-8 h-8 rounded-full border-4 border-white/40 border-t-white animate-spin" />
+                : <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 translate-x-0.5"><path d="M3.48 3.1a1 1 0 0 1 1.08-.13l16 8a1 1 0 0 1 0 1.78l-16 8A1 1 0 0 1 3.2 19.6L5.6 12 3.2 4.4a1 1 0 0 1 .28-1.3ZM7.3 13l-1.6 5.02L17.76 12 5.7 5.98 7.3 11H13a1 1 0 1 1 0 2H7.3Z"/></svg>}
+            </button>,
+            true, true,
           )}
         </div>
         {rec.note && (
@@ -281,7 +297,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         )}
 
         {/* Verse chips — the whole width */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           {verses.map(([vs, va], i) => {
             const done = !!rec.recordings[`${vs}:${va}`];
             const current = i === idx;
@@ -356,73 +372,53 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
       {/* ── Controls dock — stays at the bottom of the screen while a long verse scrolls ── */}
       <section className="sticky bottom-2 sm:bottom-4 z-20 rounded-3xl bg-white/85 dark:bg-gray-800/85 backdrop-blur border border-white dark:border-gray-700 shadow-[0_12px_40px_-18px_rgba(120,90,40,0.35)] px-2.5 sm:px-6 py-3 sm:py-5">
-        <div className="grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2 sm:gap-5">
+        <div className="flex items-center justify-center gap-3 sm:gap-8">
           {/* Previous */}
-          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || take !== 'idle'} aria-label="Previous verse"
-            className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-gray-600`}>
-            {Icon.prev}
-          </button>
+          {withTip('Previous verse',
+            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || take !== 'idle'} aria-label="Previous verse"
+              className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-gray-600`}>
+              {Icon.prev}
+            </button>)}
 
-          {/* Listen to Al-Minshawi */}
-          <button onClick={playMinshawi} disabled={take === 'recording' || !text}
-            className={`${pill} flex-col sm:flex-row h-full min-h-[3.75rem] sm:min-h-[4.5rem] px-1.5 sm:px-5 py-2 sm:py-3 border-2 ${minshawiPlaying
-              ? 'bg-teal-600 border-teal-600 text-white shadow-lg shadow-teal-600/30'
-              : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 hover:border-teal-400'}`}>
-            <span className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${minshawiPlaying ? 'bg-white/20' : 'bg-white dark:bg-teal-900/40'}`}>
-              {minshawiPlaying ? Icon.pause : Icon.speaker}
-            </span>
-            <span className="text-center sm:text-left leading-tight">
-              <span className="block text-xs sm:text-base">{minshawiPlaying ? 'Stop' : 'Listen'}</span>
-              <span className="hidden sm:block text-xs font-semibold opacity-70">Al-Minshawi</span>
-            </span>
-          </button>
-
-          {/* Record — the centrepiece */}
-          <div className="flex flex-col items-center gap-1.5">
-            {take === 'recording' ? (
+          {/* Record */}
+          {take === 'recording'
+            ? withTip('Stop recording',
               <button onClick={stopRecording} aria-label="Stop recording"
-                className="relative w-[4.25rem] h-[4.25rem] sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-red-500 to-rose-700 text-white flex items-center justify-center shadow-xl shadow-red-600/40 active:scale-95 transition-transform">
+                className={`${roundBtn} bg-gradient-to-br from-red-500 to-rose-700 shadow-xl shadow-red-600/40`}>
                 <span className="absolute inset-0 rounded-full bg-red-500 rh-pulse" />
                 <span className="relative">{Icon.stop}</span>
-              </button>
-            ) : (
+              </button>)
+            : withTip(take === 'saving' ? 'Saving…' : hasTake ? 'Record again' : 'Record my recitation',
               <button onClick={startRecording} disabled={!editable || take === 'saving' || !text} aria-label={hasTake ? 'Record again' : 'Record my recitation'}
-                className="relative w-[4.25rem] h-[4.25rem] sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-rose-400 via-rose-500 to-pink-600 text-white flex items-center justify-center shadow-xl shadow-rose-500/40 hover:shadow-rose-500/60 hover:brightness-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none">
+                className={`${roundBtn} bg-gradient-to-br from-rose-400 via-rose-500 to-pink-600 shadow-xl shadow-rose-500/40 hover:shadow-rose-500/60 hover:brightness-105`}>
                 {take === 'saving'
                   ? <span className="w-8 h-8 rounded-full border-4 border-white/40 border-t-white animate-spin" />
                   : Icon.mic}
-              </button>
-            )}
-            <span className={`text-xs sm:text-sm font-black tabular-nums ${take === 'recording' ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>
-              {take === 'recording' ? `● ${fmtSecs(elapsed)}` : take === 'saving' ? 'Saving…' : hasTake ? 'Record again' : 'Record'}
-            </span>
-          </div>
+              </button>)}
 
-          {/* Listen to mine */}
-          <button onClick={playMine} disabled={!hasTake || take !== 'idle'}
-            className={`${pill} flex-col sm:flex-row h-full min-h-[3.75rem] sm:min-h-[4.5rem] px-1.5 sm:px-5 py-2 sm:py-3 border-2 ${minePlaying
-              ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-              : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200 hover:border-indigo-400'}`}>
-            <span className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${minePlaying ? 'bg-white/20' : 'bg-white dark:bg-indigo-900/40'}`}>
-              {minePlaying ? Icon.pause : Icon.play}
-            </span>
-            <span className="text-center sm:text-left leading-tight">
-              <span className="block text-xs sm:text-base">{minePlaying ? 'Stop' : <><span className="sm:hidden">Mine</span><span className="hidden sm:inline">My recitation</span></>}</span>
-              <span className="hidden sm:block text-xs font-semibold opacity-70">{hasTake ? (takeMs ? fmtSecs(takeMs) : 'Just recorded') : 'Not recorded yet'}</span>
-            </span>
-          </button>
+          {/* My recitation */}
+          {withTip(
+            !hasTake ? 'Not recorded yet' : minePlaying ? 'Stop' : `Listen to my recitation${takeMs ? ` (${fmtSecs(takeMs)})` : ''}`,
+            <button onClick={playMine} disabled={!hasTake || take !== 'idle'} aria-label={hasTake ? 'Listen to my recitation' : 'Not recorded yet'}
+              className={`${roundBtn} bg-gradient-to-br from-indigo-400 via-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/40 hover:shadow-indigo-500/60 hover:brightness-105 ${minePlaying ? 'ring-4 ring-indigo-300/70' : ''}`}>
+              {minePlaying ? <span className="scale-125">{Icon.pause}</span> : <span className="scale-125 translate-x-0.5">{Icon.play}</span>}
+            </button>)}
 
           {/* Next */}
-          <button onClick={() => setIdx(i => Math.min(verses.length - 1, i + 1))} disabled={idx >= verses.length - 1 || take !== 'idle'} aria-label="Next verse"
-            className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full text-white bg-gradient-to-br from-teal-500 to-teal-700 shadow-md shadow-teal-700/25 hover:brightness-110`}>
-            {Icon.next}
-          </button>
+          {withTip('Next verse',
+            <button onClick={() => setIdx(i => Math.min(verses.length - 1, i + 1))} disabled={idx >= verses.length - 1 || take !== 'idle'} aria-label="Next verse"
+              className={`${pill} w-11 h-11 sm:w-14 sm:h-14 rounded-full text-white bg-gradient-to-br from-teal-500 to-teal-700 shadow-md shadow-teal-700/25 hover:brightness-110`}>
+              {Icon.next}
+            </button>)}
         </div>
 
+        {take === 'recording' && (
+          <p className="mt-2 text-center text-sm font-black tabular-nums text-red-600">● Recording {fmtSecs(elapsed)}</p>
+        )}
         <p className="hidden sm:block mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
           {take === 'recording' ? 'Recite the verse, then tap the red button to stop.'
             : hasTake ? 'Happy with it? Go to the next verse. Not yet? Record again — it replaces this one.'
-            : 'Listen as many times as you like, then tap the microphone and recite the verse.'}
+            : 'Tap the verse to listen as many times as you like, then tap the microphone and recite it.'}
         </p>
         {error && <p className="mt-2 text-center text-sm font-semibold text-red-600">{error}</p>}
       </section>
