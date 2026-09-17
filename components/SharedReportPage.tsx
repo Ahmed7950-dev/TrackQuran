@@ -1009,28 +1009,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                     </div>
                                   )}
 
-                                  <div className="h-px bg-slate-100 dark:bg-slate-700 mx-4" />
-
-                                  {/* Done button */}
-                                  <div className="px-4 py-3">
-                                    <button
-                                      onClick={() => {
-                                        if (!homeworkModal) return;
-                                        setQuranHomework(prev => prev.map(hw => hw.id === homeworkModal.id ? { ...hw, isDone: true } : hw));
-                                        const remaining = activeHwList.filter(hw => hw.id !== homeworkModal.id);
-                                        if (remaining.length > 0) {
-                                          setHomeworkModal(remaining[0]);
-                                          jumpToVerse(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
-                                        } else {
-                                          setHomeworkModal(null);
-                                          // Keep panel open so they can see the 🎉 message and history
-                                        }
-                                      }}
-                                      className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-sm transition-all shadow-sm"
-                                    >
-                                      ✅ Mark as Done
-                                    </button>
-                                  </div>
+                                  {/* Only the teacher marks homework done — no student-side button. */}
                                 </>
                               )}
                             </>
@@ -1152,22 +1131,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                   className="flex-1 py-2 px-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-semibold border border-violet-200 dark:border-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
                                 >
                                   📖 {t('studentPortal.goToVerses')}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setQuranHomework(prev => prev.map(h => h.id === hw.id ? { ...h, isDone: true } : h));
-                                    const remaining = activeHw.filter(h => h.id !== hw.id);
-                                    if (remaining.length > 0 && homeworkModal?.id === hw.id) {
-                                      setHomeworkModal(remaining[0]);
-                                      jumpToVerse(`${remaining[0].startSurah}:${remaining[0].startAyah}`);
-                                    } else if (remaining.length === 0) {
-                                      setHomeworkModal(null);
-                                      setNoteVisible(false);
-                                    }
-                                  }}
-                                  className="py-2 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-sm transition-all shadow-sm"
-                                >
-                                  ✅ {t('studentPortal.markDone')}
                                 </button>
                               </div>
                             </div>
