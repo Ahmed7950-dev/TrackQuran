@@ -224,6 +224,33 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
     </div>
   );
 
+  // The homework's words, to study before playing — in the teacher's order.
+  const wordTable = (
+    <div className="text-left">
+      <p className="text-xs font-bold uppercase tracking-wide text-violet-300 mb-2">📖 Study the words first</p>
+      <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 max-h-[45vh] overflow-y-auto">
+        <table className="w-full table-fixed">
+          <thead className="sticky top-0 bg-indigo-950/95 backdrop-blur">
+            <tr className="text-[11px] uppercase tracking-wide text-violet-300">
+              <th className="px-3 py-2 text-left font-bold w-[36%]">English</th>
+              <th className="px-3 py-2 text-left font-bold">Transliteration</th>
+              <th className="px-3 py-2 text-right font-bold w-[32%]">Arabic</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {hw.words.map(w => (
+              <tr key={w.id}>
+                <td className="px-3 py-2.5 font-semibold break-words">{w.english}</td>
+                <td className="px-3 py-2.5 text-sm italic text-violet-200 break-words">{w.transliteration}</td>
+                <td className="px-3 py-2.5 text-right text-2xl font-bold break-words" dir="rtl">{w.arabic}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   if (stage === 'intro') {
     if (hw.status === 'completed') return shell(
       <div className="text-center space-y-5">
@@ -243,6 +270,7 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
         <div className="text-6xl">⏰</div>
         <h1 className="text-2xl font-extrabold">The deadline has passed</h1>
         <p className="text-violet-200">This homework was due {fmtWhen(hw.deadline!)}. Ask your teacher for a new link.</p>
+        {wordTable}
       </div>,
     );
     return shell(
@@ -269,6 +297,7 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
         <p className="text-sm text-violet-300">
           {hw.deadline ? `Finish before ${fmtWhen(hw.deadline)}` : 'No deadline'}
         </p>
+        {wordTable}
         <button onClick={() => start(false)}
           className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-lg font-extrabold shadow-lg shadow-emerald-500/30">
           Start ▶
