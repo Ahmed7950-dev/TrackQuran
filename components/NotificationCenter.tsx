@@ -217,9 +217,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
             )}
           </div>
 
-          {/* Phone alerts — tutor first; students get this once it is proven */}
-          {recipient === 'tutor' && teacherId && (
-            <PushToggle recipient="tutor" teacherId={teacherId} />
+          {/* Phone alerts — this device, tutor or student */}
+          {teacherId && (recipient === 'tutor' || studentId) && (
+            <PushToggle recipient={recipient} teacherId={teacherId} studentId={studentId} />
           )}
 
           {/* Notification list */}

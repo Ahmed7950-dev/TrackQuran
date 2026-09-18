@@ -4,6 +4,7 @@ import App from './App';
 import { I18nProvider } from './context/I18nProvider';
 import { AuthProvider } from './context/AuthProvider';
 import SharedReportPage from './components/SharedReportPage';
+import { preparePortalInstall } from './services/pushService';
 import WordFlightJoinPage from './components/WordFlightJoinPage';
 
 // ── Route detection — done once before any React rendering ──────────────────
@@ -56,6 +57,7 @@ class ErrorBoundary extends React.Component<
 
 // Push notifications live in a service worker; registering it on load keeps an
 // existing subscription alive. It caches nothing (see public/sw.js).
+preparePortalInstall();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* not fatal */ });
