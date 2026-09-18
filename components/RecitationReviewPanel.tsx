@@ -163,28 +163,50 @@ const RecitationReviewPanel: React.FC<{
     </span>
   );
   const iconBtn = 'w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors';
+  // On a phone the verdicts take a full-width row of their own, so they never
+  // squeeze the verses; from sm up they sit inline as before.
   const verdictButtons = (small = false) => (
-    <div className="flex items-center gap-2 flex-shrink-0">
+    <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-shrink-0">
       <button onClick={() => decide('reassign')} disabled={!!busy || wrongVerses.length === 0}
         title={wrongVerses.length === 0 ? 'Log a mistake on a verse to reassign it' : `Send back ${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'}`}
-        className={`${small ? 'h-10 px-3 text-[13px]' : 'h-12 sm:h-[52px] px-3 sm:px-5 text-sm'} rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-black hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
+        className={`${small ? 'h-10 px-3 text-[13px]' : 'h-12 sm:h-[52px] px-3 sm:px-5 text-sm'} flex-1 sm:flex-none whitespace-nowrap rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-black hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
         {busy === 'reassign' ? 'Reassigning…' : `Reassign${wrongVerses.length ? ` ${wrongVerses.length}` : ''}`}
       </button>
       <button onClick={() => decide('passed')} disabled={!!busy || recorded === 0}
-        className={`${small ? 'h-10 px-4 text-[13px]' : 'h-12 sm:h-[52px] px-4 sm:px-6 text-sm'} rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black shadow-lg shadow-emerald-800/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
+        className={`${small ? 'h-10 px-4 text-[13px]' : 'h-12 sm:h-[52px] px-4 sm:px-6 text-sm'} flex-1 sm:flex-none whitespace-nowrap rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black shadow-lg shadow-emerald-800/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
         {busy === 'passed' ? 'Saving…' : 'Passed'}
       </button>
     </div>
   );
-  const style = <style>{`@keyframes rrp-bar { 0%,100% { height: 35% } 50% { height: 100% } } .rrp-bar { animation: rrp-bar .85s ease-in-out infinite; }`}</style>;
+  const style = (
+    <style>{`
+      @keyframes rrp-bar { 0%,100% { height: 35% } 50% { height: 100% } }
+      .rrp-bar { animation: rrp-bar .85s ease-in-out infinite; }
+      @media (min-width: 380px) { .xs\\:inline { display: inline } }
+    `}</style>
+  );
+
+  /** Copy link · minimise · close — shown once, wherever the layout needs them. */
+  const windowControls = (
+    <>
+      <button onClick={() => { navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }}
+        aria-label="Copy the student's recording link" title="Copy the student's recording link"
+        className={`${iconBtn} ${copied ? 'text-emerald-600 border-emerald-300' : ''}`}>{copied ? '✓' : icon.link}</button>
+      <button onClick={() => setOpen(false)} aria-label="Minimise the review bar" title="Minimise" className={iconBtn}>{icon.minus}</button>
+      <button onClick={() => { audioRef.current?.pause(); onClose(); }} aria-label="Close the review" title="Close" className={iconBtn}>{icon.close}</button>
+    </>
+  );
 
   // ── Minimised: one slim strip, playback keeps running ──
   if (!open) {
     return (
       <section ref={el => { barRef.current = el; }} aria-label="Recitation review, minimised"
-        className="fixed inset-x-0 bottom-0 z-[250] flex items-center gap-x-2 sm:gap-x-3 px-3 sm:px-5 py-2 bg-white dark:bg-gray-800 border-t border-slate-200 dark:border-gray-700 shadow-[0_-14px_32px_-26px_rgba(15,23,42,0.5)]">
+        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
+        className="fixed inset-x-0 bottom-0 z-[250] flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-2 px-3 sm:px-5 pt-2 bg-white dark:bg-gray-800 border-t border-slate-200 dark:border-gray-700 shadow-[0_-14px_32px_-26px_rgba(15,23,42,0.5)]">
         {style}
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-700 text-white text-[11px] font-black uppercase tracking-wide">🎧 Reviewing</span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-700 text-white text-[11px] font-black uppercase tracking-wide flex-shrink-0">
+          🎧<span className="hidden xs:inline">&nbsp;Reviewing</span>
+        </span>
         <span className="text-sm font-black text-slate-800 dark:text-slate-100 truncate max-w-[9rem]">{rec.studentName}</span>
         <span className="hidden lg:inline text-sm text-slate-600 dark:text-slate-300 truncate max-w-[16rem]">{rangeLabel(rec)}</span>
         <span className="text-[13px] font-bold text-teal-700 dark:text-teal-300 flex-shrink-0">{recorded} / {verses.length}</span>
@@ -195,11 +217,13 @@ const RecitationReviewPanel: React.FC<{
         )}
         <span className="flex-grow" />
         {playing && (
-          <button onClick={() => play(playing)} aria-label="Pause" className={`${iconBtn} rounded-full text-teal-700 dark:text-teal-300`}>{icon.pause}</button>
+          <button onClick={() => play(playing)} aria-label="Pause" className={`${iconBtn} rounded-full text-teal-700 dark:text-teal-300 flex-shrink-0`}>{icon.pause}</button>
         )}
-        {verdictButtons(true)}
-        <button onClick={() => setOpen(true)} aria-label="Expand the review bar" className={iconBtn}>{icon.up}</button>
-        <button onClick={() => { audioRef.current?.pause(); onClose(); }} aria-label="Close the review" className={iconBtn}>{icon.close}</button>
+        {/* Full width on a phone, so it drops to a second line instead of
+            pushing the window buttons off the edge. */}
+        <span className="order-last sm:order-none w-full sm:w-auto">{verdictButtons(true)}</span>
+        <button onClick={() => setOpen(true)} aria-label="Expand the review bar" className={`${iconBtn} flex-shrink-0`}>{icon.up}</button>
+        <button onClick={() => { audioRef.current?.pause(); onClose(); }} aria-label="Close the review" className={`${iconBtn} flex-shrink-0`}>{icon.close}</button>
       </section>
     );
   }
@@ -207,14 +231,22 @@ const RecitationReviewPanel: React.FC<{
   // ── Open: two lines ──
   return (
     <section ref={el => { barRef.current = el; }} aria-label="Recitation review"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       className="fixed inset-x-0 bottom-0 z-[250] bg-white dark:bg-gray-800 border-t border-slate-200 dark:border-gray-700 shadow-[0_-18px_40px_-28px_rgba(15,23,42,0.55)]">
       {style}
-      {/* Line 1 — who, progress, window controls */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-6 pt-2.5 pb-1.5">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-700 text-white text-[11px] sm:text-xs font-black uppercase tracking-wide">🎧 Reviewing</span>
-        <span className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100 truncate max-w-[10rem]">{rec.studentName}</span>
+      {/* Line 1 — who, progress, window controls. On a phone the controls stay
+          on the name's row and the range/progress wrap underneath. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 sm:px-6 pt-2.5 pb-1.5">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto min-w-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-teal-700 text-white text-[11px] sm:text-xs font-black uppercase tracking-wide flex-shrink-0">
+            🎧<span className="hidden xs:inline">&nbsp;Reviewing</span>
+          </span>
+          <span className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100 truncate min-w-0 sm:max-w-[10rem]">{rec.studentName}</span>
+          <span className="flex-grow sm:hidden" />
+          <span className="flex items-center gap-1.5 sm:hidden flex-shrink-0">{windowControls}</span>
+        </div>
         <span className="hidden sm:inline text-slate-300 dark:text-gray-600">|</span>
-        <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[16rem]">{rangeLabel(rec)}</span>
+        <span className="text-[13px] sm:text-sm font-semibold text-slate-600 dark:text-slate-300 truncate max-w-full sm:max-w-[16rem]">{rangeLabel(rec)}</span>
         <span className="inline-flex items-center gap-2">
           <span className="hidden sm:block w-28 h-[7px] rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
             <span className="block h-full rounded-full bg-teal-700 dark:bg-teal-500 transition-all" style={{ width: `${pct * 100}%` }} />
@@ -227,28 +259,24 @@ const RecitationReviewPanel: React.FC<{
             ? `${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'} marked — Reassign sends just those back`
             : 'Log mistakes on the page as usual — playing a verse scrolls to it'}
         </span>
-        <button onClick={() => { navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }}
-          aria-label="Copy the student's recording link" title="Copy the student's recording link"
-          className={`${iconBtn} ${copied ? 'text-emerald-600 border-emerald-300' : ''}`}>{copied ? '✓' : icon.link}</button>
-        <button onClick={() => setOpen(false)} aria-label="Minimise the review bar" title="Minimise" className={iconBtn}>{icon.minus}</button>
-        <button onClick={() => { audioRef.current?.pause(); onClose(); }} aria-label="Close the review" title="Close" className={iconBtn}>{icon.close}</button>
+        <span className="hidden sm:flex items-center gap-2 flex-shrink-0">{windowControls}</span>
       </div>
 
-      {/* Line 2 — play all · verses · verdict */}
-      <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 pb-3">
+      {/* Line 2 — play all · verses · verdict (verdicts drop to their own row on a phone) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 px-3 sm:px-6 pb-3">
         {recorded === 0 ? (
-          <div className="flex-grow flex items-center gap-3 h-12 sm:h-[52px] px-4 rounded-xl border border-dashed border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40 text-sm font-semibold text-slate-500 dark:text-slate-400">
+          <div className="flex-grow flex items-center gap-3 min-h-[3rem] sm:h-[52px] px-4 py-2 rounded-xl border border-dashed border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40 text-[13px] sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
             {rec.studentName ?? 'The student'} hasn't recorded any verse yet — the recordings appear here as they arrive.
           </div>
         ) : (
-          <>
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-grow">
             <button onClick={playAll}
               className={`flex items-center gap-2 h-12 sm:h-[52px] px-3 sm:px-4 rounded-xl border text-[13px] sm:text-sm font-black flex-shrink-0 transition-colors ${
                 chain ? 'bg-teal-700 border-teal-700 text-white' : 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100'}`}>
               {chain ? icon.pause : icon.play}<span className="hidden sm:inline">{chain ? 'Stop' : 'Play all'}</span>
             </button>
 
-            <div role="group" aria-label="Verses" className="flex-grow flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
+            <div role="group" aria-label="Verses" className="min-w-0 flex-grow flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
               {verses.map(([s, v], i) => {
                 const key = `${s}:${v}`;
                 const r = rec.recordings[key];
@@ -286,7 +314,7 @@ const RecitationReviewPanel: React.FC<{
                 );
               })}
             </div>
-          </>
+          </div>
         )}
         {verdictButtons()}
       </div>
