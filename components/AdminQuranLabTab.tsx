@@ -516,9 +516,9 @@ const AdminQuranLabTab: React.FC = () => {
   const activeRecordingAyah = phase.kind === 'recording' ? phase.ayah : phase.kind === 'countdown' ? phase.ayah : null;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       {/* ── Tool switch + shared controls ── */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-4 py-3">
         <div className="flex rounded-full bg-slate-100 dark:bg-gray-700 p-1">
           {(['vowels', 'recording'] as const).map(k => (
             <button

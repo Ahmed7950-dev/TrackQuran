@@ -43,6 +43,7 @@ const AdminQaedahTab: React.FC = () => {
   const [newTitleEn, setNewTitleEn] = useState('');
   const [newTitleAr, setNewTitleAr] = useState('');
   const [addingTopic, setAddingTopic] = useState(false);
+  const [showAddTopic, setShowAddTopic] = useState(false);
 
   // Edit topic inline
   const [editId,    setEditId]    = useState<string | null>(null);
@@ -130,6 +131,7 @@ const AdminQaedahTab: React.FC = () => {
       setTopics(prev => [...prev, created]);
       setNewTitleEn('');
       setNewTitleAr('');
+      setShowAddTopic(false);
     }
     setAddingTopic(false);
   };
@@ -295,55 +297,71 @@ const AdminQaedahTab: React.FC = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col lg:flex-row gap-6">
+    <div className="flex flex-col lg:flex-row gap-5 items-start">
 
-      {/* ── LEFT: Topics panel ───────────────────────────────────────────────── */}
-      <div className="w-full lg:w-80 flex-shrink-0 space-y-4">
-        <h2 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-          <span style={HAFS}>القاعدة النورانية</span>
-          <span className="text-slate-400 text-sm font-normal">— Lessons</span>
-        </h2>
+      {/* ── LEFT: Topics rail ────────────────────────────────────────────────── */}
+      <div className="w-full lg:w-80 flex-shrink-0 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-gray-700">
+          <h2 className="font-extrabold text-sm text-slate-800 dark:text-slate-100">Lessons</h2>
+          <span className="text-xs text-slate-400" style={HAFS}>القاعدة النورانية</span>
+          <span className="flex-1" />
+          <button
+            onClick={() => setShowAddTopic(v => !v)}
+            className={`h-8 px-3 rounded-lg text-xs font-extrabold transition-colors ${
+              showAddTopic
+                ? 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'
+                : 'bg-teal-600 hover:bg-teal-700 text-white'
+            }`}
+          >
+            {showAddTopic ? 'Close' : '+ New'}
+          </button>
+        </div>
 
         {/* Add topic form */}
-        <form onSubmit={handleAddTopic} className="bg-white dark:bg-gray-800 rounded-xl border border-slate-200 dark:border-gray-700 p-4 space-y-2 shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">New Lesson</p>
-          <input
-            value={newTitleEn}
-            onChange={e => setNewTitleEn(e.target.value)}
-            placeholder="Title (English) e.g. Short Vowels: Fatha"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-          <input
-            value={newTitleAr}
-            onChange={e => setNewTitleAr(e.target.value)}
-            placeholder="العنوان بالعربية (اختياري)"
-            dir="rtl"
-            style={HAFS}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-          <button
-            type="submit"
-            disabled={!newTitleEn.trim() || addingTopic}
-            className="w-full py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            {addingTopic ? 'Adding…' : '+ Add Lesson'}
-          </button>
-        </form>
+        {showAddTopic && (
+          <form onSubmit={handleAddTopic} className="px-4 py-3 space-y-2 bg-slate-50 dark:bg-gray-900/40 border-b border-slate-100 dark:border-gray-700">
+            <label className="sr-only" htmlFor="qaedah-new-en">Lesson title in English</label>
+            <input
+              id="qaedah-new-en"
+              value={newTitleEn}
+              onChange={e => setNewTitleEn(e.target.value)}
+              placeholder="Title (English) e.g. Short Vowels: Fatha"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            <label className="sr-only" htmlFor="qaedah-new-ar">Lesson title in Arabic</label>
+            <input
+              id="qaedah-new-ar"
+              value={newTitleAr}
+              onChange={e => setNewTitleAr(e.target.value)}
+              placeholder="العنوان بالعربية (اختياري)"
+              dir="rtl"
+              style={HAFS}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            <button
+              type="submit"
+              disabled={!newTitleEn.trim() || addingTopic}
+              className="w-full py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              {addingTopic ? 'Adding…' : '+ Add lesson'}
+            </button>
+          </form>
+        )}
 
         {/* Topics list */}
         {topicsLoading ? (
           <div className="text-center py-8 text-slate-400 text-sm">Loading…</div>
         ) : topics.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-sm">No lessons yet. Add one above.</div>
+          <div className="text-center py-8 px-4 text-slate-400 text-sm">No lessons yet. Add one above.</div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="p-2 space-y-1 max-h-[70vh] overflow-y-auto">
             {topics.map((topic, idx) => (
               <div
                 key={topic.id}
                 className={`group rounded-xl border transition-all ${
                   selectedTopic?.id === topic.id
                     ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-300 dark:border-teal-600'
-                    : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 hover:border-slate-300'
+                    : 'bg-white dark:bg-gray-800 border-transparent hover:bg-slate-50 dark:hover:bg-gray-700/50'
                 }`}
               >
                 {editId === topic.id ? (
@@ -392,15 +410,20 @@ const AdminQaedahTab: React.FC = () => {
                   </div>
                 ) : (
                   /* Normal row */
-                  <button
-                    onClick={() => handleSelectTopic(topic)}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2.5"
-                  >
-                    <span className="w-6 h-6 flex-shrink-0 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 text-xs font-bold flex items-center justify-center">
+                  <div className="w-full flex items-center gap-2 px-3 py-2.5">
+                    <button
+                      onClick={() => handleSelectTopic(topic)}
+                      className="flex-1 min-w-0 text-left flex items-center gap-2"
+                    >
+                    <span className={`w-6 h-6 flex-shrink-0 rounded-lg text-xs font-extrabold flex items-center justify-center ${
+                      selectedTopic?.id === topic.id
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400'
+                    }`}>
                       {idx + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+                      <p className={`text-sm truncate ${selectedTopic?.id === topic.id ? 'font-extrabold text-teal-700 dark:text-teal-300' : 'font-semibold text-slate-700 dark:text-slate-200'}`}>
                         {topic.titleEn}
                         {pdfs[topic.id] && <span title="Has a lesson PDF" className="ms-1.5 text-teal-500">📄</span>}
                       </p>
@@ -408,6 +431,7 @@ const AdminQaedahTab: React.FC = () => {
                         <p className="text-xs text-slate-400 dark:text-slate-500 truncate" style={HAFS}>{topic.titleAr}</p>
                       )}
                     </div>
+                    </button>
                     {/* Action buttons — shown on hover */}
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                       {/* Move up */}
@@ -435,7 +459,7 @@ const AdminQaedahTab: React.FC = () => {
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                       </button>
                     </div>
-                  </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -444,40 +468,48 @@ const AdminQaedahTab: React.FC = () => {
       </div>
 
       {/* ── RIGHT: Words panel ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 w-full">
         {!selectedTopic ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl">
             <div className="text-5xl mb-3" style={HAFS}>ب</div>
             <p className="font-semibold text-sm">Select a lesson to manage its words</p>
           </div>
         ) : (
           <div className="space-y-4">
             {/* Words header */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div>
-                <h3 className="font-bold text-slate-700 dark:text-slate-200">{selectedTopic.titleEn}</h3>
-                {selectedTopic.titleAr && (
-                  <p className="text-sm text-slate-400" style={HAFS}>{selectedTopic.titleAr}</p>
-                )}
+            <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-4 flex items-center gap-2 flex-wrap">
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-slate-800 dark:text-slate-100">{selectedTopic.titleEn}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {selectedTopic.titleAr && <span style={HAFS} className="me-2">{selectedTopic.titleAr}</span>}
+                  {words.length} word{words.length !== 1 ? 's' : ''}
+                </p>
               </div>
-              <span className="ml-auto text-xs text-slate-400 bg-slate-100 dark:bg-gray-700 px-2 py-1 rounded-full">
-                {words.length} word{words.length !== 1 ? 's' : ''}
-              </span>
+              <span className="flex-1" />
+              {([1,2,3] as const).map(l => {
+                const n = words.filter(w => w.level === l).length;
+                if (n === 0) return null;
+                return (
+                  <span key={l} className={`px-2.5 py-1 rounded-full text-xs font-bold ${LEVEL_COLOR[l].bg} ${LEVEL_COLOR[l].text}`}>
+                    L{l} · {n}
+                  </span>
+                );
+              })}
               <button
                 onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()); }}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                className={`text-xs font-bold h-9 px-3 rounded-lg border transition-colors ${
                   selectMode
                     ? 'bg-indigo-600 border-indigo-500 text-white'
-                    : 'border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'
+                    : 'border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'
                 }`}
               >
-                {selectMode ? `✓ ${selectedIds.size} selected` : '☑ Select'}
+                {selectMode ? `✓ ${selectedIds.size} selected` : 'Select'}
               </button>
               <button
                 onClick={() => setShowBulk(b => !b)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-teal-300 dark:border-teal-600 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
+                className="text-xs font-bold h-9 px-3 rounded-lg border border-teal-300 dark:border-teal-600 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
               >
-                {showBulk ? 'Hide Bulk Add' : '⚡ Bulk Add'}
+                {showBulk ? 'Hide bulk add' : 'Bulk add'}
               </button>
             </div>
 
@@ -485,34 +517,36 @@ const AdminQaedahTab: React.FC = () => {
             {(() => {
               const pdf = pdfs[selectedTopic.id];
               return (
-                <div className="rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+                <div className="rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-4">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className="flex-shrink-0 w-9 h-9 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    <span className="flex-shrink-0 w-11 h-11 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6ZM14 2v6h6" />
                       </svg>
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Lesson PDF</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 truncate">
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
                         {pdf
                           ? <a href={pdf.url} target="_blank" rel="noreferrer" className="hover:underline">{pdf.name}</a>
-                          : <span className="text-slate-400">None yet — tutors and students see only the words.</span>}
+                          : <span className="text-slate-400">No lesson PDF yet</span>}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Shown on the board before the words — tutors and students open it from the lesson.
                       </p>
                     </div>
                     <input ref={pdfInputRef} type="file" accept="application/pdf,.pdf" onChange={handlePdfPick} className="hidden" />
                     <button
                       onClick={() => pdfInputRef.current?.click()}
                       disabled={pdfBusy}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition-colors flex-shrink-0"
+                      className="text-xs font-bold h-9 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white transition-colors flex-shrink-0"
                     >
-                      {pdfBusy ? 'Working…' : pdf ? 'Replace PDF' : '+ Upload PDF'}
+                      {pdfBusy ? 'Working…' : pdf ? 'Replace' : 'Upload PDF'}
                     </button>
                     {pdf && (
                       <button
                         onClick={handlePdfRemove}
                         disabled={pdfBusy}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-300 hover:text-red-600 hover:border-red-300 disabled:opacity-50 transition-colors flex-shrink-0"
+                        className="text-xs font-bold h-9 px-3.5 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 disabled:opacity-50 transition-colors flex-shrink-0"
                       >
                         Remove
                       </button>
@@ -548,22 +582,27 @@ const AdminQaedahTab: React.FC = () => {
               </div>
             )}
 
+            {/* Words card: add form, bulk add, grid */}
+            <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+
             {/* Single word add form */}
-            <form onSubmit={handleAddWord} className="flex gap-2 items-center">
+            <form onSubmit={handleAddWord} className="flex gap-2 items-center px-4 py-3 border-b border-slate-100 dark:border-gray-700">
+              <label className="sr-only" htmlFor="qaedah-new-word">New word</label>
               <input
+                id="qaedah-new-word"
                 ref={wordInputRef}
                 value={newWord}
                 onChange={e => setNewWord(e.target.value)}
                 placeholder="اكتب كلمة…"
                 dir="rtl"
                 style={{ ...HAFS, fontSize: '1.8rem', lineHeight: 1.5 }}
-                className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-900 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
               <LevelPicker value={newWordLevel} onChange={setNewWordLevel} />
               <button
                 type="submit"
                 disabled={!newWord.trim() || addingWord}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
+                className="px-4 h-10 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap"
               >
                 {addingWord ? '…' : '+ Add'}
               </button>
@@ -571,7 +610,7 @@ const AdminQaedahTab: React.FC = () => {
 
             {/* Bulk add panel */}
             {showBulk && (
-              <div className="bg-slate-50 dark:bg-gray-900 rounded-xl border border-slate-200 dark:border-gray-700 p-4 space-y-3">
+              <div className="bg-slate-50 dark:bg-gray-900 border-b border-slate-100 dark:border-gray-700 p-4 space-y-3">
                 {/* 1-word / 2-word toggle */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Entry size:</span>
@@ -628,7 +667,7 @@ const AdminQaedahTab: React.FC = () => {
                 No words yet — add some above.
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+              <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 gap-2">
                 {words.map(w => {
                   const lc = LEVEL_COLOR[w.level];
                   const isSelected = selectedIds.has(w.id);
@@ -643,7 +682,7 @@ const AdminQaedahTab: React.FC = () => {
                         return next;
                       });
                     }}
-                    className={`group relative bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden transition-all ${
+                    className={`group relative bg-slate-50 dark:bg-gray-900/40 rounded-xl border overflow-hidden transition-all ${
                       selectMode ? 'cursor-pointer' : ''
                     } ${
                       isSelected
@@ -738,6 +777,7 @@ const AdminQaedahTab: React.FC = () => {
                 })}
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

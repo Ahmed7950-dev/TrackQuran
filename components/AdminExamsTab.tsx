@@ -97,23 +97,25 @@ const AdminExamsTab: React.FC<{ adminId: string }> = ({ adminId }) => {
 
   return (
     <div>
-      <div className="mb-4">
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Arabic Exams</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Create and manage level exams. Arabic and Transliteration are separate exams. Drafts are hidden from tutors and students until published.</p>
+      <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-4 mb-4">
+        <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">Arabic exams</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Create and manage level exams. Arabic and Transliteration are separate exams. Drafts are hidden from tutors and students until published.</p>
       </div>
 
       {loading ? (
         <p className="text-center text-slate-400 py-8">Loading…</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {byLevel.map(({ level, exams: levelExams }) => (
-            <div key={level} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-slate-700 dark:text-slate-200">Level {level}</h4>
+            <div key={level} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-3 flex-wrap px-5 py-3 bg-slate-50 dark:bg-gray-900/40 border-b border-slate-200 dark:border-gray-700">
+                <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100">Level {level}</h4>
+                <span className="text-xs text-slate-400">{levelExams.length} exam{levelExams.length === 1 ? '' : 's'}</span>
+                <span className="flex-1" />
                 <div className="flex gap-2">
                   {(['arabic', 'transliteration'] as ExamVersion[]).map(v => (
                     <button key={v} disabled={creating} onClick={() => handleCreate(level, v)}
-                      className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-xs font-semibold hover:bg-amber-200 disabled:opacity-50">
+                      className="h-8 px-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-xs font-bold hover:bg-amber-100 disabled:opacity-50 transition-colors">
                       + {v === 'arabic' ? 'Arabic' : 'Transliteration'} exam
                     </button>
                   ))}
@@ -121,26 +123,26 @@ const AdminExamsTab: React.FC<{ adminId: string }> = ({ adminId }) => {
               </div>
 
               {levelExams.length === 0 ? (
-                <p className="text-sm text-slate-400">No exams yet for this level.</p>
+                <p className="text-sm text-slate-400 px-5 py-6">No exams yet for this level.</p>
               ) : (
-                <div className="space-y-2">
+                <div>
                   {levelExams.map(exam => (
-                    <div key={exam.id} className="flex items-center justify-between gap-3 border border-slate-100 dark:border-gray-700 rounded-xl px-3 py-2">
+                    <div key={exam.id} className="flex items-center justify-between gap-3 flex-wrap px-5 py-3 border-b border-slate-100 dark:border-gray-700/70 last:border-b-0">
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{exam.title}</p>
-                        <p className="text-xs text-slate-400">
+                        <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{exam.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           {exam.version === 'arabic' ? 'Arabic' : 'Transliteration'} · {exam.totalMarks} marks · pass {exam.passingPercentage}%
                           {exam.timeLimitMinutes ? ` · ${exam.timeLimitMinutes} min` : ' · no timer'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${exam.status === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400'}`}>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold me-1 ${exam.status === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400'}`}>
                           {exam.status === 'published' ? 'Published' : 'Draft'}
                         </span>
-                        <button onClick={() => openPreview(exam.id)} className="text-xs font-semibold text-sky-600 hover:underline">Preview</button>
-                        <button onClick={() => openResults(exam)} className="text-xs font-semibold text-indigo-600 hover:underline">Results</button>
-                        <button onClick={() => setEditingId(exam.id)} className="text-xs font-semibold text-amber-600 hover:underline">Edit</button>
-                        <button onClick={() => handleDelete(exam.id)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
+                        <button onClick={() => openPreview(exam.id)} className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-gray-600 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">Preview</button>
+                        <button onClick={() => openResults(exam)} className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-gray-600 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">Results</button>
+                        <button onClick={() => setEditingId(exam.id)} className="h-8 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors">Edit</button>
+                        <button onClick={() => handleDelete(exam.id)} aria-label={`Delete ${exam.title}`} className="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-gray-600 text-xs font-bold text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Delete</button>
                       </div>
                     </div>
                   ))}
