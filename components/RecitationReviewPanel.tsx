@@ -10,9 +10,11 @@
 // marked stay visible; the page gets bottom padding to match.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useRef, useState } from 'react';
-import { QURAN_METADATA } from '../constants';
+import { QURAN_METADATA, isLetterMistakeKey } from '../constants';
+import { Mistake } from '../types';
 import {
-  RecitationHomework, rangeLabel, recitationUrl, reviewRecitationHomework, versesOfRange,
+  RecitationHomework, rangeLabel, reassignRecitationVerses, recitationUrl,
+  reviewRecitationHomework, versesOf,
 } from '../services/recitationHomeworkService';
 
 const fmtClock = (ms: number): string => {
@@ -22,15 +24,20 @@ const fmtClock = (ms: number): string => {
 
 const RecitationReviewPanel: React.FC<{
   rec: RecitationHomework;
+  /** The student's mistakes map — verses with logged mistakes turn red here. */
+  mistakes: Record<string, Mistake>;
   onJumpToVerse: (key: string) => void;
   onReviewed: (rec: RecitationHomework) => void;
+  /** Send the marked verses back as a new homework; the caller adds it to the
+   *  student's homework list and returns once it is saved. */
+  onReassign: (rec: RecitationHomework, wrongVerses: string[]) => Promise<boolean>;
   onClose: () => void;
-}> = ({ rec, onJumpToVerse, onReviewed, onClose }) => {
-  const verses = versesOfRange(rec);
+}> = ({ rec, mistakes, onJumpToVerse, onReviewed, onReassign, onClose }) => {
+  const verses = versesOf(rec);
   const [playing, setPlaying] = useState<string | null>(null);
   const [chain, setChain] = useState(false);
   const [open, setOpen] = useState(true);
-  const [busy, setBusy] = useState<'passed' | 'needs_revision' | null>(null);
+  const [busy, setBusy] = useState<'passed' | 'reassign' | null>(null);
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -86,13 +93,32 @@ const RecitationReviewPanel: React.FC<{
     play(`${first[0]}:${first[1]}`, true);
   };
 
-  const decide = async (verdict: 'passed' | 'needs_revision') => {
+  /** How many mistakes the tutor has logged on each verse of this homework. */
+  const mistakesByVerse = React.useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const [key, m] of Object.entries(mistakes ?? {})) {
+      if (!isLetterMistakeKey(key) || !m?.errorType) continue;   // yellow = fixed
+      const [su, ay] = key.replace(/^T/, '').split(':');
+      const k = `${su}:${ay}`;
+      out[k] = (out[k] ?? 0) + 1;
+    }
+    return out;
+  }, [mistakes]);
+  const wrongVerses = verses.map(([s, v]) => `${s}:${v}`).filter(k => (mistakesByVerse[k] ?? 0) > 0);
+
+  const decide = async (verdict: 'passed' | 'reassign') => {
     setErr(''); setBusy(verdict);
     audioRef.current?.pause();
-    const done = await reviewRecitationHomework(rec, verdict);
+    if (verdict === 'passed') {
+      const done = await reviewRecitationHomework(rec, 'passed');
+      setBusy(null);
+      if (!done) { setErr('Could not save the review — check your connection.'); return; }
+      onReviewed(done);
+      return;
+    }
+    const ok = await onReassign(rec, wrongVerses);
     setBusy(null);
-    if (!done) { setErr('Could not save the review — check your connection.'); return; }
-    onReviewed(done);
+    if (!ok) setErr('Could not reassign — check your connection and try again.');
   };
 
   const recorded = verses.filter(([s, v]) => rec.recordings[`${s}:${v}`]).length;
@@ -121,9 +147,10 @@ const RecitationReviewPanel: React.FC<{
   const iconBtn = 'w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-600 transition-colors';
   const verdictButtons = (small = false) => (
     <div className="flex items-center gap-2 flex-shrink-0">
-      <button onClick={() => decide('needs_revision')} disabled={!!busy || recorded === 0}
+      <button onClick={() => decide('reassign')} disabled={!!busy || wrongVerses.length === 0}
+        title={wrongVerses.length === 0 ? 'Log a mistake on a verse to reassign it' : `Send back ${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'}`}
         className={`${small ? 'h-10 px-3 text-[13px]' : 'h-12 sm:h-[52px] px-3 sm:px-5 text-sm'} rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-black hover:bg-amber-100 dark:hover:bg-amber-900/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
-        {busy === 'needs_revision' ? 'Saving…' : 'Needs revision'}
+        {busy === 'reassign' ? 'Reassigning…' : `Reassign${wrongVerses.length ? ` ${wrongVerses.length}` : ''}`}
       </button>
       <button onClick={() => decide('passed')} disabled={!!busy || recorded === 0}
         className={`${small ? 'h-10 px-4 text-[13px]' : 'h-12 sm:h-[52px] px-4 sm:px-6 text-sm'} rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black shadow-lg shadow-emerald-800/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
@@ -177,7 +204,11 @@ const RecitationReviewPanel: React.FC<{
           <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">{recorded} of {verses.length} recorded</span>
         </span>
         <span className="flex-grow" />
-        <span className="hidden lg:inline text-[13px] text-slate-400 dark:text-slate-500">Log mistakes on the page as usual — playing a verse scrolls to it</span>
+        <span className="hidden lg:inline text-[13px] text-slate-400 dark:text-slate-500">
+          {wrongVerses.length
+            ? `${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'} marked — Reassign sends just those back`
+            : 'Log mistakes on the page as usual — playing a verse scrolls to it'}
+        </span>
         <button onClick={() => { navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {}); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }}
           aria-label="Copy the student's recording link" title="Copy the student's recording link"
           className={`${iconBtn} ${copied ? 'text-emerald-600 border-emerald-300' : ''}`}>{copied ? '✓' : icon.link}</button>
@@ -204,28 +235,31 @@ const RecitationReviewPanel: React.FC<{
                 const key = `${s}:${v}`;
                 const r = rec.recordings[key];
                 const isPlaying = playing === key;
+                const wrong = mistakesByVerse[key] ?? 0;
                 const newSurah = multiSurah && i > 0 && verses[i - 1][0] !== s;
                 const name = QURAN_METADATA.find(m => m.number === s)?.transliteratedName;
                 return (
                   <React.Fragment key={key}>
                     {newSurah && <span className="w-px h-8 bg-slate-200 dark:bg-gray-600 flex-shrink-0" />}
                     <button onClick={() => (r ? play(key) : onJumpToVerse(key))}
-                      aria-label={`${name} verse ${v}${r ? `, recording ${Math.round(r.ms / 1000)} seconds` : ', not recorded'}`}
+                      aria-label={`${name} verse ${v}${r ? `, recording ${Math.round(r.ms / 1000)} seconds` : ', not recorded'}${wrong ? `, ${wrong} mistake${wrong === 1 ? '' : 's'} logged` : ''}`}
                       aria-current={isPlaying ? 'true' : undefined}
-                      className={`flex items-center gap-2 h-12 sm:h-[52px] px-2.5 sm:px-3.5 rounded-xl flex-shrink-0 transition-colors ${
-                        isPlaying ? 'bg-teal-700 border-2 border-teal-700 text-white shadow-lg shadow-teal-700/25'
+                      className={`relative flex items-center gap-2 h-12 sm:h-[52px] px-2.5 sm:px-3.5 rounded-xl flex-shrink-0 transition-colors ${
+                        isPlaying ? (wrong ? 'bg-red-600 border-2 border-red-600 text-white shadow-lg shadow-red-600/25' : 'bg-teal-700 border-2 border-teal-700 text-white shadow-lg shadow-teal-700/25')
+                        : wrong ? 'border-2 border-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100'
                         : r ? 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-400'
                         : 'border border-dashed border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40'}`}>
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
                         isPlaying ? 'bg-white/25 text-white'
+                        : wrong ? 'bg-red-600 text-white'
                         : r ? 'bg-slate-100 dark:bg-gray-600 text-slate-800 dark:text-slate-100'
                         : 'bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-400'}`}>{v}</span>
                       <span className="flex flex-col items-start leading-tight">
                         {multiSurah && (
-                          <span className={`text-[12px] font-bold ${isPlaying ? 'text-white' : r ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>{name}</span>
+                          <span className={`text-[12px] font-bold ${isPlaying ? 'text-white' : wrong ? 'text-red-700 dark:text-red-300' : r ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>{name}</span>
                         )}
-                        <span className={`text-[11px] sm:text-xs font-semibold ${isPlaying ? 'text-teal-100' : r ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400'}`}>
-                          {r ? (isPlaying ? `${fmtClock(pos * 1000)} / ${fmtClock(r.ms)}` : fmtClock(r.ms)) : rec.purgedAt ? 'cleared' : 'not recorded'}
+                        <span className={`text-[11px] sm:text-xs font-semibold ${isPlaying ? 'text-white/80' : wrong ? 'text-red-600 dark:text-red-300' : r ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400'}`}>
+                          {wrong ? `${wrong} mistake${wrong === 1 ? '' : 's'}` : r ? (isPlaying ? `${fmtClock(pos * 1000)} / ${fmtClock(r.ms)}` : fmtClock(r.ms)) : rec.purgedAt ? 'cleared' : 'not recorded'}
                         </span>
                       </span>
                       {isPlaying ? bars : r ? <span className="text-teal-700 dark:text-teal-300">{icon.play}</span> : null}

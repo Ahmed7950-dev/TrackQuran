@@ -18,7 +18,7 @@ import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
   RecitationHomework, RECORDER_BITRATE, getRecitationHomework, pickRecorderMime,
-  portalHomeworkUrl, rangeLabel, saveVerseRecording, submitRecitationHomework, versesOfRange,
+  portalHomeworkUrl, rangeLabel, saveVerseRecording, submitRecitationHomework, versesOf,
 } from '../services/recitationHomeworkService';
 
 const MAX_TAKE_MS = 5 * 60 * 1000;
@@ -126,7 +126,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     getRecitationHomework(recitationId).then(setRec);
   }, [recitationId]);
 
-  const verses = useMemo(() => (rec ? versesOfRange(rec) : []), [rec]);
+  const verses = useMemo(() => (rec ? versesOf(rec) : []), [rec]);
   const key = verses[idx] ? `${verses[idx][0]}:${verses[idx][1]}` : '';
 
   // Verse texts, one fetch per surah (cached by dataService).
