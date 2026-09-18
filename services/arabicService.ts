@@ -239,7 +239,13 @@ export async function getArabicStudents(teacherId: string): Promise<ArabicStuden
   return (data ?? []).map(rowToStudent);
 }
 
-export async function saveArabicStudent(teacherId: string, student: ArabicStudent): Promise<void> {
+/**
+ * Returns false when the row was NOT saved. A silent failure here cost a real
+ * student: `subscription_renewal_date` was in the payload months before the
+ * column existed on this table, so PostgREST rejected every add and edit while
+ * the app showed the student happily in the list until the next reload.
+ */
+export async function saveArabicStudent(teacherId: string, student: ArabicStudent): Promise<boolean> {
   // The share-link token is owned SOLELY by ensureShareToken / ensureShareTokenById.
   // A full-row upsert here must never write it: saving a stale student object whose
   // shareToken is still undefined would null the column and permanently break the
@@ -251,7 +257,8 @@ export async function saveArabicStudent(teacherId: string, student: ArabicStuden
   const { error } = await supabase
     .from('arabic_students')
     .upsert(payload, { onConflict: 'id' });
-  if (error) console.error('saveArabicStudent:', error.message);
+  if (error) { console.error('saveArabicStudent:', error.message); return false; }
+  return true;
 }
 
 /** Approve / reject a self-registered Arabic student's join request. */

@@ -575,12 +575,28 @@ const App: React.FC = () => {
       const idx = prev.findIndex(s => s.id === student.id);
       return idx >= 0 ? prev.map(s => s.id === student.id ? student : s) : [...prev, student];
     });
-    if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
+    if (currentUser?.role === 'teacher') {
+      const ok = await saveArabicStudent(currentUser.id, student);
+      // Never let a student sit in the list unsaved: they would vanish on the
+      // next reload, and their share link would never exist.
+      if (!ok) {
+        setArabicStudents(prev => prev.filter(s => s.id !== student.id));
+        window.alert(`"${student.name}" could not be saved — check your connection and add them again.`);
+      }
+    }
   };
   const handleUpdateArabicStudent = async (student: ArabicStudent) => {
     const before = arabicStudents.find(s => s.id === student.id)?.subscriptionRenewalDate;
+    const previous = arabicStudents.find(s => s.id === student.id);
     setArabicStudents(prev => prev.map(s => s.id === student.id ? student : s));
-    if (currentUser?.role === 'teacher') await saveArabicStudent(currentUser.id, student);
+    if (currentUser?.role === 'teacher') {
+      const ok = await saveArabicStudent(currentUser.id, student);
+      if (!ok) {
+        if (previous) setArabicStudents(prev => prev.map(s => s.id === student.id ? previous : s));
+        window.alert(`The changes to "${student.name}" could not be saved — check your connection and try again.`);
+        return;
+      }
+    }
     // One subscription per family — see propagateRenewalDate.
     if (student.subscriptionRenewalDate !== before) {
       void propagateRenewalDate(student.id, student.subscriptionRenewalDate);
