@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { sendPushFor } from './pushService';
 import type { LessonBooking } from './lessonBookingService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -121,6 +122,17 @@ export async function createNotification(input: {
       body:       input.body,
       is_read:    false,
       metadata:   input.metadata ?? null,
+    });
+    // …and ring the phone of anyone who asked for it. Fire and forget: the row
+    // above is the record, a push is only the alert.
+    void sendPushFor({
+      recipient: input.recipient,
+      teacherId: input.teacherId,
+      studentId: input.studentId,
+      title:     input.title,
+      body:      input.body,
+      url:       input.metadata?.url,
+      tag:       `${input.type}:${input.studentId}`,
     });
   } catch {
     // best-effort — never surface notification errors to the user

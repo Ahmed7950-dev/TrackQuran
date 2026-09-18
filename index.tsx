@@ -54,6 +54,14 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+// Push notifications live in a service worker; registering it on load keeps an
+// existing subscription alive. It caches nothing (see public/sw.js).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* not fatal */ });
+  });
+}
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

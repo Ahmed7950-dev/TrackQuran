@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import PushToggle from './PushToggle';
 import {
   BookingNotification,
   NotificationType,
@@ -215,6 +216,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
               </button>
             )}
           </div>
+
+          {/* Phone alerts — tutor first; students get this once it is proven */}
+          {recipient === 'tutor' && teacherId && (
+            <PushToggle recipient="tutor" teacherId={teacherId} />
+          )}
 
           {/* Notification list */}
           <div className="overflow-y-auto max-h-[420px]">
