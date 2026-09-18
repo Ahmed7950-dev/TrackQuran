@@ -25,7 +25,6 @@ const AdminLetterAudioTab: React.FC = () => {
   const [error, setError] = useState('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputLetter = useRef<string>('');
@@ -55,12 +54,14 @@ const AdminLetterAudioTab: React.FC = () => {
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      // Own array per take: a shared one lets the previous recorder's final
+      // flush land at the head of this take's file.
+      const chunks: Blob[] = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       rec.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
         if (blob.size > 0) {
           setBusyLetter(letter);
           const url = await uploadLetterAudio(letter, blob);

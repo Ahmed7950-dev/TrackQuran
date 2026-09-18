@@ -163,9 +163,28 @@ export const RECORDER_BITRATE = 24_000;
  * the previous take. Reads the row fresh so two verses saved back to back can't
  * overwrite each other's entry. Returns the updated row.
  */
+/**
+ * A WebM file must begin with the EBML magic 1A 45 DF A3. If anything precedes
+ * it — a stray chunk from a previous take, say — no browser will play the file,
+ * so cut back to the real header rather than storing something unplayable.
+ * Returns the blob untouched when it is already well-formed or isn't WebM.
+ */
+export async function trimToWebmHeader(blob: Blob): Promise<Blob> {
+  if (!(blob.type || '').includes('webm')) return blob;
+  const head = new Uint8Array(await blob.slice(0, 64 * 1024).arrayBuffer());
+  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return blob;
+  for (let i = 1; i + 3 < head.length; i++) {
+    if (head[i] === 0x1a && head[i + 1] === 0x45 && head[i + 2] === 0xdf && head[i + 3] === 0xa3) {
+      return blob.slice(i, blob.size, blob.type);
+    }
+  }
+  return blob;                                   // not WebM after all — store as is
+}
+
 export async function saveVerseRecording(
   id: string, surah: number, ayah: number, blob: Blob, ms: number,
 ): Promise<RecitationHomework | null> {
+  blob = await trimToWebmHeader(blob);
   const type = (blob.type || 'audio/webm').split(';')[0];
   const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
   const path = `${id}/${surah}-${ayah}-${Date.now()}.${ext}`;

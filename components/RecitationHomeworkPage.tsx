@@ -114,8 +114,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   }, []);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const startingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const tickRef = useRef<number | null>(null);
   const minshawiRef = useRef<HTMLAudioElement | null>(null);
@@ -191,8 +191,31 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
   const startRecording = async () => {
     if (!rec || !verses[idx]) return;
+    // Re-entrancy guard: getUserMedia is async, so a double tap could otherwise
+    // start two recorders — and the one we forget about keeps the mic open and
+    // keeps emitting chunks into every later take.
+    if (startingRef.current || take !== 'idle') return;
+    startingRef.current = true;
+    try {
+      await beginRecording();
+    } finally {
+      startingRef.current = false;
+    }
+  };
+
+  const beginRecording = async () => {
+    if (!rec || !verses[idx]) return;
     setError('');
     stopAudio();
+    // Retire any recorder still alive from an earlier take before opening a new one.
+    const stale = recorderRef.current;
+    if (stale) {
+      stale.ondataavailable = null;
+      stale.onstop = null;
+      if (stale.state !== 'inactive') { try { stale.stop(); } catch { /* already gone */ } }
+      recorderRef.current = null;
+    }
+    releaseMic();
     const mime = pickRecorderMime();
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('This browser cannot record audio. Try Chrome or Safari.');
@@ -212,12 +235,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const r = mime
       ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: RECORDER_BITRATE })
       : new MediaRecorder(stream, { audioBitsPerSecond: RECORDER_BITRATE });
-    chunksRef.current = [];
-    r.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data); };
+    // Each take gets its OWN chunk array. A shared one lets the previous
+    // recorder's final flush — which arrives after stop(), once this take has
+    // already begun — land at the head of the new take, leaving a file whose
+    // container header starts thousands of bytes in. Nothing can play that.
+    const chunks: Blob[] = [];
+    r.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     r.onstop = async () => {
       releaseMic();
       const ms = Date.now() - startedAtRef.current;
-      const blob = new Blob(chunksRef.current, { type: r.mimeType || mime || 'audio/webm' });
+      const blob = new Blob(chunks, { type: r.mimeType || mime || 'audio/webm' });
       if (blob.size === 0 || ms < 400) { setTake('idle'); setError('That recording was empty — hold on a moment longer and try again.'); return; }
       const k = `${s}:${a}`;
       if (localUrls.current[k]) URL.revokeObjectURL(localUrls.current[k]);
