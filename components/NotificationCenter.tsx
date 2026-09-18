@@ -74,8 +74,31 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const [open,          setOpen]          = useState(false);
   const [notifications, setNotifications] = useState<BookingNotification[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  /** Phones: the panel is wider than the space left of the bell, so it hangs off
+   *  the screen edge. Below sm it becomes a sheet pinned under the header
+   *  instead — measured, because header heights differ between pages. */
+  const [sheetTop, setSheetTop] = useState<number | null>(null);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const placePanel = useCallback(() => {
+    const narrow = window.matchMedia('(max-width: 639px)').matches;
+    if (!narrow) { setSheetTop(null); return; }
+    const rect = bellRef.current?.getBoundingClientRect();
+    setSheetTop(rect ? Math.round(rect.bottom + 8) : 64);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    placePanel();
+    window.addEventListener('resize', placePanel);
+    window.addEventListener('orientationchange', placePanel);
+    return () => {
+      window.removeEventListener('resize', placePanel);
+      window.removeEventListener('orientationchange', placePanel);
+    };
+  }, [open, placePanel]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -174,6 +197,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     <div ref={containerRef} className="relative flex-shrink-0">
       {/* Bell button */}
       <button
+        ref={bellRef}
         onClick={() => setOpen(o => !o)}
         aria-label="Notifications"
         className="relative p-1.5 sm:p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors"
@@ -201,9 +225,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute end-0 mt-2 w-80 sm:w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 z-50 overflow-hidden">
+        <div
+          style={sheetTop !== null
+            ? { top: sheetTop, maxHeight: `calc(100vh - ${sheetTop + 16}px)` }
+            : undefined}
+          className={`${sheetTop !== null ? 'fixed inset-x-2' : 'absolute end-0 mt-2 w-80 sm:w-96'} bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 z-50 overflow-hidden flex flex-col`}>
           {/* Panel header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-gray-700">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-gray-700 flex-shrink-0">
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
               Notifications
             </h3>
@@ -223,7 +251,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
           )}
 
           {/* Notification list */}
-          <div className="overflow-y-auto max-h-[420px]">
+          <div className="overflow-y-auto flex-1 min-h-0 max-h-[70vh] sm:max-h-[420px]">
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                 <span className="text-3xl mb-2">🔔</span>

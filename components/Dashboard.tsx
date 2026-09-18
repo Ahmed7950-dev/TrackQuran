@@ -540,6 +540,9 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   const archivedSet = useMemo(() => new Set(archivedIds), [archivedIds]);
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>(SortCriteria.HighestPoints);
   const [viewMode, setViewMode] = useState<'points' | 'mistakesRate'>('points');
+  /** The sort bar is one line until you open it — six chips wrapped to three
+   *  rows on a phone pushed the students themselves off the screen. */
+  const [sortOpen, setSortOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const { t } = useI18n();
@@ -925,50 +928,74 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       })()}
 
       <div className="flex flex-col gap-3 mb-6">
-        {/* ── Unified sort bar ── */}
-        <div className="flex items-center gap-1.5 flex-wrap bg-white dark:bg-gray-800 px-4 py-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-gray-700">
-          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">{t('dashboard.sortBy')}</span>
+        {/* ── Sort bar — one line showing the current sort; expands to all of them ── */}
+        {(() => {
+          const options = [
+            { criteria: SortCriteria.HighestPoints,  label: t('sortCriteria.HighestPoints'),  icon: '🏆',
+              on: 'bg-teal-600 dark:bg-teal-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700 dark:hover:text-teal-300',
+              pick: () => { setViewMode('points'); setSortCriteria(SortCriteria.HighestPoints); } },
+            { criteria: SortCriteria.FewestMistakes, label: t('sortCriteria.FewestMistakes'), icon: '📊',
+              on: 'bg-rose-500 dark:bg-rose-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 dark:hover:text-rose-400',
+              pick: () => { setViewMode('mistakesRate'); setSortCriteria(SortCriteria.FewestMistakes); } },
+            { criteria: SortCriteria.MostMemorized,  label: t('sortCriteria.MostMemorized'),  icon: '📖',
+              on: 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600',
+              pick: () => setSortCriteria(SortCriteria.MostMemorized) },
+            { criteria: SortCriteria.MostAttendance, label: t('sortCriteria.MostAttendance'), icon: '📅',
+              on: 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600',
+              pick: () => setSortCriteria(SortCriteria.MostAttendance) },
+            { criteria: SortCriteria.Name,           label: t('sortCriteria.Name'),           icon: '🔤',
+              on: 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600',
+              pick: () => setSortCriteria(SortCriteria.Name) },
+            { criteria: SortCriteria.Age,            label: t('sortCriteria.Age'),            icon: '🎂',
+              on: 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm',
+              off: 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600',
+              pick: () => setSortCriteria(SortCriteria.Age) },
+          ];
+          const active = options.find(o => o.criteria === sortCriteria) ?? options[0];
 
-          {/* Points — also switches card display to score */}
-          <button
-            onClick={() => { setViewMode('points'); setSortCriteria(SortCriteria.HighestPoints); }}
-            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-              sortCriteria === SortCriteria.HighestPoints
-                ? 'bg-teal-600 dark:bg-teal-500 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700 dark:hover:text-teal-300'
-            }`}
-          >🏆 {t('sortCriteria.HighestPoints')}</button>
+          return (
+            <div className="bg-white dark:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl shadow-sm border border-slate-100 dark:border-gray-700">
+              {/* Summary row — always visible, tap to open */}
+              <button
+                onClick={() => setSortOpen(o => !o)}
+                aria-expanded={sortOpen}
+                className="w-full flex items-center gap-2 py-0.5"
+              >
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex-shrink-0">
+                  {t('dashboard.sortBy')}
+                </span>
+                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${active.on}`}>
+                  {active.icon} {active.label}
+                </span>
+                <span className="flex-grow" />
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor"
+                  className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform duration-200 ${sortOpen ? 'rotate-180' : ''}`}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
 
-          {/* Mistakes Rate — also switches card display to mistake rate */}
-          <button
-            onClick={() => { setViewMode('mistakesRate'); setSortCriteria(SortCriteria.FewestMistakes); }}
-            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-              sortCriteria === SortCriteria.FewestMistakes
-                ? 'bg-rose-500 dark:bg-rose-500 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 dark:hover:text-rose-400'
-            }`}
-          >📊 {t('sortCriteria.FewestMistakes')}</button>
-
-          <div className="h-4 w-px bg-slate-200 dark:bg-gray-600 mx-0.5" />
-
-          {/* Other sort criteria */}
-          {([
-            { criteria: SortCriteria.MostMemorized,  label: t('sortCriteria.MostMemorized'),  icon: '📖' },
-            { criteria: SortCriteria.MostAttendance, label: t('sortCriteria.MostAttendance'), icon: '📅' },
-            { criteria: SortCriteria.Name,           label: t('sortCriteria.Name'),           icon: '🔤' },
-            { criteria: SortCriteria.Age,            label: t('sortCriteria.Age'),            icon: '🎂' },
-          ] as const).map(({ criteria, label, icon }) => (
-            <button
-              key={criteria}
-              onClick={() => setSortCriteria(criteria)}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                sortCriteria === criteria
-                  ? 'bg-slate-700 dark:bg-slate-500 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600'
-              }`}
-            >{icon} {label}</button>
-          ))}
-        </div>
+              {/* The rest, revealed */}
+              {sortOpen && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-2 mt-1.5 border-t border-slate-100 dark:border-gray-700">
+                  {options.map(o => (
+                    <button
+                      key={o.criteria}
+                      onClick={() => { o.pick(); setSortOpen(false); }}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        sortCriteria === o.criteria ? o.on : o.off
+                      }`}
+                    >{o.icon} {o.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Right side: family links · search · add student · honor board ── */}
         <div className="flex w-full items-center gap-2 flex-wrap">
