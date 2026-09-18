@@ -39,6 +39,7 @@ const RecitationReviewPanel: React.FC<{
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState<'passed' | 'reassign' | null>(null);
   const [err, setErr] = useState('');
+  const [failedUrl, setFailedUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chainRef = useRef(false);
@@ -81,7 +82,24 @@ const RecitationReviewPanel: React.FC<{
       const next = verses.slice(i + 1).find(([s, v]) => rec.recordings[`${s}:${v}`]);
       if (next) play(`${next[0]}:${next[1]}`, true); else setChain(false);
     };
-    a.play().then(() => setPlaying(key)).catch(() => { setPlaying(null); setErr('This recording could not be played.'); });
+    // Say WHY it failed: a browser that can't decode the format needs a
+    // different answer from a network or permission problem.
+    const explain = (e?: { name?: string }) => {
+      setPlaying(null);
+      setFailedUrl(r.url);
+      const webm = /\.webm(\?|$)/i.test(r.url);
+      const cannotDecode = webm && a.canPlayType('audio/webm; codecs=opus') === '';
+      if (cannotDecode) {
+        setErr('This browser cannot play WebM recordings (Safari). Open the tutor page in Chrome or Edge, or use Download below.');
+        return;
+      }
+      const code = a.error?.code;
+      const why = code === 1 ? 'aborted' : code === 2 ? 'network' : code === 3 ? 'decode failed'
+        : code === 4 ? 'format not supported' : e?.name ?? 'unknown';
+      setErr(`This recording could not be played (${why}).`);
+    };
+    a.onerror = () => explain();
+    a.play().then(() => { setPlaying(key); setErr(''); setFailedUrl(''); }).catch(explain);
   };
 
   const playAll = () => {
@@ -272,7 +290,17 @@ const RecitationReviewPanel: React.FC<{
         )}
         {verdictButtons()}
       </div>
-      {err && <p className="px-6 pb-2 text-xs font-semibold text-red-600">{err}</p>}
+      {err && (
+        <p className="px-6 pb-2 text-xs font-semibold text-red-600">
+          {err}
+          {failedUrl && (
+            <>
+              {' '}
+              <a href={failedUrl} target="_blank" rel="noreferrer" download className="underline">Download</a>
+            </>
+          )}
+        </p>
+      )}
     </section>
   );
 };
