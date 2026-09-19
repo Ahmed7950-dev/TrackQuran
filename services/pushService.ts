@@ -65,26 +65,6 @@ const deviceLabel = (): string => {
   return isStandalone() ? `${device} · Home Screen` : `${device} · ${browser}`;
 };
 
-/** Token-link portals: the student's page IS their credential. */
-const PORTAL_PATHS = [
-  /^\/report\/[a-f0-9-]{36}$/i,
-  /^\/portal\/[a-f0-9-]{36}$/i,
-  /^\/arabic\/s\/[a-f0-9-]{36}$/i,
-  /^\/family\/[a-f0-9-]{36}$/i,
-];
-
-/**
- * On a student's portal, drop the site manifest before they can install it.
- * With the manifest present, "Add to Home Screen" uses its start_url ("/") and
- * the icon would open the tutor's sign-in page instead of the student's own —
- * and iOS only delivers push to the installed app, so that icon has to be
- * right. The apple-mobile-web-app meta tags still give standalone mode.
- */
-export function preparePortalInstall(): void {
-  if (!PORTAL_PATHS.some(re => re.test(window.location.pathname))) return;
-  document.querySelectorAll('link[rel="manifest"]').forEach(el => el.remove());
-}
-
 export async function registerPushWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!('serviceWorker' in navigator)) return null;
   try {

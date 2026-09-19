@@ -23,7 +23,29 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)",     "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/report/:id",
+      "destination": "/api/portal?p=/report/:id"
+    },
+    {
+      "source": "/portal/:id",
+      "destination": "/api/portal?p=/portal/:id"
+    },
+    {
+      "source": "/arabic/s/:id",
+      "destination": "/api/portal?p=/arabic/s/:id"
+    },
+    {
+      "source": "/family/:id",
+      "destination": "/api/portal?p=/family/:id"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
