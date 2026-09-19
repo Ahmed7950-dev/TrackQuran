@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import PushToggle from './PushToggle';
+import InstallButton from './InstallButton';
 import {
   BookingNotification,
   NotificationType,
@@ -143,6 +144,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
+      // The install guide is portalled to <body>; a tap in it is not "outside".
+      if ((e.target as Element)?.closest?.('[data-install-guide]')) return;
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -194,6 +197,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
+    <>
+    {/* Add to Home Screen — sits beside every bell, tutor and student alike */}
+    <InstallButton variant="icon" />
     <div ref={containerRef} className="relative flex-shrink-0">
       {/* Bell button */}
       <button
@@ -244,6 +250,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
               </button>
             )}
           </div>
+
+          {/* Install first: on iPhone, alerts only reach the Home Screen app */}
+          <InstallButton variant="row" />
 
           {/* Phone alerts — this device, tutor or student */}
           {teacherId && (recipient === 'tutor' || studentId) && (
@@ -317,6 +326,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };
 

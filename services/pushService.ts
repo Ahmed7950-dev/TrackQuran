@@ -20,8 +20,10 @@ const VAPID_PUBLIC_KEY =
 export type PushState = 'unsupported' | 'needs-home-screen' | 'blocked' | 'off' | 'on';
 
 const isIOS = (): boolean =>
-  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
+  !/Android/.test(navigator.userAgent) && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+  );
 
 /** iOS shows the install banner only in Safari; standalone means "from the Home Screen". */
 const isStandalone = (): boolean =>

@@ -58,18 +58,8 @@ const PushToggle: React.FC<{
     ? 'New homework and your teacher\u2019s replies, even when the app is closed.'
     : 'A notification even when the app is closed.';
 
-  if (state === 'needs-home-screen') {
-    return (
-      <div className={wrap}>
-        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Get these on your phone</p>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-          On iPhone, tap Share → <span className="font-semibold">Add to Home Screen</span>, then open
-          {isStudent ? ' your page from that icon' : ' LisanQuran from that icon'} and turn
-          notifications on here.
-        </p>
-      </div>
-    );
-  }
+  // iPhone outside the Home Screen app: the install row just above explains it.
+  if (state === 'needs-home-screen') return null;
 
   if (state === 'blocked') {
     return (

@@ -4,6 +4,7 @@ import App from './App';
 import { I18nProvider } from './context/I18nProvider';
 import { AuthProvider } from './context/AuthProvider';
 import SharedReportPage from './components/SharedReportPage';
+import { initInstallCapture } from './services/installService';
 import WordFlightJoinPage from './components/WordFlightJoinPage';
 
 // ── Route detection — done once before any React rendering ──────────────────
@@ -61,6 +62,9 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* not fatal */ });
   });
 }
+
+// The install prompt fires once, early — catch it before React mounts.
+initInstallCapture();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
