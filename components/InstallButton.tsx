@@ -161,11 +161,16 @@ const InstallButton: React.FC<{ variant?: 'icon' | 'row' }> = ({ variant = 'icon
           </div>
 
           {arrowAtBottom && (
-            <div className="fixed bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center text-white pointer-events-none animate-bounce">
-              <span className="text-xs font-black mb-1 drop-shadow">Share is down here</span>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-8 h-8 drop-shadow">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m0 0-6-6m6 6 6-6" />
-              </svg>
+            // Centred by layout, not transform: animate-bounce animates
+            // `transform`, which would wipe out a -translate-x-1/2 and shift the
+            // arrow half its width right — onto the button next to Share.
+            <div className="fixed inset-x-0 bottom-3 flex justify-center pointer-events-none">
+              <div className="flex flex-col items-center text-white animate-bounce">
+                <span className="text-xs font-black mb-1 drop-shadow whitespace-nowrap">Share is down here</span>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-8 h-8 drop-shadow">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m0 0-6-6m6 6 6-6" />
+                </svg>
+              </div>
             </div>
           )}
         </div>,
