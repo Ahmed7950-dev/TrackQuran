@@ -18,6 +18,34 @@ interface Props {
 
 const THUMB_W = 96; // thumbnail render width in px (height is proportional)
 
+// ── Keep lesson PDFs on the device ──────────────────────────────────────────
+// Supabase serves storage files with `cache-control: no-cache`, so without
+// this every lesson opening downloaded the whole PDF again (15–25 MB each) —
+// the bulk of the project's egress. Uploaded PDFs live at timestamped paths
+// and never change, so a copy kept in Cache Storage is safe to reuse forever.
+const PDF_CACHE = 'lesson-pdfs-v1';
+const PDF_CACHE_MAX = 40;                         // oldest copies dropped beyond this
+const isImmutableUpload = (u: string) => /\/storage\/v1\/object\/public\/.+\/\d{12,}-[^/]+\.pdf(\?|$)/i.test(u);
+
+async function pdfSource(url: string): Promise<{ url: string } | { data: ArrayBuffer }> {
+  if (!isImmutableUpload(url) || typeof caches === 'undefined') return { url };
+  try {
+    const cache = await caches.open(PDF_CACHE);
+    const hit = await cache.match(url);
+    if (hit) return { data: await hit.arrayBuffer() };
+    const res = await fetch(url);
+    if (!res.ok) return { url };
+    await cache.put(url, res.clone());
+    // Trim: keys() is in insertion order, so the front is the oldest.
+    cache.keys().then(keys => Promise.all(
+      keys.slice(0, Math.max(0, keys.length - PDF_CACHE_MAX)).map(k => cache.delete(k)),
+    )).catch(() => {});
+    return { data: await res.arrayBuffer() };
+  } catch {
+    return { url };                                // private mode, quota… — just stream it
+  }
+}
+
 const PdfPager: React.FC<Props> = ({
   url, initialPage = 1, onPageChange, className,
   fitMode = 'width', pageStrip = false,
@@ -96,14 +124,19 @@ const PdfPager: React.FC<Props> = ({
   // ── Load document ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let task: any = null;
     setLoading(true); setError(''); setNumPages(0); setThumbnails([]);
-    const task = pdfjsLib.getDocument({
-      url,
-      cMapUrl: '/pdfjs/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: '/pdfjs/standard_fonts/',
-    });
-    task.promise.then(async (doc: any) => {
+    pdfSource(url).then(source => {
+      if (cancelled) return null;
+      task = pdfjsLib.getDocument({
+        ...source,
+        cMapUrl: '/pdfjs/cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: '/pdfjs/standard_fonts/',
+      });
+      return task.promise;
+    }).then(async (doc: any) => {
+      if (!doc) return;
       if (cancelled) return;
       docRef.current = doc;
       setNumPages(doc.numPages);
@@ -122,7 +155,7 @@ const PdfPager: React.FC<Props> = ({
     });
     return () => {
       cancelled = true;
-      try { task.destroy?.(); } catch { /* noop */ }
+      try { task?.destroy?.(); } catch { /* noop */ }
       docRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
