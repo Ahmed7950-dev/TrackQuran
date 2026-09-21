@@ -79,6 +79,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [submitting, setSubmitting] = useState(false);
   const [minshawiPlaying, setMinshawiPlaying] = useState(false);
   const [minePlaying, setMinePlaying] = useState(false);
+  /** On a reassigned homework: the one the tutor checked — its takes can be replayed. */
+  const [prevRec, setPrevRec] = useState<RecitationHomework | null>(null);
+  const [prevPlaying, setPrevPlaying] = useState(false);
+  // Viewport width — the verse and the comment pills scale with it (see LH).
+  const [vw, setVw] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const on = () => setVw(window.innerWidth);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
   /** Takes recorded in this visit, playable instantly before the upload's URL. */
   const localUrls = useRef<Record<string, string>>({});
 
@@ -126,6 +136,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const tickRef = useRef<number | null>(null);
   const minshawiRef = useRef<HTMLAudioElement | null>(null);
   const mineRef = useRef<HTMLAudioElement | null>(null);
+  const prevRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     document.title = 'Recitation homework';
@@ -136,6 +147,14 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // on the tutor's Quran page (recitation_mistakes returns only this homework's
   // verses). Refreshed when the student comes back to the page, so marks logged
   // meanwhile appear without a reload.
+  const parentId = rec?.parentId;
+  useEffect(() => {
+    if (!parentId) { setPrevRec(null); return; }
+    let live = true;
+    getRecitationHomework(parentId).then(p => { if (live) setPrevRec(p); });
+    return () => { live = false; };
+  }, [parentId]);
+
   const [liveMistakes, setLiveMistakes] = useState<Record<string, Mistake> | null>(null);
   useEffect(() => {
     let live = true;
@@ -179,6 +198,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const stopAudio = () => {
     minshawiRef.current?.pause(); setMinshawiPlaying(false);
     mineRef.current?.pause(); setMinePlaying(false);
+    prevRef.current?.pause(); setPrevPlaying(false);
   };
   useEffect(() => { stopAudio(); }, [idx]);
 
@@ -196,10 +216,24 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const a = minshawiRef.current ?? (minshawiRef.current = new Audio());
     if (minshawiPlaying) { a.pause(); setMinshawiPlaying(false); return; }
     mineRef.current?.pause(); setMinePlaying(false);
+    prevRef.current?.pause(); setPrevPlaying(false);
     a.src = audioUrl(verses[idx][0], verses[idx][1]);
     a.onended = () => setMinshawiPlaying(false);
     a.onerror = () => { setMinshawiPlaying(false); setError('The recitation could not be played.'); };
     a.play().then(() => setMinshawiPlaying(true)).catch(() => setMinshawiPlaying(false));
+  };
+
+  /** The take the teacher reviewed and marked — from the homework this one redoes. */
+  const playPrev = () => {
+    const url = prevRec?.recordings[key]?.url;
+    if (!url || take === 'recording') return;
+    const a = prevRef.current ?? (prevRef.current = new Audio());
+    if (prevPlaying) { a.pause(); setPrevPlaying(false); return; }
+    minshawiRef.current?.pause(); setMinshawiPlaying(false);
+    mineRef.current?.pause(); setMinePlaying(false);
+    a.src = url;
+    a.onended = () => setPrevPlaying(false);
+    a.play().then(() => setPrevPlaying(true)).catch(() => setPrevPlaying(false));
   };
 
   const playMine = () => {
@@ -208,6 +242,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const a = mineRef.current ?? (mineRef.current = new Audio());
     if (minePlaying) { a.pause(); setMinePlaying(false); return; }
     minshawiRef.current?.pause(); setMinshawiPlaying(false);
+    prevRef.current?.pause(); setPrevPlaying(false);
     a.src = url;
     a.onended = () => setMinePlaying(false);
     a.play().then(() => setMinePlaying(true)).catch(() => setMinePlaying(false));
@@ -338,6 +373,19 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // Live marks first; the copy saved on a reassigned homework only if the live
   // lookup is unavailable.
   const mistakes: Record<string, Mistake> = liveMistakes ?? rec.mistakes ?? {};
+  // Comment pills sit above their letter; at the normal spacing they covered the
+  // line above (measured), so a verse with comments gets taller lines. Mark
+  // overlays are positioned from the line height, so it is passed to them too.
+  // The take the teacher reviewed, for this verse (gone once audio is purged).
+  const prevTake = prevRec && !prevRec.purgedAt ? prevRec.recordings[key] : undefined;
+  const verseHasComments = Object.entries(mistakes).some(([k, m]) => k.startsWith(`${s}:${a}:`) && m?.errorText);
+  // The gap has to fit one comment pill (fixed px) under a verse sized in vw,
+  // so it is worked out in px and turned back into a line-height ratio. The
+  // numbers mirror the two clamp()s below: verse clamp(2.4rem, 6.2vw, 6.5rem),
+  // pill clamp(11px, 1.6vw, 15px); a pill is ~1.25 lines + padding + border.
+  const versePx = Math.min(104, Math.max(38.4, vw * 0.062));
+  const pillPx = Math.min(15, Math.max(11, vw * 0.016));
+  const LH = verseHasComments ? Math.round((2.1 + (pillPx * 1.25 + 22) / versePx) * 100) / 100 : 2.1;
   const verseMistakeCount = Object.entries(mistakes)
     .filter(([k, m]) => k.startsWith(`${s}:${a}:`) && m?.errorType).length;
 
@@ -374,12 +422,12 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const wordMistake = mistakes[wordKey];
 
     if (!hasLetterMistake) {
-      if (!wordMistake) return renderWordWithMarks(word, `r${wi}`, 2.1);
+      if (!wordMistake) return renderWordWithMarks(word, `r${wi}`, LH);
       return (
         <span className="relative inline rounded-lg"
           style={wordMistake.errorType ? letterStyle(wordMistake) : { background: wordLevelBg(wordMistake.level), borderRadius: 8 }}>
           {bubble(wordMistake)}
-          {renderWordWithMarks(word, `r${wi}`, 2.1)}
+          {renderWordWithMarks(word, `r${wi}`, LH)}
         </span>
       );
     }
@@ -397,7 +445,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
               {m && bubble(m)}
               <span className="relative inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
-                {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 2.1) : almSeedForUnit(letter) + letter}
+                {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, LH) : almSeedForUnit(letter) + letter}
               </span>
             </span>
           );
@@ -613,6 +661,21 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
       {/* ── The verse — tap to hear Al-Minshawi ── */}
       <main className="flex-grow flex flex-col rounded-[24px] sm:rounded-[32px] p-2.5 sm:p-3.5" style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
+        {/* Reassigned homework: the take the teacher listened to and marked */}
+        {prevTake && (
+          <button onClick={playPrev} disabled={take === 'recording'}
+            aria-label={prevPlaying ? 'Stop the recording your teacher checked' : 'Listen to the recording your teacher checked'}
+            className="mb-2.5 sm:mb-3 flex items-center justify-center gap-2.5 rounded-[16px] px-4 py-2.5 text-[13px] sm:text-[15px] font-semibold transition-colors disabled:opacity-50"
+            style={prevPlaying
+              ? { background: P.gold, color: theme === 'night' ? '#1a1406' : '#fff', fontFamily: BODY }
+              : { background: P.goldSoft, color: P.goldInk, border: `1.5px solid ${P.gold}`, fontFamily: BODY }}>
+            {prevPlaying
+              ? bars(theme === 'night' ? '#1a1406' : '#fff', true)
+              : <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 flex-shrink-0" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>}
+            <span>{prevPlaying ? 'Playing the recording your teacher checked · tap to stop' : 'Listen to the recording your teacher checked'}</span>
+            <span className="tabular-nums opacity-75">{fmtSecs(prevTake.ms)}</span>
+          </button>
+        )}
         <button onClick={playMinshawi} disabled={take === 'recording' || !text}
           aria-label={`Play Al-Minshawi reciting ${surahName?.transliteratedName} verse ${a}`}
           className="flex-grow flex flex-col items-center justify-center gap-4 sm:gap-6 rounded-[18px] sm:rounded-[22px] px-3 sm:px-10 py-6 sm:py-10 transition-colors"
@@ -631,7 +694,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           )}
           {text ? (
             <p dir="rtl" lang="ar" className="font-quranic m-0 text-center break-words"
-              style={{ color: P.verseInk, fontSize: 'clamp(2.4rem, 6.2vw, 6.5rem)', lineHeight: 2.1 }}>
+              style={{ color: P.verseInk, fontSize: 'clamp(2.4rem, 6.2vw, 6.5rem)', lineHeight: LH }}>
               {splitVerseWords(text).map((w, i, arr) => (
                 <React.Fragment key={i}>{markedWord(w, i)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
               ))}
