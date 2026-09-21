@@ -155,6 +155,15 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     return () => { live = false; };
   }, [parentId]);
 
+  // The tutor opening this page from their own app is signed in; a student
+  // arriving by link is not. Decides where Back leads when there is no history.
+  const teacherId = rec?.teacherId;
+  const [isTutor, setIsTutor] = useState(false);
+  useEffect(() => {
+    if (!teacherId) return;
+    supabase.auth.getSession().then(({ data }) => setIsTutor(data.session?.user?.id === teacherId));
+  }, [teacherId]);
+
   const [liveMistakes, setLiveMistakes] = useState<Record<string, Mistake> | null>(null);
   useEffect(() => {
     let live = true;
@@ -365,6 +374,17 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const surahName = QURAN_METADATA.find(m => m.number === s);
   const portalLink = rec.reportId ? portalHomeworkUrl(rec.reportId, rec.homeworkId) : null;
   const pct = verses.length ? recordedCount / verses.length : 0;
+
+  // Back: return to where they came from inside the app (the portal's homework
+  // tab, the tutor's page); opened fresh — a link, a push notification, a new
+  // tab — go to their main page instead: the tutor's app, or the student's portal.
+  const goBack = () => {
+    stopAudio();
+    let fromHere = false;
+    try { fromHere = !!document.referrer && new URL(document.referrer).origin === window.location.origin; } catch { /* bad referrer */ }
+    if (fromHere && window.history.length > 1) { window.history.back(); return; }
+    window.location.href = isTutor ? '/' : rec.reportId ? `/report/${rec.reportId}` : '/';
+  };
   const multiSurah = rec.startSurah !== rec.endSurah;
 
   // A reassigned homework carries the tutor's logged mistakes. Keys are the
@@ -546,6 +566,15 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       <header className="rounded-[24px] sm:rounded-[28px] px-4 sm:px-8 py-4 sm:py-6 flex flex-col gap-3 sm:gap-5"
         style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-6">
+          {withTip(isTutor ? 'Back to LisanQuran' : 'Back to my page',
+            <button onClick={goBack} disabled={take !== 'idle'}
+              aria-label={isTutor ? 'Back to LisanQuran' : 'Back to my Quran page'}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40"
+              style={{ background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>, 'below')}
           <span className="hidden sm:block">{ring(76, 8)}</span>
           <span className="sm:hidden">{ring(52, 6)}</span>
           <div className="min-w-0 flex-1">
