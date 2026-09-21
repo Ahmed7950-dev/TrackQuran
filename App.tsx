@@ -1541,7 +1541,7 @@ const App: React.FC = () => {
     const student = students.find(s => s.id === rec.studentId);
     if (!student || currentUser?.role !== 'teacher' || wrongVerses.length === 0) return false;
     const newHomeworkId = `hw-${Date.now()}`;
-    const child = await reassignRecitationVerses({ rec, wrongVerses, newHomeworkId });
+    const child = await reassignRecitationVerses({ rec, wrongVerses, newHomeworkId, mistakes: student.mistakes });
     if (!child) return false;
 
     const parsed = wrongVerses.map(k => k.split(':').map(Number));

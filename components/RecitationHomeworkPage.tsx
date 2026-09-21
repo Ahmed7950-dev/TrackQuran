@@ -13,7 +13,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersesForSurah } from '../services/dataService';
-import { splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
+import {
+  splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT,
+  wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
+} from '../utils/quranicMarks';
+import { parseWordIntoLetters } from '../utils/mistakeLetters';
+import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
@@ -308,6 +313,63 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const pct = verses.length ? recordedCount / verses.length : 0;
   const multiSurah = rec.startSurah !== rec.endSurah;
 
+  // A reassigned homework carries the tutor's logged mistakes. Keys are the
+  // live page's: surah:ayah:word[:letter], word counted by splitVerseWords and
+  // letter by parseWordIntoLetters — the same split the Mistakes page uses.
+  const mistakes = rec.mistakes ?? {};
+  const verseMistakeCount = Object.keys(mistakes).filter(k => k.startsWith(`${s}:${a}:`)).length;
+  const tint = (m: Mistake) => m.errorType === 'tajweed' ? 'rgba(34,197,94,0.30)' : 'rgba(239,68,68,0.30)';
+  const bubble = (m: Mistake) => m.errorText ? (
+    <span aria-hidden="true" className="absolute left-1/2 pointer-events-none"
+      style={{
+        bottom: '100%', transform: 'translateX(-50%)', marginBottom: 2, zIndex: 20,
+        fontFamily: BODY, fontSize: 13, fontWeight: 700, lineHeight: 1.25, whiteSpace: 'nowrap',
+        padding: '2px 8px', borderRadius: 8, color: '#fff',
+        background: m.errorType === 'tajweed' ? '#16A34A' : '#DC2626',
+        boxShadow: '0 2px 6px rgba(0,0,0,.18)',
+      }}>
+      {m.errorText}
+    </span>
+  ) : null;
+
+  const markedWord = (word: string, wi: number): React.ReactNode => {
+    const wordKey = `${s}:${a}:${wi}`;
+    const letters = parseWordIntoLetters(word);
+    const hasLetterMistake = letters.some(l => mistakes[`${wordKey}:${l.index}`]);
+    const wordMistake = mistakes[wordKey];
+
+    if (!hasLetterMistake) {
+      if (!wordMistake) return renderWordWithMarks(word, `r${wi}`, 2.1);
+      return (
+        <span className="relative inline rounded-lg" style={{ background: tint(wordMistake) }}>
+          {bubble(wordMistake)}
+          {renderWordWithMarks(word, `r${wi}`, 2.1)}
+        </span>
+      );
+    }
+
+    // Letter by letter, exactly as the Mistakes page draws it, so the highlight
+    // sits on the letter the tutor marked and the word still joins up.
+    const plan = wordMarkPlan(word);
+    return (
+      <span className="relative inline"
+        style={{ display: 'inline', whiteSpace: 'nowrap', letterSpacing: 0,
+          fontFamily: plan.mode === 'wholeWord' ? plan.font : 'inherit' }}>
+        {letters.map(({ letter, index }) => {
+          const m = mistakes[`${wordKey}:${index}`];
+          return (
+            <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
+              {m && bubble(m)}
+              <span className="relative inline rounded" style={{ display: 'inline', background: m ? tint(m) : undefined }}>
+                {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 2.1) : almSeedForUnit(letter) + letter}
+              </span>
+            </span>
+          );
+        })}
+      </span>
+    );
+  };
+
   const eyebrow = rec.status === 'submitted' ? 'Submitted' : rec.status === 'passed' ? 'Passed'
     : rec.status === 'needs_revision' ? 'Needs revision' : 'Recitation homework';
   const subline = rec.status === 'submitted' ? 'Your teacher will listen and review it.'
@@ -518,11 +580,18 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             {surahName?.transliteratedName} · Verse {a}
             <span className="hidden sm:block w-10 h-px" style={{ background: P.gold }} />
           </span>
+          {verseMistakeCount > 0 && (
+            <span className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] sm:text-[14px] font-bold"
+              style={{ background: 'rgba(239,68,68,0.12)', color: theme === 'night' ? '#FCA5A5' : '#B91C1C', fontFamily: BODY }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: '#DC2626' }} />
+              Your teacher marked {verseMistakeCount} mistake{verseMistakeCount === 1 ? '' : 's'} here — fix {verseMistakeCount === 1 ? 'it' : 'them'}, then record again
+            </span>
+          )}
           {text ? (
             <p dir="rtl" lang="ar" className="font-quranic m-0 text-center break-words"
               style={{ color: P.verseInk, fontSize: 'clamp(2.4rem, 6.2vw, 6.5rem)', lineHeight: 2.1 }}>
               {splitVerseWords(text).map((w, i, arr) => (
-                <React.Fragment key={i}>{renderWordWithMarks(w, `r${i}`, 2.1)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
+                <React.Fragment key={i}>{markedWord(w, i)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
               ))}
               {' '}
               <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap"

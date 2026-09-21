@@ -8,46 +8,9 @@ import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, tanweenOnSeatAlif, almSeedForUnit } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
+import { parseWordIntoLetters } from '../utils/mistakeLetters';
 
-
-// Helper function to check if a character is an Arabic letter
-const isArabicLetter = (char: string | undefined): boolean => {
-    if (!char) return false;
-    const code = char.charCodeAt(0);
-    // Basic Arabic letters (U+0621–U+064A)
-    if (code >= 0x0621 && code <= 0x064A) return true;
-    // Extended Arabic letters used in Quranic orthography
-    // (e.g. ٱ Alef Wasla U+0671). Excludes U+0670 which is a combining mark.
-    if (code >= 0x0671 && code <= 0x06D3) return true;
-    if (code === 0x06D5) return true;
-    if (code >= 0x06EE && code <= 0x06EF) return true;
-    if (code >= 0x06FA && code <= 0x06FC) return true;
-    return false;
-};
-
-// Parse word into individual letters with their indices
-const parseWordIntoLetters = (word: string): Array<{ letter: string; index: number }> => {
-    const letters: Array<{ letter: string; index: number }> = [];
-    if (!word || typeof word !== 'string') return letters;
-    word = tanweenOnSeatAlif(word); // display: fathatan on its seat alif (رَسُولاً)
-    let letterIndex = 0;
-    for (let i = 0; i < word.length; i++) {
-        const char = word[i];
-        if (isArabicLetter(char)) {
-            letters.push({ letter: char, index: letterIndex });
-            letterIndex++;
-        } else {
-            // Attach diacritics to the previous letter, or create a standalone unit
-            if (letters.length > 0) {
-                letters[letters.length - 1].letter += char;
-            } else {
-                letters.push({ letter: char, index: letterIndex });
-            }
-        }
-    }
-    return letters;
-};
 
 /** Returns the timestamp of the most recent mistake logged for a given verse. */
 const getVerseNewestTime = (verseKey: string, mistakes: Record<string, any>): number => {

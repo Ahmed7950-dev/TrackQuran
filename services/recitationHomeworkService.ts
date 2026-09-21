@@ -17,7 +17,8 @@
 
 import { supabase } from '../lib/supabase';
 import { createNotification } from './notificationService';
-import { QURAN_METADATA } from '../constants';
+import { QURAN_METADATA, isLetterMistakeKey, isTurkishMistakeKey } from '../constants';
+import type { Mistake } from '../types';
 
 export const RECITATION_BUCKET = 'quran-recitations';
 export const KEEP_AFTER_REVIEW_DAYS = 30;
@@ -43,6 +44,9 @@ export interface RecitationHomework {
   verses?: string[];
   parentId?: string;
   reassignedCount?: number;
+  /** On a reassigned homework: the tutor's logged mistakes on its verses,
+   *  shown highlighted with their comments while the student re-records. */
+  mistakes?: Record<string, Mistake>;
   recordings: Record<string, VerseRecording>;
   createdAt: string;
   submittedAt: string | null;
@@ -55,6 +59,7 @@ interface Row {
   report_id: string | null; start_surah: number; start_ayah: number; end_surah: number; end_ayah: number;
   note: string | null; status: RecitationStatus; recordings: Record<string, VerseRecording> | null;
   verses: string[] | null; parent_id: string | null; reassigned_count: number | null;
+  mistakes: Record<string, Mistake> | null;
   created_at: string; submitted_at: string | null; reviewed_at: string | null; purged_at: string | null;
 }
 
@@ -65,6 +70,7 @@ const fromRow = (r: Row): RecitationHomework => ({
   note: r.note ?? undefined, status: r.status, recordings: r.recordings ?? {},
   verses: r.verses ?? undefined, parentId: r.parent_id ?? undefined,
   reassignedCount: r.reassigned_count ?? undefined,
+  mistakes: r.mistakes ?? undefined,
   createdAt: r.created_at, submittedAt: r.submitted_at, reviewedAt: r.reviewed_at, purgedAt: r.purged_at,
 });
 
@@ -117,12 +123,15 @@ export async function createRecitationHomework(input: {
   startSurah: number; startAyah: number; endSurah: number; endAyah: number; note?: string;
   /** Only for a reassigned homework: the verses to record again. */
   verses?: string[]; parentId?: string;
+  /** Only for a reassigned homework: the mistakes to show on those verses. */
+  mistakes?: Record<string, Mistake>;
 }): Promise<RecitationHomework | null> {
   const { data, error } = await supabase.from('quran_recitation_homework').insert({
     homework_id: input.homeworkId, teacher_id: input.teacherId, student_id: input.studentId,
     student_name: input.studentName, report_id: input.reportId,
     start_surah: input.startSurah, start_ayah: input.startAyah, end_surah: input.endSurah, end_ayah: input.endAyah,
     note: input.note ?? null, verses: input.verses ?? null, parent_id: input.parentId ?? null,
+    ...(input.mistakes && Object.keys(input.mistakes).length ? { mistakes: input.mistakes } : {}),
   }).select('*').single();
   if (error) { console.error('createRecitationHomework:', error.message); return null; }
   return fromRow(data as Row);
@@ -259,11 +268,29 @@ export async function reviewRecitationHomework(
  * those verses. Returns the new row, which the caller adds to the student's
  * homework list (so it shows in their portal) before the student is told.
  */
+/**
+ * The logged mistakes on some verses — the ones that make a verse red in the
+ * review bar: letter/word keys with an errorType (a plain yellow highlight has
+ * none). Turkish-script keys index a different text, so they are left out.
+ */
+export function mistakesForVerses(all: Record<string, Mistake>, verseKeys: string[]): Record<string, Mistake> {
+  const wanted = new Set(verseKeys);
+  const out: Record<string, Mistake> = {};
+  for (const [key, m] of Object.entries(all ?? {})) {
+    if (!isLetterMistakeKey(key) || isTurkishMistakeKey(key) || !m?.errorType) continue;
+    const [s, a] = key.split(':');
+    if (wanted.has(`${s}:${a}`)) out[key] = m;
+  }
+  return out;
+}
+
 export async function reassignRecitationVerses(input: {
   rec: RecitationHomework;
   wrongVerses: string[];          // "surah:ayah", in order
   newHomeworkId: string;          // the QuranHomework id the caller will create
   note?: string;
+  /** The student's mistakes map — the ones on wrongVerses travel with the homework. */
+  mistakes?: Record<string, Mistake>;
 }): Promise<RecitationHomework | null> {
   const { rec, wrongVerses } = input;
   if (wrongVerses.length === 0) return null;
@@ -277,6 +304,7 @@ export async function reassignRecitationVerses(input: {
     startSurah: first[0], startAyah: first[1], endSurah: last[0], endAyah: last[1],
     note: input.note ?? 'Record these verses again — your teacher marked mistakes in them.',
     verses: wrongVerses, parentId: rec.id,
+    mistakes: input.mistakes ? mistakesForVerses(input.mistakes, wrongVerses) : undefined,
   });
   if (!child) return null;
 
