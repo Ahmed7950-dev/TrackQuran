@@ -25,7 +25,9 @@ const THUMB_W = 96; // thumbnail render width in px (height is proportional)
 // and never change, so a copy kept in Cache Storage is safe to reuse forever.
 const PDF_CACHE = 'lesson-pdfs-v1';
 const PDF_CACHE_MAX = 40;                         // oldest copies dropped beyond this
-const isImmutableUpload = (u: string) => /\/storage\/v1\/object\/public\/.+\/\d{12,}-[^/]+\.pdf(\?|$)/i.test(u);
+// A file name carrying an upload timestamp (13 digits) anywhere in it:
+// arabic-pdfs/<ts>-<name>.pdf, pdfs/<ts>-<name>.pdf, qaedah-pdfs/<topic>-<ts>-<name>.pdf
+const isImmutableUpload = (u: string) => /\/storage\/v1\/object\/public\/[^?]*\/[^/?]*\d{12,}[^/?]*\.pdf(\?|$)/i.test(u);
 
 async function pdfSource(url: string): Promise<{ url: string } | { data: ArrayBuffer }> {
   if (!isImmutableUpload(url) || typeof caches === 'undefined') return { url };
