@@ -18,6 +18,7 @@ import {
   wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
 } from '../utils/quranicMarks';
 import { parseWordIntoLetters } from '../utils/mistakeLetters';
+import { supabase } from '../lib/supabase';
 import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
@@ -129,6 +130,24 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   useEffect(() => {
     document.title = 'Recitation homework';
     getRecitationHomework(recitationId).then(setRec);
+  }, [recitationId]);
+
+  // The mistakes the tutor has logged on these verses — live, the same marks as
+  // on the tutor's Quran page (recitation_mistakes returns only this homework's
+  // verses). Refreshed when the student comes back to the page, so marks logged
+  // meanwhile appear without a reload.
+  const [liveMistakes, setLiveMistakes] = useState<Record<string, Mistake> | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      supabase.rpc('recitation_mistakes', { p_id: recitationId }).then(({ data, error }) => {
+        if (live && !error && data && typeof data === 'object') setLiveMistakes(data as Record<string, Mistake>);
+      });
+    };
+    load();
+    const onShow = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { live = false; document.removeEventListener('visibilitychange', onShow); };
   }, [recitationId]);
 
   const verses = useMemo(() => (rec ? versesOf(rec) : []), [rec]);
@@ -316,17 +335,33 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // A reassigned homework carries the tutor's logged mistakes. Keys are the
   // live page's: surah:ayah:word[:letter], word counted by splitVerseWords and
   // letter by parseWordIntoLetters — the same split the Mistakes page uses.
-  const mistakes = rec.mistakes ?? {};
-  const verseMistakeCount = Object.keys(mistakes).filter(k => k.startsWith(`${s}:${a}:`)).length;
-  const tint = (m: Mistake) => m.errorType === 'tajweed' ? 'rgba(34,197,94,0.30)' : 'rgba(239,68,68,0.30)';
+  // Live marks first; the copy saved on a reassigned homework only if the live
+  // lookup is unavailable.
+  const mistakes: Record<string, Mistake> = liveMistakes ?? rec.mistakes ?? {};
+  const verseMistakeCount = Object.entries(mistakes)
+    .filter(([k, m]) => k.startsWith(`${s}:${a}:`) && m?.errorType).length;
+
+  // Exactly the tutor's Quran page: pink + red underline for reading, green +
+  // green underline for tajweed, yellow for a mark whose type was cleared.
+  const letterStyle = (m: Mistake): React.CSSProperties =>
+    m.errorType === 'tajweed' ? { backgroundColor: 'rgba(134,239,172,0.70)', borderBottom: '2px solid #16a34a', borderRadius: 3 }
+    : m.errorType === 'reading' ? { backgroundColor: 'rgba(252,165,165,0.75)', borderBottom: '2px solid #dc2626', borderRadius: 3 }
+    : { backgroundColor: 'rgba(254,240,138,0.80)', borderBottom: '2px solid #ca8a04', borderRadius: 3 };
+  // Whole-word marks by click count, as on the Quran page.
+  const wordLevelBg = (level: number) =>
+    level === 3 ? 'rgba(254,202,202,0.70)' : level === 2 || level === 4 ? 'rgba(254,215,170,0.70)' : 'rgba(254,240,138,0.70)';
+  const night = theme === 'night';
   const bubble = (m: Mistake) => m.errorText ? (
     <span aria-hidden="true" className="absolute left-1/2 pointer-events-none"
       style={{
-        bottom: '100%', transform: 'translateX(-50%)', marginBottom: 2, zIndex: 20,
-        fontFamily: BODY, fontSize: 13, fontWeight: 700, lineHeight: 1.25, whiteSpace: 'nowrap',
-        padding: '2px 8px', borderRadius: 8, color: '#fff',
-        background: m.errorType === 'tajweed' ? '#16A34A' : '#DC2626',
-        boxShadow: '0 2px 6px rgba(0,0,0,.18)',
+        bottom: '100%', transform: 'translateX(-50%)', marginBottom: 4, zIndex: 20,
+        fontFamily: BODY, fontSize: 'clamp(11px, 1.6vw, 15px)', fontWeight: 600, lineHeight: 1.25,
+        whiteSpace: 'nowrap', padding: '2px 9px', borderRadius: 8, boxShadow: '0 4px 10px rgba(0,0,0,.12)',
+        ...(m.errorType === 'tajweed'
+          ? night ? { background: 'rgba(20,83,45,.75)', color: '#BBF7D0', border: '2px solid #15803D' }
+                  : { background: '#DCFCE7', color: '#166534', border: '2px solid #86EFAC' }
+          : night ? { background: 'rgba(127,29,29,.75)', color: '#FECACA', border: '2px solid #B91C1C' }
+                  : { background: '#FEE2E2', color: '#991B1B', border: '2px solid #FCA5A5' }),
       }}>
       {m.errorText}
     </span>
@@ -341,7 +376,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     if (!hasLetterMistake) {
       if (!wordMistake) return renderWordWithMarks(word, `r${wi}`, 2.1);
       return (
-        <span className="relative inline rounded-lg" style={{ background: tint(wordMistake) }}>
+        <span className="relative inline rounded-lg"
+          style={wordMistake.errorType ? letterStyle(wordMistake) : { background: wordLevelBg(wordMistake.level), borderRadius: 8 }}>
           {bubble(wordMistake)}
           {renderWordWithMarks(word, `r${wi}`, 2.1)}
         </span>
@@ -360,7 +396,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           return (
             <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
               {m && bubble(m)}
-              <span className="relative inline rounded" style={{ display: 'inline', background: m ? tint(m) : undefined }}>
+              <span className="relative inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
                 {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 2.1) : almSeedForUnit(letter) + letter}
               </span>
             </span>
@@ -541,6 +577,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           {verses.map(([vs, va], i) => {
             const done = !!rec.recordings[`${vs}:${va}`];
             const current = i === idx;
+            const marked = Object.entries(mistakes).some(([k, mm]) => k.startsWith(`${vs}:${va}:`) && mm?.errorType);
             const newSurah = i === 0 || verses[i - 1][0] !== vs;
             return (
               <React.Fragment key={`${vs}:${va}`}>
@@ -553,15 +590,20 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
                   </>
                 )}
                 <button onClick={() => take === 'idle' && setIdx(i)}
-                  aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${done ? ', recorded' : ''}${current ? ', current' : ''}`}
+                  aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${done ? ', recorded' : ''}${current ? ', current' : ''}${marked ? ', has mistakes' : ''}`}
                   aria-current={current ? 'step' : undefined}
-                  className="rounded-full text-[14px] sm:text-[16px] font-bold tabular-nums transition-all w-[38px] h-[38px] sm:w-[46px] sm:h-[46px]"
+                  className="relative rounded-full text-[14px] sm:text-[16px] font-bold tabular-nums transition-all w-[38px] h-[38px] sm:w-[46px] sm:h-[46px]"
                   style={current
                     ? { background: P.goldSoft, color: P.goldInk, border: `3px solid ${P.gold}`, boxShadow: `0 0 0 4px ${P.goldHalo}` }
                     : done
                       ? { background: P.chipDone, color: P.chipDoneInk, border: 'none' }
                       : { background: P.chipIdle, color: P.chipIdleInk, border: `1.5px solid ${P.chipIdleBorder}` }}>
                   {va}
+                  {/* This verse has marks from the teacher — go look. */}
+                  {marked && (
+                    <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full"
+                      style={{ background: '#DC2626', border: `2px solid ${P.card}` }} />
+                  )}
                 </button>
               </React.Fragment>
             );
