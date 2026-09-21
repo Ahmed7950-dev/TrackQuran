@@ -726,12 +726,47 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** How many times the CURRENT per-ayah file has played so far. */
     const repeatDoneRef = useRef(1);
     const surahNavScrollRef = useRef<HTMLDivElement | null>(null);
+    /** The sm+ surah bar's box. When the tools either side leave its scrolling
+     *  strip too narrow to use (an iPad held upright), the bar is swapped for the
+     *  phone's surah selector. */
+    const surahNavWrapRef = useRef<HTMLDivElement | null>(null);
+    const [compactSurahNav, setCompactSurahNav] = useState(false);
+    const compactNavRef = useRef({ on: false, backAt: 0 });
     // Phone-only vertical surah picker. The horizontal pill strip needs width
     // to be usable — on a phone it shows two or three names and fights the
     // pinned first/last pills and both arrows for space. Small screens get a
     // single current-surah button that opens a vertical list instead, opened
     // centred on the current surah so its neighbours are visible above/below.
     const [surahPickerOpen, setSurahPickerOpen] = useState(false);
+
+    // Bar or selector? In bar mode, if the scrolling strip between the pinned
+    // first/last surahs drops under MIN_STRIP px, switch to the selector and
+    // remember how wide the bar's box must grow for the strip to reach
+    // BACK_STRIP again; only then switch back (the gap stops it flickering).
+    useEffect(() => {
+        const wrap = surahNavWrapRef.current;
+        if (!wrap || typeof ResizeObserver === 'undefined') return;
+        const MIN_STRIP = 120, BACK_STRIP = 200;
+        const check = () => {
+            const w = wrap.clientWidth;
+            const st = compactNavRef.current;
+            if (!st.on) {
+                const strip = surahNavScrollRef.current?.clientWidth ?? w;
+                if (strip < MIN_STRIP && w > 0) {
+                    st.on = true;
+                    st.backAt = w - strip + BACK_STRIP;
+                    setCompactSurahNav(true);
+                }
+            } else if (w >= st.backAt) {
+                st.on = false;
+                setCompactSurahNav(false);
+            }
+        };
+        const ro = new ResizeObserver(check);
+        ro.observe(wrap);
+        check();
+        return () => ro.disconnect();
+    }, []);
     const readOnlyAudioRef = useRef<HTMLAudioElement | null>(null);
     // true while a tap on an ayah number is playing the surah sequentially from
     // that ayah to the end (vs a single-verse play from tapping the verse text).
@@ -3905,8 +3940,26 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         </form>
                         <div className="sm:hidden order-2 basis-full h-0" aria-hidden="true" />
 
-                        {/* ── Middle (sm+): surah pills — first & last pinned, middle scrolls ── */}
-                        <div className="hidden flex-1 sm:flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
+                        {/* ── Middle (sm+): surah pills — first & last pinned, middle scrolls.
+                            Too narrow to scroll (iPad upright)? The phone's selector instead. ── */}
+                        <div ref={surahNavWrapRef} className="hidden flex-1 sm:flex items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
+                            {compactSurahNav ? (
+                                <button
+                                    onClick={() => setSurahPickerOpen(true)}
+                                    className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
+                                    aria-label="Choose surah"
+                                >
+                                    <span className="flex items-center gap-1.5 min-w-0">
+                                        <span className="font-mono text-xs opacity-80 flex-shrink-0">{selectedSurahId}</span>
+                                        <span className="truncate tracking-wide">
+                                            {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
+                                        </span>
+                                    </span>
+                                    <svg className="w-3.5 h-3.5 flex-shrink-0 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+                                    </svg>
+                                </button>
+                            ) : (<>
                             {/* First surah (Al-Fatihah) — pinned */}
                             {surahStatuses[0] && (
                                 <button
@@ -3962,6 +4015,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <span className="tracking-wide">{surahStatuses[surahStatuses.length - 1].transliteratedName}</span>
                                 </button>
                             )}
+                            </>)}
                         </div>
 
                         {/* ── Right: tool controls. On phones this is its own full-width
@@ -4631,9 +4685,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
             {/* ── Phone surah picker: vertical list, same colours as the pills ── */}
             {surahPickerOpen && (
-                <div className="fixed inset-0 z-[200] flex items-end bg-black/50" onClick={() => setSurahPickerOpen(false)}>
+                <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50" onClick={() => setSurahPickerOpen(false)}>
                     <div
-                        className="w-full max-h-[78vh] bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl flex flex-col"
+                        className="w-full sm:max-w-xl max-h-[78vh] bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100 dark:border-gray-700">
