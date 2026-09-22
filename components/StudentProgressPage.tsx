@@ -6,7 +6,8 @@ import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
-import { loadVerseNotes, saveVerseNote } from '../services/tadabburService';
+import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, WordMeaning } from '../services/tadabburService';
+import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
@@ -20,6 +21,10 @@ import ConfirmationModal from './ConfirmationModal';
 declare var confetti: any;
 
 type LogType = 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafseer' | 'homework';
+type PageMode = 'reading' | 'listening' | 'hifz' | 'tadabbur';
+/** Word text as stored with a meaning: waqf signs and ۞ dropped, so the same
+ *  word matches across verses for the tutor's own suggestions. */
+const normalizeMeaningWord = (w: string) => w.replace(/[\u06D6-\u06DC\u06DE\u06E9]/g, '').trim();
 
 
 interface StudentProgressPageProps {
@@ -451,10 +456,15 @@ const SurahProgressBar: React.FC<{
     hasTafsir?: (id: number) => boolean,
     /** Segment click → jump to that surah's beginning. */
     onSelectSurah?: (id: number) => void,
-}> = ({ surahStatuses, title, type, hasHomework, hasTafsir, onSelectSurah }) => {
+    /** Tadabbur mode: blue = surah with tadabbur work, everything else grey. */
+    tadabbur?: (id: number) => boolean,
+}> = ({ surahStatuses, title, type, hasHomework, hasTafsir, onSelectSurah, tadabbur }) => {
     // Mirrors getSurahNavButtonClass so the mini-map and the nav bar speak the
     // same color language: green=hifz, orange=read, purple=homework, blue=tafsir.
     const segmentClass = (status: SurahStatus['status'], memStatus: SurahStatus['memStatus'], id: number) => {
+        if (tadabbur) return tadabbur(id)
+            ? 'bg-blue-500 dark:bg-blue-600 hover:bg-blue-600'
+            : 'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600';
         if (memStatus !== 'not-started') return 'bg-green-400 dark:bg-green-600 hover:bg-green-500';
         if (status !== 'not-started') return 'bg-orange-400 dark:bg-orange-600 hover:bg-orange-500';
         if (hasHomework?.(id)) return 'bg-purple-400 dark:bg-purple-600 hover:bg-purple-500';
@@ -543,6 +553,152 @@ const PageProgressBar: React.FC<{
                         </div>
                     );
                 })}
+            </div>
+        </div>
+    );
+};
+
+/** Tadabbur: the tutor taps a word → suggestions + their own meaning.
+ *  A popover under the word from sm up, a bottom sheet on phones. */
+const WordMeaningPanel: React.FC<{
+    word: string;
+    anchor: HTMLElement;
+    transliteration?: string;
+    apiMeaning?: string;
+    apiLoading?: boolean;
+    currentMeaning?: string;
+    onSave: (meaning: string) => Promise<void>;
+    onClose: () => void;
+}> = ({ word, anchor, transliteration, apiMeaning, apiLoading, currentMeaning, onSave, onClose }) => {
+    const [text, setText] = useState(currentMeaning ?? '');
+    const [mine, setMine] = useState<{ meaning: string; surah: number; ayah: number }[]>([]);
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState('');
+    const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+    const isPhone = typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches;
+
+    useEffect(() => {
+        let alive = true;
+        loadMyMeaningsForWord(normalizeMeaningWord(word)).then(r => { if (alive) setMine(r); });
+        return () => { alive = false; };
+    }, [word]);
+
+    useLayoutEffect(() => {
+        if (isPhone) return;
+        const place = () => {
+            const r = anchor.getBoundingClientRect();
+            const W = 380, H = 340;
+            const left = Math.min(Math.max(8, r.left + r.width / 2 - W / 2), window.innerWidth - W - 8);
+            if (r.bottom + 8 + H < window.innerHeight || r.top < H) setPos({ top: r.bottom + 8, left });
+            else setPos({ bottom: window.innerHeight - r.top + 8, left });
+        };
+        place();
+        window.addEventListener('scroll', place, true);
+        window.addEventListener('resize', place);
+        return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+    }, [anchor, isPhone]);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const save = async (m: string) => {
+        setBusy(true); setErr('');
+        try { await onSave(m); onClose(); }
+        catch { setErr('Could not save — check the connection and try again.'); setBusy(false); }
+    };
+
+    const suggestions: { text: string; source: string }[] = [];
+    const seen = new Set<string>();
+    const push = (t: string, source: string) => {
+        const k = t.trim().toLowerCase();
+        if (!k || seen.has(k)) return;
+        seen.add(k); suggestions.push({ text: t.trim(), source });
+    };
+    if (apiMeaning) push(apiMeaning, 'Quran.com word-by-word');
+    mine.forEach(m => push(m.meaning, `You wrote this in ${QURAN_METADATA[m.surah - 1]?.transliteratedName ?? m.surah} ${m.ayah}`));
+
+    return (
+        <>
+            <div className="fixed inset-0 z-[60] max-sm:bg-black/30" onClick={onClose} />
+            <div
+                role="dialog" aria-label={`Meaning of ${word}`} dir="ltr"
+                className="fixed z-[61] bg-white dark:bg-gray-800 font-sans text-left shadow-2xl border border-blue-200 dark:border-blue-900 flex flex-col gap-2.5 p-3.5 max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-3xl max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:w-[380px] sm:rounded-2xl"
+                style={isPhone ? undefined : pos ? { top: pos.top, bottom: pos.bottom, left: pos.left } : { visibility: 'hidden' }}
+            >
+                <span className="sm:hidden self-center w-10 h-1 rounded-full bg-slate-300 dark:bg-gray-600" />
+                <div className="flex items-center gap-2.5">
+                    <span className="font-quranic text-3xl leading-[1.6] text-slate-900 dark:text-slate-100" dir="rtl">{word}</span>
+                    {transliteration && <span className="text-sm italic text-slate-500 dark:text-slate-400">{transliteration}</span>}
+                    <span className="flex-1" />
+                    <button onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600">✕</button>
+                </div>
+                {(suggestions.length > 0 || apiLoading) && (
+                    <>
+                        <span className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-slate-500 dark:text-slate-400">Suggestions — tap to use</span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {apiLoading && suggestions.length === 0 && <span className="text-sm text-slate-400 animate-pulse">Loading…</span>}
+                            {suggestions.map(sg => {
+                                const current = sg.text === currentMeaning;
+                                return (
+                                    <button key={sg.text} disabled={busy} onClick={() => save(sg.text)}
+                                        className={`flex flex-col items-start px-2.5 py-1.5 rounded-xl text-left transition-colors disabled:opacity-60 ${current
+                                            ? 'border-2 border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100'
+                                            : 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 hover:border-blue-400'}`}>
+                                        <span className="text-sm font-bold">{sg.text}</span>
+                                        <span className={`text-[10px] font-semibold ${current ? 'text-blue-500' : 'text-slate-500 dark:text-slate-400'}`}>{sg.source}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+                <form className="flex flex-col gap-1.5" onSubmit={e => { e.preventDefault(); if (text.trim()) save(text); }}>
+                    <label htmlFor="word-meaning-input" className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-slate-500 dark:text-slate-400">Or write your own</label>
+                    <span className="flex gap-1.5">
+                        <input id="word-meaning-input" type="text" value={text} onChange={e => setText(e.target.value)} autoFocus={!isPhone}
+                            placeholder="Write the meaning…" enterKeyHint="done"
+                            className="flex-1 min-w-0 h-11 sm:h-10 px-3 rounded-xl border-[1.5px] border-blue-300 dark:border-blue-800 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 text-[15px] sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button type="submit" disabled={busy || !text.trim()} className="h-11 sm:h-10 px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-extrabold disabled:opacity-50">
+                            {busy ? '…' : 'Save'}
+                        </button>
+                    </span>
+                </form>
+                {currentMeaning && (
+                    <button onClick={() => save('')} disabled={busy} className="self-start text-xs font-bold text-red-700 dark:text-red-400 hover:underline">Remove this meaning</button>
+                )}
+                {err && <p className="text-xs font-semibold text-red-600 dark:text-red-400">{err}</p>}
+            </div>
+        </>
+    );
+};
+
+/** Tadabbur: one segment per verse of the open surah, blue once it has a word
+ *  meaning, a tutor note or the student's reflection. */
+const VerseTadabburBar: React.FC<{
+    title: string;
+    count: number;
+    isDone: (ayah: number) => boolean;
+    onSelect: (ayah: number) => void;
+}> = ({ title, count, isDone, onSelect }) => {
+    if (count === 0) return null;
+    return (
+        <div className="mt-3">
+            <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{title}</h4>
+            <div className="flex gap-px sm:gap-0.5">
+                {Array.from({ length: count }, (_, i) => i + 1).map(ayah => (
+                    <div key={ayah} className="relative group flex-1 min-w-0">
+                        <button type="button" aria-label={`Verse ${ayah}`} onClick={() => onSelect(ayah)}
+                            className={`h-4 w-full block rounded-sm transition-colors cursor-pointer ${isDone(ayah)
+                                ? 'bg-blue-500 dark:bg-blue-600 hover:bg-blue-600'
+                                : 'bg-slate-200 dark:bg-gray-700 hover:bg-slate-300 dark:hover:bg-gray-600'}`} />
+                        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 dark:bg-black text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 left-1/2 -translate-x-1/2">
+                            Verse {ayah}
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -708,9 +864,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [readOnlySpeed, setReadOnlySpeed] = useState(1);
     /** One compound popup for speed + reciter + verse repeat. */
     const [audioMenuOpen, setAudioMenuOpen] = useState(false);
-    /** Tutor-side listen mode: verse taps play recitation instead of logging. */
-    const [tutorListen, setTutorListen] = useState(false);
-    const listenActive = readOnly || tutorListen;
+    /** The page's mode (left of the surah bar). Reading logs mistakes (tutor);
+     *  listening plays verses on tap; hifz hides/reveals verses on tap;
+     *  tadabbur shows verse blocks with word meanings and notes. */
+    const [pageMode, setPageModeRaw] = useState<PageMode>('reading');
+    const tutorListen = !readOnly && pageMode === 'listening';
+    // Students have always been able to tap a verse to hear it while reading.
+    const listenActive = readOnly ? (pageMode === 'reading' || pageMode === 'listening') : tutorListen;
     // Key for this student's per-device preferences (reading position, scroll
     // speed). The student portal passes a placeholder `student` whose id is the
     // same for EVERY link ('shared-report-quran'), so there the real id comes
@@ -969,7 +1129,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setReadOnlyAudioVerse(null);
     }, []);
 
-    useEffect(() => { if (!tutorListen) stopVerse(); }, [tutorListen, stopVerse]);
+    useEffect(() => { if (!listenActive) stopVerse(); }, [listenActive, stopVerse]);
 
     // Safari marks an <audio> element as user-activated the first time play() is
     // called on it inside a gesture. Do that once, on the first touch anywhere,
@@ -1009,8 +1169,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         playVerse(surah, ayah, true);
     };
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
-    const [tadabburMode, setTadabburMode] = useState(false);
+    const tadabburMode = pageMode === 'tadabbur';
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
+    /** Tutor's word meanings ("s:a:wordIndex") and per-verse notes ("s:a") for this student. */
+    const [wordMeanings, setWordMeanings] = useState<Record<string, WordMeaning>>({});
+    const [tutorVerseNotes, setTutorVerseNotes] = useState<Record<string, string>>({});
+    const [tutorNoteDrafts, setTutorNoteDrafts] = useState<Record<string, string>>({});
+    const [tutorNoteSaving, setTutorNoteSaving] = useState<Record<string, 'saving' | 'saved' | 'error'>>({});
+    /** Test: meanings hidden; hover (or tap) a word to check it. */
+    const [testMode, setTestMode] = useState(false);
+    const [peekWords, setPeekWords] = useState<Set<string>>(new Set());
+    const [wordEditor, setWordEditor] = useState<{ key: string; surah: number; ayah: number; wordIndex: number; word: string; el: HTMLElement } | null>(null);
+    const [expandedTafsir, setExpandedTafsir] = useState<Set<string>>(new Set());
+    /** quran.com word-by-word data, per surah (loaded in tadabbur mode). */
+    const [wbwBySurah, setWbwBySurah] = useState<Record<number, Map<string, WbwWord[]>>>({});
     /** Tutor-side toggle: show / hide student Tadabbur notes during a live session */
     const [showStudentNotes, setShowStudentNotes] = useState(true);
     const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
@@ -1102,8 +1274,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const scrollSpeedRef        = useRef(readScrollSpeed(prefsId));
     const tajweedMenuRef    = useRef<HTMLDivElement>(null);
     // ── Tools menu (combines Translation + Tajweed + Teacher Notes) ───────
-    const [showToolsMenu, setShowToolsMenu] = useState(false);
-    const toolsMenuRef = useRef<HTMLDivElement>(null);
 
     // ── Teacher's Notes popup ────────────────────────────────────────────────
     const [teacherNote, setTeacherNote] = useState(student.teacherNote ?? '');
@@ -1134,10 +1304,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Hifz mode: a tap on a verse hides it (blurred) or brings it back, so the
     // student can test themselves. Letter taps don't log anything meanwhile.
     // Leaving the mode reveals everything again.
-    const [hifzMode, setHifzMode] = useState(false);
-    const toggleHifzMode = () => {
-        if (hifzMode) setHiddenRanges([]);
-        setHifzMode(!hifzMode);
+    const hifzMode = pageMode === 'hifz';
+    const setPageMode = (m: PageMode) => {
+        if (m === pageMode) return;
+        if (pageMode === 'hifz') setHiddenRanges([]);          // leaving hifz shows every verse again
+        if (pageMode === 'tadabbur') { setShowTranslation(false); setTestMode(false); setPeekWords(new Set()); setWordEditor(null); }
+        if (m === 'tadabbur') { setShowTranslation(true); setIsAutoScrolling(false); }
+        if (m === 'tadabbur' || m === 'listening') setFocusMode(false);
+        setMobileTool(null);
+        setAudioMenuOpen(false);
+        setPageModeRaw(m);
     };
     const toggleVerseHidden = (verse: Progress) => setHiddenRanges(prev => {
         const idx = prev.findIndex(r => isVerseAfterOrEqual(verse, r.start) && isVerseAfterOrEqual(r.end, verse));
@@ -1237,6 +1413,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         loadVerseNotes(notesStudentId)
             .then(setVerseNotes)
             .catch(err => console.warn('[Tadabbur] load notes failed:', err));
+        loadWordMeanings(notesStudentId)
+            .then(setWordMeanings)
+            .catch(err => console.warn('[Tadabbur] load word meanings failed:', err));
+        loadTutorVerseNotes(notesStudentId)
+            .then(setTutorVerseNotes)
+            .catch(err => console.warn('[Tadabbur] load tutor notes failed:', err));
     }, [notesStudentId]);
 
     // ── Tadabbur: save / delete a note then update local state ────────────────
@@ -1261,6 +1443,62 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             setSavingNoteKey(null);
         }
     }, [notesStudentId]);
+
+    // ── Tadabbur: word meanings, tutor notes, blue progress ──────────────────
+    useEffect(() => {
+        if (!tadabburMode) return;
+        const surahs = [...new Set(verses.map(v => Number(v.verse_key.split(':')[0])))];
+        surahs.filter(n => !wbwBySurah[n]).forEach(n => {
+            fetchSurahWbw(n)
+                .then(map => setWbwBySurah(prev => ({ ...prev, [n]: map })))
+                .catch(err => console.warn('[Tadabbur] word-by-word load failed:', err));
+        });
+    }, [tadabburMode, verses, wbwBySurah]);
+
+    const handleSaveWordMeaning = useCallback(async (surah: number, ayah: number, wordIndex: number, word: string, meaning: string) => {
+        if (!notesStudentId) return;
+        const key = `${surah}:${ayah}:${wordIndex}`;
+        const wordText = normalizeMeaningWord(word);
+        await saveWordMeaning(notesStudentId, surah, ayah, wordIndex, wordText, meaning);
+        setWordMeanings(prev => {
+            const next = { ...prev };
+            if (meaning.trim()) next[key] = { meaning: meaning.trim(), wordText };
+            else delete next[key];
+            return next;
+        });
+    }, [notesStudentId]);
+
+    const handleSaveTutorNote = useCallback(async (surah: number, ayah: number, text: string) => {
+        if (!notesStudentId) return;
+        const key = `${surah}:${ayah}`;
+        if ((tutorVerseNotes[key] ?? '') === text.trim()) return;
+        setTutorNoteSaving(p => ({ ...p, [key]: 'saving' }));
+        try {
+            await saveTutorVerseNote(notesStudentId, surah, ayah, text);
+            setTutorVerseNotes(prev => {
+                const next = { ...prev };
+                if (text.trim()) next[key] = text.trim(); else delete next[key];
+                return next;
+            });
+            setTutorNoteSaving(p => ({ ...p, [key]: 'saved' }));
+        } catch (err) {
+            console.error('[Tadabbur] tutor note save failed:', err);
+            setTutorNoteSaving(p => ({ ...p, [key]: 'error' }));
+        }
+    }, [notesStudentId, tutorVerseNotes]);
+
+    /** "s:a" of every verse with a word meaning, a tutor note or a student reflection. */
+    const tadabburVerses = useMemo(() => {
+        const set = new Set<string>();
+        for (const k of Object.keys(wordMeanings)) set.add(k.split(':').slice(0, 2).join(':'));
+        for (const k of Object.keys(tutorVerseNotes)) set.add(k);
+        for (const k of Object.keys(verseNotes)) set.add(k);
+        return set;
+    }, [wordMeanings, tutorVerseNotes, verseNotes]);
+    const tadabburSurahs = useMemo(
+        () => new Set([...tadabburVerses].map(k => Number(k.split(':')[0]))),
+        [tadabburVerses]);
+    const surahHasTadabbur = (id: number) => tadabburSurahs.has(id);
 
     // ── Teacher's Notes popup + postMessage listener ─────────────────────────
     useEffect(() => {
@@ -2012,6 +2250,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Surah-name tint mirrors the verse model: green=hifz, orange=read,
     // purple=homework, blue=tafsir, with a blue underline when tafsir overlaps.
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
+        if (tadabburMode) {
+            if (surahId === selectedSurahId) return 'bg-blue-700 text-white shadow-lg transform scale-105';
+            return surahHasTadabbur(surahId)
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900'
+                : 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
+        }
         if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
         const hasRead = status !== 'not-started';
         const hasMem  = memStatus !== 'not-started';
@@ -2030,6 +2274,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     const getDividerClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
         if (surahId === selectedSurahId) return 'bg-white/40 dark:bg-white/40';
+        if (tadabburMode) return surahHasTadabbur(surahId) ? 'bg-blue-300 dark:bg-blue-700' : 'bg-slate-300 dark:bg-gray-600';
         const hasRead = status !== 'not-started';
         const hasMem  = memStatus !== 'not-started';
         if (hasMem)  return 'bg-green-300 dark:bg-green-700';
@@ -3349,6 +3594,200 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         </div>
     );
 
+    const togglePeek = (k: string) => setPeekWords(prev => {
+        const n = new Set(prev);
+        if (n.has(k)) n.delete(k); else n.add(k);
+        return n;
+    });
+    const noop = () => {};
+
+    /** Tadabbur mode: one block per verse — the words (with meanings above
+     *  them), then translation, explanation, the student's reflection and the
+     *  tutor's note. Same Quran font and size as reading. */
+    const renderTadabburVerse = (verse: QuranVerse, surahNum: number, ayahNum: number) => {
+        const vk = `${surahNum}:${ayahNum}`;
+        const words = splitVerseWords(verse.text_uthmani, turkishSource);
+        const letterWords = words.filter(w => parseWordIntoLetters(w).length > 0).length;
+        const meaningCount = words.reduce((n, _, i) => n + (wordMeanings[`${vk}:${i}`] ? 1 : 0), 0);
+        const quranSize = fontSize <= 1 ? 'text-base' : `text-${fontSize}xl`;
+        const tjMap = verseTajweedMaps.get(verse.verse_key);
+        const note = verseNotes[vk] ?? '';
+        const tNote = tutorVerseNotes[vk] ?? '';
+        const draft = tutorNoteDrafts[vk] ?? tNote;
+        const saveState = tutorNoteSaving[vk];
+        const isEditingThisNote = editingNoteKey === vk;
+        const surahName = QURAN_METADATA[surahNum - 1]?.transliteratedName ?? '';
+        const tafsir = tafsirs[verse.verse_key];
+        const tafsirOpen = expandedTafsir.has(vk);
+        const showReflection = !!notesStudentId && (readOnly || showStudentNotes);
+        const showTutorNote = !!notesStudentId && (!readOnly || !!tNote);
+        const section = 'rounded-xl border p-3 sm:p-4';
+        const label = 'text-[10px] sm:text-[11px] font-extrabold tracking-[0.08em] uppercase mb-1.5';
+        const body = 'text-[15px] leading-relaxed whitespace-pre-wrap';
+        const done = tadabburVerses.has(vk);
+
+        return (
+            <article key={`tadabbur-${verse.verse_key}`} id={`verse-container-${verse.verse_key}`} dir="ltr"
+                className={`mx-1 sm:mx-4 my-3 sm:my-5 rounded-2xl border bg-white dark:bg-gray-800 font-sans text-left text-base leading-normal select-text flex flex-col gap-4 px-3 py-4 sm:px-6 sm:py-5 ${done ? 'border-blue-200 dark:border-blue-900' : 'border-slate-200 dark:border-gray-700'}`}>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="h-7 px-3 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs sm:text-[13px] font-extrabold flex items-center">{surahName} · {ayahNum}</span>
+                    {letterWords > 0 && (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {meaningCount} of {letterWords} words have a meaning{!readOnly && !testMode ? ' · tap a word to add one' : ''}
+                        </span>
+                    )}
+                </div>
+
+                <div dir="rtl" className={`font-quranic ${quranSize} text-slate-900 dark:text-slate-100 flex flex-wrap justify-center items-end gap-x-2 sm:gap-x-4 gap-y-1 select-none`}>
+                    {words.map((word, wordIndex) => {
+                        const letters = parseWordIntoLetters(word);
+                        if (letters.length === 0) return <span key={`w${wordIndex}`} className="self-center leading-[1.8]">{word}</span>;
+                        const mk = `${vk}:${wordIndex}`;
+                        const meaning = wordMeanings[mk]?.meaning;
+                        const peek = peekWords.has(mk);
+                        const editing = wordEditor?.key === mk;
+                        const markPlan = wordMarkPlan(word);
+                        const clickable = testMode ? !!meaning : !readOnly;
+                        return (
+                            <span key={mk} className="relative inline-flex flex-col items-center group/word">
+                                {testMode ? (
+                                    meaning ? (
+                                        <span role="tooltip" className={`absolute bottom-full mb-1 z-10 whitespace-nowrap font-sans text-xs sm:text-sm font-bold text-white bg-blue-900 px-2.5 py-1 rounded-lg shadow pointer-events-none transition-opacity ${peek ? 'opacity-100' : 'opacity-0 group-hover/word:opacity-100'}`}>{meaning}</span>
+                                    ) : null
+                                ) : (
+                                    <span className={`font-sans text-[11px] sm:text-sm font-bold leading-tight px-2 py-0.5 rounded-md max-w-[11rem] text-center ${meaning ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200' : 'invisible'}`}>{meaning || ' '}</span>
+                                )}
+                                <span
+                                    onClickCapture={e => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (testMode) { if (meaning) togglePeek(mk); return; }
+                                        if (readOnly) return;
+                                        setWordEditor({ key: mk, surah: surahNum, ayah: ayahNum, wordIndex, word, el: e.currentTarget as HTMLElement });
+                                    }}
+                                    className={`leading-[1.8] rounded-lg px-1 transition-colors ${clickable ? 'cursor-pointer' : ''} ${meaning ? (testMode ? 'border-b-2 border-dotted border-blue-500' : 'border-b-2 border-blue-300 dark:border-blue-600') : ''} ${editing || (testMode && peek) ? 'ring-[3px] ring-blue-500 bg-blue-50 dark:bg-blue-900/30' : clickable ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : ''}`}
+                                    style={{ fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : undefined }}
+                                >
+                                    {letters.map(({ letter, index: letterIndex }) => {
+                                        const baseKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
+                                        const isLast = letterIndex === letters.length - 1;
+                                        const r = tjMap?.get(`${wordIndex}:${letterIndex}`);
+                                        return (
+                                            <LetterWithError
+                                                key={baseKey}
+                                                letter={letter}
+                                                joinLead={letterIndex > 0 && connectsForward(letters[letterIndex - 1].letter[0])}
+                                                joinTrail={!isLast && connectsForward(letter[0])}
+                                                letterKey={`tadabbur-${baseKey}`}
+                                                mistake={undefined}
+                                                isEditing={false}
+                                                errorText=""
+                                                onLetterClick={noop}
+                                                onTextChange={noop}
+                                                onTextSubmit={noop}
+                                                onTextCancel={noop}
+                                                tajweedClass={r ? `tj-${r}` : undefined}
+                                                markLineHeight={1.8}
+                                                clickState={0}
+                                                vowelAdj={vowelAdjMap?.[currentQuranicFont()]?.[baseKey]}
+                                            />
+                                        );
+                                    })}
+                                </span>
+                            </span>
+                        );
+                    })}
+                    <span className="self-center leading-[1.8]"><VerseMarker number={ayahNum} surah={surahNum} isSelectedStart={false} /></span>
+                </div>
+
+                {(showTranslation || showReflection || showTutorNote) && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {showTranslation && (
+                            <section className={`${section} bg-slate-50 dark:bg-gray-700/40 border-slate-200 dark:border-gray-600`}>
+                                <p className={`${label} text-teal-700 dark:text-teal-400`}>Translation</p>
+                                <p className={`${body} text-slate-700 dark:text-slate-200`}>
+                                    {translations[verse.verse_key] ?? (isTranslationLoading ? 'Loading…' : translationError || '—')}
+                                </p>
+                            </section>
+                        )}
+                        {showTranslation && (
+                            <section className={`${section} bg-slate-50 dark:bg-gray-700/40 border-slate-200 dark:border-gray-600`}>
+                                <p className={`${label} text-teal-700 dark:text-teal-400`}>Explanation</p>
+                                <p className={`${body} text-slate-700 dark:text-slate-200 ${tafsirOpen ? '' : 'line-clamp-3'}`}>
+                                    {tafsir ?? (isTafsirLoading ? 'Loading…' : tafsirError || '—')}
+                                </p>
+                                {tafsir && tafsir.length > 200 && (
+                                    <button
+                                        onClick={() => setExpandedTafsir(prev => { const n = new Set(prev); if (n.has(vk)) n.delete(vk); else n.add(vk); return n; })}
+                                        className="mt-1 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
+                                        {tafsirOpen ? 'Show less' : 'Read more'}
+                                    </button>
+                                )}
+                            </section>
+                        )}
+                        {showReflection && (
+                            <section className={`${section} bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800`} data-tadabbur="true">
+                                <p className={`${label} text-emerald-700 dark:text-emerald-400`}>{readOnly ? 'Your reflection' : 'Student’s reflection'}</p>
+                                {readOnly && isEditingThisNote ? (
+                                    <div className="flex flex-col gap-1">
+                                        <textarea
+                                            value={editingNoteText}
+                                            onChange={e => setEditingNoteText(e.target.value)}
+                                            rows={3} autoFocus
+                                            placeholder="What does this verse mean to you?"
+                                            className="w-full p-2.5 text-sm border-2 border-emerald-400 dark:border-emerald-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 resize-none"
+                                            onKeyDown={e => { if (e.key === 'Escape') { setEditingNoteKey(null); setEditingNoteText(''); } }}
+                                            onBlur={() => handleSaveNote(surahNum, ayahNum, editingNoteText)}
+                                        />
+                                        <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">{savingNoteKey === vk ? 'Saving…' : 'Saves automatically'}</span>
+                                    </div>
+                                ) : note ? (
+                                    <p className={`${body} text-emerald-900 dark:text-emerald-100 ${readOnly ? 'cursor-pointer hover:opacity-80' : ''}`}
+                                        onClick={readOnly ? () => { setEditingNoteKey(vk); setEditingNoteText(note); } : undefined}>
+                                        {note}
+                                    </p>
+                                ) : readOnly ? (
+                                    <button onClick={() => { setEditingNoteKey(vk); setEditingNoteText(''); }}
+                                        className="w-full text-left text-sm text-emerald-700 dark:text-emerald-400 py-2 px-3 rounded-lg border border-dashed border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 font-medium">
+                                        + Write your reflection
+                                    </button>
+                                ) : (
+                                    <p className="text-sm italic text-emerald-800/60 dark:text-emerald-300/60">Not written yet.</p>
+                                )}
+                            </section>
+                        )}
+                        {showTutorNote && (
+                            <section className={`${section} bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 flex flex-col`} data-tadabbur="true">
+                                {readOnly ? (
+                                    <>
+                                        <p className={`${label} text-amber-700 dark:text-amber-400`}>Teacher’s note</p>
+                                        <p className={`${body} text-amber-950 dark:text-amber-100`}>{tNote}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <label htmlFor={`tutor-note-${vk}`} className={`${label} text-amber-700 dark:text-amber-400`}>Your note on this verse</label>
+                                        <textarea
+                                            id={`tutor-note-${vk}`}
+                                            rows={3}
+                                            value={draft}
+                                            onChange={e => setTutorNoteDrafts(p => ({ ...p, [vk]: e.target.value }))}
+                                            onBlur={() => handleSaveTutorNote(surahNum, ayahNum, draft)}
+                                            placeholder="What to remember, a question to think about, homework…"
+                                            className="w-full p-2.5 text-sm rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-700 text-slate-800 dark:text-slate-100 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                        />
+                                        <span className={`mt-1 text-[11px] ${saveState === 'error' ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-amber-800/80 dark:text-amber-300/80'}`}>
+                                            {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Not saved — click outside the box to try again' : saveState === 'saved' ? 'Saved · the student can see it' : 'Saves automatically · the student can see it'}
+                                        </span>
+                                    </>
+                                )}
+                            </section>
+                        )}
+                    </div>
+                )}
+            </article>
+        );
+    };
+
     const renderSurahContent = () => {
         if (isLoading) return <div className="flex justify-center items-center h-full p-12"><p>{t('liveSession.loadingSurah')}</p></div>;
         if (error) return <div className="text-center text-red-500 p-12">{error}</div>;
@@ -3395,6 +3834,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
                 currentRenderedSurah = surahNum;
             }
+
+            if (tadabburMode) { surahContent.push(renderTadabburVerse(verse, surahNum, ayahNum)); return; }
             
             const verseKey = `${surahNum}:${ayahNum}`;
             // Include ALL logs (first-time + revisions + tafseer) so highlighting matches the progress table
@@ -3636,6 +4077,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
+    /** Small square tool button in the toolbar (joins the icon row on phones). */
+    const toolBtn = 'sm:h-7 sm:px-2.5 flex items-center justify-center sm:rounded-md text-[11px] font-bold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3';
+    const testWordCount = Object.keys(wordMeanings).filter(k => k.startsWith(`${selectedSurahId}:`)).length;
+
     // Shared recitation-settings pill (speed + reciter + verse repeat) —
     // rendered on the student toolbar and beside the tutor's 🎧 listen toggle.
     const recitationSettings = (
@@ -3835,17 +4280,25 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                      )}
                 </div>
                 <SurahProgressBar
-                    surahStatuses={surahStatuses} title={t('liveSession.overallProgress')} type="reading"
+                    surahStatuses={surahStatuses} title={tadabburMode ? 'Tadabbur progress' : t('liveSession.overallProgress')} type="reading"
                     hasHomework={surahHasHomework} hasTafsir={surahHasTafsir}
                     onSelectSurah={handleSurahSelection}
+                    tadabbur={tadabburMode ? surahHasTadabbur : undefined}
                 />
-                <PageProgressBar
+                {tadabburMode ? (
+                    <VerseTadabburBar
+                        title={`${selectedSurahInfo?.transliteratedName ?? ''} · verses`}
+                        count={selectedSurahInfo?.numberOfAyahs ?? 0}
+                        isDone={ayah => tadabburVerses.has(`${selectedSurahId}:${ayah}`)}
+                        onSelect={ayah => jumpToVerseNumber(String(ayah))}
+                    />
+                ) : <PageProgressBar
                     pages={surahPages}
                     title={t('liveSession.pagesOfSurah', { surah: selectedSurahInfo?.transliteratedName ?? '' })}
                     statusOf={pageStatus}
                     onSelectPage={goToPage}
                     isOpen={p => p >= currentPageRange.start && p <= currentPageRange.end}
-                />
+                />}
                 <MilestoneTracker completedPages={new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)])} />
             </div>
 
@@ -3856,25 +4309,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     {/* Phones: row 1 = surah selector + verse number box; row 2 = one
                         joined bar of icons (recitation first) with search taking the rest. */}
                     <div className="flex flex-wrap items-center gap-2 max-sm:gap-x-0 max-sm:gap-y-1.5 min-w-0">
-                        {/* ── Left: speed control (readOnly) OR error type toggle (live) ── */}
-                        {readOnly ? (
-                        <div className="relative flex items-center gap-1.5 flex-shrink-0 max-sm:contents" dir="ltr">
-                            {recitationSettings}
-                        </div>
-                        ) : (
-                        <div className="flex items-center gap-2 flex-shrink-0 max-sm:contents">
-                            {/* Listen mode: verse taps play recitation instead of logging */}
-                            <div className="relative flex items-center gap-1.5 max-sm:contents" dir="ltr">
+                        {/* ── Left: the four modes, then that mode's own controls ── */}
+                        <div role="group" aria-label="Mode" dir="ltr" className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1 max-sm:me-1.5">
+                            {([
+                                ['reading', 'Reading', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H3.5A1.5 1.5 0 0 1 2 16z" /><path d="M22 5.5A1.5 1.5 0 0 0 20.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h6a1.5 1.5 0 0 0 1.5-1.5z" /></svg>, 'w-8 max-sm:w-7'],
+                                ['listening', 'Listening', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>, 'w-8 max-sm:w-7'],
+                                ['hifz', 'Hifz', <span key="i" className="italic font-bold text-[15px] leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>, 'px-2 max-sm:px-1.5'],
+                                ['tadabbur', 'Tadabbur', <span key="i" className="text-[16px] leading-none" style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>تدبر</span>, 'px-2.5 max-sm:px-2'],
+                            ] as [PageMode, string, React.ReactNode, string][]).map(([m, label, icon, size]) => (
                                 <button
-                                    onClick={() => setTutorListen(o => !o)}
-                                    title={tutorListen ? 'Listening — tap to return to mistake logging' : 'Listen mode: tap verses to hear the recitation'}
-                                    aria-label="Toggle listen mode"
-                                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm shadow-sm leading-none transition-colors max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 max-sm:rounded-s-lg ${tutorListen ? 'bg-teal-600 text-white ring-2 ring-teal-300 dark:ring-teal-700' : 'bg-slate-100 dark:bg-gray-700/60 hover:bg-slate-200 dark:hover:bg-gray-600'}`}
-                                >
-                                    🎧
-                                </button>
+                                    key={m}
+                                    onClick={() => setPageMode(m)}
+                                    aria-label={`${label} mode`}
+                                    aria-pressed={pageMode === m}
+                                    title={{
+                                        reading: readOnly ? 'Reading — tap a verse to hear it' : 'Reading — click a letter to log a mistake',
+                                        listening: 'Listening — choose the reciter and speed, tap a verse to hear it',
+                                        hifz: 'Hifz — tap a verse to hide or reveal it',
+                                        tadabbur: readOnly ? 'Tadabbur — word meanings, translation and your reflections' : 'Tadabbur — tap a word to give it a meaning',
+                                    }[m]}
+                                    className={`h-8 ${size} flex items-center justify-center rounded-full transition-colors ${pageMode === m
+                                        ? (m === 'tadabbur' ? 'bg-blue-700 text-white shadow' : 'bg-teal-600 dark:bg-orange-600 text-white shadow')
+                                        : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-gray-600'}`}
+                                >{icon}</button>
+                            ))}
+                        </div>
+                        {pageMode === 'listening' && (
+                            <div className="relative flex items-center gap-1.5 flex-shrink-0 max-sm:contents" dir="ltr">
                                 {recitationSettings}
                             </div>
+                        )}
+                        {pageMode === 'reading' && !readOnly && (
+                        <div className="flex items-center gap-2 flex-shrink-0 max-sm:contents">
                             <div className={`flex items-center gap-1 rounded-full px-2 py-1 h-10 transition-colors duration-300 max-sm:h-9 max-sm:rounded-none max-sm:ring-0 max-sm:px-1 max-sm:order-3 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 ${errorType === 'reading' ? 'bg-red-100 dark:bg-red-900/40 ring-1 ring-red-400' : errorType === 'tajweed' ? 'bg-green-100 dark:bg-green-900/40 ring-1 ring-green-400' : 'bg-slate-200 dark:bg-gray-700'}`}>
                                 <button
                                     onClick={() => setErrorType('reading')}
@@ -3904,10 +4370,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </div>
                         </div>
                         )}
+                        {pageMode === 'hifz' && hiddenRanges.length > 0 && (
+                            <button
+                                onClick={() => setHiddenRanges([])}
+                                title="Reveal all hidden verses"
+                                className="flex-shrink-0 sm:h-7 px-2 flex items-center justify-center gap-1 sm:rounded-md text-xs font-semibold bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 max-sm:h-9 max-sm:rounded-none max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                </svg>
+                                <span className="max-sm:hidden">Show all</span>
+                            </button>
+                        )}
                         {/* ── Middle (phones): current surah button → vertical picker ── */}
                         <button
                             onClick={() => setSurahPickerOpen(true)}
-                            className="sm:hidden order-1 flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
+                            className={`sm:hidden order-1 flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${tadabburMode ? 'bg-blue-700' : 'bg-teal-600 dark:bg-orange-600'} text-white shadow-md`}
                             aria-label="Choose surah"
                         >
                             <span className="flex items-center gap-1.5 min-w-0">
@@ -3946,7 +4425,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             {compactSurahNav ? (
                                 <button
                                     onClick={() => setSurahPickerOpen(true)}
-                                    className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-teal-600 dark:bg-orange-600 text-white shadow-md"
+                                    className={`flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${tadabburMode ? 'bg-blue-700' : 'bg-teal-600 dark:bg-orange-600'} text-white shadow-md`}
                                     aria-label="Choose surah"
                                 >
                                     <span className="flex items-center gap-1.5 min-w-0">
@@ -4028,7 +4507,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 A<span className="text-[10px]">A</span>
                             </button>
                             <button onClick={() => toggleMobileTool('scroll')} aria-label={t('liveSession.toggleAutoScrollPlay')} title={t('liveSession.toggleAutoScrollPlay')}
-                                className={`sm:hidden order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
+                                className={`${pageMode === 'tadabbur' ? 'hidden' : 'sm:hidden'} order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>
                             </button>
 
@@ -4040,97 +4519,84 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </div>
 
                             {/* Auto-scroll */}
-                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} sm:flex order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
+                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} ${pageMode === 'tadabbur' ? 'sm:hidden' : 'sm:flex'} order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
                                 <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                     {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                                 </button>
                                 {isAutoScrolling && (<div className="flex items-center justify-center gap-1 sm:flex-grow"><button onClick={handleDecreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseScrollSpeed')} title={t('liveSession.decreaseScrollSpeed')}>-</button><span className="text-sm font-mono text-slate-700 dark:text-slate-200 w-8 text-center">{scrollSpeed}</span><button onClick={handleIncreaseSpeed} className="w-7 h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseScrollSpeed')} title={t('liveSession.increaseScrollSpeed')}>+</button></div>)}
                             </div>
 
-                            {/* ── Right-side compact controls (on phones they join the icon row) ── */}
+                            {/* ── This mode's tools, each a small icon (on phones they join the icon row) ── */}
                             <div className="contents sm:flex items-center gap-1.5">
-                                {/* Focus / word-by-word mode toggle */}
-                                <button
-                                    onClick={() => setFocusMode(p => !p)}
-                                    title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
-                                    className={`sm:h-7 sm:px-2.5 flex items-center justify-center sm:rounded-md text-[11px] font-bold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
-                                >
-                                    🔍
-                                </button>
-
-                                {/* ── "Tools" combined dropdown ── */}
-                                <div className="relative max-sm:order-3" ref={toolsMenuRef}>
+                                {(pageMode === 'reading' || pageMode === 'hifz') && (<>
+                                    {/* Focus / word-by-word mode toggle */}
                                     <button
-                                        onClick={() => setShowToolsMenu(p => !p)}
-                                        title="Tools"
-                                        aria-label="Tools"
-                                        className={`sm:h-7 sm:px-2.5 flex items-center justify-center gap-1.5 sm:rounded-md text-xs font-semibold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${
-                                            showToolsMenu || showTranslation || showTajweed || teacherNote
-                                                ? 'bg-teal-600 text-white shadow-md'
-                                                : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30'
-                                        }`}
+                                        onClick={() => setFocusMode(p => !p)}
+                                        title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
+                                        aria-label="Focus mode"
+                                        aria-pressed={focusMode}
+                                        className={`${toolBtn} ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 sm:hidden"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
-                                        <span className="hidden sm:inline">Tools</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" className="hidden sm:block w-2.5 h-2.5 opacity-70"><path d="M6 8L1 3h10L6 8z"/></svg>
+                                        🔍
                                     </button>
-
-                                    {showToolsMenu && (
-                                        <div className="absolute top-full mt-1.5 end-0 z-50 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl shadow-xl p-3 flex flex-col gap-1 min-w-[190px]">
-                                            {/* Translation */}
-                                            <button onClick={() => setShowTranslation(p => !p)} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${showTranslation ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                <span className="w-4 h-4 flex items-center justify-center text-xs font-bold">T</span>
-                                                Translation
-                                            </button>
-
-                                            <div className="border-t border-slate-100 dark:border-gray-700 my-1" />
-                                            <div className={`flex items-center gap-1 rounded-lg transition-colors ${showTajweed ? 'bg-emerald-100 dark:bg-emerald-900/40' : ''}`}>
-                                                <button onClick={() => setShowTajweed(p => !p)} className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${showTajweed ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                    <span className="w-4 h-4 flex items-center justify-center text-sm">🎨</span>
-                                                    {t('liveSession.tajweedColors')}
-                                                </button>
-                                                <button
-                                                    onClick={() => setShowTajweedMenu(true)}
-                                                    title={t('liveSession.tajweedInfo')}
-                                                    aria-label={t('liveSession.tajweedInfo')}
-                                                    className={`me-1.5 w-5 h-5 flex-shrink-0 rounded-full border flex items-center justify-center text-xs font-bold transition-colors ${showTajweed ? 'border-emerald-400 text-emerald-600 dark:text-emerald-300 dark:border-emerald-600 hover:bg-emerald-200/60 dark:hover:bg-emerald-800/50' : 'border-slate-300 text-slate-400 dark:border-gray-600 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
-                                                >i</button>
-                                            </div>
-
-                                            {/* Teacher's Notes */}
-                                            {!readOnly && (<>
-                                                <div className="border-t border-slate-100 dark:border-gray-700 my-1" />
-                                                <button onClick={() => { openTeacherNoteWindow(); setShowToolsMenu(false); }} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${teacherNote ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                    <span className="text-base">🗒️</span> Teacher's Notes
-                                                </button>
-                                                {notesStudentId && (
-                                                    <button onClick={() => setShowStudentNotes(p => !p)} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${showStudentNotes ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                        <span className="text-base">✍️</span> Student Notes
-                                                    </button>
-                                                )}
-                                            </>)}
-
-                                            {/* Tadabbur */}
-                                            {readOnly && notesStudentId && (<>
-                                                <div className="border-t border-slate-100 dark:border-gray-700 my-1" />
-                                                <button onClick={() => { setTadabburMode(p => !p); setShowToolsMenu(false); }} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${tadabburMode ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}>
-                                                    <span style={{ fontFamily: 'Amiri Regular', fontSize: '0.85rem' }}>تدبر</span> Tadabbur
-                                                </button>
-                                            </>)}
-                                        </div>
+                                    {/* Tajweed colours (+ the key) */}
+                                    <div className={`flex items-center sm:rounded-md max-sm:order-3 max-sm:h-9 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 ${showTajweed ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300'}`}>
+                                        <button
+                                            onClick={() => setShowTajweed(p => !p)}
+                                            title={t('liveSession.tajweedColors')}
+                                            aria-label={t('liveSession.tajweedColors')}
+                                            aria-pressed={showTajweed}
+                                            className="h-7 max-sm:h-9 ps-2 pe-1 flex items-center justify-center text-[13px]"
+                                        >🎨</button>
+                                        <button
+                                            onClick={() => setShowTajweedMenu(true)}
+                                            title={t('liveSession.tajweedInfo')}
+                                            aria-label={t('liveSession.tajweedInfo')}
+                                            className={`me-1 w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${showTajweed ? 'border-white/70' : 'border-slate-400 dark:border-gray-500'}`}
+                                        >i</button>
+                                    </div>
+                                    {/* Teacher's note */}
+                                    {!readOnly && (
+                                        <button
+                                            onClick={openTeacherNoteWindow}
+                                            title="Teacher's notes"
+                                            aria-label="Teacher's notes"
+                                            className={`${toolBtn} ${teacherNote ? 'bg-amber-400 text-amber-950 shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
+                                        >🗒️</button>
                                     )}
-                                </div>
-
-                                {/* Hifz mode — tap verses to hide them and recite from memory */}
-                                <button
-                                    onClick={toggleHifzMode}
-                                    title={hifzMode ? 'Hifz mode on — tap a verse to hide or show it. Tap here to leave (shows all verses).' : 'Hifz mode — tap verses to hide them'}
-                                    aria-label="Hifz mode"
-                                    aria-pressed={hifzMode}
-                                    className={`sm:h-7 px-1.5 sm:px-2.5 flex items-center justify-center sm:rounded-md transition-colors duration-200 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${hifzMode ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 dark:ring-emerald-700' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
-                                >
-                                    <span className="italic font-bold text-[17px] leading-none tracking-wide" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>
-                                </button>
+                                </>)}
+                                {pageMode === 'tadabbur' && (<>
+                                    <button
+                                        onClick={() => setShowTranslation(p => !p)}
+                                        title="Translation & explanation"
+                                        aria-label="Translation and explanation"
+                                        aria-pressed={showTranslation}
+                                        className={`${toolBtn} ${showTranslation ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-blue-50'}`}
+                                    >文A</button>
+                                    {!readOnly && notesStudentId && (
+                                        <button
+                                            onClick={() => setShowStudentNotes(p => !p)}
+                                            title="Student's reflections"
+                                            aria-label="Student notes"
+                                            aria-pressed={showStudentNotes}
+                                            className={`${toolBtn} text-[13px] ${showStudentNotes ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-50'}`}
+                                        >✍️</button>
+                                    )}
+                                    <button
+                                        onClick={() => { setTestMode(p => !p); setPeekWords(new Set()); setWordEditor(null); }}
+                                        title={testMode ? 'Test on: meanings are hidden — click to show them' : 'Test: hide the word meanings'}
+                                        aria-label={testMode ? 'Test: meanings hidden — click to show them' : 'Test: hide word meanings'}
+                                        aria-pressed={testMode}
+                                        className={`${toolBtn} max-sm:w-auto max-sm:px-2 gap-1 ${testMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                            {testMode
+                                                ? <><path d="M3 3l18 18" /><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.1 3.9" /><path d="M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>
+                                                : <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>}
+                                        </svg>
+                                        {testMode ? `Testing · ${testWordCount}` : 'Test'}
+                                    </button>
+                                </>)}
                             </div>
 
                             {/* Search — with instant typeahead (pages, verses, surah names) */}
@@ -4193,6 +4659,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </div>
                 <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
                     <div>
+                        {tadabburMode && testMode && (
+                            <div dir="ltr" className="mx-2 sm:mx-4 mt-3 sm:mt-4 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm font-semibold font-sans text-left">
+                                Meanings are hidden. Hover a word (or tap it on a phone) to check the answer.
+                            </div>
+                        )}
                         {/* ── Focus / word-by-word strip ───────────────────────────────────── */}
                         {focusMode ? (
                             (() => {
@@ -4436,6 +4907,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 </button>
             )}
             <style>{TAJWEED_CSS}</style>
+            {wordEditor && (() => {
+                const vkey = `${wordEditor.surah}:${wordEditor.ayah}`;
+                const apiWords = wbwBySurah[wordEditor.surah]?.get(vkey);
+                const text = verses.find(v => v.verse_key === vkey)?.text_uthmani ?? '';
+                const align = apiWords ? alignWbw(splitVerseWords(text, turkishSource), apiWords) : null;
+                const ai = align?.[wordEditor.wordIndex] ?? -1;
+                const api = ai >= 0 ? apiWords?.[ai] : undefined;
+                return (
+                    <WordMeaningPanel
+                        key={wordEditor.key}
+                        word={wordEditor.word}
+                        anchor={wordEditor.el}
+                        transliteration={api?.transliteration}
+                        apiMeaning={api?.translation}
+                        apiLoading={!apiWords}
+                        currentMeaning={wordMeanings[wordEditor.key]?.meaning}
+                        onSave={m => handleSaveWordMeaning(wordEditor.surah, wordEditor.ayah, wordEditor.wordIndex, wordEditor.word, m)}
+                        onClose={() => setWordEditor(null)}
+                    />
+                );
+            })()}
             {showTajweedMenu && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowTajweedMenu(false)}>
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
