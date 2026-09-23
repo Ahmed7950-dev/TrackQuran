@@ -2150,7 +2150,17 @@ const App: React.FC = () => {
                 return (
                 <button
                   key={tab.id}
-                  onClick={() => { setCurrentStudentView('details'); setSessionStudentId(null); setActiveTab(tab.id); }}
+                  // Carry the student over the way the "Main page" tab does: a
+                  // session opened straight from a recitation review has no
+                  // selectedStudent, so clearing the session alone dropped the
+                  // tutor back to the whole student list.
+                  onClick={() => {
+                    const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
+                    setCurrentStudentView('details');
+                    if (sid) setSelectedStudentId(sid);
+                    setSessionStudentId(null);
+                    setActiveTab(tab.id);
+                  }}
                   className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab.id
                       ? tab.id === 'homework'

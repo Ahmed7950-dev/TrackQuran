@@ -46,6 +46,11 @@ const RecitationReviewPanel: React.FC<{
   chainRef.current = chain;
   const [pos, setPos] = useState(0);
   const barRef = useRef<HTMLElement | null>(null);
+  /** The verse whose recording is loaded — it stays loaded while paused, so the
+   *  5-second jumps and the arrow keys keep working between plays. */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loadedRef = useRef<string | null>(null);
+  loadedRef.current = loadedKey;
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
@@ -67,12 +72,48 @@ const RecitationReviewPanel: React.FC<{
     return () => window.clearInterval(iv);
   }, [playing]);
 
+  /** Jump within the loaded recording (the 5-second buttons and arrow keys). */
+  const seek = (delta: number) => {
+    const a = audioRef.current;
+    if (!a || !loadedRef.current) return;
+    const end = Number.isFinite(a.duration) ? a.duration : Infinity;
+    a.currentTime = Math.max(0, Math.min(end, a.currentTime + delta));
+    setPos(a.currentTime);
+  };
+
+  // ← and → move the recording, so the tutor never leaves the keyboard while
+  // logging. Capture phase: the Quran page's own arrow handling (focus mode)
+  // must not also fire.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (!loadedRef.current) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      seek(e.key === 'ArrowLeft' ? -5 : 5);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   const play = (key: string, keepChain = false) => {
     const r = rec.recordings[key];
     const a = audioRef.current ?? (audioRef.current = new Audio());
     if (!r) return;
     if (playing === key && !keepChain) { a.pause(); setPlaying(null); setChain(false); return; }
+    // Same verse, paused (or moved with the 5-second jumps): carry on from where
+    // it stands instead of starting the recording again.
+    if (loadedKey === key && !keepChain && a.src && a.paused && a.currentTime > 0 && a.currentTime < a.duration) {
+      setChain(false);
+      a.play().then(() => { setPlaying(key); setErr(''); }).catch(() => { setPlaying(null); });
+      return;
+    }
     if (!keepChain) setChain(false);
+    setLoadedKey(key);
+    loadedRef.current = key;
     onJumpToVerse(key);
     a.src = r.url;
     a.onended = () => {
@@ -154,7 +195,22 @@ const RecitationReviewPanel: React.FC<{
     minus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" className="w-4 h-4" aria-hidden="true"><path d="M5 12h14" /></svg>,
     up: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>,
     close: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" className="w-4 h-4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>,
+    back5: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true"><path d="M11 5 6.5 9.5 11 14" /><path d="M6.5 9.5H13a6 6 0 1 1-6 6" /></svg>,
+    fwd5: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true"><path d="m13 5 4.5 4.5L13 14" /><path d="M17.5 9.5H11a6 6 0 1 0 6 6" /></svg>,
   };
+
+  /** −5s / +5s for the loaded recording (also on ← and →). */
+  const seekButtons = (small = false) => (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      {([[-5, 'Back 5 seconds (←)', icon.back5], [5, 'Forward 5 seconds (→)', icon.fwd5]] as const).map(([d, label, ic]) => (
+        <button key={d} onClick={() => seek(d)} disabled={!loadedKey} title={label} aria-label={label}
+          className={`${small ? 'w-9 h-9 rounded-lg' : 'h-12 sm:h-[52px] w-10 sm:w-12 rounded-xl'} flex flex-col items-center justify-center border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}>
+          {ic}
+          {!small && <span className="text-[9px] font-black leading-none -mt-0.5">5s</span>}
+        </button>
+      ))}
+    </div>
+  );
   const bars = (
     <span aria-hidden="true" className="inline-flex items-end gap-[3px] h-4">
       {[0.5, 1, 0.65, 0.85].map((h, i) => (
@@ -216,8 +272,12 @@ const RecitationReviewPanel: React.FC<{
           </span>
         )}
         <span className="flex-grow" />
-        {playing && (
-          <button onClick={() => play(playing)} aria-label="Pause" className={`${iconBtn} rounded-full text-teal-700 dark:text-teal-300 flex-shrink-0`}>{icon.pause}</button>
+        {loadedKey && (
+          <span className="flex items-center gap-1 flex-shrink-0">
+            {seekButtons(true)}
+            <button onClick={() => play(playing ?? loadedKey)} aria-label={playing ? 'Pause' : 'Play'}
+              className={`${iconBtn} rounded-full text-teal-700 dark:text-teal-300 flex-shrink-0`}>{playing ? icon.pause : icon.play}</button>
+          </span>
         )}
         {/* Full width on a phone, so it drops to a second line instead of
             pushing the window buttons off the edge. */}
@@ -257,6 +317,7 @@ const RecitationReviewPanel: React.FC<{
         <span className="hidden lg:inline text-[13px] text-slate-400 dark:text-slate-500">
           {wrongVerses.length
             ? `${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'} marked — Reassign sends just those back`
+            : loadedKey ? '← and → jump 5 seconds in the recording'
             : 'Log mistakes on the page as usual — playing a verse scrolls to it'}
         </span>
         <span className="hidden sm:flex items-center gap-2 flex-shrink-0">{windowControls}</span>
@@ -275,6 +336,7 @@ const RecitationReviewPanel: React.FC<{
                 chain ? 'bg-teal-700 border-teal-700 text-white' : 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100'}`}>
               {chain ? icon.pause : icon.play}<span className="hidden sm:inline">{chain ? 'Stop' : 'Play all'}</span>
             </button>
+            {seekButtons()}
 
             <div role="group" aria-label="Verses" className="min-w-0 flex-grow flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
               {verses.map(([s, v], i) => {
