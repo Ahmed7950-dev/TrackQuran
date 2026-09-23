@@ -121,6 +121,22 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     fetchNotifications();
   }, [fetchNotifications]);
 
+  // A Home Screen app comes back on the page it had, and the realtime socket
+  // slept with it: anything that arrived meanwhile would only show after the
+  // app was closed and opened again. Fetch again whenever it is shown.
+  useEffect(() => {
+    const again = () => { if (!document.hidden) fetchNotifications(); };
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) again(); };
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('focus', again);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('focus', again);
+      window.removeEventListener('pageshow', onShow);
+    };
+  }, [fetchNotifications]);
+
   // ── Realtime subscription ──────────────────────────────────────────────────
 
   useEffect(() => {

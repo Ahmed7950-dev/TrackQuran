@@ -95,6 +95,11 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [studentLessons, setStudentLessons] = useState<LessonSession[]>([]);
   const [studentTZ, setStudentTZ] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Bumped whenever the app is shown again, so everything loaded once on mount
+   *  is fetched afresh. iOS restores a Home Screen app to the page it had
+   *  before — without this, homework and notifications assigned in between are
+   *  only seen after the student closes and opens the app a second time. */
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tadabburLab' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
   // Remember each tab's scroll position so returning to a tab (esp. Quran) lands
@@ -199,7 +204,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     listRecitationHomework(report.student_id)
       .then(list => setRecitations(Object.fromEntries(list.map(r => [r.id, r]))))
       .catch(() => {});
-  }, [report?.student_id, activeTab]);
+  }, [report?.student_id, activeTab, refreshNonce]);
 
   // ?hw=<homeworkId> (the "see my mistakes" notification): open the Quran page
   // on that homework, with its note, once the report has loaded.
@@ -223,8 +228,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
   useEffect(() => {
     getSharedReport(reportId).then(r => {
-      if (!r) setNotFound(true);
-      else {
+      if (!r) { if (!report) setNotFound(true); return; }
+      {
         setReport(r);
         // Initialise font from teacher's saved preference stored in the report
         if (r.report_data.quranicFont) setQuranicFont(r.report_data.quranicFont);
@@ -247,7 +252,25 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
     // Load existing play counts from DB
     getReportPlays(reportId).then(plays => setVersePlays(plays));
+  }, [reportId, refreshNonce]);
 
+  // iOS keeps a Home Screen app on the page it had when it was last used, so a
+  // student who opened the app, then got homework, saw the old page until they
+  // closed and opened it again. Fetch again whenever the app is shown.
+  useEffect(() => {
+    const again = () => { if (!document.hidden) setRefreshNonce(n => n + 1); };
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) again(); };
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('focus', again);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('focus', again);
+      window.removeEventListener('pageshow', onShow);
+    };
+  }, []);
+
+  useEffect(() => {
     // Subscribe to real-time play broadcasts so the student's own counter updates live
     const ch = supabase.channel(`report-plays-${reportId}`);
     ch
