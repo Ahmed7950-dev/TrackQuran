@@ -63,6 +63,7 @@ import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
 import RecitationReviewPanel from './components/RecitationReviewPanel';
+import TadabburLabPage from './components/TadabburLabPage';
 import {
   RecitationHomework, clearRecitationHistory, createRecitationHomework, deleteRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
@@ -776,10 +777,10 @@ const App: React.FC = () => {
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>(
     () => (localStorage.getItem('nav_currentStudentView') === 'mistakes' ? 'mistakes' : 'details'),
   );
-  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest';
+  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest' | 'tadabburLab';
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     const saved = localStorage.getItem('nav_activeTab');
-    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest'];
+    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'];
     return saved && (allowed as string[]).includes(saved) ? (saved as ActiveTab) : 'main';
   });
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -2073,7 +2074,7 @@ const App: React.FC = () => {
         )}
       </header>
       {/* ── Thin student-tools bar — visible on all student pages (detail + session) ── */}
-      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill', 'mistakesStudy', 'fluencyTest'].includes(activeTab) && (() => {
+      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'].includes(activeTab) && (() => {
         const activeHwCount = (sessionStudent ?? selectedStudent)?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
         const tabs = [
           { id: 'main',            label: 'Main page',                  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.5a.75.75 0 0 0 .75.75H9.75v-6a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v6h4.5a.75.75 0 0 0 .75-.75V9.75M8.25 21h8.25" /></svg> },
@@ -2084,6 +2085,7 @@ const App: React.FC = () => {
           { id: 'lettersTrainer',  label: t('header.lettersTrainer'),   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg> },
           { id: 'fluencyTest',     label: 'Fluency Test',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg> },
           { id: 'mistakesStudy',   label: 'Mistakes Study',             icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" /></svg> },
+          { id: 'tadabburLab',     label: 'Tadabbur Lab',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" /></svg> },
           { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
           // Bill tab — platform students only (tutor-issued invoice; not for Preply).
           { id: 'bill',            label: t('bill.tab'),                icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l2.25 2.25L15 9.75M9 8.25V6a2.25 2.25 0 0 1 4.5 0v2.25" /></svg> },
@@ -2240,6 +2242,18 @@ const App: React.FC = () => {
           <FluencyTestPage student={(sessionStudent ?? selectedStudent)!} students={students} onLogActivity={handleLogActivity} />
         ) : activeTab === 'mistakesStudy' && (sessionStudent ?? selectedStudent) ? (
           <MistakesStudyPage student={(sessionStudent ?? selectedStudent)!} />
+        ) : activeTab === 'tadabburLab' && (sessionStudent ?? selectedStudent) ? (
+          <TadabburLabPage
+            studentId={(sessionStudent ?? selectedStudent)!.id}
+            studentName={(sessionStudent ?? selectedStudent)!.name}
+            teacherId={currentUser?.id}
+            onOpenVerse={key => {
+              const sid = (sessionStudent ?? selectedStudent)!.id;
+              setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
+              setActiveTab('main');
+              setSessionStudentId(sid);
+            }}
+          />
         ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {
           const hw_student = sessionStudent ?? selectedStudent!;
           const hw_all  = hw_student.quranHomework ?? [];

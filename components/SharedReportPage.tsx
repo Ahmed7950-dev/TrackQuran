@@ -23,6 +23,7 @@ import AlphabetTrainerPage from './AlphabetTrainerPage';
 import LettersTrainerPage from './LettersTrainerPage';
 import { GameInviteContext, GameInvitePopup } from './GameInvite';
 import StudentProgressPage from './StudentProgressPage';
+import TadabburLabPage from './TadabburLabPage';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
 import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
@@ -95,7 +96,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [studentTZ, setStudentTZ] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
+  const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tadabburLab' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
   // Remember each tab's scroll position so returning to a tab (esp. Quran) lands
   // exactly where you left it instead of jumping/looking blank.
   const tabScrollRef = useRef<Record<string, number>>({});
@@ -666,6 +667,20 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 })()}
               </button>
               <button
+                onClick={() => changeTab('tadabburLab')}
+                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'tadabburLab'
+                    ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" />
+                </svg>
+                Tadabbur Lab
+              </button>
+              <button
                 onClick={() => changeTab('tajweed')}
                 className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'tajweed'
@@ -1038,6 +1053,15 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             <GameInvitePopup identity={inviteIdentity} />
             {activeTab === 'lettersTrainer' && (
               <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} readOnly />
+            )}
+
+            {activeTab === 'tadabburLab' && report && (
+              <TadabburLabPage
+                studentId={report.student_id}
+                studentName={report.student_name}
+                teacherId={report.teacher_id}
+                readOnly
+              />
             )}
 
             {activeTab === 'homework' && (() => {
