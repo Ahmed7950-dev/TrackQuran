@@ -1,10 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // StudentsTable — the roster as one list instead of cards in three age groups:
 // every student in a row, with the things the tutor checks before a lesson —
-// when they next meet, whether the lesson is linked to the calendar, whether
-// the portal link exists, homework still open, reminders switched on, a
-// recording waiting — and how they are doing: pages, attendance, quality,
-// mistakes, fluency level and rank. Any column sorts by its header.
+// when they next meet, whether the lesson is linked to the calendar, homework
+// still open, reminders switched on, a recording waiting — and how they are
+// doing: pages, attendance, quality, mistakes, fluency level and rank.
+// Any column sorts by its header.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useMemo, useState } from 'react';
 import { Student } from '../types';
@@ -14,7 +14,6 @@ export interface RosterRowData {
   /** The student's next lesson, from the calendar. */
   nextLesson?: Date;
   linked: boolean;
-  hasPortal: boolean;
   openHomework: number;
   notifications: boolean;
   awaitingReview: boolean;
@@ -34,7 +33,7 @@ export interface RosterRowData {
 }
 
 type SortKey =
-  | 'name' | 'nextLesson' | 'linked' | 'portal' | 'homework' | 'reminders' | 'review'
+  | 'name' | 'nextLesson' | 'linked' | 'homework' | 'reminders' | 'review'
   | 'pagesRead' | 'pagesMemorized' | 'attendance' | 'quality' | 'mistakes' | 'fluency' | 'rank';
 
 const dayLabel = (d: Date): string => {
@@ -85,7 +84,6 @@ const StudentsTable: React.FC<{
         case 'name': return s.name.toLocaleLowerCase();
         case 'nextLesson': return d?.nextLesson?.getTime() ?? LAST;
         case 'linked': return d?.linked ? 1 : 0;
-        case 'portal': return d?.hasPortal ? 1 : 0;
         case 'homework': return d?.openHomework ?? 0;
         case 'reminders': return d?.notifications ? 1 : 0;
         case 'review': return d?.awaitingReview ? 1 : 0;
@@ -134,13 +132,12 @@ const StudentsTable: React.FC<{
             <Header id="name" label="Student" align="start" />
             <Header id="nextLesson" label="Next lesson" align="start" />
             <Header id="linked" label="Linked" title="Linked to a calendar lesson" />
-            <Header id="portal" label="Portal" title="The student's link exists" />
             <Header id="homework" label="Homework" title="Homework still not done" />
             <Header id="reminders" label="Reminders" title="A phone is registered for reminders" />
             <Header id="review" label="To review" title="A recording is waiting for you" />
             <Header id="pagesRead" label="Read" title="Pages read" />
             <Header id="pagesMemorized" label="Hifz" title="Pages memorized" />
-            <Header id="attendance" label="Attend." title="Lessons attended" />
+            <Header id="attendance" label="Attended" title="Lessons they came to, out of the ones they had" />
             <Header id="quality" label="Quality" title="Average reading quality out of 10" />
             <Header id="mistakes" label="Mistakes" title="Counted mistakes per page covered" />
             <Header id="fluency" label="Fluency" title="Highest fluency level passed" />
@@ -180,9 +177,6 @@ const StudentsTable: React.FC<{
                   <Mark on={!!d?.linked} label={d?.linked ? 'Linked to the calendar' : 'No lesson linked'} />
                 </td>
                 <td className={`${cell} text-center`}>
-                  <Mark on={!!d?.hasPortal} label={d?.hasPortal ? 'Portal link created' : 'No portal link yet'} />
-                </td>
-                <td className={`${cell} text-center`}>
                   {d?.openHomework ? (
                     <span title={`${d.openHomework} not done yet`}
                       className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 text-[13px] font-extrabold">
@@ -209,9 +203,9 @@ const StudentsTable: React.FC<{
                 <td className={`${cell} text-center ${num}`}>{d?.pagesMemorized || <span className={dim}>—</span>}</td>
                 <td className={`${cell} text-center`}>
                   {attendPct === null ? <span className={dim}>—</span> : (
-                    <span title={`${d!.attended} of ${d!.attendanceTotal} lessons`}
+                    <span title={`Came to ${d!.attended} of the ${d!.attendanceTotal} lessons they had (${attendPct}%)`}
                       className={`text-sm font-semibold ${attendPct >= 90 ? 'text-emerald-700 dark:text-emerald-400' : attendPct >= 70 ? 'text-slate-700 dark:text-slate-200' : 'text-amber-700 dark:text-amber-400'}`}>
-                      {attendPct}%
+                      {d!.attended}<span className="text-slate-400 dark:text-slate-500 font-normal"> / {d!.attendanceTotal}</span>
                     </span>
                   )}
                 </td>
@@ -262,7 +256,7 @@ const StudentsTable: React.FC<{
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={15} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 italic">No students to show.</td></tr>
+            <tr><td colSpan={14} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 italic">No students to show.</td></tr>
           )}
         </tbody>
       </table>

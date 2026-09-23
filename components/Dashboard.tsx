@@ -7,7 +7,6 @@ import { computeReportRanks } from '../services/rankingService';
 import StudentProfileIcon from './StudentProfileIcon';
 import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent, autoSyncGCalLinks, getUpcomingSessions } from '../services/lessonSessionService';
 import StudentsTable, { RosterRowData } from './StudentsTable';
-import { listReportIdsForTeacher } from '../services/dataService';
 import { listStudentsWithPush } from '../services/pushService';
 import { listStudentsAwaitingReview } from '../services/recitationHomeworkService';
 import { listFluencyResults } from '../services/fluencyService';
@@ -761,7 +760,6 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   };
 
   // ── The list view's columns ─────────────────────────────────────────────
-  const [portalIds, setPortalIds] = useState<Set<string>>(new Set());
   const [pushIds, setPushIds] = useState<Set<string>>(new Set());
   const [reviewIds, setReviewIds] = useState<Set<string>>(new Set());
   const [bookedLessons, setBookedLessons] = useState<Map<string, Date>>(new Map());
@@ -770,15 +768,13 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     if (layout !== 'list' || !teacherId) return;
     let stop = false;
     (async () => {
-      const [reports, pushes, reviews, sessions, fluency] = await Promise.all([
-        listReportIdsForTeacher(teacherId).catch(() => new Map<string, string>()),
+      const [pushes, reviews, sessions, fluency] = await Promise.all([
         listStudentsWithPush().catch(() => new Set<string>()),
         listStudentsAwaitingReview(teacherId).catch(() => new Set<string>()),
         getUpcomingSessions(teacherId).catch(() => []),
         listFluencyResults(students.map(s => s.id)).catch(() => []),
       ]);
       if (stop) return;
-      setPortalIds(new Set(reports.keys()));
       setPushIds(pushes);
       setReviewIds(reviews);
       const soonest = new Map<string, Date>();
@@ -829,7 +825,6 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       out.set(s.id, {
         nextLesson: gcal.get(s.id) ?? bookedLessons.get(s.id),
         linked: linkedStudentIds.has(s.id),
-        hasPortal: portalIds.has(s.id),
         openHomework: (s.quranHomework ?? []).filter(h => !h.isDone).length,
         notifications: pushIds.has(s.id),
         awaitingReview: reviewIds.has(s.id),
@@ -844,7 +839,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       });
     }
     return out;
-  }, [students, nextLessons, bookedLessons, linkedStudentIds, portalIds, pushIds, reviewIds, fluencyLevels]);
+  }, [students, nextLessons, bookedLessons, linkedStudentIds, pushIds, reviewIds, fluencyLevels]);
 
   const studentGroups = useMemo(() => {
     const youngGems        = sortedStudents.filter(s => getEffectiveCategory(s) === 'young_gems');
