@@ -24,6 +24,7 @@ import LettersTrainerPage from './LettersTrainerPage';
 import { GameInviteContext, GameInvitePopup } from './GameInvite';
 import StudentProgressPage from './StudentProgressPage';
 import TadabburLabPage from './TadabburLabPage';
+import HomeworkTab from './HomeworkTab';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
 import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
@@ -1088,152 +1089,32 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             )}
 
             {activeTab === 'homework' && (() => {
-              const activeHw = quranHomework.filter(hw => !hw.isDone);
-              const doneHw   = quranHomework.filter(hw =>  hw.isDone);
-
-              const fmtRange = (hw: QuranHomework) => {
-                const startName = QURAN_METADATA.find(s => s.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
-                const endName   = QURAN_METADATA.find(s => s.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
-                if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${startName} : ${hw.startAyah}`;
-                return `${startName} ${hw.startAyah} → ${endName} ${hw.endAyah}`;
-              };
-
+              // How long until the next lesson, in the student's own words.
+              const next = studentLessons
+                .filter(l => l.startAt && new Date(l.startAt).getTime() > Date.now())
+                .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0];
+              let untilLesson: string | null = null;
+              if (next) {
+                const hours = Math.floor((new Date(next.startAt).getTime() - Date.now()) / 3_600_000);
+                const d = Math.floor(hours / 24), h = hours % 24;
+                untilLesson = hours < 1 ? 'under an hour'
+                  : [d ? `${d} day${d === 1 ? '' : 's'}` : '', h ? `${h} hour${h === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ');
+              }
               return (
-                <div className="max-w-2xl mx-auto space-y-8 py-2">
-
-                  {/* ── Active homework ───────────────────────────────── */}
-                  <section>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                      <span className="text-xl">📝</span>
-                      {t('studentPortal.currentHomework')}
-                      {activeHw.length > 0 && (
-                        <span className="bg-violet-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                          {activeHw.length}
-                        </span>
-                      )}
-                    </h2>
-
-                    {activeHw.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
-                        <p className="text-3xl mb-2">🎉</p>
-                        <p className="font-semibold text-slate-700 dark:text-slate-200">{t('studentPortal.allCaughtUp')}</p>
-                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">{t('studentPortal.noPendingHomework')}</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {activeHw.map((hw, idx) => (
-                          <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-100 dark:border-violet-900/40 shadow-sm overflow-hidden">
-                            {/* Purple top accent */}
-                            <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
-                            <div className="p-4 sm:p-5">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-xs font-bold text-violet-500 dark:text-violet-400 uppercase tracking-wide">
-                                      #{idx + 1}
-                                    </span>
-                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                                      {fmtRange(hw)}
-                                    </span>
-                                  </div>
-                                  {hw.note ? (
-                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2 whitespace-pre-wrap bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">
-                                      {hw.note}
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">{t('studentPortal.noInstructions')}</p>
-                                  )}
-                                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-                                    {t('studentPortal.assignedOn', { date: new Date(hw.assignedAt).toLocaleDateString(language === 'ar' ? 'ar' : language === 'tr' ? 'tr' : undefined, { day: 'numeric', month: 'short', year: 'numeric' }) })}
-                                  </p>
-                                </div>
-                              </div>
-                              {hw.recitationId && (() => {
-                                const rec = recitations[hw.recitationId];
-                                const status = rec?.status ?? 'assigned';
-                                const n = rec ? Object.keys(rec.recordings).length : 0;
-                                const label = status === 'submitted' ? '📨 Submitted — your teacher will review it'
-                                  : status === 'passed' ? '✅ Passed'
-                                  : status === 'needs_revision' ? '🔁 Needs revision — see the mistakes, then record again'
-                                  : n > 0 ? `🎙 ${n} verse${n === 1 ? '' : 's'} recorded so far` : '🎙 Record your recitation of these verses';
-                                return (
-                                  <a href={`/recite/${hw.recitationId}`}
-                                    className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 transition-colors">
-                                    <span className="text-sm font-bold">{label}</span>
-                                    <span className="text-sm font-black flex-shrink-0">
-                                      {status === 'submitted' || status === 'passed' ? 'Open →' : n > 0 ? 'Continue →' : 'Start →'}
-                                    </span>
-                                  </a>
-                                );
-                              })()}
-                              <div className="flex gap-2 mt-4">
-                                <button
-                                  onClick={() => {
-                                    setHomeworkModal(hw);
-                                    jumpToVerse(`${hw.startSurah}:${hw.startAyah}`);
-                                    setShowHistory(false);
-                                    setNoteVisible(true);
-                                    changeTab('quran');
-                                  }}
-                                  className="flex-1 py-2 px-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-semibold border border-violet-200 dark:border-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
-                                >
-                                  📖 {t('studentPortal.goToVerses')}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-
-                  {/* ── Completed history ─────────────────────────────── */}
-                  <section>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                      <span className="text-xl">✅</span>
-                      {t('studentPortal.completed')}
-                      {doneHw.length > 0 && (
-                        <span className="bg-slate-400 dark:bg-slate-600 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                          {doneHw.length}
-                        </span>
-                      )}
-                    </h2>
-
-                    {doneHw.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
-                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">{t('studentPortal.completedWillAppear')}</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {doneHw.map((hw, idx) => (
-                          <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden opacity-80">
-                            <div className="h-1 bg-gradient-to-r from-teal-400 to-emerald-400" />
-                            <div className="p-4 sm:p-5 flex items-start gap-3">
-                              <span className="text-xl mt-0.5 flex-shrink-0">✅</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">
-                                    #{doneHw.length - idx}
-                                  </span>
-                                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 line-through decoration-slate-300 dark:decoration-slate-600">
-                                    {fmtRange(hw)}
-                                  </span>
-                                </div>
-                                {hw.note && (
-                                  <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1 truncate">{hw.note}</p>
-                                )}
-                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                                  Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-
-                </div>
+                <HomeworkTab
+                  side="student"
+                  homework={quranHomework}
+                  recitations={recitations}
+                  untilLesson={untilLesson}
+                  onOpenVerses={hw => {
+                    setHomeworkModal(hw);
+                    jumpToVerse(`${hw.startSurah}:${hw.startAyah}`);
+                    setShowHistory(false);
+                    setNoteVisible(true);
+                    changeTab('quran');
+                  }}
+                  onRecord={hw => { if (hw.recitationId) window.location.href = `/recite/${hw.recitationId}`; }}
+                />
               );
             })()}
 

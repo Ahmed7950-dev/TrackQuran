@@ -64,6 +64,7 @@ import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
 import RecitationReviewPanel from './components/RecitationReviewPanel';
 import TadabburLabPage from './components/TadabburLabPage';
+import HomeworkTab from './components/HomeworkTab';
 import {
   RecitationHomework, clearRecitationHistory, createRecitationHomework, deleteRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
@@ -2256,219 +2257,44 @@ const App: React.FC = () => {
           />
         ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {
           const hw_student = sessionStudent ?? selectedStudent!;
-          const hw_all  = hw_student.quranHomework ?? [];
-          const hw_active = hw_all.filter(hw => !hw.isDone);
-          const hw_done   = hw_all.filter(hw =>  hw.isDone);
-          const fmtRange = (hw: QuranHomework) => {
-            const s = QURAN_METADATA.find(m => m.number === hw.startSurah)?.transliteratedName ?? `Surah ${hw.startSurah}`;
-            const e = QURAN_METADATA.find(m => m.number === hw.endSurah)?.transliteratedName   ?? `Surah ${hw.endSurah}`;
-            if (hw.startSurah === hw.endSurah && hw.startAyah === hw.endAyah) return `${s} : ${hw.startAyah}`;
-            return `${s} ${hw.startAyah} → ${e} ${hw.endAyah}`;
-          };
-          const removeHomework = async (homeworkId: string) => {
-            const gone = hw_all.find(hw => hw.id === homeworkId);
-            const rec = gone?.recitationId ? recitations[gone.recitationId] : undefined;
+          const hw_all = hw_student.quranHomework ?? [];
+          const removeHomework = async (hw: QuranHomework) => {
+            const rec = hw.recitationId ? recitations[hw.recitationId] : undefined;
             if (rec) deleteRecitationHomework(rec);   // its recordings too
-            const updated = hw_all.filter(hw => hw.id !== homeworkId);
+            const updated = hw_all.filter(h => h.id !== hw.id);
             handleUpdateStudent({ ...hw_student, quranHomework: updated });
-            const reportId = await getStudentReportId(currentUser.id, hw_student.id);
+            const reportId = await getStudentReportId(currentUser!.id, hw_student.id);
             if (reportId) {
               await updateQuranHomeworkInReport(reportId, updated);
               supabase.channel(`report-plays-${reportId}`).send({ type: 'broadcast', event: 'homework_assigned', payload: { quranHomework: updated } });
             }
           };
-          // Open the Quran view at this homework's verses. The key used to be
-          // cleared after 800ms so a repeat tap would re-fire — but when this
-          // also had to MOUNT the Quran page, the verse fetch regularly outlasted
-          // that window and the page resumed to the last logged verse instead.
-          // The nonce makes repeat taps work without any timer.
+          // Open the Quran view at this homework's verses. The nonce makes a
+          // repeat tap navigate again without any timer.
           const goToHomework = (hw: QuranHomework) => {
             if (!sessionStudent) setSessionStudentId(hw_student.id);
             setActiveTab('main');
-            const key = `${hw.startSurah}:${hw.startAyah}`;
-            setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
+            setQuranHomeworkJump(prev => ({ key: `${hw.startSurah}:${hw.startAyah}`, n: (prev?.n ?? 0) + 1 }));
+          };
+          const clearFinished = async () => {
+            const old = Object.values(recitations).filter(r => r.studentId === hw_student.id && (r.status === 'passed' || r.status === 'needs_revision'));
+            if (!old.length) return;
+            if (!confirm(`Clear ${old.length} reviewed recitation homework${old.length === 1 ? '' : 's'} for ${hw_student.name}? The recordings are deleted too.`)) return;
+            await clearRecitationHistory(hw_student.id);
+            listRecitationHomework(hw_student.id).then(l => setRecitations(Object.fromEntries(l.map(r => [r.id, r]))));
           };
           return (
-            <div className="max-w-2xl mx-auto space-y-8 py-2">
-              {/* Active homework */}
-              <section>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                  <span className="text-xl">📝</span> Current Homework
-                  {hw_active.length > 0 && <span className="bg-violet-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{hw_active.length}</span>}
-                </h2>
-                {hw_active.length === 0 ? (
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
-                    <p className="text-3xl mb-2">🎉</p>
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">All caught up!</p>
-                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">No pending homework assigned.</p>
-                  </div>
-                ) : hw_active.map((hw, idx) => {
-                  // A recitation homework the student has sent in shows green: it is
-                  // done on their side and waiting for the tutor to review it.
-                  const recOf = hw.recitationId ? recitations[hw.recitationId] : undefined;
-                  const submitted = recOf?.status === 'submitted';
-                  return (
-                  <div key={hw.id} className={`bg-white dark:bg-slate-800 rounded-2xl border shadow-sm overflow-hidden mb-3 ${
-                    submitted ? 'border-emerald-300 dark:border-emerald-800' : 'border-violet-100 dark:border-violet-900/40'}`}>
-                    <div className={`h-1 bg-gradient-to-r ${submitted ? 'from-emerald-500 to-teal-500' : 'from-violet-500 to-purple-500'}`} />
-                    <div className="p-4 sm:p-5">
-                      <div className="flex items-start gap-2 mb-1">
-                        <span className="text-xs font-bold text-violet-500 dark:text-violet-400 uppercase tracking-wide mt-0.5">#{idx + 1}</span>
-                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{fmtRange(hw)}</span>
-                      </div>
-                      {hw.note ? (
-                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2 whitespace-pre-wrap bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">{hw.note}</p>
-                      ) : (
-                        <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1">No instructions.</p>
-                      )}
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-                        Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {hw.isDone && ' · ✅ Done'}
-                      </p>
-                      {hw.recitationId && (() => {
-                        const rec = recitations[hw.recitationId];
-                        const n = rec ? Object.keys(rec.recordings).length : 0;
-                        const chip = !rec ? { cls: 'bg-slate-100 text-slate-500', text: '🎙 Recording homework' }
-                          : rec.status === 'submitted' ? { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300', text: '📨 Submitted — ready to review' }
-                          : rec.status === 'passed' ? { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', text: '✅ Passed' }
-                          : rec.status === 'needs_revision' ? { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', text: '🔁 Needs revision — waiting for new recordings' }
-                          : { cls: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300', text: `🎙 Recording… ${n} verse${n === 1 ? '' : 's'} so far` };
-                        return (
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${chip.cls}`}>{chip.text}</span>
-                            <button onClick={() => navigator.clipboard?.writeText(recitationUrl(hw.recitationId!)).catch(() => {})}
-                              className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100">
-                              🔗 Copy recording link
-                            </button>
-                            {rec && n > 0 && (
-                              <button onClick={() => openRecitationReview(rec)}
-                                className={`px-2.5 py-1 rounded-full text-xs font-bold text-white ${
-                                  rec.status === 'submitted' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-teal-600 hover:bg-teal-700'}`}>
-                                🎧 {rec.status === 'submitted' ? 'Listen & mark mistakes' : 'Open recitation bar'}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => goToHomework(hw)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/30 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-bold hover:bg-violet-100 dark:hover:bg-violet-800/50 transition-colors"
-                        >
-                          📖 Go to homework
-                        </button>
-                        <button
-                          onClick={() => handleMarkHomeworkDone(hw_student.id, hw.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 dark:bg-green-900/30 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 text-xs font-bold hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors"
-                        >
-                          ✓ Done
-                        </button>
-                        <button
-                          onClick={() => removeHomework(hw.id)}
-                          className="ms-auto text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium transition-colors"
-                        >
-                          🗑 Remove
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })}
-              </section>
-
-              {/* Recitation history — every recording homework, newest first */}
-              {(() => {
-                const list = Object.values(recitations)
-                  .filter(r => r.studentId === hw_student.id)
-                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-                const old = list.filter(r => r.status === 'passed' || r.status === 'needs_revision');
-                const fmtDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-                const clearHistory = async () => {
-                  if (!confirm(`Clear ${old.length} reviewed recitation homework${old.length === 1 ? '' : 's'} for ${hw_student.name}? The recordings are deleted too.`)) return;
-                  await clearRecitationHistory(hw_student.id);
-                  listRecitationHomework(hw_student.id).then(l => setRecitations(Object.fromEntries(l.map(r => [r.id, r]))));
-                };
-                return (
-                  <section>
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                      <span className="text-xl">🎙</span> Recitation history
-                      {list.length > 0 && <span className="bg-teal-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{list.length}</span>}
-                      {old.length > 0 && (
-                        <button onClick={clearHistory}
-                          className="ms-auto text-xs font-bold text-red-500 hover:text-red-700 dark:text-red-400">🗑 Clear history</button>
-                      )}
-                    </h2>
-                    {list.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 text-center">
-                        <p className="text-sm text-slate-400 dark:text-slate-500 italic">Recording homework will be listed here.</p>
-                      </div>
-                    ) : (
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700 overflow-hidden">
-                        {list.map(r => {
-                          const total = versesOf(r).length;
-                          const done = Object.keys(r.recordings).length;
-                          const chip = r.status === 'passed' ? { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', text: '✅ Passed' }
-                            : r.status === 'needs_revision' ? { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', text: `🔁 Reassigned${r.reassignedCount ? ` ${r.reassignedCount}/${total}` : ''}` }
-                            : r.status === 'submitted' ? { cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300', text: '📨 Submitted' }
-                            : { cls: 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300', text: `🎙 Recording ${done}/${total}` };
-                          return (
-                            <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{recitationRangeLabel(r)}</span>
-                              {r.parentId && <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">follow-up</span>}
-                              <span className="text-[11px] text-slate-400">
-                                Assigned {fmtDay(r.createdAt)}
-                                {r.submittedAt ? ` · sent ${fmtDay(r.submittedAt)}` : ''}
-                                {r.reviewedAt ? ` · reviewed ${fmtDay(r.reviewedAt)}` : ''}
-                              </span>
-                              <span className="ms-auto flex items-center gap-2">
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${chip.cls}`}>{chip.text}</span>
-                                {done > 0 && !r.purgedAt && (
-                                  <button onClick={() => openRecitationReview(r)}
-                                    className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100">
-                                    🎧 Listen
-                                  </button>
-                                )}
-                                {r.purgedAt && <span className="text-[11px] text-slate-400 italic">recordings cleared</span>}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-                );
-              })()}
-
-              {/* Completed history */}
-              <section>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                  <span className="text-xl">✅</span> Completed
-                  {hw_done.length > 0 && <span className="bg-slate-400 dark:bg-slate-600 text-white text-xs font-bold rounded-full px-2 py-0.5">{hw_done.length}</span>}
-                </h2>
-                {hw_done.length === 0 ? (
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 text-center">
-                    <p className="text-sm text-slate-400 dark:text-slate-500 italic">Completed homework will appear here.</p>
-                  </div>
-                ) : hw_done.map((hw, idx) => (
-                  <div key={hw.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-3 opacity-75">
-                    <div className="h-1 bg-gradient-to-r from-teal-400 to-emerald-400" />
-                    <div className="p-4 sm:p-5 flex items-start gap-3">
-                      <span className="text-xl mt-0.5 flex-shrink-0">✅</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">#{hw_done.length - idx}</span>
-                          <span className="text-sm font-bold text-slate-700 dark:text-slate-300 line-through decoration-slate-300 dark:decoration-slate-600">{fmtRange(hw)}</span>
-                        </div>
-                        {hw.note && <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-1 truncate">{hw.note}</p>}
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                          Assigned {new Date(hw.assignedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </section>
-            </div>
+            <HomeworkTab
+              side="tutor"
+              homework={hw_all}
+              recitations={recitations}
+              onOpenVerses={goToHomework}
+              onListen={openRecitationReview}
+              onCopyLink={rec => navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {})}
+              onMarkDone={hw => handleMarkHomeworkDone(hw_student.id, hw.id)}
+              onRemove={removeHomework}
+              onClearFinished={clearFinished}
+            />
           );
         })() : activeTab === 'bill' && currentUser?.role === 'teacher' && (sessionStudent ?? selectedStudent)?.studentType === 'platform' ? (
           <BillPage
