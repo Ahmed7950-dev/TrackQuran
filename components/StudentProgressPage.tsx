@@ -8,6 +8,7 @@ import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
+import { listRecitationHomework, versesOf } from '../services/recitationHomeworkService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
@@ -775,6 +776,9 @@ const isVerseInHomeworkRange = (
 // blue = tafsir. Tafsir layered on top of another state shows as a blue underline.
 const VERSE_BG: Record<string, string> = {
     green:  'bg-green-100 dark:bg-green-900/40',
+    // Recorded for homework and passed by the tutor — a light mint, so it reads
+    // as "checked" without taking the green that hifz owns.
+    mint:   'bg-teal-100/70 dark:bg-teal-900/25',
     orange: 'bg-orange-100 dark:bg-orange-900/30',
     purple: 'bg-purple-100 dark:bg-purple-900/30',
     blue:   'bg-blue-100 dark:bg-blue-900/30',
@@ -782,7 +786,7 @@ const VERSE_BG: Record<string, string> = {
 };
 const VERSE_UNDERLINE = 'border-b-4 border-blue-400 dark:border-blue-500';
 const VERSE_MARKER_FILL: Record<string, string> = {
-    green: '#86efac', orange: '#fdba74', purple: '#d8b4fe', blue: '#93c5fd', none: 'currentColor',
+    green: '#86efac', orange: '#fdba74', mint: '#99f6e4', purple: '#d8b4fe', blue: '#93c5fd', none: 'currentColor',
 };
 
 // A Lottie animation that rests on its first frame and plays while `play` is true.
@@ -1171,6 +1175,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
     const tadabburMode = pageMode === 'tadabbur';
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
+    /** Verses the student recorded for homework and the tutor passed. */
+    const [recitedOkVerses, setRecitedOkVerses] = useState<Set<string>>(new Set());
     /** Tutor's word meanings ("s:a:wordIndex") and per-verse notes ("s:a") for this student. */
     const [wordMeanings, setWordMeanings] = useState<Record<string, WordMeaning>>({});
     const [tutorVerseNotes, setTutorVerseNotes] = useState<Record<string, string>>({});
@@ -1435,6 +1441,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             loadWordMeanings(notesStudentId)
                 .then(setWordMeanings)
                 .catch(err => console.warn('[Tadabbur] load word meanings failed:', err));
+        }
+        if (what === 'all') {
+            // Passed recordings, and the verses of a reviewed one that were NOT
+            // sent back to be recorded again — those were read correctly.
+            listRecitationHomework(notesStudentId)
+                .then(list => {
+                    const childOf = new Map<string, string[]>();
+                    for (const r of list) {
+                        if (r.parentId) childOf.set(r.parentId, versesOf(r).map(([su, ay]) => `${su}:${ay}`));
+                    }
+                    const ok = new Set<string>();
+                    for (const r of list) {
+                        const verses = versesOf(r).map(([su, ay]) => `${su}:${ay}`);
+                        if (r.status === 'passed') verses.forEach(v => ok.add(v));
+                        else if (r.status === 'needs_revision') {
+                            const back = new Set(childOf.get(r.id) ?? []);
+                            verses.filter(v => !back.has(v)).forEach(v => ok.add(v));
+                        }
+                    }
+                    setRecitedOkVerses(ok);
+                })
+                .catch(err => console.warn('[Quran page] recitation results failed:', err));
         }
         if (what === 'all' || what === 'tutorNotes') {
             loadTutorVerseNotes(notesStudentId)
@@ -3236,10 +3264,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const isRead      = getVerseRangeInfo(surahNum, ayahNum, recitationAchievements).isLogged;
         const isTafseer   = getTafseerRangeInfo(surahNum, ayahNum).isLogged;
         const isHomework  = isVerseHomework(surahNum, ayahNum);
-        const base = isMemorized ? 'green' : isRead ? 'orange' : isHomework ? 'purple' : isTafseer ? 'blue' : 'none';
+        const recitedOk   = recitedOkVerses.has(`${surahNum}:${ayahNum}`);
+        const base = isMemorized ? 'green' : isRead ? 'orange' : recitedOk ? 'mint' : isHomework ? 'purple' : isTafseer ? 'blue' : 'none';
         const underline = isTafseer && base !== 'blue' && base !== 'none';
         return { base, underline };
-    }, [getVerseRangeInfo, getTafseerRangeInfo, isVerseHomework, memorizationAchievements, recitationAchievements]);
+    }, [getVerseRangeInfo, getTafseerRangeInfo, isVerseHomework, memorizationAchievements, recitationAchievements, recitedOkVerses]);
 
     
     // ── Range-log helpers ─────────────────────────────────────────────────────
@@ -4923,6 +4952,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" />Read &amp; memorized</span>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-300 dark:bg-orange-700" />Read</span>
+                                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-teal-200 dark:bg-teal-800" />Recorded &amp; correct</span>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-purple-300 dark:bg-purple-700" />Homework</span>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 dark:bg-blue-700" />Tafsir</span>
                                 </div>
