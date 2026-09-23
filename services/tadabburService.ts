@@ -158,3 +158,23 @@ export async function saveTutorVerseNote(studentId: string, surah: number, ayah:
   );
   if (error) throw error;
 }
+
+/**
+ * Live updates while both sides have the Quran page open: the tutor sees a
+ * reflection the moment the student saves it, the student sees the tutor's
+ * note and word meanings. `onChange` says which of the three changed; the
+ * caller reloads that map. Returns an unsubscribe function.
+ */
+export function subscribeToTadabbur(
+  studentId: string,
+  onChange: (what: 'notes' | 'tutorNotes' | 'meanings') => void,
+): () => void {
+  const filter = `student_id=eq.${studentId}`;
+  const channel = supabase
+    .channel(`tadabbur-${studentId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'quran_verse_notes', filter }, () => onChange('notes'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'quran_verse_tutor_notes', filter }, () => onChange('tutorNotes'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'quran_word_meanings', filter }, () => onChange('meanings'))
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}

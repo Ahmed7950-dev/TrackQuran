@@ -6,7 +6,7 @@ import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
-import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, WordMeaning } from '../services/tadabburService';
+import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, WordMeaning } from '../services/tadabburService';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
@@ -1408,18 +1408,44 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     }, [readOnlySpeed]);
 
     // ── Tadabbur: load notes when notesStudentId is available ─────────────────
+    /** Reload one of the three tadabbur maps (or all of them). */
+    const refreshTadabbur = useCallback((what: 'notes' | 'tutorNotes' | 'meanings' | 'all' = 'all') => {
+        if (!notesStudentId) return;
+        if (what === 'all' || what === 'notes') {
+            loadVerseNotes(notesStudentId)
+                .then(setVerseNotes)
+                .catch(err => console.warn('[Tadabbur] load notes failed:', err));
+        }
+        if (what === 'all' || what === 'meanings') {
+            loadWordMeanings(notesStudentId)
+                .then(setWordMeanings)
+                .catch(err => console.warn('[Tadabbur] load word meanings failed:', err));
+        }
+        if (what === 'all' || what === 'tutorNotes') {
+            loadTutorVerseNotes(notesStudentId)
+                .then(setTutorVerseNotes)
+                .catch(err => console.warn('[Tadabbur] load tutor notes failed:', err));
+        }
+    }, [notesStudentId]);
+
+    useEffect(() => { refreshTadabbur('all'); }, [refreshTadabbur]);
+
+    // The other side writes while this page is open: the tutor sees the
+    // student's reflection as it is saved, the student sees the tutor's note
+    // and word meanings — no reload. A refresh when the tab comes back covers
+    // anything written while it was asleep or the socket was down.
     useEffect(() => {
         if (!notesStudentId) return;
-        loadVerseNotes(notesStudentId)
-            .then(setVerseNotes)
-            .catch(err => console.warn('[Tadabbur] load notes failed:', err));
-        loadWordMeanings(notesStudentId)
-            .then(setWordMeanings)
-            .catch(err => console.warn('[Tadabbur] load word meanings failed:', err));
-        loadTutorVerseNotes(notesStudentId)
-            .then(setTutorVerseNotes)
-            .catch(err => console.warn('[Tadabbur] load tutor notes failed:', err));
-    }, [notesStudentId]);
+        const stop = subscribeToTadabbur(notesStudentId, what => refreshTadabbur(what));
+        const onWake = () => { if (!document.hidden) refreshTadabbur('all'); };
+        document.addEventListener('visibilitychange', onWake);
+        window.addEventListener('focus', onWake);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onWake);
+            window.removeEventListener('focus', onWake);
+        };
+    }, [notesStudentId, refreshTadabbur]);
 
     // ── Tadabbur: save / delete a note then update local state ────────────────
     const handleSaveNote = useCallback(async (surahNum: number, ayahNum: number, text: string) => {
