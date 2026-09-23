@@ -130,9 +130,9 @@ const HomeworkTab: React.FC<{
 
     return (
       <article key={hw.id} className={`border rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-sm ${t.card}`}>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-start sm:items-center gap-3 flex-wrap">
           <div className="min-w-0">
-            <p className="text-xl sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+            <p className="text-lg sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
               {homeworkRange(hw)}
             </p>
             <p className="flex items-center gap-2 mt-0.5">
@@ -142,7 +142,7 @@ const HomeworkTab: React.FC<{
             </p>
           </div>
           <span className="flex-grow" />
-          <span className={`h-8 px-3.5 rounded-full text-[13px] font-bold flex items-center gap-2 ${t.chip}`}>
+          <span className={`h-8 px-3 sm:px-3.5 rounded-full text-xs sm:text-[13px] font-bold flex items-center gap-2 flex-shrink-0 ${t.chip}`}>
             <span className={`w-[7px] h-[7px] rounded-full ${t.dot}`} />{state}
           </span>
         </div>
@@ -153,15 +153,20 @@ const HomeworkTab: React.FC<{
           </p>
         )}
 
+        {/* The tries: a row each on a phone (and whenever there are more than
+            three — side by side they cut their own words off), one segmented
+            strip otherwise. */}
         {tries.length > 1 && (
-          <div className="flex rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden">
+          <div className={`flex rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden ${
+            tries.length > 3 ? 'flex-col' : 'flex-col sm:flex-row'}`}>
             {tries.map(tr => (
               <span key={tr.n}
-                className={`flex-1 px-3 py-2.5 flex items-center gap-2.5 border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${
+                className={`px-3 py-2.5 flex items-center gap-2.5 border-slate-200 dark:border-gray-700 ${
+                  tries.length > 3 ? 'border-b last:border-b-0' : 'border-b sm:border-b-0 sm:border-e sm:flex-1 sm:min-w-0 last:border-b-0 sm:last:border-e-0'} ${
                   tr.current ? 'bg-white dark:bg-gray-800' : 'bg-slate-50 dark:bg-gray-700/40'}`}>
                 <span className={`w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center flex-shrink-0 ${
                   tr.current ? 'border-amber-400 text-amber-700 dark:text-amber-300' : 'border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400'}`}>{tr.n}</span>
-                <span className={`text-[13px] ${tr.current ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>{tr.text}</span>
+                <span className={`text-[13px] whitespace-nowrap ${tr.current ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>{tr.text}</span>
               </span>
             ))}
           </div>
@@ -170,13 +175,13 @@ const HomeworkTab: React.FC<{
         <div className="flex items-center gap-2.5 flex-wrap">
           {main && (
             <button onClick={main.run}
-              className={`h-11 px-5 rounded-full text-white text-sm font-bold ${t.main} transition-colors`}>
+              className={`h-11 px-4 sm:px-5 rounded-full text-white text-sm font-bold whitespace-nowrap ${t.main} transition-colors`}>
               {main.label}
             </button>
           )}
           {main?.label !== second.label && (
             <button onClick={second.run}
-              className="h-11 px-4 rounded-full border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-gray-700">
+              className="h-11 px-4 rounded-full border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap transition-colors hover:bg-slate-50 dark:hover:bg-gray-700">
               {second.label}
             </button>
           )}
