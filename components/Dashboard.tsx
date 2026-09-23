@@ -10,6 +10,7 @@ import StudentsTable, { RosterRowData } from './StudentsTable';
 import { listStudentsWithPush } from '../services/pushService';
 import { listStudentsAwaitingReview } from '../services/recitationHomeworkService';
 import { listFluencyResults } from '../services/fluencyService';
+import { createNotification } from '../services/notificationService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink, fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
@@ -838,6 +839,23 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     return out;
   }, [students, nextLessons, bookedLessons, linkedStudentIds, pushIds, reviewIds, fluencyLevels]);
 
+  /** The bell in the list: a push (and a bell row) asking them to look at their
+   *  homework. It lands on their own page, so the tap goes somewhere useful. */
+  const remindAboutHomework = useCallback(async (studentId: string) => {
+    if (!teacherId) return;
+    const reportId = await getStudentReportId(teacherId, studentId).catch(() => null);
+    await createNotification({
+      teacherId,
+      studentId,
+      recipient: 'student',
+      bookingId: null,
+      type: 'homework_nudge',
+      title: 'A reminder from your teacher',
+      body: 'Please open your page and check your homework.',
+      metadata: reportId ? { url: `/report/${reportId}` } : undefined,
+    });
+  }, [teacherId]);
+
   const studentGroups = useMemo(() => {
     const youngGems        = sortedStudents.filter(s => getEffectiveCategory(s) === 'young_gems');
     const aspiringScholars = sortedStudents.filter(s => getEffectiveCategory(s) === 'aspiring_scholars');
@@ -1177,7 +1195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
 
       {layout === 'list' ? (
         <StudentsTable students={sortedStudents} data={rosterData} onSelectStudent={onSelectStudent}
-          archivedIds={archivedSet} onToggleArchive={onToggleArchive} />
+          archivedIds={archivedSet} onToggleArchive={onToggleArchive} onRemind={remindAboutHomework} />
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <div className="space-y-4">

@@ -36,7 +36,8 @@ export type NotificationType =
   | 'quran_recitation_submitted'
   | 'quran_recitation_reviewed'
   | 'tadabbur_deck_assigned'
-  | 'tadabbur_deck_completed';
+  | 'tadabbur_deck_completed'
+  | 'homework_nudge';
 
 export interface BookingNotification {
   id:         string;

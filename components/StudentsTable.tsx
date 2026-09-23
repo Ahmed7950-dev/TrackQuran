@@ -64,8 +64,24 @@ const StudentsTable: React.FC<{
   onSelectStudent: (id: string) => void;
   archivedIds?: Set<string>;
   onToggleArchive?: (studentId: string, archived: boolean) => void;
-}> = ({ students, data, onSelectStudent, archivedIds, onToggleArchive }) => {
+  /** Ring the student's phone: "check your homework". */
+  onRemind?: (studentId: string) => Promise<void>;
+}> = ({ students, data, onSelectStudent, archivedIds, onToggleArchive, onRemind }) => {
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'nextLesson', dir: 'asc' });
+  /** studentId → 'sending' while it goes, 'sent' for a few seconds after. */
+  const [reminded, setReminded] = useState<Record<string, 'sending' | 'sent'>>({});
+
+  const remind = async (studentId: string) => {
+    if (!onRemind || reminded[studentId]) return;
+    setReminded(r => ({ ...r, [studentId]: 'sending' }));
+    await onRemind(studentId);
+    setReminded(r => ({ ...r, [studentId]: 'sent' }));
+    window.setTimeout(() => setReminded(r => {
+      const next = { ...r };
+      delete next[studentId];
+      return next;
+    }), 8000);   // the tick sticks around, so a double tap can't double-send
+  };
 
   /** Text sorts A→Z first, everything else biggest-first. */
   const clickHeader = (key: SortKey) => setSort(cur =>
@@ -129,7 +145,7 @@ const StudentsTable: React.FC<{
             <Header id="nextLesson" label="Next lesson" align="start" />
             <Header id="linked" label="Linked" title="Linked to a calendar lesson" />
             <Header id="homework" label="Homework" title="Homework still not done" />
-            <Header id="reminders" label="Reminders" title="A phone is registered for reminders" />
+            <Header id="reminders" label="Remind" title="Ring their phone: check your homework" />
             <Header id="review" label="To review" title="A recording is waiting for you" />
             <Header id="pagesRead" label="Read" title="Pages read" />
             <Header id="pagesMemorized" label="Hifz" title="Pages memorized" />
@@ -181,7 +197,28 @@ const StudentsTable: React.FC<{
                   )}
                 </td>
                 <td className={`${cell} text-center`}>
-                  <Mark on={!!d?.notifications} label={d?.notifications ? 'Reminders on' : 'Reminders off — the phone is not registered'} />
+                  {!d?.notifications ? (
+                    <Mark on={false} label="Reminders off — the phone is not registered" />
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); remind(s.id); }}
+                      disabled={!onRemind || !!reminded[s.id]}
+                      title={reminded[s.id] === 'sent' ? 'Reminder sent' : `Remind ${s.name} to check their homework`}
+                      aria-label={reminded[s.id] === 'sent' ? 'Reminder sent' : `Remind ${s.name} to check their homework`}
+                      className={`inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+                        reminded[s.id] === 'sent'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/70'} ${
+                        reminded[s.id] === 'sending' ? 'opacity-60' : ''}`}>
+                      {reminded[s.id] === 'sent' ? (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
+                      ) : (
+                        <svg className={`w-[18px] h-[18px] ${reminded[s.id] === 'sending' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M18 8a6 6 0 0 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" /><path d="M10.5 20a2 2 0 0 0 3 0" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
                 </td>
                 <td className={`${cell} text-center`}>
                   {d?.awaitingReview ? (
