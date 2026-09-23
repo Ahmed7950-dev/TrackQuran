@@ -3,7 +3,7 @@
 // every student in a row, with the things the tutor checks before a lesson —
 // when they next meet, whether the lesson is linked to the calendar, homework
 // still open, reminders switched on, a recording waiting — and how they are
-// doing: pages, attendance, quality, mistakes, fluency level and rank.
+// doing: pages, quality, mistakes, fluency level and rank.
 // Any column sorts by its header.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useMemo, useState } from 'react';
@@ -19,9 +19,6 @@ export interface RosterRowData {
   awaitingReview: boolean;
   pagesRead: number;
   pagesMemorized: number;
-  /** Lessons attended out of those with a record (rescheduled ones ignored). */
-  attended: number;
-  attendanceTotal: number;
   /** Average reading quality out of 10, or null when nothing is logged. */
   quality: number | null;
   /** Counted mistakes per page covered, or null when no pages are covered. */
@@ -34,7 +31,7 @@ export interface RosterRowData {
 
 type SortKey =
   | 'name' | 'nextLesson' | 'linked' | 'homework' | 'reminders' | 'review'
-  | 'pagesRead' | 'pagesMemorized' | 'attendance' | 'quality' | 'mistakes' | 'fluency' | 'rank';
+  | 'pagesRead' | 'pagesMemorized' | 'quality' | 'mistakes' | 'fluency' | 'rank';
 
 const dayLabel = (d: Date): string => {
   const now = new Date();
@@ -89,7 +86,6 @@ const StudentsTable: React.FC<{
         case 'review': return d?.awaitingReview ? 1 : 0;
         case 'pagesRead': return d?.pagesRead ?? 0;
         case 'pagesMemorized': return d?.pagesMemorized ?? 0;
-        case 'attendance': return d && d.attendanceTotal ? d.attended / d.attendanceTotal : -1;
         case 'quality': return d?.quality ?? -1;
         // Nothing covered yet sorts last either way, not as a perfect score.
         case 'mistakes': return d?.mistakeRate ?? (sort.dir === 'asc' ? LAST : -1);
@@ -137,7 +133,6 @@ const StudentsTable: React.FC<{
             <Header id="review" label="To review" title="A recording is waiting for you" />
             <Header id="pagesRead" label="Read" title="Pages read" />
             <Header id="pagesMemorized" label="Hifz" title="Pages memorized" />
-            <Header id="attendance" label="Attended" title="Lessons they came to, out of the ones they had" />
             <Header id="quality" label="Quality" title="Average reading quality out of 10" />
             <Header id="mistakes" label="Mistakes" title="Counted mistakes per page covered" />
             <Header id="fluency" label="Fluency" title="Highest fluency level passed" />
@@ -151,7 +146,6 @@ const StudentsTable: React.FC<{
             const next = d?.nextLesson;
             const soon = !!next && next.getTime() - Date.now() < 24 * 3_600_000;
             const archived = !!archivedIds?.has(s.id);
-            const attendPct = d && d.attendanceTotal ? Math.round((d.attended / d.attendanceTotal) * 100) : null;
             const num = 'text-sm font-semibold text-slate-700 dark:text-slate-200';
             const dim = 'text-sm text-slate-400 dark:text-slate-500';
             return (
@@ -202,14 +196,6 @@ const StudentsTable: React.FC<{
                 <td className={`${cell} text-center ${num}`}>{d?.pagesRead || <span className={dim}>—</span>}</td>
                 <td className={`${cell} text-center ${num}`}>{d?.pagesMemorized || <span className={dim}>—</span>}</td>
                 <td className={`${cell} text-center`}>
-                  {attendPct === null ? <span className={dim}>—</span> : (
-                    <span title={`Came to ${d!.attended} of the ${d!.attendanceTotal} lessons they had (${attendPct}%)`}
-                      className={`text-sm font-semibold ${attendPct >= 90 ? 'text-emerald-700 dark:text-emerald-400' : attendPct >= 70 ? 'text-slate-700 dark:text-slate-200' : 'text-amber-700 dark:text-amber-400'}`}>
-                      {d!.attended}<span className="text-slate-400 dark:text-slate-500 font-normal"> / {d!.attendanceTotal}</span>
-                    </span>
-                  )}
-                </td>
-                <td className={`${cell} text-center`}>
                   {d?.quality == null ? <span className={dim}>—</span> : (
                     <span className={`text-sm font-semibold ${d.quality >= 8 ? 'text-emerald-700 dark:text-emerald-400' : d.quality >= 6 ? 'text-slate-700 dark:text-slate-200' : 'text-amber-700 dark:text-amber-400'}`}>
                       {d.quality.toFixed(1)}
@@ -256,7 +242,7 @@ const StudentsTable: React.FC<{
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={14} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 italic">No students to show.</td></tr>
+            <tr><td colSpan={13} className="px-4 py-10 text-center text-slate-400 dark:text-slate-500 italic">No students to show.</td></tr>
           )}
         </tbody>
       </table>

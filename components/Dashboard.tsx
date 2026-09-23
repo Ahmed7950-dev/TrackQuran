@@ -820,7 +820,6 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         const [su, ay] = key.split(':').map(Number);
         return !isNaN(su) && !isNaN(ay) && pages.has(getPageOfAyah(su, ay));
       }).length;
-      const seen = (s.attendance ?? []).filter(a => a.status !== AttendanceStatus.Rescheduled);
       const reads = s.recitationAchievements ?? [];
       out.set(s.id, {
         nextLesson: gcal.get(s.id) ?? bookedLessons.get(s.id),
@@ -830,8 +829,6 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         awaitingReview: reviewIds.has(s.id),
         pagesRead: getRecitedPagesSet(s).size,
         pagesMemorized: getMemorizedPagesSet(s).size,
-        attended: seen.filter(a => a.status === AttendanceStatus.Present).length,
-        attendanceTotal: seen.length,
         quality: reads.length ? reads.reduce((sum, a) => sum + a.readingQuality, 0) / reads.length : null,
         mistakeRate: pages.size ? counted / pages.size : null,
         fluency: fluencyLevels.get(s.id) ?? null,
