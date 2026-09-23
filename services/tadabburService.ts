@@ -178,3 +178,19 @@ export function subscribeToTadabbur(
     .subscribe();
   return () => { supabase.removeChannel(channel); };
 }
+
+/** A reflection another student of the same tutor wrote on a verse (read-only). */
+export interface SharedVerseNote { studentId: string; studentName: string; ayah: number; noteText: string }
+
+/**
+ * Reflections by the tutor's OTHER students on the verses of one surah.
+ * Goes through a security-definer function, so the student portal can ask
+ * without being able to see the roster or another tutor's students.
+ */
+export async function loadSharedVerseNotes(studentId: string, surah: number): Promise<SharedVerseNote[]> {
+  const { data, error } = await supabase.rpc('shared_verse_notes', { p_student_id: studentId, p_surah: surah });
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    studentId: r.student_id, studentName: r.student_name, ayah: r.ayah, noteText: r.note_text,
+  }));
+}

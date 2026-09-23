@@ -6,7 +6,7 @@ import { QURAN_METADATA } from '../constants';
 import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
-import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, WordMeaning } from '../services/tadabburService';
+import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
@@ -1181,6 +1181,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [peekWords, setPeekWords] = useState<Set<string>>(new Set());
     const [wordEditor, setWordEditor] = useState<{ key: string; surah: number; ayah: number; wordIndex: number; word: string; el: HTMLElement } | null>(null);
     const [expandedTafsir, setExpandedTafsir] = useState<Set<string>>(new Set());
+    /** Reflections by the tutor's other students, per surah, and which author's
+     *  reflection each verse is currently showing ('' = the student in view). */
+    const [sharedNotes, setSharedNotes] = useState<Record<number, SharedVerseNote[]>>({});
+    const sharedNotesRef = useRef<Record<number, SharedVerseNote[]>>({});
+    sharedNotesRef.current = sharedNotes;
+    const [noteAuthor, setNoteAuthor] = useState<Record<string, string>>({});
     /** quran.com word-by-word data, per surah (loaded in tadabbur mode). */
     const [wbwBySurah, setWbwBySurah] = useState<Record<number, Map<string, WbwWord[]>>>({});
     /** Tutor-side toggle: show / hide student Tadabbur notes during a live session */
@@ -1411,6 +1417,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** Reload one of the three tadabbur maps (or all of them). */
     const refreshTadabbur = useCallback((what: 'notes' | 'tutorNotes' | 'meanings' | 'all' = 'all') => {
         if (!notesStudentId) return;
+        if (what === 'all') {
+            // Reload the other students' reflections in place — clearing them
+            // first would blink the names off the screen on every tab focus.
+            Object.keys(sharedNotesRef.current).map(Number).forEach(n => {
+                loadSharedVerseNotes(notesStudentId, n)
+                    .then(rows => setSharedNotes(prev => ({ ...prev, [n]: rows })))
+                    .catch(err => console.warn('[Tadabbur] shared reflections failed:', err));
+            });
+        }
         if (what === 'all' || what === 'notes') {
             loadVerseNotes(notesStudentId)
                 .then(setVerseNotes)
@@ -1480,6 +1495,31 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 .catch(err => console.warn('[Tadabbur] word-by-word load failed:', err));
         });
     }, [tadabburMode, verses, wbwBySurah]);
+
+    // Other students' reflections on the surahs on screen (same tutor only —
+    // the database function decides that, not the client).
+    useEffect(() => {
+        if (!tadabburMode || !notesStudentId) return;
+        const surahs = [...new Set(verses.map(v => Number(v.verse_key.split(':')[0])))];
+        surahs.filter(n => !sharedNotes[n]).forEach(n => {
+            loadSharedVerseNotes(notesStudentId, n)
+                .then(rows => setSharedNotes(prev => ({ ...prev, [n]: rows })))
+                .catch(err => console.warn('[Tadabbur] shared reflections failed:', err));
+        });
+    }, [tadabburMode, verses, sharedNotes, notesStudentId]);
+
+    /** "surah:ayah" → the other students who wrote on that verse. */
+    const sharedByVerse = useMemo(() => {
+        const m = new Map<string, SharedVerseNote[]>();
+        for (const [surah, rows] of Object.entries(sharedNotes)) {
+            for (const r of rows) {
+                const k = `${surah}:${r.ayah}`;
+                const list = m.get(k);
+                if (list) list.push(r); else m.set(k, [r]);
+            }
+        }
+        return m;
+    }, [sharedNotes]);
 
     const handleSaveWordMeaning = useCallback(async (surah: number, ayah: number, wordIndex: number, word: string, meaning: string) => {
         if (!notesStudentId) return;
@@ -3646,6 +3686,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const tafsir = tafsirs[verse.verse_key];
         const tafsirOpen = expandedTafsir.has(vk);
         const showReflection = !!notesStudentId && (readOnly || showStudentNotes);
+        // Reflections other students wrote on this verse — read-only, picked by name.
+        const others = sharedByVerse.get(vk) ?? [];
+        const viewingId = noteAuthor[vk] ?? '';
+        const viewedOther = viewingId ? others.find(o => o.studentId === viewingId) ?? null : null;
+        const ownChipName = readOnly ? 'You' : (student.name || 'This student');
         const showTutorNote = !!notesStudentId && (!readOnly || !!tNote);
         const section = 'rounded-xl border p-3 sm:p-4';
         const label = 'text-[10px] sm:text-[11px] font-extrabold tracking-[0.08em] uppercase mb-1.5';
@@ -3754,7 +3799,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {showReflection && (
                             <section className={`${section} bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800`} data-tadabbur="true">
                                 <p className={`${label} text-emerald-700 dark:text-emerald-400`}>{readOnly ? 'Your reflection' : 'Student’s reflection'}</p>
-                                {readOnly && isEditingThisNote ? (
+                                {others.length > 0 && (
+                                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                        <span className="text-[11px] font-semibold text-emerald-800/70 dark:text-emerald-300/70">
+                                            Reflections on this verse:
+                                        </span>
+                                        {[{ studentId: '', studentName: ownChipName }, ...others].map(o => (
+                                            <button
+                                                key={o.studentId || 'own'}
+                                                onClick={() => setNoteAuthor(p => ({ ...p, [vk]: o.studentId }))}
+                                                title={o.studentId ? `${o.studentName}’s reflection (read-only)` : undefined}
+                                                aria-pressed={viewingId === o.studentId}
+                                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${viewingId === o.studentId
+                                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                    : 'bg-white/70 dark:bg-gray-700 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-gray-600'}`}
+                                            >{o.studentName}</button>
+                                        ))}
+                                    </div>
+                                )}
+                                {viewedOther ? (
+                                    <>
+                                        <p className={`${body} text-emerald-900 dark:text-emerald-100`}>{viewedOther.noteText}</p>
+                                        <p className="mt-1.5 text-[11px] font-semibold text-emerald-700/70 dark:text-emerald-300/70">
+                                            {viewedOther.studentName}’s reflection · read-only
+                                        </p>
+                                    </>
+                                ) : readOnly && isEditingThisNote ? (
                                     <div className="flex flex-col gap-1">
                                         <textarea
                                             value={editingNoteText}
