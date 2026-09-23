@@ -10,6 +10,7 @@ import StudentsTable, { RosterRowData } from './StudentsTable';
 import { listReportIdsForTeacher } from '../services/dataService';
 import { listStudentsWithPush } from '../services/pushService';
 import { listStudentsAwaitingReview } from '../services/recitationHomeworkService';
+import { listFluencyResults } from '../services/fluencyService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink, fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
@@ -764,15 +765,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   const [pushIds, setPushIds] = useState<Set<string>>(new Set());
   const [reviewIds, setReviewIds] = useState<Set<string>>(new Set());
   const [bookedLessons, setBookedLessons] = useState<Map<string, Date>>(new Map());
+  const [fluencyLevels, setFluencyLevels] = useState<Map<string, number>>(new Map());
   useEffect(() => {
     if (layout !== 'list' || !teacherId) return;
     let stop = false;
     (async () => {
-      const [reports, pushes, reviews, sessions] = await Promise.all([
+      const [reports, pushes, reviews, sessions, fluency] = await Promise.all([
         listReportIdsForTeacher(teacherId).catch(() => new Map<string, string>()),
         listStudentsWithPush().catch(() => new Set<string>()),
         listStudentsAwaitingReview(teacherId).catch(() => new Set<string>()),
         getUpcomingSessions(teacherId).catch(() => []),
+        listFluencyResults(students.map(s => s.id)).catch(() => []),
       ]);
       if (stop) return;
       setPortalIds(new Set(reports.keys()));
@@ -786,9 +789,16 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         if (!had || at < had) soonest.set(ses.studentId, at);
       }
       setBookedLessons(soonest);
+      const best = new Map<string, number>();
+      for (const f of fluency) {
+        if (!f.passed) continue;
+        best.set(f.studentId, Math.max(best.get(f.studentId) ?? 0, f.level));
+      }
+      setFluencyLevels(best);
     })();
     return () => { stop = true; };
-  }, [layout, teacherId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, teacherId, students.length]);
 
   const rosterData = useMemo(() => {
     // Google Calendar is the truer answer where it has one (a rescheduled
@@ -798,8 +808,24 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       const had = gcal.get(l.student.id);
       if (!had || l.date < had) gcal.set(l.student.id, l.date);
     }
+    // Rank: the same score the cards and the honor board use.
+    const byScore = [...students]
+      .map(s => ({ id: s.id, score: calculateScore(s) }))
+      .sort((a, b) => b.score - a.score);
+    const rankOf = new Map(byScore.map((r, i) => [r.id, i + 1]));
+
     const out = new Map<string, RosterRowData>();
     for (const s of students) {
+      // Mistakes per page, over the pages actually covered — the same rule the
+      // "fewest mistakes" sort uses (yellow = fixed, so it never counts).
+      const pages = new Set<number>([...getRecitedPagesSet(s), ...getMemorizedPagesSet(s)]);
+      const counted = Object.entries(s.mistakes || {}).filter(([key, m]) => {
+        if (!(m as Mistake).errorType) return false;
+        const [su, ay] = key.split(':').map(Number);
+        return !isNaN(su) && !isNaN(ay) && pages.has(getPageOfAyah(su, ay));
+      }).length;
+      const seen = (s.attendance ?? []).filter(a => a.status !== AttendanceStatus.Rescheduled);
+      const reads = s.recitationAchievements ?? [];
       out.set(s.id, {
         nextLesson: gcal.get(s.id) ?? bookedLessons.get(s.id),
         linked: linkedStudentIds.has(s.id),
@@ -807,10 +833,18 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         openHomework: (s.quranHomework ?? []).filter(h => !h.isDone).length,
         notifications: pushIds.has(s.id),
         awaitingReview: reviewIds.has(s.id),
+        pagesRead: getRecitedPagesSet(s).size,
+        pagesMemorized: getMemorizedPagesSet(s).size,
+        attended: seen.filter(a => a.status === AttendanceStatus.Present).length,
+        attendanceTotal: seen.length,
+        quality: reads.length ? reads.reduce((sum, a) => sum + a.readingQuality, 0) / reads.length : null,
+        mistakeRate: pages.size ? counted / pages.size : null,
+        fluency: fluencyLevels.get(s.id) ?? null,
+        rank: rankOf.get(s.id) ?? 0,
       });
     }
     return out;
-  }, [students, nextLessons, bookedLessons, linkedStudentIds, portalIds, pushIds, reviewIds]);
+  }, [students, nextLessons, bookedLessons, linkedStudentIds, portalIds, pushIds, reviewIds, fluencyLevels]);
 
   const studentGroups = useMemo(() => {
     const youngGems        = sortedStudents.filter(s => getEffectiveCategory(s) === 'young_gems');
@@ -1150,7 +1184,8 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
       </div>
 
       {layout === 'list' ? (
-        <StudentsTable students={sortedStudents} data={rosterData} onSelectStudent={onSelectStudent} />
+        <StudentsTable students={sortedStudents} data={rosterData} onSelectStudent={onSelectStudent}
+          archivedIds={archivedSet} onToggleArchive={onToggleArchive} />
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <div className="space-y-4">
