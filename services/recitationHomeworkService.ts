@@ -378,3 +378,14 @@ export async function purgeOldRecitations(teacherId: string): Promise<number> {
   }
   return n;
 }
+
+/** Students (by id) with a recording sent in and waiting for the tutor. */
+export async function listStudentsAwaitingReview(teacherId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('quran_recitation_homework')
+    .select('student_id')
+    .eq('teacher_id', teacherId)
+    .eq('status', 'submitted');
+  if (error) { console.error('listStudentsAwaitingReview:', error.message); return new Set(); }
+  return new Set((data ?? []).map(r => r.student_id as string));
+}

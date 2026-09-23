@@ -171,3 +171,13 @@ export async function sendPushFor(input: {
     // never let a push failure break the thing that caused it
   }
 }
+
+/** The students (by push id) with at least one phone registered for reminders. */
+export async function listStudentsWithPush(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('push_subscriptions')
+    .select('student_id')
+    .eq('recipient', 'student');
+  if (error) { console.error('listStudentsWithPush:', error.message); return new Set(); }
+  return new Set((data ?? []).map(r => r.student_id as string).filter(Boolean));
+}

@@ -581,6 +581,16 @@ export const getStudentTimezonePublic = async (studentId: string): Promise<strin
   return (data as string | null) ?? null;
 };
 
+/** studentId → their portal link id, for every student of this teacher. */
+export const listReportIdsForTeacher = async (teacherId: string): Promise<Map<string, string>> => {
+  const { data, error } = await supabase
+    .from('shared_reports')
+    .select('id, student_id')
+    .eq('teacher_id', teacherId);
+  if (error) { console.error('listReportIdsForTeacher:', error.message); return new Map(); }
+  return new Map((data ?? []).map(r => [r.student_id as string, r.id as string]));
+};
+
 /** Returns the existing report UUID for this student, or null if none exists yet. */
 export const getStudentReportId = async (teacherId: string, studentId: string): Promise<string | null> => {
   const { data } = await supabase

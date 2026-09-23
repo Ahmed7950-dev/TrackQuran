@@ -5,7 +5,11 @@ import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdate
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
 import StudentProfileIcon from './StudentProfileIcon';
-import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent, autoSyncGCalLinks } from '../services/lessonSessionService';
+import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent, autoSyncGCalLinks, getUpcomingSessions } from '../services/lessonSessionService';
+import StudentsTable, { RosterRowData } from './StudentsTable';
+import { listReportIdsForTeacher } from '../services/dataService';
+import { listStudentsWithPush } from '../services/pushService';
+import { listStudentsAwaitingReview } from '../services/recitationHomeworkService';
 import { getPortalTokenForStudent } from '../services/portalPairService';
 import { createGoogleMeetLink, fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import MilestoneBadge from './MilestoneBadge';
@@ -543,6 +547,11 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   /** The sort bar is one line until you open it — six chips wrapped to three
    *  rows on a phone pushed the students themselves off the screen. */
   const [sortOpen, setSortOpen] = useState(false);
+  /** Cards in three age groups, or every student in one list. */
+  const [layout, setLayout] = useState<'cards' | 'list'>(() => {
+    try { return localStorage.getItem('dashboard_layout') === 'list' ? 'list' : 'cards'; } catch { return 'cards'; }
+  });
+  useEffect(() => { try { localStorage.setItem('dashboard_layout', layout); } catch { /* private mode */ } }, [layout]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const { t } = useI18n();
@@ -749,6 +758,59 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
     if (age <= 35) return 'aspiring_scholars';
     return 'devoted_learners';
   };
+
+  // ── The list view's columns ─────────────────────────────────────────────
+  const [portalIds, setPortalIds] = useState<Set<string>>(new Set());
+  const [pushIds, setPushIds] = useState<Set<string>>(new Set());
+  const [reviewIds, setReviewIds] = useState<Set<string>>(new Set());
+  const [bookedLessons, setBookedLessons] = useState<Map<string, Date>>(new Map());
+  useEffect(() => {
+    if (layout !== 'list' || !teacherId) return;
+    let stop = false;
+    (async () => {
+      const [reports, pushes, reviews, sessions] = await Promise.all([
+        listReportIdsForTeacher(teacherId).catch(() => new Map<string, string>()),
+        listStudentsWithPush().catch(() => new Set<string>()),
+        listStudentsAwaitingReview(teacherId).catch(() => new Set<string>()),
+        getUpcomingSessions(teacherId).catch(() => []),
+      ]);
+      if (stop) return;
+      setPortalIds(new Set(reports.keys()));
+      setPushIds(pushes);
+      setReviewIds(reviews);
+      const soonest = new Map<string, Date>();
+      for (const ses of sessions) {
+        const at = new Date(ses.startAt);
+        if (at.getTime() < Date.now()) continue;
+        const had = soonest.get(ses.studentId);
+        if (!had || at < had) soonest.set(ses.studentId, at);
+      }
+      setBookedLessons(soonest);
+    })();
+    return () => { stop = true; };
+  }, [layout, teacherId]);
+
+  const rosterData = useMemo(() => {
+    // Google Calendar is the truer answer where it has one (a rescheduled
+    // lesson moves there first); the stored sessions cover everyone else.
+    const gcal = new Map<string, Date>();
+    for (const l of nextLessons) {
+      const had = gcal.get(l.student.id);
+      if (!had || l.date < had) gcal.set(l.student.id, l.date);
+    }
+    const out = new Map<string, RosterRowData>();
+    for (const s of students) {
+      out.set(s.id, {
+        nextLesson: gcal.get(s.id) ?? bookedLessons.get(s.id),
+        linked: linkedStudentIds.has(s.id),
+        hasPortal: portalIds.has(s.id),
+        openHomework: (s.quranHomework ?? []).filter(h => !h.isDone).length,
+        notifications: pushIds.has(s.id),
+        awaitingReview: reviewIds.has(s.id),
+      });
+    }
+    return out;
+  }, [students, nextLessons, bookedLessons, linkedStudentIds, portalIds, pushIds, reviewIds]);
 
   const studentGroups = useMemo(() => {
     const youngGems        = sortedStudents.filter(s => getEffectiveCategory(s) === 'young_gems');
@@ -1051,6 +1113,17 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
             );
           })()}
 
+          {/* Cards or one list */}
+          <div role="group" aria-label="Layout" className="flex-shrink-0 flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-gray-700">
+            {([['cards', 'Cards'], ['list', 'List']] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setLayout(id)} aria-pressed={layout === id}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                  layout === id ? 'bg-white dark:bg-gray-800 text-teal-700 dark:text-orange-400 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Add Student — between search and honor board */}
           <button
             onClick={onAddStudent}
@@ -1076,6 +1149,9 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         </div>
       </div>
 
+      {layout === 'list' ? (
+        <StudentsTable students={sortedStudents} data={rosterData} onSelectStudent={onSelectStudent} />
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <div className="space-y-4">
           <GroupHeader label={t('dashboard.youngGems')} count={studentGroups.youngGems.length} />
@@ -1096,6 +1172,7 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           )) : <p className="text-slate-500 dark:text-slate-400 italic">{t('dashboard.noStudents')}</p>}
         </div>
       </div>
+      )}
       <HonorBoardModal
         isOpen={isHonorBoardOpen}
         onClose={() => setIsHonorBoardOpen(false)}
