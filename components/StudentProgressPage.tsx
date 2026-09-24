@@ -76,6 +76,12 @@ interface StudentProgressPageProps {
   /** When true: disables all logging interactions; verse-number click plays audio instead */
   readOnly?: boolean;
   /**
+   * The public reader on the landing page: no student card, no progress bars,
+   * only listening and hifz, and a long press on a verse opens its translation
+   * and explanation. Always passed together with `readOnly`.
+   */
+  guest?: boolean;
+  /**
    * Top offset (px) for the sticky surah navigation toolbar.
    * Set to the height of the page header above this component.
    * Defaults to 100 (tutor app header). Pass a higher value when
@@ -860,7 +866,7 @@ const ICON = {
     search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -898,7 +904,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** The page's mode (left of the surah bar). Reading logs mistakes (tutor);
      *  listening plays verses on tap; hifz hides/reveals verses on tap;
      *  tadabbur shows verse blocks with word meanings and notes. */
-    const [pageMode, setPageModeRaw] = useState<PageMode>('reading');
+    const [pageMode, setPageModeRaw] = useState<PageMode>(guest ? 'listening' : 'reading');
     const tutorListen = !readOnly && pageMode === 'listening';
     // Students have always been able to tap a verse to hear it while reading.
     const listenActive = readOnly ? (pageMode === 'reading' || pageMode === 'listening') : tutorListen;
@@ -1200,6 +1206,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         playVerse(surah, ayah, true);
     };
     // ── Tadabbur (verse notes) ────────────────────────────────────────────────
+    // ── The public reader: hold a verse to read what it means ───────────────
+    const verseInfoTimer = useRef<number | null>(null);
+    /** True while the click that follows a long press must be swallowed. */
+    const verseInfoFired = useRef(false);
+    const [guestInfoVerse, setGuestInfoVerse] = useState<{ surah: number; ayah: number } | null>(null);
+    /** Once the reader has asked for a meaning, the surah's translation stays loaded. */
+    const [guestInfoWanted, setGuestInfoWanted] = useState(false);
+    const endVerseInfoPress = useCallback(() => {
+        if (verseInfoTimer.current) { window.clearTimeout(verseInfoTimer.current); verseInfoTimer.current = null; }
+    }, []);
+    const startVerseInfoPress = useCallback((surah: number, ayah: number) => {
+        verseInfoFired.current = false;
+        endVerseInfoPress();
+        verseInfoTimer.current = window.setTimeout(() => {
+            verseInfoTimer.current = null;
+            verseInfoFired.current = true;
+            setGuestInfoWanted(true);
+            setGuestInfoVerse({ surah, ayah });
+            stopVerse();
+        }, 450);
+    }, [endVerseInfoPress, stopVerse]);
+    useEffect(() => endVerseInfoPress, [endVerseInfoPress]);
+
     const tadabburMode = pageMode === 'tadabbur';
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
     /** Verses the student recorded for homework and the tutor passed. */
@@ -2471,7 +2500,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     useEffect(() => {
         const fetchTranslation = async () => {
-            if (!selectedSurahId || !showTranslation) { setTranslations({}); return; }
+            if (!selectedSurahId || !(showTranslation || guestInfoWanted)) { setTranslations({}); return; }
             setIsTranslationLoading(true); setTranslationError(null);
             try {
                 const response = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurahId}/en.sahih`);
@@ -2490,11 +2519,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
         };
         fetchTranslation();
-    }, [selectedSurahId, showTranslation, t]);
+    }, [selectedSurahId, showTranslation, guestInfoWanted, t]);
 
     useEffect(() => {
         const fetchTafsir = async () => {
-            if (!selectedSurahId || !showTranslation || verses.length === 0) { setTafsirs({}); return; }
+            if (!selectedSurahId || !(showTranslation || guestInfoWanted) || verses.length === 0) { setTafsirs({}); return; }
             setIsTafsirLoading(true);
             setTafsirError(null);
             try {
@@ -2549,7 +2578,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }
         };
         fetchTafsir();
-    }, [selectedSurahId, showTranslation, verses]);
+    }, [selectedSurahId, showTranslation, guestInfoWanted, verses]);
 
     // First open: resume to the last-log position once it's available. The initial
     // useState may have been empty if the resume point loaded after this mounted.
@@ -4119,13 +4148,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     // Skip audio if the click originated inside the Tadabbur note section
                     // Hifz mode wins over everything: capture the tap before any letter sees it.
                     style={isVerseHidden && hifzMode ? { filter: 'blur(0.45em)', opacity: 0.5 } : undefined}
+                    onPointerDown={guest ? () => startVerseInfoPress(surahNum, ayahNum) : undefined}
+                    onPointerUp={guest ? endVerseInfoPress : undefined}
+                    onPointerCancel={guest ? endVerseInfoPress : undefined}
+                    onPointerLeave={guest ? endVerseInfoPress : undefined}
+                    onContextMenu={guest ? (e) => e.preventDefault() : undefined}
                     onClickCapture={hifzMode ? (e) => {
                         if ((e.target as Element).closest?.('[data-tadabbur]')) return;
                         e.preventDefault();
                         e.stopPropagation();
+                        // The hold already opened the meaning — don't hide the verse too.
+                        if (verseInfoFired.current) { verseInfoFired.current = false; return; }
                         toggleVerseHidden({ surah: surahNum, ayah: ayahNum });
                     } : listenActive ? (e) => {
                         if ((e.target as Element).closest?.('[data-tadabbur]')) return;
+                        if (verseInfoFired.current) { verseInfoFired.current = false; e.preventDefault(); e.stopPropagation(); return; }
                         const audio = readOnlyAudioRef.current;
                         if (!audio) return;
                         // Full-surah mode: one tap starts the surah, the next stops it.
@@ -4468,6 +4505,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     }
                 }
             `}</style>
+            {!guest && (
             <div className="bg-white p-4 rounded-xl shadow-md border border-slate-200 dark:bg-gray-800 dark:border-gray-700">
                 <div className="flex justify-between items-start">
                     <div className="flex-grow min-w-0">
@@ -4504,6 +4542,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 />}
                 <MilestoneTracker completedPages={new Set<number>([...getRecitedPagesSet(student), ...getMemorizedPagesSet(student)])} />
             </div>
+            )}
 
             <div className="space-y-6">
                 <div className="relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-t-none rounded-b-2xl shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
@@ -4525,7 +4564,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 ['listening', 'Listening', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>, 'w-9 max-sm:w-7'],
                                 ['hifz', 'Hifz', <span key="i" className="italic font-bold text-[15px] leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>, 'px-2.5 max-sm:px-1'],
                                 ['tadabbur', 'Tadabbur', <span key="i" className="text-[16px] leading-none" style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>تدبر</span>, 'px-3 max-sm:px-1.5'],
-                            ] as [PageMode, string, React.ReactNode, string][]).map(([m, label, icon, size]) => (
+                            ] as [PageMode, string, React.ReactNode, string][])
+                                .filter(([m]) => !guest || m === 'listening' || m === 'hifz')
+                                .map(([m, label, icon, size]) => (
                                 <button
                                     key={m}
                                     onClick={() => setPageMode(m)}
@@ -4731,7 +4772,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
                             {/* ── This mode's tools, each a small icon (on phones they join the icon row) ── */}
                             <div className="contents sm:flex items-center gap-1.5">
-                                {(pageMode === 'reading' || pageMode === 'hifz') && (<>
+                                {(pageMode === 'reading' || pageMode === 'hifz' || (guest && pageMode === 'listening')) && (<>
                                     {/* Focus / word-by-word mode toggle */}
                                     <button
                                         onClick={() => setFocusMode(p => !p)}
@@ -5031,8 +5072,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* Colour legend (left) + pagination controls (right) */}
                         {!isLoading && !error && verses.length > 0 && (
                             <div dir="ltr" className="flex flex-wrap justify-between items-center gap-x-3 gap-y-2 sm:gap-x-4 sm:gap-y-3 py-4 px-2 sm:py-6 sm:px-4 border-t border-slate-200 dark:border-gray-700">
-                                {/* Legend */}
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
+                                {/* Legend — the colours only mean something with a teacher */}
+                                <div className={`flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 ${guest ? 'hidden' : 'flex'}`}>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 dark:bg-green-700" />Read &amp; memorized</span>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-300 dark:bg-orange-700" />Read</span>
                                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-teal-200 dark:bg-teal-800" />Recorded &amp; correct</span>
@@ -5543,6 +5584,52 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     style={{ display: 'none' }}
                 />
             )}
+
+            {/* ── The public reader: what the held verse means ─────────────── */}
+            {guest && guestInfoVerse && (() => {
+                const vk = `${guestInfoVerse.surah}:${guestInfoVerse.ayah}`;
+                const verse = verses.find(v => v.verse_key === vk);
+                const name = QURAN_METADATA[guestInfoVerse.surah - 1]?.transliteratedName ?? '';
+                const tafsir = tafsirs[vk];
+                return ReactDOM.createPortal(
+                    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
+                        role="dialog" aria-modal="true" aria-label={`${name} ${guestInfoVerse.ayah} — meaning`}>
+                        <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={() => setGuestInfoVerse(null)} />
+                        <div className="relative w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-gray-700">
+                            <div className="sticky top-0 flex items-center gap-2 px-4 sm:px-6 py-3 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border-b border-slate-100 dark:border-gray-700">
+                                <span className="h-8 px-3 rounded-full bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[13px] font-extrabold flex items-center">
+                                    {name} · {guestInfoVerse.ayah}
+                                </span>
+                                <span className="flex-grow" />
+                                <button onClick={() => setGuestInfoVerse(null)} aria-label="Close"
+                                    className="w-9 h-9 rounded-xl border border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                                </button>
+                            </div>
+                            <div className="px-4 sm:px-6 py-4 space-y-4">
+                                {verse && (
+                                    <p dir="rtl" className="font-quranic text-2xl sm:text-3xl leading-[2] text-slate-900 dark:text-slate-100 text-center">
+                                        {verse.text_uthmani}
+                                    </p>
+                                )}
+                                <section className="rounded-2xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40 p-3 sm:p-4">
+                                    <p className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-teal-700 dark:text-teal-400 mb-1.5">Translation</p>
+                                    <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-200">
+                                        {translations[vk] ?? (isTranslationLoading ? 'Loading…' : translationError || '—')}
+                                    </p>
+                                </section>
+                                <section className="rounded-2xl border border-slate-200 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40 p-3 sm:p-4">
+                                    <p className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-teal-700 dark:text-teal-400 mb-1.5">Explanation</p>
+                                    <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-200">
+                                        {tafsir ?? (isTafsirLoading ? 'Loading…' : 'No explanation for this verse yet.')}
+                                    </p>
+                                </section>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body,
+                );
+            })()}
         </div>
     );
 };

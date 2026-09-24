@@ -1274,7 +1274,15 @@
     "kidsTowerTag": "Hızlı cevapla — her doğru harf bir şövalyeyi savaşa gönderir!",
     "kidsOddName": "Farklı Harfi Bul",
     "kidsOddTag": "Bir harf sahtekâr... Rakibinden önce bul!",
-    "kidsCta": "Oyunla öğrenmeye başla"
+    "kidsCta": "Oyunla öğrenmeye başla",
+    "readerNav": "Kur’an oku",
+    "readerBadge": "Ücretsiz · hesap gerekmez",
+    "readerTitle": "Kur’anı şimdi baştan sona okuyun ve dinleyin",
+    "readerSub": "Öğrencilerimizin derslerde kullandığı mushafın aynısı, herkese açık. Bir ayete dokunun, dinleyin; basılı tutun, anlamını okuyun.",
+    "readerPoint1": "Dilediğiniz kariden dinleyin",
+    "readerPoint2": "Tecvid renkleri ve odak modu",
+    "readerPoint3": "Ezberinizi sınamak için ayetleri gizleyin",
+    "readerCta": "Mushafı aç"
   },
   "register": {
     "welcomeTitle": "Öğrenci olarak kaydol",

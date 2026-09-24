@@ -47,6 +47,7 @@ import RefundPolicyPage from './components/RefundPolicyPage';
 import StudentRegisterPage from './components/StudentRegisterPage';
 import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
+import PublicQuranPage from './components/PublicQuranPage';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import { renewalReminderOccurrence } from './utils/renewal';
 import { getFamilyGroupsByStudent, familyRenewalUpdates, type FamilyGroup } from './services/familyGroupService';
@@ -407,6 +408,9 @@ const App: React.FC = () => {
   //    registered as a student with the same Google account ───────────────────
   if (window.location.pathname === '/student') return <StudentRoute />;
 
+
+  // ── The Qur'an reader anyone can open, no account ───────────────────────────
+  if (window.location.pathname === '/quran') return <PublicQuranPage />;
 
   // ── Public policy / pricing pages — no auth required ─────────────────────────
   if (window.location.pathname === '/pricing') return <PricingPage />;

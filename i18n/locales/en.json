@@ -1274,7 +1274,15 @@
     "kidsTowerTag": "Answer fast — every correct letter sends a knight into battle!",
     "kidsOddName": "Find the Odd Letter",
     "kidsOddTag": "One letter is an impostor. Spot it before your rival does!",
-    "kidsCta": "Start learning through play"
+    "kidsCta": "Start learning through play",
+    "readerNav": "Read Qur’an",
+    "readerBadge": "Free · no account needed",
+    "readerTitle": "Read and listen to the whole Qur’an, right now",
+    "readerSub": "The same reader our students use in their lessons, open to everyone. Tap a verse to hear it, hold a verse to read what it means.",
+    "readerPoint1": "Listen with your choice of reciter",
+    "readerPoint2": "Tajweed colours and focus mode",
+    "readerPoint3": "Hide verses to test your memory",
+    "readerCta": "Open the Qur’an reader"
   },
   "register": {
     "welcomeTitle": "Register as a student",

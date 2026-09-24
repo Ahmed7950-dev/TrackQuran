@@ -142,6 +142,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
   }));
 
   const navLinks = [
+    { label: t('landing.readerNav'),      href: '/quran' },
     { label: t('landing.navPrograms'),    href: '#programs' },
     { label: t('landing.kidsNav'),        href: '#kids' },
     { label: t('landing.navHowItWorks'), href: '#how' },
@@ -151,6 +152,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
   ];
 
   const scrollTo = (href: string) => {
+    // A menu item can be a page of its own (the public Qur'an reader).
+    if (href.startsWith('/')) { window.location.href = href; return; }
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
     setMobileNavOpen(false);
@@ -344,6 +347,57 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </div>
           </div>
 
+        </div>
+      </section>
+
+      {/* ── 3b. The Qur'an reader anyone can open ───────────────────────────── */}
+      <section id="reader" style={{ background: isDark ? C.greenDeep : C.green, padding: '56px 24px', position: 'relative', overflow: 'hidden' }}>
+        <svg aria-hidden="true" width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.16 }}>
+          <StarPatternDefs id="readerStars" color={C.goldSoft} opacity={0.5} />
+          <rect width="100%" height="100%" fill="url(#readerStars)" />
+        </svg>
+        <div style={{ maxWidth: 1000, margin: '0 auto', position: 'relative', display: 'grid', gap: 28, alignItems: 'center', gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{
+              display: 'inline-block', padding: '5px 14px', borderRadius: 999,
+              background: 'rgba(225,197,136,0.16)', border: `1px solid ${C.goldSoft}`,
+              color: C.goldSoft, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', fontFamily: F.body,
+            }}>
+              {t('landing.readerBadge')}
+            </span>
+            <h2 style={{ fontFamily: F.display, fontSize: 'clamp(28px, 4.4vw, 46px)', fontWeight: 600, color: '#fff', margin: '16px 0 12px', lineHeight: 1.15 }}>
+              {t('landing.readerTitle')}
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.78)', fontSize: 16, lineHeight: 1.65, maxWidth: 620, margin: '0 auto', fontFamily: F.body }}>
+              {t('landing.readerSub')}
+            </p>
+            <div style={{ fontFamily: F.arabic, direction: 'rtl', color: C.goldSoft, fontSize: 'clamp(22px, 3.4vw, 32px)', margin: '22px 0 4px', lineHeight: 2 }}>
+              ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, margin: '18px 0 26px' }}>
+              {[t('landing.readerPoint1'), t('landing.readerPoint2'), t('landing.readerPoint3')].map(point => (
+                <span key={point} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 999,
+                  background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)',
+                  color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 500, fontFamily: F.body,
+                }}>
+                  <CheckIcon dark />{point}
+                </span>
+              ))}
+            </div>
+            <a href="/quran" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 28px', borderRadius: 10,
+              background: C.gold, color: C.greenDeep, fontSize: 16, fontWeight: 700,
+              textDecoration: 'none', fontFamily: F.body, boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+            }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H4.5A1.5 1.5 0 0 1 3 15z" />
+                <path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5h5A1.5 1.5 0 0 0 21 15z" />
+              </svg>
+              {t('landing.readerCta')}
+            </a>
+          </div>
         </div>
       </section>
 
