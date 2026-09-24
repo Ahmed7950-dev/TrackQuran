@@ -839,6 +839,27 @@ const LogOption: React.FC<{ src: string; label: string; sub?: string; color: 'or
     );
 };
 
+/** One toolbar icon: same stroke, same size, whatever the tool. */
+const Ico: React.FC<{ d: string; size?: number }> = ({ d, size = 17 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d={d} />
+    </svg>
+);
+
+/** The paths the toolbar icons are drawn from. */
+const ICON = {
+    focus: 'M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15',
+    palette: 'M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-1.6 1.2-2.1 2.4-2.1H18a3 3 0 0 0 3-3 9 9 0 0 0-9-8.2M7.5 12.5h.01M10 8.5h.01M14.5 8.5h.01',
+    note: 'M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM14 4v5h5M8 13h7M8 17h5',
+    translate: 'M4 6h9M4 10h7M9 3c-.7 4.2-2.6 7.8-5 10M13 21l4-9 4 9M14.5 18h5',
+    pencil: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z',
+    mic: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
+    eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+    down: 'M12 5v14m0 0-5-5m5 5 5-5',
+    search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
+};
+
 const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
@@ -1275,8 +1296,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [focusMode, setFocusMode] = useState(false);
     // Phones: font size, auto-scroll and search collapse to small icons; this
     // is the one whose controls are open on the line under them.
-    const [mobileTool, setMobileTool] = useState<'font' | 'scroll' | null>(null);
-    const toggleMobileTool = (tool: 'font' | 'scroll') => setMobileTool(cur => (cur === tool ? null : tool));
+    const [mobileTool, setMobileTool] = useState<'font' | 'scroll' | 'search' | null>(null);
+    const toggleMobileTool = (tool: 'font' | 'scroll' | 'search') => setMobileTool(cur => (cur === tool ? null : tool));
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => { if (mobileTool === 'search') searchInputRef.current?.focus(); }, [mobileTool]);
     const [currentAyah, setCurrentAyah] = useState(1);
     const currentAyahRef        = useRef(1);
     const carouselContainerRef  = useRef<HTMLDivElement>(null);
@@ -2356,12 +2379,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // purple=homework, blue=tafsir, with a blue underline when tafsir overlaps.
     const getSurahNavButtonClass = (surahId: number, status: SurahStatus['status'], memStatus: SurahStatus['memStatus']) => {
         if (tadabburMode) {
-            if (surahId === selectedSurahId) return 'bg-blue-700 text-white shadow-lg transform scale-105';
+            if (surahId === selectedSurahId) return 'bg-blue-700 text-white shadow-sm ring-2 ring-blue-700/25';
             return surahHasTadabbur(surahId)
                 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900'
                 : 'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600';
         }
-        if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-lg transform scale-105';
+        if (surahId === selectedSurahId) return 'bg-teal-600 dark:bg-orange-600 text-white shadow-sm ring-2 ring-teal-600/25 dark:ring-orange-500/30';
         const hasRead = status !== 'not-started';
         const hasMem  = memStatus !== 'not-started';
         const hasTaf  = surahHasTafsir(surahId);
@@ -4255,8 +4278,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
-    /** Small square tool button in the toolbar (joins the icon row on phones). */
-    const toolBtn = 'sm:h-7 sm:px-2.5 flex items-center justify-center sm:rounded-md text-[11px] font-bold transition-colors duration-200 max-sm:w-8 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3';
+    /** Every tool in the toolbar is this square — one size, one weight. */
+    const toolBtn = 'w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl border text-[13px] font-bold transition-colors duration-200 max-sm:order-3';
+    /** A tool that is off: white square, hairline border. */
+    const toolOff = 'bg-white dark:bg-gray-900/40 border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700';
     const testWordCount = Object.keys(wordMeanings).filter(k => k.startsWith(`${selectedSurahId}:`)).length;
 
     // Shared recitation-settings pill (speed + reciter + verse repeat) —
@@ -4269,9 +4294,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 onClick={() => setAudioMenuOpen(o => !o)}
                                 title="Recitation settings"
                                 aria-label="Recitation settings"
-                                className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 dark:bg-gray-700/60 flex items-center justify-center gap-1 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors shadow-sm leading-none max-sm:min-w-[2rem] max-sm:px-1 max-sm:gap-0.5 max-sm:bg-slate-200 dark:max-sm:bg-gray-700 max-sm:h-9 max-sm:rounded-none max-sm:shadow-none max-sm:ring-0 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3 ${readOnly ? 'max-sm:rounded-s-lg' : ''}`}
+                                className="h-9 px-2.5 flex-shrink-0 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/40 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors leading-none max-sm:order-3"
                             >
-                                <span className="text-sm leading-none">🎙️</span>
+                                <Ico d={ICON.mic} size={16} />
                                 <span className={readOnlySpeed === 1 ? 'max-sm:hidden' : 'max-sm:text-[9px]'}>{readOnlySpeed}×</span>
                                 {verseRepeat > 1 && <span className="text-amber-600 dark:text-amber-400">↻{verseRepeat}</span>}
                             </button>
@@ -4481,10 +4506,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
 
             <div className="space-y-6">
-                <div className="relative px-2 py-2 sm:p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
+                <div className="relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-t-none rounded-b-2xl shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
                     {/* How far into the surah the reader has come — full at its end. */}
                     <div dir="ltr" aria-hidden="true"
-                        className="absolute inset-x-0 bottom-0 h-[3px] rounded-b-xl overflow-hidden bg-slate-200/60 dark:bg-gray-700/60">
+                        className="absolute inset-x-0 bottom-0 h-[3px] rounded-b-2xl overflow-hidden bg-slate-200/60 dark:bg-gray-700/60">
                         <div className="h-full bg-orange-500 dark:bg-orange-400 transition-[width] duration-200 ease-out"
                             style={{ width: `${surahProgress * 100}%` }} />
                     </div>
@@ -4492,14 +4517,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         Wraps on narrow screens so the right-side controls stay reachable. */}
                     {/* Phones: row 1 = surah selector + verse number box; row 2 = one
                         joined bar of icons (recitation first) with search taking the rest. */}
-                    <div className="flex flex-wrap items-center gap-2 max-sm:gap-x-0 max-sm:gap-y-1.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 max-sm:gap-x-1.5 max-sm:gap-y-1.5 min-w-0">
                         {/* ── Left: the four modes, then that mode's own controls ── */}
-                        <div role="group" aria-label="Mode" dir="ltr" className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1 max-sm:me-1.5">
+                        <div role="group" aria-label="Mode" dir="ltr" className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1">
                             {([
-                                ['reading', 'Reading', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H3.5A1.5 1.5 0 0 1 2 16z" /><path d="M22 5.5A1.5 1.5 0 0 0 20.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h6a1.5 1.5 0 0 0 1.5-1.5z" /></svg>, 'w-8 max-sm:w-7'],
-                                ['listening', 'Listening', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>, 'w-8 max-sm:w-7'],
-                                ['hifz', 'Hifz', <span key="i" className="italic font-bold text-[15px] leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>, 'px-2 max-sm:px-1.5'],
-                                ['tadabbur', 'Tadabbur', <span key="i" className="text-[16px] leading-none" style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>تدبر</span>, 'px-2.5 max-sm:px-2'],
+                                ['reading', 'Reading', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H3.5A1.5 1.5 0 0 1 2 16z" /><path d="M22 5.5A1.5 1.5 0 0 0 20.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h6a1.5 1.5 0 0 0 1.5-1.5z" /></svg>, 'w-9 max-sm:w-7'],
+                                ['listening', 'Listening', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>, 'w-9 max-sm:w-7'],
+                                ['hifz', 'Hifz', <span key="i" className="italic font-bold text-[15px] leading-none" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>Hifz</span>, 'px-2.5 max-sm:px-1'],
+                                ['tadabbur', 'Tadabbur', <span key="i" className="text-[16px] leading-none" style={{ fontFamily: "'Amiri Quran', 'Amiri Regular', serif" }}>تدبر</span>, 'px-3 max-sm:px-1.5'],
                             ] as [PageMode, string, React.ReactNode, string][]).map(([m, label, icon, size]) => (
                                 <button
                                     key={m}
@@ -4512,7 +4537,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         hifz: 'Hifz — tap a verse to hide or reveal it',
                                         tadabbur: readOnly ? 'Tadabbur — word meanings, translation and your reflections' : 'Tadabbur — tap a word to give it a meaning',
                                     }[m]}
-                                    className={`h-8 ${size} flex items-center justify-center rounded-full transition-colors ${pageMode === m
+                                    className={`h-8 sm:h-9 ${size} flex items-center justify-center rounded-full transition-colors ${pageMode === m
                                         ? (m === 'tadabbur' ? 'bg-blue-700 text-white shadow' : 'bg-teal-600 dark:bg-orange-600 text-white shadow')
                                         : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-gray-600'}`}
                                 >{icon}</button>
@@ -4525,15 +4550,15 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         )}
                         {pageMode === 'reading' && !readOnly && (
                         <div className="flex items-center gap-2 flex-shrink-0 max-sm:contents">
-                            <div className={`flex items-center gap-1 rounded-full px-2 py-1 h-10 transition-colors duration-300 max-sm:h-9 max-sm:rounded-none max-sm:ring-0 max-sm:px-1 max-sm:order-3 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 ${errorType === 'reading' ? 'bg-red-100 dark:bg-red-900/40 ring-1 ring-red-400' : errorType === 'tajweed' ? 'bg-green-100 dark:bg-green-900/40 ring-1 ring-green-400' : 'bg-slate-200 dark:bg-gray-700'}`}>
+                            <div className="flex items-center gap-0.5 p-0.5 h-9 flex-shrink-0 rounded-full bg-slate-100 dark:bg-gray-700/60 max-sm:order-3">
                                 <button
                                     onClick={() => setErrorType('reading')}
-                                    className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${errorType === 'reading' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-900/30'}`}
+                                    className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors duration-300 text-[11px] font-bold ${errorType === 'reading' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-gray-600'}`}
                                     title={t('liveSession.readingError')}
                                 >R</button>
                                 <button
                                     onClick={() => setErrorType('tajweed')}
-                                    className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors duration-300 text-[10px] font-bold ${errorType === 'tajweed' ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-green-100 dark:hover:bg-green-900/30'}`}
+                                    className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors duration-300 text-[11px] font-bold ${errorType === 'tajweed' ? 'bg-green-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-gray-600'}`}
                                     title={t('liveSession.tajweedError')}
                                 >T</button>
                                 {hiddenRanges.length > 0 && (
@@ -4542,7 +4567,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         <button
                                             onClick={() => setHiddenRanges([])}
                                             title="Reveal all hidden verses"
-                                            className="w-6 h-6 flex items-center justify-center rounded-full text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
+                                            className="w-7 h-7 flex items-center justify-center rounded-full text-sky-600 dark:text-sky-400 hover:bg-white dark:hover:bg-gray-600 transition-colors"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
@@ -4558,28 +4583,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             <button
                                 onClick={() => setHiddenRanges([])}
                                 title="Reveal all hidden verses"
-                                className="flex-shrink-0 sm:h-7 px-2 flex items-center justify-center gap-1 sm:rounded-md text-xs font-semibold bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 max-sm:h-9 max-sm:rounded-none max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 max-sm:order-3"
+                                className="h-9 flex-shrink-0 px-3 flex items-center justify-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-bold hover:bg-sky-100 transition-colors max-sm:order-3"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                </svg>
-                                <span className="max-sm:hidden">Show all</span>
+                                <Ico d={ICON.eye} size={16} />
+                                <span>Show all</span>
                             </button>
                         )}
                         {/* ── Middle (phones): current surah button → vertical picker ── */}
                         <button
                             onClick={() => setSurahPickerOpen(true)}
-                            className={`sm:hidden order-1 flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${tadabburMode ? 'bg-blue-700' : 'bg-teal-600 dark:bg-orange-600'} text-white shadow-md`}
+                            className="sm:hidden order-1 h-10 flex-1 min-w-0 flex items-center gap-2 px-2.5 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900/40 text-slate-800 dark:text-slate-100"
                             aria-label="Choose surah"
                         >
-                            <span className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-mono text-xs opacity-80 flex-shrink-0">{selectedSurahId}</span>
-                                <span className="truncate tracking-wide">
-                                    {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
-                                </span>
+                            <span className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${tadabburMode ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-teal-50 text-teal-700 dark:bg-gray-700 dark:text-orange-300'}`}>{selectedSurahId}</span>
+                            <span className="flex-1 min-w-0 truncate text-start text-[15px] font-bold tracking-tight">
+                                {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
                             </span>
-                            <svg className="w-3.5 h-3.5 flex-shrink-0 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <svg className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
                             </svg>
                         </button>
@@ -4598,7 +4618,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 min={1} max={selectedSurahInfo?.numberOfAyahs}
                                 placeholder="Ayah"
                                 aria-label={t('liveSession.goToVerseHint')}
-                                className="w-16 h-8 px-2 rounded-full text-center text-sm font-bold bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-14 h-10 px-1 rounded-xl text-center text-sm font-bold bg-white dark:bg-gray-900/40 dark:text-white border border-slate-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                         </form>
                         <div className="sm:hidden order-2 basis-full h-0" aria-hidden="true" />
@@ -4609,16 +4629,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             {compactSurahNav ? (
                                 <button
                                     onClick={() => setSurahPickerOpen(true)}
-                                    className={`flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${tadabburMode ? 'bg-blue-700' : 'bg-teal-600 dark:bg-orange-600'} text-white shadow-md`}
+                                    className="h-10 flex-1 min-w-0 flex items-center gap-2 px-2.5 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900/40 text-slate-800 dark:text-slate-100"
                                     aria-label="Choose surah"
                                 >
-                                    <span className="flex items-center gap-1.5 min-w-0">
-                                        <span className="font-mono text-xs opacity-80 flex-shrink-0">{selectedSurahId}</span>
-                                        <span className="truncate tracking-wide">
-                                            {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
-                                        </span>
+                                    <span className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${tadabburMode ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-teal-50 text-teal-700 dark:bg-gray-700 dark:text-orange-300'}`}>{selectedSurahId}</span>
+                                    <span className="flex-1 min-w-0 truncate text-start text-[15px] font-bold tracking-tight">
+                                        {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
                                     </span>
-                                    <svg className="w-3.5 h-3.5 flex-shrink-0 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
                                     </svg>
                                 </button>
@@ -4630,19 +4648,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onClick={() => handleSurahSelection(surahStatuses[0].id)}
                                     onDoubleClick={() => setVerseJumpSurah(surahStatuses[0].id)}
                                     title={t('liveSession.goToVerseHint')}
-                                    className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
+                                    className={`flex-shrink-0 h-8 flex items-center gap-2 px-3 rounded-full text-[13px] font-semibold transition-colors duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[0].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[0].id, surahStatuses[0].status, surahStatuses[0].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[0].transliteratedName}</span>
                                 </button>
                             )}
-                            <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
+                            <div className="w-px h-6 bg-slate-200 dark:bg-gray-600 flex-shrink-0" />
                             {/* Scroll-left arrow */}
                             <button
                                 onClick={() => surahNavScrollRef.current?.scrollBy({ left: -220, behavior: 'smooth' })}
                                 aria-label="Scroll surahs left"
-                                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base leading-none"
-                            >‹</button>
+                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors"
+                            ><Ico d="m15 6-6 6 6 6" size={15} /></button>
                             {/* Surahs 2–113 — scrollable */}
                             <div ref={surahNavScrollRef} className="flex-1 overflow-x-auto overflow-y-hidden horizontal-scrollbar min-w-0">
                                 <div className="flex items-center gap-1 sm:gap-2 pb-0.5">
@@ -4650,7 +4668,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         <button key={id} id={`surah-nav-${id}`} onClick={() => handleSurahSelection(id)}
                                             onDoubleClick={() => setVerseJumpSurah(id)}
                                             title={t('liveSession.goToVerseHint')}
-                                            className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
+                                            className={`flex-shrink-0 h-8 flex items-center gap-2 px-3 rounded-full text-[13px] font-semibold transition-colors duration-200 whitespace-nowrap ${getSurahNavButtonClass(id, status, memStatus)}`}>
                                             <span className="font-mono text-xs">{id}</span>
                                             <div className={`w-px h-4 ${getDividerClass(id, status, memStatus)}`} />
                                             <span className="tracking-wide">{transliteratedName}</span>
@@ -4662,9 +4680,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             <button
                                 onClick={() => surahNavScrollRef.current?.scrollBy({ left: 220, behavior: 'smooth' })}
                                 aria-label="Scroll surahs right"
-                                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors text-base leading-none"
-                            >›</button>
-                            <div className="w-px h-6 bg-slate-300 dark:bg-gray-500 flex-shrink-0" />
+                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors"
+                            ><Ico d="m9 6 6 6-6 6" size={15} /></button>
+                            <div className="w-px h-6 bg-slate-200 dark:bg-gray-600 flex-shrink-0" />
                             {/* Last surah (An-Nas) — pinned */}
                             {surahStatuses.length > 1 && surahStatuses[surahStatuses.length - 1] && (
                                 <button
@@ -4672,7 +4690,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onClick={() => handleSurahSelection(surahStatuses[surahStatuses.length - 1].id)}
                                     onDoubleClick={() => setVerseJumpSurah(surahStatuses[surahStatuses.length - 1].id)}
                                     title={t('liveSession.goToVerseHint')}
-                                    className={`flex-shrink-0 flex items-center gap-1 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
+                                    className={`flex-shrink-0 h-8 flex items-center gap-2 px-3 rounded-full text-[13px] font-semibold transition-colors duration-200 whitespace-nowrap ${getSurahNavButtonClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`}>
                                     <span className="font-mono text-xs">{surahStatuses[surahStatuses.length - 1].id}</span>
                                     <div className={`w-px h-4 ${getDividerClass(surahStatuses[surahStatuses.length - 1].id, surahStatuses[surahStatuses.length - 1].status, surahStatuses[surahStatuses.length - 1].memStatus)}`} />
                                     <span className="tracking-wide">{surahStatuses[surahStatuses.length - 1].transliteratedName}</span>
@@ -4684,26 +4702,27 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {/* ── Right: tool controls. On phones this is its own full-width
                             row under the surah button, everything compact; from sm it goes
                             back to the inline cluster. ── */}
+                        <div className="hidden sm:block w-px h-6 bg-slate-200 dark:bg-gray-600 flex-shrink-0" aria-hidden="true" />
                         <div className="max-sm:contents flex flex-nowrap items-center gap-2 flex-shrink-0 min-w-0">
                             {/* Phones: small icons — tap to open that control on the line below */}
                             <button onClick={() => toggleMobileTool('font')} aria-label="Text size" title="Text size"
-                                className={`sm:hidden order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors text-[13px] font-bold ${mobileTool === 'font' ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
-                                A<span className="text-[10px]">A</span>
+                                className={`sm:hidden ${toolBtn} ${mobileTool === 'font' ? 'bg-teal-50 dark:bg-teal-900/40 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300' : toolOff}`}>
+                                <span className="tracking-tight">Aa</span>
                             </button>
                             <button onClick={() => toggleMobileTool('scroll')} aria-label={t('liveSession.toggleAutoScrollPlay')} title={t('liveSession.toggleAutoScrollPlay')}
-                                className={`${pageMode === 'tadabbur' ? 'hidden' : 'sm:hidden'} order-3 w-8 h-9 flex items-center justify-center border-e border-slate-300 dark:border-gray-600 transition-colors ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-600 dark:bg-orange-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300'}`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>
+                                className={`${pageMode === 'tadabbur' ? 'hidden' : 'sm:hidden'} ${toolBtn} ${mobileTool === 'scroll' || isAutoScrolling ? 'bg-teal-50 dark:bg-teal-900/40 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300' : toolOff}`}>
+                                <Ico d={ICON.down} />
                             </button>
 
                             {/* Font size */}
-                            <div className={`${mobileTool === 'font' ? 'flex' : 'hidden'} sm:flex order-last sm:order-none w-full sm:w-auto justify-center items-center bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 gap-3 sm:gap-1`}>
+                            <div className={`${mobileTool === 'font' ? 'flex' : 'hidden'} sm:flex order-last sm:order-none w-full sm:w-auto justify-center items-center bg-slate-100 dark:bg-gray-700/60 rounded-xl p-0.5 sm:p-1 gap-3 sm:gap-1 max-sm:mt-1`}>
                                 <button onClick={handleDecreaseFontSize} className="w-9 h-8 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.decreaseFont')}>-</button>
                                 <span className="text-slate-600 dark:text-slate-300 font-semibold w-5 sm:w-7 text-center text-sm">A</span>
                                 <button onClick={handleIncreaseFontSize} className="w-9 h-8 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition" aria-label={t('liveSession.increaseFont')}>+</button>
                             </div>
 
                             {/* Auto-scroll */}
-                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} ${pageMode === 'tadabbur' ? 'sm:hidden' : 'sm:flex'} order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-200 dark:bg-gray-700 rounded-lg p-0.5 sm:p-1 transition-all duration-300 ease-in-out ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
+                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} ${pageMode === 'tadabbur' ? 'sm:hidden' : 'sm:flex'} order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-100 dark:bg-gray-700/60 rounded-xl p-0.5 sm:p-1 transition-all duration-300 ease-in-out max-sm:mt-1 ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
                                 <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                     {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                                 </button>
@@ -4719,24 +4738,24 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         title={focusMode ? 'Exit focus mode' : 'Focus mode — scroll through words'}
                                         aria-label="Focus mode"
                                         aria-pressed={focusMode}
-                                        className={`${toolBtn} ${focusMode ? 'bg-violet-600 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30'}`}
+                                        className={`${toolBtn} ${focusMode ? 'bg-violet-50 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300' : toolOff}`}
                                     >
-                                        🔍
+                                        <Ico d={ICON.focus} />
                                     </button>
                                     {/* Tajweed colours (+ the key) */}
-                                    <div className={`flex items-center sm:rounded-md max-sm:order-3 max-sm:h-9 max-sm:border-e max-sm:border-slate-300 dark:max-sm:border-gray-600 ${showTajweed ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300'}`}>
+                                    <div className={`h-9 flex-shrink-0 flex items-center rounded-xl border transition-colors duration-200 max-sm:order-3 ${showTajweed ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-white dark:bg-gray-900/40 border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>
                                         <button
                                             onClick={() => setShowTajweed(p => !p)}
                                             title={t('liveSession.tajweedColors')}
                                             aria-label={t('liveSession.tajweedColors')}
                                             aria-pressed={showTajweed}
-                                            className="h-7 max-sm:h-9 ps-2 pe-1 flex items-center justify-center text-[13px]"
-                                        >🎨</button>
+                                            className="h-9 w-8 flex items-center justify-center"
+                                        ><Ico d={ICON.palette} /></button>
                                         <button
                                             onClick={() => setShowTajweedMenu(true)}
                                             title={t('liveSession.tajweedInfo')}
                                             aria-label={t('liveSession.tajweedInfo')}
-                                            className={`me-1 w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${showTajweed ? 'border-white/70' : 'border-slate-400 dark:border-gray-500'}`}
+                                            className={`me-1.5 w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${showTajweed ? 'border-emerald-400' : 'border-slate-400 dark:border-gray-500'}`}
                                         >i</button>
                                     </div>
                                     {/* Teacher's note */}
@@ -4745,8 +4764,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             onClick={openTeacherNoteWindow}
                                             title="Teacher's notes"
                                             aria-label="Teacher's notes"
-                                            className={`${toolBtn} ${teacherNote ? 'bg-amber-400 text-amber-950 shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
-                                        >🗒️</button>
+                                            className={`${toolBtn} ${teacherNote ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300' : toolOff}`}
+                                        ><Ico d={ICON.note} /></button>
                                     )}
                                 </>)}
                                 {pageMode === 'tadabbur' && (<>
@@ -4755,23 +4774,23 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         title="Translation & explanation"
                                         aria-label="Translation and explanation"
                                         aria-pressed={showTranslation}
-                                        className={`${toolBtn} ${showTranslation ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-blue-50'}`}
-                                    >文A</button>
+                                        className={`${toolBtn} ${showTranslation ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300' : toolOff}`}
+                                    ><Ico d={ICON.translate} /></button>
                                     {!readOnly && notesStudentId && (
                                         <button
                                             onClick={() => setShowStudentNotes(p => !p)}
                                             title="Student's reflections"
                                             aria-label="Student notes"
                                             aria-pressed={showStudentNotes}
-                                            className={`${toolBtn} text-[13px] ${showStudentNotes ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-50'}`}
-                                        >✍️</button>
+                                            className={`${toolBtn} ${showStudentNotes ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : toolOff}`}
+                                        ><Ico d={ICON.pencil} /></button>
                                     )}
                                     <button
                                         onClick={() => { setTestMode(p => !p); setPeekWords(new Set()); setWordEditor(null); }}
                                         title={testMode ? 'Test on: meanings are hidden — click to show them' : 'Test: hide the word meanings'}
                                         aria-label={testMode ? 'Test: meanings hidden — click to show them' : 'Test: hide word meanings'}
                                         aria-pressed={testMode}
-                                        className={`${toolBtn} max-sm:w-auto max-sm:px-2 gap-1 ${testMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-200 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'}`}
+                                        className={`${toolBtn} w-auto px-3 gap-1.5 text-xs ${testMode ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300' : toolOff}`}
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                             {testMode
@@ -4783,16 +4802,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </>)}
                             </div>
 
+                            <button onClick={() => toggleMobileTool('search')} aria-label={t('liveSession.search')} title={t('liveSession.search')}
+                                className={`sm:hidden ${toolBtn} ms-auto ${mobileTool === 'search' ? 'bg-teal-50 dark:bg-teal-900/40 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300' : 'bg-teal-600 dark:bg-orange-600 border-transparent text-white'}`}>
+                                <Ico d={ICON.search} />
+                            </button>
+
                             {/* Search — with instant typeahead (pages, verses, surah names) */}
-                            <div className="relative max-sm:order-3 max-sm:flex-1 max-sm:min-w-[33%] sm:flex-none min-w-0">
-                                <form onSubmit={handleSearch} className="flex gap-0 sm:gap-2 items-center">
-                                    <input type="text" value={searchInput}
+                            <div className={`${mobileTool === 'search' ? 'max-sm:block' : 'max-sm:hidden'} relative max-sm:order-last max-sm:w-full max-sm:mt-1 sm:flex-none min-w-0`}>
+                                <form onSubmit={handleSearch} className="flex gap-2 items-center">
+                                    <input type="text" ref={searchInputRef} value={searchInput}
                                         onChange={e => { setSearchInput(e.target.value); setShowSearchSuggestions(true); }}
                                         onFocus={() => { if (searchInput.trim()) setShowSearchSuggestions(true); }}
                                         onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)}
                                         onKeyDown={e => { if (e.key === 'Escape') setShowSearchSuggestions(false); }}
-                                        placeholder={t('liveSession.searchPlaceholder')} className="w-full sm:w-36 min-w-0 px-2 py-1.5 sm:py-2 max-sm:h-9 max-sm:rounded-none max-sm:border-x-0 text-sm bg-white dark:bg-gray-900 dark:text-white border border-slate-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
-                                    <button type="submit" disabled={isSearching} className="bg-teal-600 dark:bg-orange-600 text-white p-2 sm:p-2.5 max-sm:h-9 max-sm:rounded-none max-sm:rounded-e-lg rounded-lg hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600 flex-shrink-0" aria-label={t('liveSession.search')}>
+                                        placeholder={t('liveSession.searchPlaceholder')} className="w-full sm:w-40 min-w-0 px-3 h-9 text-sm bg-white dark:bg-gray-900/40 dark:text-white border border-slate-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none transition" />
+                                    <button type="submit" disabled={isSearching} className="w-9 h-9 flex items-center justify-center bg-teal-600 dark:bg-orange-600 text-white rounded-xl hover:bg-teal-700 dark:hover:bg-orange-700 transition disabled:bg-slate-400 dark:disabled:bg-gray-600 flex-shrink-0" aria-label={t('liveSession.search')}>
                                         {isSearching ? <SpinnerIcon/> : <SearchIcon/>}
                                     </button>
                                 </form>
