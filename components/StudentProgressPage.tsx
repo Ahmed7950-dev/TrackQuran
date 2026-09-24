@@ -4398,7 +4398,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     );
 
     return (
-        <div className="space-y-6 relative px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
+        <div className={`space-y-6 relative ${guest ? '' : 'px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8'}`}>
             {/* Cursor-sharing indicator (tutor side) — confirms the student can
                 see where the tutor is pointing. Toggle with the C key. */}
             {cursorModeActive && !readOnly && (
@@ -4545,10 +4545,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             )}
 
             <div className="space-y-6">
-                <div className="relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-t-none rounded-b-2xl shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
+                <div className={`relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30 rounded-t-none ${guest ? 'rounded-b-none border-x-0' : 'rounded-b-2xl'}`} style={{ top: `${toolbarStickyTop}px` }}>
                     {/* How far into the surah the reader has come — full at its end. */}
                     <div dir="ltr" aria-hidden="true"
-                        className="absolute inset-x-0 bottom-0 h-[3px] rounded-b-2xl overflow-hidden bg-slate-200/60 dark:bg-gray-700/60">
+                        className={`absolute inset-x-0 bottom-0 h-[3px] overflow-hidden bg-slate-200/60 dark:bg-gray-700/60 ${guest ? '' : 'rounded-b-2xl'}`}>
                         <div className="h-full bg-orange-500 dark:bg-orange-400 transition-[width] duration-200 ease-out"
                             style={{ width: `${surahProgress * 100}%` }} />
                     </div>
@@ -4906,7 +4906,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         </div>
                     )}
                 </div>
-                <div dir="rtl" ref={quranBodyRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden">
+                <div dir="rtl" ref={quranBodyRef} className={`bg-white dark:bg-gray-800 shadow-md border border-slate-200 dark:border-gray-700 min-h-[50vh] overflow-hidden ${guest ? 'border-x-0' : 'rounded-xl'}`}>
                     <div>
                         {tadabburMode && testMode && (
                             <div dir="ltr" className="mx-2 sm:mx-4 mt-3 sm:mt-4 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm font-semibold font-sans text-left">

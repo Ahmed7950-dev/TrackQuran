@@ -66,7 +66,7 @@ const PublicQuranPage: React.FC = () => {
       <header ref={headerRef}
         className="fixed top-0 inset-x-0 z-40 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border-b border-slate-200 dark:border-gray-700"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="max-w-[1400px] mx-auto px-3 sm:px-5 h-14 flex items-center gap-2">
+        <div className="w-full px-3 sm:px-5 h-14 flex items-center gap-2">
           <a href="/" className="flex items-center gap-2 min-w-0" aria-label="LisanQuran home">
             <span className="w-8 h-8 rounded-xl bg-teal-700 text-white flex items-center justify-center flex-shrink-0" aria-hidden="true">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -99,8 +99,8 @@ const PublicQuranPage: React.FC = () => {
 
       <div style={{ height: headerHeight }} aria-hidden="true" />
 
-      <div className="max-w-[1400px] mx-auto px-2 sm:px-4 pb-10">
-        <p className="px-1 py-3 text-[13px] text-slate-500 dark:text-slate-400">
+      <div className="w-full pb-10">
+        <p className="px-3 sm:px-5 py-3 text-[13px] text-slate-500 dark:text-slate-400">
           Tap a verse to hear it · hold a verse to read what it means · no account needed.
         </p>
         <StudentProgressPage
