@@ -1365,6 +1365,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const scrollIntervalRef = useRef<number | null>(null);
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
     const quranBodyRef = useRef<HTMLDivElement>(null); // For scroll-to-top on page navigation
+    /** 0–1: how far into the OPEN SURAH the verse under the toolbar is, for the
+     *  orange line along the bottom of the surah bar. Read from the verse the
+     *  reader has reached, not the scrollbar, so the page window (which only
+     *  holds a few pages at a time) doesn't distort it. */
+    const [surahProgress, setSurahProgress] = useState(0);
     const [clickStateUpdateTrigger, setClickStateUpdateTrigger] = useState(0); // Force re-render when click states change
     const [showMistakeHighlight, setShowMistakeHighlight] = useState(false);
     const mistakeSoundRef = useRef<(() => void) | null>(null);
@@ -3217,6 +3222,42 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const handleDecreaseFontSize = () => setFontSize(prev => Math.max(prev - 1, 1));
 
     const selectedSurahInfo = QURAN_METADATA.find(s => s.number === selectedSurahId);
+
+    useEffect(() => {
+        const total = selectedSurahInfo?.numberOfAyahs ?? 0;
+        if (!total) { setSurahProgress(0); return; }
+        let frame = 0;
+        const measure = () => {
+            frame = 0;
+            const body = quranBodyRef.current;
+            if (!body) return;
+            // The reading line: just under the sticky toolbar.
+            const line = toolbarStickyTop + 90;
+            let reached = 0;
+            for (const el of Array.from(body.querySelectorAll<HTMLElement>('[id^="verse-container-"]'))) {
+                const [su, ay] = el.id.replace('verse-container-', '').split(':').map(Number);
+                if (su !== selectedSurahId) continue;
+                const r = el.getBoundingClientRect();
+                if (r.top <= line) reached = Math.max(reached, ay);
+                // Past the line already — the rest of the list is further down.
+                else break;
+            }
+            // The last verse only counts as "finished" once it has been read past.
+            const last = body.querySelector<HTMLElement>(`[id="verse-container-${selectedSurahId}:${total}"]`);
+            if (last && last.getBoundingClientRect().bottom <= window.innerHeight) reached = total;
+            setSurahProgress(Math.min(1, reached / total));
+        };
+        const onScroll = () => { if (!frame) frame = requestAnimationFrame(measure); };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        measure();
+        return () => {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onScroll);
+            cancelAnimationFrame(frame);
+        };
+    }, [selectedSurahId, selectedSurahInfo, verses, currentPageRange, toolbarStickyTop]);
+
     
     const getMistakeColor = (level: number): string => {
         switch (level) {
@@ -4434,7 +4475,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
 
             <div className="space-y-6">
-                <div className="px-2 py-2 sm:p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
+                <div className="relative px-2 py-2 sm:p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-t-none rounded-b-xl shadow-md border border-slate-200 dark:border-gray-700 sticky z-30" style={{ top: `${toolbarStickyTop}px` }}>
+                    {/* How far into the surah the reader has come — full at its end. */}
+                    <div dir="ltr" aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 h-[3px] rounded-b-xl overflow-hidden bg-slate-200/60 dark:bg-gray-700/60">
+                        <div className="h-full bg-orange-500 dark:bg-orange-400 transition-[width] duration-200 ease-out"
+                            style={{ width: `${surahProgress * 100}%` }} />
+                    </div>
                     {/* Toolbar: fixed left controls | scrollable surah pills | fixed right controls.
                         Wraps on narrow screens so the right-side controls stay reachable. */}
                     {/* Phones: row 1 = surah selector + verse number box; row 2 = one

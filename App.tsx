@@ -803,10 +803,16 @@ const App: React.FC = () => {
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(68);
   useEffect(() => {
-    if (!headerRef.current) return;
-    const ro = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
-    ro.observe(headerRef.current);
-    setHeaderHeight(headerRef.current.getBoundingClientRect().height);
+    const el = headerRef.current;
+    if (!el) return;
+    // The BORDER box, not contentRect: the header carries the notch padding
+    // (env(safe-area-inset-top)), which contentRect leaves out — everything
+    // sticking below it then sat that much too high and hid under the header
+    // in the Home Screen app.
+    const measure = () => setHeaderHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
     return () => ro.disconnect();
   }, [currentUser]);
 
@@ -816,9 +822,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const el = thinBarRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setThinBarHeight(entry.contentRect.height));
+    const measure = () => setThinBarHeight(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setThinBarHeight(el.getBoundingClientRect().height);
+    measure();
     return () => ro.disconnect();
   }, []);
 
