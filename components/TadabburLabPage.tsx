@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// TadabburLabPage — every word the student has a meaning for, grouped surah →
-// verse: hear it (Quran.com word-by-word recitation), pick a few, and revise
+// TadabburLabPage — one block per verse: the verse in Arabic as the Quran page
+// draws it, the reflection the student wrote on it, and that verse's words —
+// hear each one (Quran.com word-by-word recitation), pick a few, and revise
 // them as flashcards with the same red/green strength bar as the Arabic words.
 // The tutor can send a picked deck to the student's portal as homework.
 //
@@ -10,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QURAN_METADATA } from '../constants';
 import { QuranVerse } from '../types';
-import { loadWordMeanings } from '../services/tadabburService';
+import { loadWordMeanings, loadVerseNotes } from '../services/tadabburService';
 import {
   loadWordStrength, recordWordReview, withWordReview, WordStrength, isWeak,
   wordAudioUrl, wordKey, listWordHomework, assignWordHomework, completeWordHomework,
@@ -21,6 +22,15 @@ import { getVersesForSurah } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { createNotification } from '../services/notificationService';
 import VocabStrengthBar from './VocabStrengthBar';
+
+/** One verse on the page: its Arabic, the student's reflection, its words. */
+interface VerseBlock {
+  key: string;
+  surah: number;
+  ayah: number;
+  words: LabWord[];
+  note: string;
+}
 
 interface LabWord {
   key: string;
@@ -35,6 +45,24 @@ interface LabWord {
 
 const surahName = (n: number) => QURAN_METADATA.find(m => m.number === n)?.transliteratedName ?? `Surah ${n}`;
 const surahArabic = (n: number) => QURAN_METADATA.find(m => m.number === n)?.name ?? '';
+
+const EASTERN = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+const eastern = (n: number) => String(n).split('').map(d => EASTERN[Number(d)]).join('');
+
+/** The verse-end rosette, the same one the Quran page ends a verse with. */
+const VerseEnd: React.FC<{ number: number }> = ({ number }) => (
+  <span
+    className="inline-flex items-center justify-center flex-shrink-0 font-mono font-bold text-slate-700 dark:text-slate-200 relative"
+    style={{ verticalAlign: 'middle', fontSize: 'clamp(9px, min(0.6em, 2.6vw), 22px)', width: '2.35em', height: '2.35em', margin: '0 0.45em' }}
+    aria-label={`Verse ${number}`}
+  >
+    <svg className="absolute inset-0 w-full h-full text-slate-200 dark:text-gray-700" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true">
+      <path d="M50,4 C24.6,4 4,24.6 4,50 C4,75.4 24.6,96 50,96 C75.4,96 96,75.4 96,50 C96,24.6 75.4,4 50,4 Z M50,10 C72.1,10 90,27.9 90,50 C90,72.1 72.1,90 50,90 C27.9,90 10,72.1 10,50 C10,27.9 27.9,10 50,10 Z" />
+      <path d="M50,16 C49.2,21.8 45.8,25.2 40,26 C34.2,26.8 30.8,30.2 30,36 C29.2,41.8 32.2,45.8 38,48 C43.8,50.2 48.2,53.2 50,60 C51.8,53.2 56.2,50.2 62,48 C67.8,45.8 70.8,41.8 70,36 C69.2,30.2 65.8,26.8 60,26 C54.2,25.2 50.8,21.8 50,16 Z" />
+    </svg>
+    <span className="relative z-10">{eastern(number)}</span>
+  </span>
+);
 
 const shuffle = <T,>(arr: T[]): T[] => {
   const a = [...arr];
@@ -56,14 +84,18 @@ const TadabburLabPage: React.FC<{
 }> = ({ studentId, studentName, readOnly = false, teacherId, onOpenVerse }) => {
   const [words, setWords] = useState<LabWord[]>([]);
   const [verseText, setVerseText] = useState<Record<string, string>>({});
+  /** "surah:ayah" → the reflection the student wrote on that verse. */
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [strength, setStrength] = useState<WordStrength>(new Map());
   const [homework, setHomework] = useState<WordHomework[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'weak' | 'new'>('all');
+  const [filter, setFilter] = useState<'all' | 'weak' | 'new' | 'reflections'>('all');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** Verses whose reflection is shown in full rather than folded. */
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set());
 
   // ── Flashcard run ────────────────────────────────────────────────────────
   const [deck, setDeck] = useState<LabWord[] | null>(null);
@@ -85,16 +117,23 @@ const TadabburLabPage: React.FC<{
     setLoading(true);
     setErr('');
     try {
-      const [meanings, str, hw] = await Promise.all([
+      const [meanings, str, hw, reflections] = await Promise.all([
         loadWordMeanings(studentId),
         loadWordStrength(studentId),
         listWordHomework(studentId).catch(() => [] as WordHomework[]),
+        loadVerseNotes(studentId).catch(() => ({} as Record<string, string>)),
       ]);
       setStrength(str);
       setHomework(hw);
+      setNotes(reflections);
 
       const entries = Object.entries(meanings);
-      const surahs = [...new Set(entries.map(([k]) => Number(k.split(':')[0])))];
+      // A verse can carry a reflection and no meanings at all, so its surah
+      // has to be fetched too — otherwise the block has no Arabic to show.
+      const surahs = [...new Set([
+        ...entries.map(([k]) => Number(k.split(':')[0])),
+        ...Object.keys(reflections).map(k => Number(k.split(':')[0])),
+      ])];
       const texts: Record<string, string> = {};
       const positions = new Map<string, number>();
 
@@ -156,19 +195,39 @@ const TadabburLabPage: React.FC<{
     });
   }, [words, search, filter, strength]);
 
+  /** One block per verse: the Arabic, the reflection, and that verse's words. */
   const grouped = useMemo(() => {
-    const bySurah = new Map<number, Map<number, LabWord[]>>();
-    for (const w of visible) {
-      const verses = bySurah.get(w.surah) ?? new Map<number, LabWord[]>();
-      verses.set(w.ayah, [...(verses.get(w.ayah) ?? []), w]);
-      bySurah.set(w.surah, verses);
+    const narrowed = filter === 'weak' || filter === 'new' || !!search.trim();
+    const byVerse = new Map<string, VerseBlock>();
+    const touch = (surah: number, ayah: number) => {
+      const k = `${surah}:${ayah}`;
+      let v = byVerse.get(k);
+      if (!v) { v = { key: k, surah, ayah, words: [], note: (notes[k] ?? '').trim() }; byVerse.set(k, v); }
+      return v;
+    };
+    for (const w of visible) touch(w.surah, w.ayah).words.push(w);
+    // A verse the student reflected on belongs here even with no words on it —
+    // unless a search or a word filter is narrowing the page.
+    if (!narrowed) {
+      for (const [k, text] of Object.entries(notes)) {
+        if (!text.trim()) continue;
+        const [surah, ayah] = k.split(':').map(Number);
+        touch(surah, ayah);
+      }
+    }
+    let list = [...byVerse.values()];
+    if (filter === 'reflections') list = list.filter(v => v.note);
+    const bySurah = new Map<number, VerseBlock[]>();
+    for (const v of list.sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)) {
+      bySurah.set(v.surah, [...(bySurah.get(v.surah) ?? []), v]);
     }
     return [...bySurah.entries()].map(([surah, verses]) => ({
       surah,
-      verses: [...verses.entries()].map(([ayah, list]) => ({ ayah, words: list })),
-      count: [...verses.values()].reduce((n, l) => n + l.length, 0),
+      verses,
+      count: verses.reduce((n, v) => n + v.words.length, 0),
+      notes: verses.filter(v => v.note).length,
     }));
-  }, [visible]);
+  }, [visible, notes, filter, search]);
 
   const weakCount = useMemo(() => words.filter(w => isWeak(strength.get(w.key))).length, [words, strength]);
   const freshCount = useMemo(() => words.filter(w => !(strength.get(w.key)?.length)).length, [words, strength]);
@@ -178,7 +237,14 @@ const TadabburLabPage: React.FC<{
     const right = answered.filter(a => a[a.length - 1]).length;
     return Math.round((right / answered.length) * 100);
   }, [words, strength]);
-  const verseCount = useMemo(() => new Set(words.map(w => `${w.surah}:${w.ayah}`)).size, [words]);
+  /** Verses on the page: ones with a word meaning, ones with a reflection. */
+  const verseKeys = useMemo(() => new Set([
+    ...words.map(w => `${w.surah}:${w.ayah}`),
+    ...Object.entries(notes).filter(([, n]) => n.trim()).map(([k]) => k),
+  ]), [words, notes]);
+  const verseCount = verseKeys.size;
+  const surahCount = useMemo(() => new Set([...verseKeys].map(k => Number(k.split(':')[0]))).size, [verseKeys]);
+  const noteCount = useMemo(() => Object.values(notes).filter(n => n.trim()).length, [notes]);
 
   const togglePick = (key: string) => setPicked(prev => {
     const next = new Set(prev);
@@ -323,6 +389,104 @@ const TadabburLabPage: React.FC<{
     </div>
   );
 
+  const verseBlock = (v: VerseBlock) => {
+    const text = verseText[v.key];
+    const pieces = text ? splitVerseWords(text) : [];
+    const wordAt = new Map(v.words.map(w => [w.wordIndex, w]));
+    return (
+      <article key={v.key} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => onOpenVerse?.(v.key)}
+            disabled={!onOpenVerse}
+            title={onOpenVerse ? 'Open this verse in the Quran page' : undefined}
+            className="h-8 px-3 rounded-full bg-blue-700 text-white text-[13px] font-extrabold disabled:opacity-90"
+          >
+            {surahName(v.surah)} · {v.ayah}
+          </button>
+          {v.note && (
+            <span className="h-8 px-3 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-[12px] font-extrabold flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" /></svg>
+              Reflection
+            </span>
+          )}
+          <span className="flex-grow" />
+          {v.words.length > 0 && (
+            <button onClick={() => pickMany(v.words)}
+              className="h-8 px-3 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 text-[12px] font-extrabold">
+              Pick these {v.words.length}
+            </button>
+          )}
+        </div>
+
+        {/* The verse itself, drawn the way the Quran page draws it. */}
+        {text ? (
+          <div dir="rtl" className="font-quranic text-3xl sm:text-4xl text-slate-900 dark:text-slate-100 flex flex-wrap justify-center items-end gap-x-2 sm:gap-x-4 gap-y-1 select-text">
+            {pieces.map((word, i) => {
+              const w = wordAt.get(i);
+              return (
+                <span key={`${v.key}-${i}`} className="relative inline-flex flex-col items-center">
+                  <span className={`font-sans text-[11px] sm:text-sm font-bold leading-tight px-2 py-0.5 rounded-md max-w-[11rem] text-center ${
+                    w ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200' : 'invisible'}`}>
+                    {w?.meaning || ' '}
+                  </span>
+                  <span className={`leading-[1.8] px-1 ${w ? 'border-b-2 border-blue-300 dark:border-blue-600' : ''}`}>
+                    {renderWordWithMarks(word, `${v.key}-${i}`, 1.8)}
+                  </span>
+                </span>
+              );
+            })}
+            <span className="self-center leading-[1.8]"><VerseEnd number={v.ayah} /></span>
+          </div>
+        ) : (
+          <p className="text-center text-sm text-slate-400 dark:text-slate-500 animate-pulse">Loading the verse…</p>
+        )}
+
+        {v.note && (
+          <section className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 sm:p-4">
+            <p className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-emerald-700 dark:text-emerald-400 mb-1.5">
+              {readOnly ? 'Your reflection' : `${studentName}'s reflection`}
+            </p>
+            <p className={`text-[15px] leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-200 ${
+              v.note.length > 320 && !openNotes.has(v.key) ? 'line-clamp-6' : ''}`}>
+              {v.note}
+            </p>
+            {v.note.length > 320 && (
+              <button
+                onClick={() => setOpenNotes(prev => {
+                  const next = new Set(prev);
+                  if (next.has(v.key)) next.delete(v.key); else next.add(v.key);
+                  return next;
+                })}
+                className="mt-1.5 text-[13px] font-extrabold text-emerald-700 dark:text-emerald-400 hover:underline"
+              >
+                {openNotes.has(v.key) ? 'Show less' : 'Read it all'}
+              </button>
+            )}
+          </section>
+        )}
+
+        {v.words.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
+                {v.words.length} word{v.words.length === 1 ? '' : 's'} to revise
+              </p>
+              <span className="flex-grow h-px bg-slate-100 dark:bg-gray-700" />
+              <button onClick={() => startDeck(v.words)}
+                className="h-8 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[12px] font-extrabold">
+                Flashcards
+              </button>
+            </div>
+            <div dir="rtl" className="flex flex-wrap gap-2.5">
+              {v.words.map(wordCard)}
+            </div>
+          </div>
+        )}
+      </article>
+    );
+  };
+
   // ── Flashcards ───────────────────────────────────────────────────────────
   if (deck && !done) {
     const card = deck[cardIndex];
@@ -445,15 +609,16 @@ const TadabburLabPage: React.FC<{
         <div className="min-w-0">
           <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">Tadabbur Lab</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {readOnly ? 'Every word you have a meaning for — hear it, then revise it.'
-              : <>Every word <strong className="text-slate-800 dark:text-slate-100">{studentName}</strong> has a meaning for, ready to hear and revise.</>}
+            {readOnly ? 'Every verse you reflected on, with its words to hear and revise.'
+              : <>Every verse <strong className="text-slate-800 dark:text-slate-100">{studentName}</strong> reflected on, with its words to hear and revise.</>}
           </p>
         </div>
         <span className="flex-grow" />
         <div className="flex flex-wrap gap-2">
           {[
-            { v: String(new Set(words.map(w => w.surah)).size), l: 'Surahs', c: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+            { v: String(surahCount), l: 'Surahs', c: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
             { v: String(verseCount), l: 'Verses', c: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+            { v: String(noteCount), l: 'Reflections', c: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
             { v: String(words.length), l: 'Words', c: 'bg-slate-100 dark:bg-gray-700 text-slate-800 dark:text-slate-100' },
             { v: knownPct === null ? '—' : `${knownPct}%`, l: 'Known', c: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
           ].map(s => (
@@ -513,7 +678,8 @@ const TadabburLabPage: React.FC<{
         />
         <div role="group" aria-label="Filter" className="flex items-center gap-1 p-1 rounded-full bg-slate-100 dark:bg-gray-700">
           {([
-            ['all', `All ${words.length}`],
+            ['all', 'All'],
+            ['reflections', `Reflections ${noteCount}`],
             ['weak', `Weak ${weakCount}`],
             ['new', `Never revised ${freshCount}`],
           ] as const).map(([id, label]) => (
@@ -539,54 +705,42 @@ const TadabburLabPage: React.FC<{
 
       {loading ? (
         <p className="p-10 text-center text-slate-500 dark:text-slate-400 animate-pulse">Loading the words…</p>
-      ) : !words.length ? (
+      ) : !words.length && !noteCount ? (
         <div className="p-10 text-center rounded-3xl border border-dashed border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800">
           <p className="text-lg font-bold text-slate-700 dark:text-slate-200">No words yet</p>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {readOnly
-              ? 'Word meanings your teacher writes in Tadabbur mode show up here.'
-              : 'Open the Quran page in Tadabbur mode and tap a word to give it a meaning.'}
+              ? 'Reflections you write and word meanings your teacher gives in Tadabbur mode show up here.'
+              : 'Open the Quran page in Tadabbur mode: tap a word to give it a meaning, and reflections the student writes land here too.'}
           </p>
         </div>
-      ) : !visible.length ? (
+      ) : !grouped.length ? (
         <p className="p-10 text-center text-slate-500 dark:text-slate-400">Nothing matches that.</p>
       ) : grouped.map(g => (
-        <section key={g.surah} className="p-4 sm:p-6 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <section key={g.surah} className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 px-1 pt-2">
             <span className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-black flex items-center justify-center">{g.surah}</span>
             <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100">{surahName(g.surah)}</span>
             <span className="font-quranic text-lg text-slate-600 dark:text-slate-300">{surahArabic(g.surah)}</span>
-            <span className="text-[13px] text-slate-500 dark:text-slate-400">{g.verses.length} verses · {g.count} words</span>
+            <span className="text-[13px] text-slate-500 dark:text-slate-400">
+              {g.verses.length} verse{g.verses.length === 1 ? '' : 's'}
+              {g.count > 0 && ` · ${g.count} word${g.count === 1 ? '' : 's'}`}
+              {g.notes > 0 && ` · ${g.notes} reflection${g.notes === 1 ? '' : 's'}`}
+            </span>
             <span className="flex-grow" />
-            <button onClick={() => pickMany(g.verses.flatMap(v => v.words))}
-              className="h-8 px-3 rounded-lg border border-slate-200 dark:border-gray-600 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
-              Pick all {g.count}
-            </button>
+            {g.count > 0 && (
+              <button onClick={() => pickMany(g.verses.flatMap(v => v.words))}
+                className="h-8 px-3 rounded-lg border border-slate-200 dark:border-gray-600 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
+                Pick all {g.count}
+              </button>
+            )}
           </div>
 
-          {g.verses.map(v => (
-            <div key={v.ayah} className="flex flex-wrap items-start gap-3 pt-3 border-t border-slate-100 dark:border-gray-700">
-              <div className="flex flex-col gap-1.5 items-start flex-shrink-0">
-                <button onClick={() => onOpenVerse?.(`${g.surah}:${v.ayah}`)}
-                  disabled={!onOpenVerse}
-                  title={onOpenVerse ? 'Open this verse in the Quran page' : undefined}
-                  className="h-8 px-3 rounded-full bg-blue-700 text-white text-[13px] font-extrabold disabled:opacity-90">
-                  {g.surah}:{v.ayah}
-                </button>
-                <button onClick={() => pickMany(v.words)}
-                  className="h-7 px-2.5 rounded-lg border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 text-[11px] font-extrabold">
-                  Pick these {v.words.length}
-                </button>
-              </div>
-              <div dir="rtl" className="flex-grow flex flex-wrap gap-2.5">
-                {v.words.map(wordCard)}
-              </div>
-            </div>
-          ))}
+          {g.verses.map(verseBlock)}
         </section>
       ))}
 
-      <p className="px-2 text-xs text-slate-500 dark:text-slate-400">
+      <p className="px-2 pt-2 text-xs text-slate-500 dark:text-slate-400">
         Every word plays from the Quran.com word-by-word recitation — that exact word, in that exact verse.
       </p>
 
