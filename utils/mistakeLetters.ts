@@ -70,8 +70,9 @@ export const splitTrailingWaqf = (unit: string): { glyph: string; waqf: string }
 /**
  * The space before the sign is what makes iOS draw it whole, AND what keeps it
  * off the last letter: with the sign tight against the word it landed on top of
- * a tanween sitting on an alif (وَلُؤْلُؤًاۖ). Nearly all of the space goes
- * between the word and the sign, so the gap to the NEXT word stays normal —
- * measured on an iPhone against the same words set as one run.
+ * a tanween sitting on an alif (وَلُؤْلُؤًاۖ). Most of the space goes
+ * between the word and the sign (0.5em), and a little after it (0.15em), so the
+ * sign clears even a tanween on an alif and still reads as belonging to the word
+ * it ends rather than the one that follows. Measured on an iPhone.
  */
-export const WAQF_STYLE: React.CSSProperties = { display: 'inline', marginInline: '0.22em 0.04em' };
+export const WAQF_STYLE: React.CSSProperties = { display: 'inline', marginInline: '0.5em 0.15em' };
