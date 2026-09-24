@@ -9,7 +9,7 @@ import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
-import { parseWordIntoLetters } from '../utils/mistakeLetters';
+import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 
 
 /** Returns the timestamp of the most recent mistake logged for a given verse. */
@@ -694,6 +694,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         letterKey: string;
         mistake: Mistake | undefined;
     }> = ({ letter, letterKey, mistake }) => {
+        const { glyph, waqf } = splitTrailingWaqf(letter);
         const getLetterColor = () => {
             if (mistake && mistake.errorText) {
                 if (mistake.errorType === 'tajweed') return 'bg-green-100 dark:bg-green-900/40';
@@ -749,8 +750,10 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     }}
                 >
                     {/* almSeedForUnit: keeps iOS CoreText shaping tatweel-hamza units as Arabic */}
-                    {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, 10 / 7) : almSeedForUnit(letter) + letter}
+                    {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, 10 / 7) : almSeedForUnit(glyph) + glyph}
                 </span>
+                {/* A stopping sign only draws whole as its own run — splitTrailingWaqf. */}
+                {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
             </span>
         );
     };

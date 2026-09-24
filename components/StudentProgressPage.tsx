@@ -13,6 +13,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
+import { splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
@@ -286,6 +287,9 @@ const LetterWithError: React.FC<{
 }) => {
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
+    // A trailing stopping sign is drawn beside the letter, not inside it: iOS
+    // clips it to a sliver when it shares the letter's span.
+    const { glyph, waqf } = splitTrailingWaqf(letter);
 
     const cancelLongPress = () => {
         if (longPressTimer.current !== null) {
@@ -419,11 +423,13 @@ const LetterWithError: React.FC<{
                     // almSeedForUnit: tatweel-seated hamza units (ـَٔ) carry no
                     // Script=Arabic char, so iOS CoreText skips their GPOS and
                     // drops the vowel to the baseline — seed the run as Arabic.
-                    const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
-                    const overlays = unitOverlayPlan(letter, markLineHeight, vowelAdj);
+                    const text = almSeedForUnit(glyph) + (joinLead ? ZWJ : '') + glyph + (joinTrail ? ZWJ : '');
+                    const overlays = unitOverlayPlan(glyph, markLineHeight, vowelAdj);
                     return overlays ? renderUnitOverlays(text, overlays) : text;
                 })()}
             </span>
+            {/* The stopping sign draws whole only as its own run — splitTrailingWaqf. */}
+            {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
         </span>
     );
 };

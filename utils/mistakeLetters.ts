@@ -8,6 +8,7 @@
 // can share it.)
 // ---------------------------------------------------------------------------
 
+import type React from 'react';
 import { tanweenOnSeatAlif } from './quranicMarks';
 
 export const isArabicLetter = (char: string | undefined): boolean => {
@@ -45,3 +46,26 @@ export const parseWordIntoLetters = (word: string): Array<{ letter: string; inde
   }
   return letters;
 };
+
+/**
+ * A stopping sign (ۖ ۗ ۘ ۙ ۚ ۛ, U+06D6–U+06DC) that trails a letter unit.
+ *
+ * iOS clips these: inside a per-letter span the sign comes out as a sliver with
+ * its top cut off, while the same text as one run draws it in full. Giving the
+ * sign its own span with a hair of margin — so WebKit shapes it as its own run —
+ * brings the whole glyph back. Verified on an iPhone simulator against the same
+ * verse drawn as plain text.
+ *
+ * The split is DISPLAY ONLY: `parseWordIntoLetters` still returns the sign as
+ * part of its letter, so every mistake key keeps pointing at the same letter.
+ */
+const TRAILING_WAQF = /[\u06D6-\u06DC]+$/;
+
+export const splitTrailingWaqf = (unit: string): { glyph: string; waqf: string } => {
+  const m = unit.match(TRAILING_WAQF);
+  if (!m) return { glyph: unit, waqf: '' };
+  return { glyph: unit.slice(0, unit.length - m[0].length), waqf: m[0] };
+};
+
+/** The margin is what makes iOS draw the sign whole; it is too small to see. */
+export const WAQF_STYLE: React.CSSProperties = { display: 'inline', margin: '0 0.06em' };

@@ -17,7 +17,7 @@ import {
   splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT,
   wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
 } from '../utils/quranicMarks';
-import { parseWordIntoLetters } from '../utils/mistakeLetters';
+import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { supabase } from '../lib/supabase';
 import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
@@ -461,12 +461,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           fontFamily: plan.mode === 'wholeWord' ? plan.font : 'inherit' }}>
         {letters.map(({ letter, index }) => {
           const m = mistakes[`${wordKey}:${index}`];
+          // A stopping sign sits beside the letter, never inside its span —
+          // iOS clips it to a sliver otherwise (see splitTrailingWaqf).
+          const { glyph, waqf } = splitTrailingWaqf(letter);
           return (
             <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
               {m && bubble(m)}
               <span className="relative inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
-                {hasLowMeem(letter) ? renderLowMeemUnit(letter, letter, LH) : almSeedForUnit(letter) + letter}
+                {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, LH) : almSeedForUnit(glyph) + glyph}
               </span>
+              {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
             </span>
           );
         })}
