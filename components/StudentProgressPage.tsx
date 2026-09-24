@@ -4398,7 +4398,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     );
 
     return (
-        <div className={`space-y-6 relative ${guest ? '' : 'px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8'}`}>
+        <div className={`relative ${guest ? '' : 'space-y-6 px-2 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8'}`}>
             {/* Cursor-sharing indicator (tutor side) — confirms the student can
                 see where the tutor is pointing. Toggle with the C key. */}
             {cursorModeActive && !readOnly && (
@@ -4544,7 +4544,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             </div>
             )}
 
-            <div className="space-y-6">
+            <div className={guest ? '' : 'space-y-6'}>
                 <div className={`relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30 rounded-t-none ${guest ? 'rounded-b-none border-x-0' : 'rounded-b-2xl'}`} style={{ top: `${toolbarStickyTop}px` }}>
                     {/* How far into the surah the reader has come — full at its end. */}
                     <div dir="ltr" aria-hidden="true"
