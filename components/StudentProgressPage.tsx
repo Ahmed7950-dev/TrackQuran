@@ -3234,14 +3234,20 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             // The reading line: just under the sticky toolbar.
             const line = toolbarStickyTop + 90;
             let reached = 0;
+            // The pages before the open window count too: opening page 3 of a
+            // surah already puts you a fifth of the way in, so the line starts
+            // at the first verse ON SCREEN, not at zero.
+            let windowStart = 0;
             for (const el of Array.from(body.querySelectorAll<HTMLElement>('[id^="verse-container-"]'))) {
                 const [su, ay] = el.id.replace('verse-container-', '').split(':').map(Number);
                 if (su !== selectedSurahId) continue;
+                if (!windowStart) windowStart = ay;
                 const r = el.getBoundingClientRect();
                 if (r.top <= line) reached = Math.max(reached, ay);
                 // Past the line already — the rest of the list is further down.
                 else break;
             }
+            if (!reached) reached = Math.max(0, windowStart - 1);
             // The last verse only counts as "finished" once it has been read past.
             const last = body.querySelector<HTMLElement>(`[id="verse-container-${selectedSurahId}:${total}"]`);
             if (last && last.getBoundingClientRect().bottom <= window.innerHeight) reached = total;
