@@ -1,15 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // RecitationHomeworkPage — /recite/:id, no sign-in needed.
 //
-// "Prepare reading" homework, one verse at a time: the verse is drawn big with
+// Reading homework, one verse at a time: the verse is drawn big with
 // the live-logging page's own word renderer and Quran font; tapping it plays
 // Al-Minshawi (as often as the student likes). The student records their own
 // recitation, listens back, records again until happy, and moves on. A side
 // panel (a strip on phones) shows how many verses are recorded. When every
 // verse has a take, Submit notifies the tutor.
 //
+// Hifz homework is the same page with the verses withheld: every verse of the
+// range is listed showing only its first word, tapping one opens it in full, a
+// switch hides even the first words, there is no reciter to lean on, and the
+// whole range is recited from memory in ONE take.
+//
 // Each take is uploaded as soon as it stops — so leaving the page loses
-// nothing — and replaces the verse's previous take (see saveVerseRecording).
+// nothing — and replaces the previous one (see saveVerseRecording).
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getVersesForSurah } from '../services/dataService';
@@ -23,8 +28,9 @@ import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
-  RecitationHomework, RECORDER_BITRATE, getRecitationHomework, pickRecorderMime,
-  portalHomeworkUrl, rangeLabel, saveVerseRecording, submitRecitationHomework, versesOf,
+  RecitationHomework, RECORDER_BITRATE, getRecitationHomework, isFullyRecorded, pickRecorderMime,
+  portalHomeworkUrl, rangeLabel, saveVerseRecording, saveWholeRecording, submitRecitationHomework,
+  versesOf, WHOLE_TAKE,
 } from '../services/recitationHomeworkService';
 
 const MAX_TAKE_MS = 5 * 60 * 1000;
@@ -91,6 +97,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   }, []);
   /** Takes recorded in this visit, playable instantly before the upload's URL. */
   const localUrls = useRef<Record<string, string>>({});
+  /** Hifz: the verses the student has opened, and whether even the first words are hidden. */
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [blind, setBlind] = useState(false);
 
   // Day / night, remembered on this device (defaults to the app's own theme).
   const [theme, setTheme] = useState<ReciteTheme>(() => {
@@ -234,7 +243,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
   /** The take the teacher reviewed and marked — from the homework this one redoes. */
   const playPrev = () => {
-    const url = prevRec?.recordings[key]?.url;
+    const url = prevRec?.recordings[rec?.kind === 'hifz' ? WHOLE_TAKE : key]?.url;
     if (!url || take === 'recording') return;
     const a = prevRef.current ?? (prevRef.current = new Audio());
     if (prevPlaying) { a.pause(); setPrevPlaying(false); return; }
@@ -246,7 +255,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const playMine = () => {
-    const url = localUrls.current[key] ?? rec?.recordings[key]?.url;
+    const k = rec?.kind === 'hifz' ? WHOLE_TAKE : key;
+    const url = localUrls.current[k] ?? rec?.recordings[k]?.url;
     if (!url) return;
     const a = mineRef.current ?? (mineRef.current = new Audio());
     if (minePlaying) { a.pause(); setMinePlaying(false); return; }
@@ -258,7 +268,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const startRecording = async () => {
-    if (!rec || !verses[idx]) return;
+    if (!rec || (!verses[idx] && rec.kind !== 'hifz')) return;
     // Re-entrancy guard: getUserMedia is async, so a double tap could otherwise
     // start two recorders — and the one we forget about keeps the mic open and
     // keeps emitting chunks into every later take.
@@ -272,7 +282,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const beginRecording = async () => {
-    if (!rec || !verses[idx]) return;
+    if (!rec || (!verses[idx] && rec.kind !== 'hifz')) return;
+    const whole = rec.kind === 'hifz';
     setError('');
     stopAudio();
     // Retire any recorder still alive from an earlier take before opening a new one.
@@ -299,7 +310,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       return;
     }
     streamRef.current = stream;
-    const [s, a] = verses[idx];
+    const [s, a] = verses[idx] ?? [rec.startSurah, rec.startAyah];
     const r = mime
       ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: RECORDER_BITRATE })
       : new MediaRecorder(stream, { audioBitsPerSecond: RECORDER_BITRATE });
@@ -314,11 +325,13 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       const ms = Date.now() - startedAtRef.current;
       const blob = new Blob(chunks, { type: r.mimeType || mime || 'audio/webm' });
       if (blob.size === 0 || ms < 400) { setTake('idle'); setError('That recording was empty — hold on a moment longer and try again.'); return; }
-      const k = `${s}:${a}`;
+      const k = whole ? WHOLE_TAKE : `${s}:${a}`;
       if (localUrls.current[k]) URL.revokeObjectURL(localUrls.current[k]);
       localUrls.current[k] = URL.createObjectURL(blob);
       setTake('saving');
-      const saved = await saveVerseRecording(rec.id, s, a, blob, ms);
+      const saved = whole
+        ? await saveWholeRecording(rec.id, blob, ms)
+        : await saveVerseRecording(rec.id, s, a, blob, ms);
       setTake('idle');
       if (saved) setRec(saved);
       else setError('Your recording could not be saved — check your connection and record again.');
@@ -365,12 +378,18 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     </div>,
   );
 
-  const recordedCount = verses.filter(([vs, va]) => rec.recordings[`${vs}:${va}`]).length;
-  const allRecorded = recordedCount === verses.length && verses.length > 0;
+  const isHifz = rec.kind === 'hifz';
+  const wholeTake = rec.recordings[WHOLE_TAKE];
+  const allRecorded = isFullyRecorded(rec);
+  // Hifz has one take for the whole range, so the ring is all-or-nothing.
+  const recordedCount = isHifz
+    ? (wholeTake ? verses.length : 0)
+    : verses.filter(([vs, va]) => rec.recordings[`${vs}:${va}`]).length;
   const [s, a] = verses[idx] ?? [rec.startSurah, rec.startAyah];
   const text = texts[key];
-  const hasTake = !!(localUrls.current[key] || rec.recordings[key]);
-  const takeMs = rec.recordings[key]?.ms;
+  const takeKey = isHifz ? WHOLE_TAKE : key;
+  const hasTake = !!(localUrls.current[takeKey] || rec.recordings[takeKey]);
+  const takeMs = rec.recordings[takeKey]?.ms;
   const surahName = QURAN_METADATA.find(m => m.number === s);
   const portalLink = rec.reportId ? portalHomeworkUrl(rec.reportId, rec.homeworkId) : null;
   const pct = verses.length ? recordedCount / verses.length : 0;
@@ -397,7 +416,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // line above (measured), so a verse with comments gets taller lines. Mark
   // overlays are positioned from the line height, so it is passed to them too.
   // The take the teacher reviewed, for this verse (gone once audio is purged).
-  const prevTake = prevRec && !prevRec.purgedAt ? prevRec.recordings[key] : undefined;
+  const prevTake = prevRec && !prevRec.purgedAt ? prevRec.recordings[takeKey] : undefined;
   const verseHasComments = Object.entries(mistakes).some(([k, m]) => k.startsWith(`${s}:${a}:`) && m?.errorText);
   // The gap has to fit one comment pill (fixed px) under a verse sized in vw,
   // so it is worked out in px and turned back into a line-height ratio. The
@@ -435,19 +454,19 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     </span>
   ) : null;
 
-  const markedWord = (word: string, wi: number): React.ReactNode => {
-    const wordKey = `${s}:${a}:${wi}`;
+  const markedWord = (word: string, wi: number, vs: number = s, va: number = a, lh: number = LH): React.ReactNode => {
+    const wordKey = `${vs}:${va}:${wi}`;
     const letters = parseWordIntoLetters(word);
     const hasLetterMistake = letters.some(l => mistakes[`${wordKey}:${l.index}`]);
     const wordMistake = mistakes[wordKey];
 
     if (!hasLetterMistake) {
-      if (!wordMistake) return renderWordWithMarks(word, `r${wi}`, LH);
+      if (!wordMistake) return renderWordWithMarks(word, `r${vs}-${va}-${wi}`, lh);
       return (
         <span className="relative inline rounded-lg"
           style={wordMistake.errorType ? letterStyle(wordMistake) : { background: wordLevelBg(wordMistake.level), borderRadius: 8 }}>
           {bubble(wordMistake)}
-          {renderWordWithMarks(word, `r${wi}`, LH)}
+          {renderWordWithMarks(word, `r${vs}-${va}-${wi}`, lh)}
         </span>
       );
     }
@@ -468,7 +487,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
               {m && bubble(m)}
               <span className="relative inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
-                {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, LH) : almSeedForUnit(glyph) + glyph}
+                {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, lh) : almSeedForUnit(glyph) + glyph}
               </span>
               {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
             </span>
@@ -479,9 +498,12 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const eyebrow = rec.status === 'submitted' ? 'Submitted' : rec.status === 'passed' ? 'Passed'
-    : rec.status === 'needs_revision' ? 'Needs revision' : 'Recitation homework';
+    : rec.status === 'needs_revision' ? 'Needs revision' : isHifz ? 'Hifz homework' : 'Recitation homework';
   const subline = rec.status === 'submitted' ? 'Your teacher will listen and review it.'
     : rec.status === 'passed' ? 'Your teacher reviewed this homework — well done.'
+    : isHifz ? (allRecorded
+        ? 'Recorded — listen back once more, then send it to your teacher'
+        : `Recite all ${verses.length} verse${verses.length === 1 ? '' : 's'} from memory in one recording`)
     : allRecorded ? `All ${verses.length} verses recorded — listen back once more, then send it to your teacher`
     : `${recordedCount} of ${verses.length} verses recorded`;
   const notice = rec.status === 'needs_revision'
@@ -549,6 +571,103 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           style={{ background: color, height: on ? undefined : `${h * 100}%`, animationDelay: `${i * 0.09}s` }} />
       ))}
     </span>
+  );
+
+  /** Hifz: the verses of the range, each holding back all but its first word. */
+  const hifzStage = (
+    <div className="flex-grow flex flex-col gap-2.5 sm:gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-1">
+        <span className="text-[12px] sm:text-[14px] font-semibold tracking-[0.06em]" style={{ color: P.goldInk }}>
+          {blind ? 'Every verse is hidden' : 'Only the first word of each verse'}
+        </span>
+        <span className="flex-grow" />
+        {revealed.size > 0 && (
+          <button onClick={() => setRevealed(new Set())}
+            className="rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors"
+            style={{ background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk, fontFamily: BODY }}>
+            Close the {revealed.size} open verse{revealed.size === 1 ? '' : 's'}
+          </button>
+        )}
+        <button onClick={() => { setBlind(b => !b); setRevealed(new Set()); }}
+          aria-pressed={blind}
+          className="rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors"
+          style={blind
+            ? { background: P.primary, color: P.onPrimary, border: `1.5px solid ${P.primary}`, fontFamily: BODY }
+            : { background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk, fontFamily: BODY }}>
+          {blind ? 'Show the first words' : 'Hide everything'}
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:gap-2.5">
+        {verses.map(([vs, va]) => {
+          const vk = `${vs}:${va}`;
+          const vText = texts[vk];
+          const open = revealed.has(vk);
+          const words = vText ? splitVerseWords(vText) : [];
+          const firstWord = words.findIndex(w => parseWordIntoLetters(w).length > 0);
+          const marks = Object.entries(mistakes).filter(([k, mm]) => k.startsWith(`${vk}:`) && mm?.errorType).length;
+          return (
+            <button key={vk}
+              onClick={() => setRevealed(prev => {
+                const next = new Set(prev);
+                if (next.has(vk)) next.delete(vk); else next.add(vk);
+                return next;
+              })}
+              disabled={!vText}
+              aria-expanded={open}
+              aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${open ? ', open' : ', hidden — tap to reveal'}`}
+              className="w-full text-start rounded-[18px] sm:rounded-[22px] px-3 sm:px-6 py-3 sm:py-5 transition-colors"
+              style={{ background: P.stage, border: `${theme === 'morning' ? 2 : 1}px solid ${open ? P.primary : P.stageBorder}` }}>
+              <span className="flex items-center gap-2 mb-1.5">
+                <span className="inline-flex items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
+                  style={{ minWidth: 26, height: 26, padding: '0 6px', border: `2px solid ${P.gold}`, color: P.goldInk, fontFamily: BODY }}>
+                  {va}
+                </span>
+                {multiSurah && (
+                  <span className="text-[12px] font-semibold" style={{ color: P.faint }}>
+                    {QURAN_METADATA.find(m => m.number === vs)?.transliteratedName}
+                  </span>
+                )}
+                {marks > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                    style={{ background: 'rgba(239,68,68,0.12)', color: theme === 'night' ? '#FCA5A5' : '#B91C1C', fontFamily: BODY }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#DC2626' }} />
+                    {marks} mistake{marks === 1 ? '' : 's'}
+                  </span>
+                )}
+                <span className="flex-grow" />
+                <span className="text-[12px] font-semibold" style={{ color: P.faint, fontFamily: BODY }}>
+                  {open ? 'tap to hide' : 'tap to reveal'}
+                </span>
+              </span>
+
+              {!vText ? (
+                <span className="block py-3 text-[14px]" style={{ color: P.faint }}>Loading…</span>
+              ) : (
+                <p dir="rtl" lang="ar" className="font-quranic m-0 break-words text-center"
+                  style={{ color: P.verseInk, fontSize: 'clamp(1.7rem, 4.4vw, 3.4rem)', lineHeight: 2.1 }}>
+                  {open ? (<>
+                    {words.map((w, i) => (
+                      <React.Fragment key={i}>{markedWord(w, i, vs, va, 2.1)}{i < words.length - 1 ? ' ' : ''}</React.Fragment>
+                    ))}
+                    {' '}
+                    <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap"
+                      style={{ minWidth: '1.35em', height: '1.35em', padding: '0 0.25em', fontSize: '0.4em', lineHeight: 1, border: `3px solid ${P.gold}`, color: P.goldInk, fontFamily: BODY, fontWeight: 700 }}>
+                      {toArabicDigits(va)}
+                    </span>
+                  </>) : blind ? (
+                    <span style={{ color: P.faint, letterSpacing: '0.35em' }}>• • • • •</span>
+                  ) : (<>
+                    {firstWord >= 0 ? markedWord(words[firstWord], firstWord, vs, va, 2.1) : null}
+                    <span style={{ color: P.faint }}>{'  '}…</span>
+                  </>)}
+                </p>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 
   const liveLine = take === 'recording'
@@ -654,6 +773,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         )}
 
         {/* Verse chips — centred, grouped by surah */}
+        {!isHifz && (
         <nav aria-label="Verses" className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
           {verses.map(([vs, va], i) => {
             const done = !!rec.recordings[`${vs}:${va}`];
@@ -690,6 +810,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             );
           })}
         </nav>
+        )}
       </header>
 
       {/* ── The verse — tap to hear Al-Minshawi ── */}
@@ -709,6 +830,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             <span className="tabular-nums opacity-75">{fmtSecs(prevTake.ms)}</span>
           </button>
         )}
+        {isHifz ? hifzStage : (
         <button onClick={playMinshawi} disabled={take === 'recording' || !text}
           aria-label={`Play Al-Minshawi reciting ${surahName?.transliteratedName} verse ${a}`}
           className="flex-grow flex flex-col items-center justify-center gap-4 sm:gap-6 rounded-[18px] sm:rounded-[22px] px-3 sm:px-10 py-6 sm:py-10 transition-colors"
@@ -746,6 +868,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             {minshawiPlaying ? 'Al-Minshawi is reciting · tap to stop' : 'Tap the verse to hear Al-Minshawi'}
           </span>
         </button>
+        )}
       </main>
 
       {/* ── Controls — pinned to the bottom while a long verse scrolls ── */}
@@ -763,7 +886,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           </div>
         )}
         <div className="flex items-center justify-center gap-4 sm:gap-7">
-          {withTip('Previous verse',
+          {!isHifz && withTip('Previous verse',
             <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || take !== 'idle'} aria-label="Previous verse"
               className={smallRound} style={{ background: P.ghost, border: `1.5px solid ${P.ghostBorder}`, color: P.ghostInk }}>
               {I.prev}
@@ -776,13 +899,14 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
                 <span className="absolute -inset-2 rounded-full rh-halo" style={{ background: P.recording }} />
                 <span className="relative">{I.stop}</span>
               </button>)
-            : withTip(take === 'saving' ? 'Saving…' : hasTake ? 'Record again' : 'Record my recitation',
-              <button onClick={startRecording} disabled={!editable || take === 'saving' || !text}
+            : withTip(take === 'saving' ? 'Saving…' : hasTake ? 'Record again'
+                : isHifz ? 'Record the whole range from memory' : 'Record my recitation',
+              <button onClick={startRecording} disabled={!editable || take === 'saving' || (isHifz ? !Object.keys(texts).length : !text)}
                 aria-label={hasTake ? 'Record again' : 'Record my recitation'} className={bigRound}
                 style={{
                   background: P.record, color: P.recordInk, border: `6px solid ${P.recordRing}`,
                   boxShadow: theme === 'morning' ? '0 14px 30px -12px rgba(181,69,47,.7)' : '0 14px 30px -12px rgba(224,103,122,.5)',
-                  opacity: !editable || !text ? 0.45 : 1,
+                  opacity: !editable || (isHifz ? !Object.keys(texts).length : !text) ? 0.45 : 1,
                 }}>
                 {take === 'saving' ? <span className="w-8 h-8 rounded-full border-4 border-current border-t-transparent animate-spin" /> : I.mic}
               </button>)}
@@ -800,7 +924,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
               {minePlaying ? I.pause : <span className="translate-x-0.5">{I.play}</span>}
             </button>)}
 
-          {withTip('Next verse',
+          {!isHifz && withTip('Next verse',
             <button onClick={() => setIdx(i => Math.min(verses.length - 1, i + 1))} disabled={idx >= verses.length - 1 || take !== 'idle'} aria-label="Next verse"
               className={smallRound} style={{ background: P.primary, color: P.onPrimary, border: 'none' }}>
               {I.next}

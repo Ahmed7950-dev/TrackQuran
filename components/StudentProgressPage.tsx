@@ -49,7 +49,7 @@ interface StudentProgressPageProps {
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
-  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string, opts?: { recite?: boolean }) => void;
+  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string, opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz' }) => void;
   /**
    * When set, immediately navigates the Quran view to this verse key ("surah:ayah").
    * Useful for jumping to homework verses from outside the component.
@@ -1262,6 +1262,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [homeworkNote, setHomeworkNote] = useState<string>('');
     /** Recitation homework: the student records every verse for review. */
     const [homeworkRecite, setHomeworkRecite] = useState(false);
+    /** Reading: hear each verse and record it. Hifz: verses hidden, one take. */
+    const [homeworkReciteKind, setHomeworkReciteKind] = useState<'reading' | 'hifz'>('reading');
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
     // Where this tutor/student was last reading. Restored ahead of the
@@ -3520,8 +3522,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             onLogTafseerRange(student.id, pendingLogRange);
             showToast('Tafseer logged');
         } else if (selectedLogType === 'homework') {
-            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim(), { recite: homeworkRecite });
-            showToast(homeworkRecite ? 'Recitation homework assigned 🎙' : 'Homework assigned 📝');
+            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim(), { recite: homeworkRecite, reciteKind: homeworkReciteKind });
+            showToast(!homeworkRecite ? 'Homework assigned 📝'
+                : homeworkReciteKind === 'hifz' ? 'Hifz homework assigned 🎙' : 'Recitation homework assigned 🎙');
         }
         setPendingLogRange(null);
         setLogTypeStep(null);
@@ -5306,7 +5309,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     {/* ── Homework ── */}
                                     {onLogHomework && (
                                         <LogOption src="/animations/homework.json" label="Homework" color="purple"
-                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setHomeworkRecite(false); setLogTypeStep('homework-note'); }} />
+                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setHomeworkRecite(false); setHomeworkReciteKind('reading'); setLogTypeStep('homework-note'); }} />
                                     )}
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
@@ -5335,8 +5338,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             type="button"
                                             onClick={() => {
                                                 setHomeworkNote(n => n.trim() ? `${n.trim()}\n${c.text}` : c.text);
-                                                // Preparing reading is exactly what the recording homework is for.
-                                                if (c.label.includes('Prepare')) setHomeworkRecite(true);
+                                                // Preparing reading is exactly what the recording homework is for,
+                                                // and memorising is the same page with the verses hidden.
+                                                if (c.label.includes('Prepare')) { setHomeworkRecite(true); setHomeworkReciteKind('reading'); }
+                                                if (c.label.includes('Memorize')) { setHomeworkRecite(true); setHomeworkReciteKind('hifz'); }
                                             }}
                                             className="px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/70 transition-colors active:scale-95"
                                         >
@@ -5356,10 +5361,28 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     <input type="checkbox" checked={homeworkRecite} onChange={e => setHomeworkRecite(e.target.checked)}
                                         className="mt-0.5 w-4 h-4 rounded text-teal-600 focus:ring-teal-500" />
                                     <span className="text-sm">
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">🎙 Student records each verse</span>
-                                        <span className="block text-xs text-slate-500 dark:text-slate-400">They listen to Al-Minshawi, record every verse and submit; you review and log mistakes here.</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">🎙 Student records their recitation</span>
+                                        <span className="block text-xs text-slate-500 dark:text-slate-400">They record and submit; you review and log mistakes here.</span>
                                     </span>
                                 </label>
+                                {homeworkRecite && (
+                                    <div role="radiogroup" aria-label="What kind of recitation homework" className="grid sm:grid-cols-2 gap-2 -mt-2 mb-4">
+                                        {([
+                                            ['reading', '📖 Reading', 'The verse is shown and they can hear it. One recording per verse.'],
+                                            ['hifz', '🧠 Hifz', 'Verses hidden — only the first word shows. No reciter. One recording for the whole range.'],
+                                        ] as const).map(([k, label, hint]) => (
+                                            <button key={k} type="button" role="radio" aria-checked={homeworkReciteKind === k}
+                                                onClick={() => setHomeworkReciteKind(k)}
+                                                className={`text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${
+                                                    homeworkReciteKind === k
+                                                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30'
+                                                        : 'border-slate-200 dark:border-gray-600 hover:border-slate-300'}`}>
+                                                <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">{label}</span>
+                                                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{hint}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="flex gap-3">
                                     <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
                                     <button onClick={() => confirmLog()} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>

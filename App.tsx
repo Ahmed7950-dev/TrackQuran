@@ -1500,7 +1500,8 @@ const App: React.FC = () => {
   };
 
   const handleLogHomework = async (
-    studentId: string, range: { start: Progress; end: Progress }, note: string, opts?: { recite?: boolean },
+    studentId: string, range: { start: Progress; end: Progress }, note: string,
+    opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz' },
   ) => {
     const student = students.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
@@ -1522,6 +1523,7 @@ const App: React.FC = () => {
         reportId: reportId ?? null,
         startSurah: newHomework.startSurah, startAyah: newHomework.startAyah,
         endSurah: newHomework.endSurah, endAyah: newHomework.endAyah, note: newHomework.note,
+        kind: opts.reciteKind ?? 'reading',
       });
       if (rec) {
         newHomework.recitationId = rec.id;

@@ -27,6 +27,17 @@ const SITE = 'https://www.lisanquran.com';
 
 export type RecitationStatus = 'assigned' | 'submitted' | 'passed' | 'needs_revision';
 
+/**
+ * Reading homework: the student hears each verse and records it one at a time.
+ * Hifz homework: the verses are hidden — only the first word of each shows —
+ * there is no reciter to listen to, and the whole range is recited from memory
+ * in ONE take, kept in `recordings` under WHOLE_TAKE.
+ */
+export type RecitationKind = 'reading' | 'hifz';
+
+/** The key the one hifz take is stored under, where reading uses "surah:ayah". */
+export const WHOLE_TAKE = 'all';
+
 export interface VerseRecording { path: string; url: string; ms: number; at: string }
 
 export interface RecitationHomework {
@@ -39,6 +50,7 @@ export interface RecitationHomework {
   startSurah: number; startAyah: number; endSurah: number; endAyah: number;
   note?: string;
   status: RecitationStatus;
+  kind: RecitationKind;
   /** Explicit verse list ("surah:ayah") — set on a reassigned homework, where
    *  the verses are the ones the student got wrong and are not a range. */
   verses?: string[];
@@ -57,7 +69,8 @@ export interface RecitationHomework {
 interface Row {
   id: string; homework_id: string; teacher_id: string; student_id: string; student_name: string | null;
   report_id: string | null; start_surah: number; start_ayah: number; end_surah: number; end_ayah: number;
-  note: string | null; status: RecitationStatus; recordings: Record<string, VerseRecording> | null;
+  note: string | null; status: RecitationStatus; kind: RecitationKind | null;
+  recordings: Record<string, VerseRecording> | null;
   verses: string[] | null; parent_id: string | null; reassigned_count: number | null;
   mistakes: Record<string, Mistake> | null;
   created_at: string; submitted_at: string | null; reviewed_at: string | null; purged_at: string | null;
@@ -67,7 +80,8 @@ const fromRow = (r: Row): RecitationHomework => ({
   id: r.id, homeworkId: r.homework_id, teacherId: r.teacher_id, studentId: r.student_id,
   studentName: r.student_name ?? undefined, reportId: r.report_id ?? undefined,
   startSurah: r.start_surah, startAyah: r.start_ayah, endSurah: r.end_surah, endAyah: r.end_ayah,
-  note: r.note ?? undefined, status: r.status, recordings: r.recordings ?? {},
+  note: r.note ?? undefined, status: r.status, kind: r.kind ?? 'reading',
+  recordings: r.recordings ?? {},
   verses: r.verses ?? undefined, parentId: r.parent_id ?? undefined,
   reassignedCount: r.reassigned_count ?? undefined,
   mistakes: r.mistakes ?? undefined,
@@ -121,6 +135,7 @@ export const rangeLabel = (r: Pick<RecitationHomework, 'startSurah' | 'startAyah
 export async function createRecitationHomework(input: {
   homeworkId: string; teacherId: string; studentId: string; studentName: string; reportId: string | null;
   startSurah: number; startAyah: number; endSurah: number; endAyah: number; note?: string;
+  kind?: RecitationKind;
   /** Only for a reassigned homework: the verses to record again. */
   verses?: string[]; parentId?: string;
   /** Only for a reassigned homework: the mistakes to show on those verses. */
@@ -130,7 +145,8 @@ export async function createRecitationHomework(input: {
     homework_id: input.homeworkId, teacher_id: input.teacherId, student_id: input.studentId,
     student_name: input.studentName, report_id: input.reportId,
     start_surah: input.startSurah, start_ayah: input.startAyah, end_surah: input.endSurah, end_ayah: input.endAyah,
-    note: input.note ?? null, verses: input.verses ?? null, parent_id: input.parentId ?? null,
+    note: input.note ?? null, kind: input.kind ?? 'reading',
+    verses: input.verses ?? null, parent_id: input.parentId ?? null,
     ...(input.mistakes && Object.keys(input.mistakes).length ? { mistakes: input.mistakes } : {}),
   }).select('*').single();
   if (error) { console.error('createRecitationHomework:', error.message); return null; }
@@ -219,6 +235,43 @@ export async function saveVerseRecording(
   return fromRow(data as Row);
 }
 
+/**
+ * Hifz homework: ONE recording for the whole range, stored under WHOLE_TAKE.
+ * Same contract as saveVerseRecording — the new file replaces the old one.
+ */
+export async function saveWholeRecording(id: string, blob: Blob, ms: number): Promise<RecitationHomework | null> {
+  blob = await trimToWebmHeader(blob);
+  const type = (blob.type || 'audio/webm').split(';')[0];
+  const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+  const path = `${id}/${WHOLE_TAKE}-${Date.now()}.${ext}`;
+  const { error: upErr } = await supabase.storage.from(RECITATION_BUCKET).upload(path, blob, {
+    contentType: type, cacheControl: '31536000', upsert: false,
+  });
+  if (upErr) { console.error('saveWholeRecording upload:', upErr.message); return null; }
+  const url = supabase.storage.from(RECITATION_BUCKET).getPublicUrl(path).data.publicUrl;
+
+  const current = await getRecitationHomework(id);
+  if (!current) return null;
+  const previous = current.recordings[WHOLE_TAKE];
+  const recordings = { ...current.recordings, [WHOLE_TAKE]: { path, url, ms, at: new Date().toISOString() } };
+  const { data, error } = await supabase.from('quran_recitation_homework')
+    .update({ recordings }).eq('id', id).select('*').single();
+  if (error) {
+    console.error('saveWholeRecording row:', error.message);
+    await supabase.storage.from(RECITATION_BUCKET).remove([path]);
+    return null;
+  }
+  if (previous?.path) await supabase.storage.from(RECITATION_BUCKET).remove([previous.path]);
+  return fromRow(data as Row);
+}
+
+/** Everything recorded? Hifz needs its one take, reading needs every verse. */
+export function isFullyRecorded(rec: RecitationHomework): boolean {
+  if (rec.kind === 'hifz') return !!rec.recordings[WHOLE_TAKE];
+  const list = versesOf(rec);
+  return list.length > 0 && list.every(([s, a]) => !!rec.recordings[`${s}:${a}`]);
+}
+
 // ── Submit & review ─────────────────────────────────────────────────────────
 
 export async function submitRecitationHomework(rec: RecitationHomework): Promise<RecitationHomework | null> {
@@ -303,7 +356,7 @@ export async function reassignRecitationVerses(input: {
     studentName: rec.studentName ?? '', reportId: rec.reportId ?? null,
     startSurah: first[0], startAyah: first[1], endSurah: last[0], endAyah: last[1],
     note: input.note ?? 'Record these verses again — your teacher marked mistakes in them.',
-    verses: wrongVerses, parentId: rec.id,
+    kind: rec.kind, verses: wrongVerses, parentId: rec.id,
     mistakes: input.mistakes ? mistakesForVerses(input.mistakes, wrongVerses) : undefined,
   });
   if (!child) return null;

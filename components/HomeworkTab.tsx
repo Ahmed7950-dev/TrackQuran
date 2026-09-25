@@ -49,7 +49,8 @@ const triesOf = (rec: RecitationHomework | undefined, all: Record<string, Recita
   const out: Try[] = [];
   chain.forEach((r, i) => {
     const total = versesOf(r).length;
-    const done = Object.keys(r.recordings).length;
+    const hifz = r.kind === 'hifz';
+    const done = hifz ? (Object.keys(r.recordings).length ? total : 0) : Object.keys(r.recordings).length;
     const last = i === chain.length - 1;
     if (!last) {
       const wrong = r.reassignedCount ?? 0;
@@ -58,8 +59,9 @@ const triesOf = (rec: RecitationHomework | undefined, all: Record<string, Recita
     } else {
       out.push({
         n: out.length + 1,
-        text: r.status === 'submitted' ? `${done} of ${total} sent`
+        text: r.status === 'submitted' ? (hifz ? `${total} verse${total === 1 ? '' : 's'} sent` : `${done} of ${total} sent`)
           : r.status === 'passed' ? 'passed'
+          : hifz ? (done ? 'recorded' : `${total} verse${total === 1 ? '' : 's'} to recite`)
           : `${done} of ${total} recorded`,
         current: true,
       });

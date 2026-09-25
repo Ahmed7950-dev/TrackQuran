@@ -13,7 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { QURAN_METADATA, isLetterMistakeKey } from '../constants';
 import { Mistake } from '../types';
 import {
-  RecitationHomework, rangeLabel, reassignRecitationVerses, recitationUrl,
+  RecitationHomework, rangeLabel, reassignRecitationVerses, recitationUrl, WHOLE_TAKE,
   reviewRecitationHomework, versesOf,
 } from '../services/recitationHomeworkService';
 
@@ -114,7 +114,7 @@ const RecitationReviewPanel: React.FC<{
     if (!keepChain) setChain(false);
     setLoadedKey(key);
     loadedRef.current = key;
-    onJumpToVerse(key);
+    if (key !== WHOLE_TAKE) onJumpToVerse(key);
     a.src = r.url;
     a.onended = () => {
       setPlaying(null);
@@ -144,7 +144,9 @@ const RecitationReviewPanel: React.FC<{
   };
 
   const playAll = () => {
-    if (chain) { audioRef.current?.pause(); setChain(false); setPlaying(null); return; }
+    if (chain || playing === WHOLE_TAKE) { audioRef.current?.pause(); setChain(false); setPlaying(null); return; }
+    // A hifz homework is one recording of the whole range — nothing to chain.
+    if (rec.kind === 'hifz') { play(WHOLE_TAKE); return; }
     const first = verses.find(([s, v]) => rec.recordings[`${s}:${v}`]);
     if (!first) return;
     setChain(true);
@@ -180,7 +182,10 @@ const RecitationReviewPanel: React.FC<{
     if (!ok) setErr('Could not reassign — check your connection and try again.');
   };
 
-  const recorded = verses.filter(([s, v]) => rec.recordings[`${s}:${v}`]).length;
+  const isHifz = rec.kind === 'hifz';
+  const recorded = isHifz
+    ? (rec.recordings[WHOLE_TAKE] ? verses.length : 0)
+    : verses.filter(([s, v]) => rec.recordings[`${s}:${v}`]).length;
   const pct = verses.length ? recorded / verses.length : 0;
   const multiSurah = rec.startSurah !== rec.endSurah;
   const nowPlaying = playing ? rec.recordings[playing] : null;
@@ -311,7 +316,11 @@ const RecitationReviewPanel: React.FC<{
           <span className="hidden sm:block w-28 h-[7px] rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
             <span className="block h-full rounded-full bg-teal-700 dark:bg-teal-500 transition-all" style={{ width: `${pct * 100}%` }} />
           </span>
-          <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">{recorded} of {verses.length} recorded</span>
+          <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">
+            {isHifz
+              ? (recorded ? `Hifz · one recording of ${verses.length} verse${verses.length === 1 ? '' : 's'}` : 'Hifz · not recorded yet')
+              : `${recorded} of ${verses.length} recorded`}
+          </span>
         </span>
         <span className="flex-grow" />
         <span className="hidden lg:inline text-[13px] text-slate-400 dark:text-slate-500">
@@ -327,14 +336,17 @@ const RecitationReviewPanel: React.FC<{
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 px-3 sm:px-6 pb-3">
         {recorded === 0 ? (
           <div className="flex-grow flex items-center gap-3 min-h-[3rem] sm:h-[52px] px-4 py-2 rounded-xl border border-dashed border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40 text-[13px] sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {rec.studentName ?? 'The student'} hasn't recorded any verse yet — the recordings appear here as they arrive.
+            {rec.studentName ?? 'The student'} hasn't recorded {isHifz ? 'this range' : 'any verse'} yet — the recording{isHifz ? '' : 's'} appear{isHifz ? 's' : ''} here as {isHifz ? 'it arrives' : 'they arrive'}.
           </div>
         ) : (
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-grow">
             <button onClick={playAll}
               className={`flex items-center gap-2 h-12 sm:h-[52px] px-3 sm:px-4 rounded-xl border text-[13px] sm:text-sm font-black flex-shrink-0 transition-colors ${
-                chain ? 'bg-teal-700 border-teal-700 text-white' : 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100'}`}>
-              {chain ? icon.pause : icon.play}<span className="hidden sm:inline">{chain ? 'Stop' : 'Play all'}</span>
+                chain || playing === WHOLE_TAKE ? 'bg-teal-700 border-teal-700 text-white' : 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100'}`}>
+              {chain || playing === WHOLE_TAKE ? icon.pause : icon.play}
+              <span className="hidden sm:inline">
+                {chain || playing === WHOLE_TAKE ? 'Stop' : isHifz ? 'Play the recitation' : 'Play all'}
+              </span>
             </button>
             {seekButtons()}
 
@@ -349,28 +361,28 @@ const RecitationReviewPanel: React.FC<{
                 return (
                   <React.Fragment key={key}>
                     {newSurah && <span className="w-px h-8 bg-slate-200 dark:bg-gray-600 flex-shrink-0" />}
-                    <button onClick={() => (r ? play(key) : onJumpToVerse(key))}
-                      aria-label={`${name} verse ${v}${r ? `, recording ${Math.round(r.ms / 1000)} seconds` : ', not recorded'}${wrong ? `, ${wrong} mistake${wrong === 1 ? '' : 's'} logged` : ''}`}
+                    <button onClick={() => (r && !isHifz ? play(key) : onJumpToVerse(key))}
+                      aria-label={`${name} verse ${v}${isHifz ? '' : r ? `, recording ${Math.round(r.ms / 1000)} seconds` : ', not recorded'}${wrong ? `, ${wrong} mistake${wrong === 1 ? '' : 's'} logged` : ''}`}
                       aria-current={isPlaying ? 'true' : undefined}
                       className={`relative flex items-center gap-2 h-12 sm:h-[52px] px-2.5 sm:px-3.5 rounded-xl flex-shrink-0 transition-colors ${
                         isPlaying ? (wrong ? 'bg-red-600 border-2 border-red-600 text-white shadow-lg shadow-red-600/25' : 'bg-teal-700 border-2 border-teal-700 text-white shadow-lg shadow-teal-700/25')
                         : wrong ? 'border-2 border-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100'
-                        : r ? 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-400'
+                        : r || isHifz ? 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-400'
                         : 'border border-dashed border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-700/40'}`}>
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
                         isPlaying ? 'bg-white/25 text-white'
                         : wrong ? 'bg-red-600 text-white'
-                        : r ? 'bg-slate-100 dark:bg-gray-600 text-slate-800 dark:text-slate-100'
+                        : r || isHifz ? 'bg-slate-100 dark:bg-gray-600 text-slate-800 dark:text-slate-100'
                         : 'bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 text-slate-400'}`}>{v}</span>
                       <span className="flex flex-col items-start leading-tight">
                         {multiSurah && (
                           <span className={`text-[12px] font-bold ${isPlaying ? 'text-white' : wrong ? 'text-red-700 dark:text-red-300' : r ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>{name}</span>
                         )}
                         <span className={`text-[11px] sm:text-xs font-semibold ${isPlaying ? 'text-white/80' : wrong ? 'text-red-600 dark:text-red-300' : r ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400'}`}>
-                          {wrong ? `${wrong} mistake${wrong === 1 ? '' : 's'}` : r ? (isPlaying ? `${fmtClock(pos * 1000)} / ${fmtClock(r.ms)}` : fmtClock(r.ms)) : rec.purgedAt ? 'cleared' : 'not recorded'}
+                          {wrong ? `${wrong} mistake${wrong === 1 ? '' : 's'}` : isHifz ? 'go to verse' : r ? (isPlaying ? `${fmtClock(pos * 1000)} / ${fmtClock(r.ms)}` : fmtClock(r.ms)) : rec.purgedAt ? 'cleared' : 'not recorded'}
                         </span>
                       </span>
-                      {isPlaying ? bars : r ? <span className="text-teal-700 dark:text-teal-300">{icon.play}</span> : null}
+                      {isPlaying ? bars : r && !isHifz ? <span className="text-teal-700 dark:text-teal-300">{icon.play}</span> : null}
                     </button>
                   </React.Fragment>
                 );
