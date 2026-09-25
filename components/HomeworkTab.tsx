@@ -12,6 +12,7 @@
 // line — the corrected reading, with none of the wrong ones kept.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useMemo, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
@@ -77,6 +78,8 @@ interface Block {
   attempts: Attempt[];
   /** No recording homework: one plain row, nothing to line up. */
   plain: boolean;
+  /** How it is recorded: reading verse by verse, or hifz in one take. */
+  kind: 'reading' | 'hifz' | null;
   done: boolean;
   lastDate: string;
 }
@@ -102,7 +105,9 @@ const HomeworkTab: React.FC<{
 }) => {
   const isTutor = side === 'tutor';
   const [showFinished, setShowFinished] = useState(false);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  /** The open ⋯ menu and where to draw it — in the page, so a short block
+   *  cannot clip it (the card rounds its corners with overflow-hidden). */
+  const [menu, setMenu] = useState<{ key: string; top: number; right: number } | null>(null);
 
   /** Homework grouped by the chain its recording belongs to, oldest try first. */
   const blocks = useMemo<Block[]>(() => {
@@ -156,6 +161,7 @@ const HomeworkTab: React.FC<{
         columns: attempts[0].verses,
         attempts,
         plain: false,
+        kind: attempts[0].rec.kind === 'hifz' ? 'hifz' : 'reading',
         done: last.rec.status === 'passed' || last.hw.isDone,
         lastDate: last.rec.createdAt,
       });
@@ -164,7 +170,7 @@ const HomeworkTab: React.FC<{
     for (const hw of plain) {
       out.push({
         key: hw.id, hw, title: homeworkRange(hw), arabic: surahArabic(hw.startSurah),
-        columns: [], attempts: [], plain: true, done: !!hw.isDone, lastDate: hw.assignedAt,
+        columns: [], attempts: [], plain: true, kind: null, done: !!hw.isDone, lastDate: hw.assignedAt,
       });
     }
 
@@ -266,6 +272,14 @@ const HomeworkTab: React.FC<{
         <h2 className="min-w-0 truncate text-xl sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 700 }}>
           {b.title}
         </h2>
+        {b.kind && (
+          <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+            b.kind === 'hifz'
+              ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+              : 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'}`}>
+            {b.kind === 'hifz' ? 'Hifz' : 'Reading'}
+          </span>
+        )}
         <span dir="rtl" className="hidden sm:inline font-quranic text-lg text-slate-500 dark:text-slate-400">{b.arabic}</span>
         <span className="flex-grow" />
         <button onClick={() => onOpenVerses(b.hw)}
@@ -273,29 +287,15 @@ const HomeworkTab: React.FC<{
           Open verses
         </button>
         {isTutor && (
-          <span className="relative flex-shrink-0">
-            <button onClick={() => setMenuFor(m => (m === b.key ? null : b.key))}
-              aria-label="More" className="w-8 h-8 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 text-lg leading-none">⋯</button>
-            {menuFor === b.key && (
-              <>
-                <span className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
-                <span className="absolute end-0 top-full mt-1 z-20 w-48 py-1 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl flex flex-col">
-                  {b.attempts.length > 0 && onCopyLink && (
-                    <button onClick={() => { onCopyLink(b.attempts[b.attempts.length - 1].rec); setMenuFor(null); }}
-                      className="px-4 py-2 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Copy the link</button>
-                  )}
-                  {onMarkDone && (
-                    <button onClick={() => { onMarkDone(b.hw); setMenuFor(null); }}
-                      className="px-4 py-2 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Mark done</button>
-                  )}
-                  {onRemove && (
-                    <button onClick={() => { onRemove(b.hw); setMenuFor(null); }}
-                      className="px-4 py-2 text-start text-[13px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">Remove</button>
-                  )}
-                </span>
-              </>
-            )}
-          </span>
+          <button
+            onClick={e => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setMenu(m => (m?.key === b.key ? null : {
+                key: b.key, top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right),
+              }));
+            }}
+            aria-label="More" aria-haspopup="menu" aria-expanded={menu?.key === b.key}
+            className="flex-shrink-0 w-8 h-8 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 text-lg leading-none">⋯</button>
         )}
       </div>
 
@@ -321,8 +321,31 @@ const HomeworkTab: React.FC<{
     </section>
   );
 
+  const openMenuBlock = menu ? blocks.find(b => b.key === menu.key) : null;
+
   return (
     <div className="max-w-3xl mx-auto px-1 sm:px-0 py-2 flex flex-col gap-4">
+      {openMenuBlock && ReactDOM.createPortal(
+        <>
+          <div className="fixed inset-0 z-[300]" onClick={() => setMenu(null)} />
+          <div role="menu" className="fixed z-[301] w-48 py-1 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl flex flex-col"
+            style={{ top: menu!.top, right: menu!.right }}>
+            {openMenuBlock.attempts.length > 0 && onCopyLink && (
+              <button role="menuitem" onClick={() => { onCopyLink(openMenuBlock.attempts[openMenuBlock.attempts.length - 1].rec); setMenu(null); }}
+                className="px-4 py-2.5 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Copy the link</button>
+            )}
+            {onMarkDone && !openMenuBlock.done && (
+              <button role="menuitem" onClick={() => { onMarkDone(openMenuBlock.hw); setMenu(null); }}
+                className="px-4 py-2.5 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Mark done</button>
+            )}
+            {onRemove && (
+              <button role="menuitem" onClick={() => { onRemove(openMenuBlock.hw); setMenu(null); }}
+                className="px-4 py-2.5 text-start text-[13px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">Remove</button>
+            )}
+          </div>
+        </>,
+        document.body,
+      )}
       <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-gray-700">
         <h1 className="text-2xl sm:text-3xl text-slate-900 dark:text-slate-100" style={{ fontFamily: SERIF, fontWeight: 600 }}>
           {isTutor ? 'Homework' : 'My homework'}
