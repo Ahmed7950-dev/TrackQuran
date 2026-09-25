@@ -214,13 +214,33 @@ const HomeworkTab: React.FC<{
     <span className={`inline-flex items-center h-8 px-3 rounded-full text-[13px] font-bold ${cls}`}>{text}</span>
   );
 
-  /** A try whose recording is still there can be played back at any time —
-   *  including the one that passed, which is the corrected reading. */
-  const canListen = (a: Attempt) =>
-    isTutor && !!onListen && !a.rec.purgedAt && Object.keys(a.rec.recordings).length > 0;
+  /**
+   * The homework as it now stands: every verse that was ever set, each with
+   * the NEWEST recording of it — a verse re-recorded after being sent back
+   * plays the corrected take, not the one it replaced. So one Listen plays the
+   * whole homework read correctly, however many tries it took.
+   */
+  const wholeOf = (b: Block): RecitationHomework => {
+    const first = b.attempts[0].rec;
+    const last = b.attempts[b.attempts.length - 1].rec;
+    const recordings: RecitationHomework['recordings'] = {};
+    for (const a of b.attempts) Object.assign(recordings, a.rec.recordings);
+    return {
+      ...last,
+      startSurah: first.startSurah, startAyah: first.startAyah,
+      endSurah: first.endSurah, endAyah: first.endAyah,
+      verses: first.verses,
+      recordings,
+    };
+  };
 
-  const listenGhost = (a: Attempt) => (
-    <button onClick={() => onListen!(a.rec)} title="Listen to this recording"
+  /** Only the last row offers it, and it plays the whole homework. */
+  const canListen = (b: Block, a: Attempt) =>
+    isTutor && !!onListen && a === b.attempts[b.attempts.length - 1]
+    && b.attempts.some(x => !x.rec.purgedAt && Object.keys(x.rec.recordings).length > 0);
+
+  const listenGhost = (b: Block) => (
+    <button onClick={() => onListen!(wholeOf(b))} title="Listen to the whole homework, as it now stands"
       className="flex-shrink-0 h-8 px-3 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 inline-flex items-center gap-1.5">
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
       Listen
@@ -228,7 +248,7 @@ const HomeworkTab: React.FC<{
   );
 
   /** The last column of a row: what there is to do, or how it went. */
-  const action = (a: Attempt) => {
+  const action = (b: Block, a: Attempt) => {
     if (a.state === 'reviewed') {
       return (
         <span className="inline-flex items-center gap-2">
@@ -238,7 +258,7 @@ const HomeworkTab: React.FC<{
             </span>
             <span className="text-[11px] text-slate-400 dark:text-slate-500">read correctly</span>
           </span>
-          {canListen(a) && listenGhost(a)}
+          {canListen(b, a) && listenGhost(b)}
         </span>
       );
     }
@@ -246,13 +266,13 @@ const HomeworkTab: React.FC<{
       return (
         <span className="inline-flex items-center gap-2">
           {pill('Passed', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200')}
-          {canListen(a) && listenGhost(a)}
+          {canListen(b, a) && listenGhost(b)}
         </span>
       );
     }
     if (a.state === 'submitted') {
       return isTutor && onListen
-        ? <button onClick={() => onListen(a.rec)}
+        ? <button onClick={() => onListen(wholeOf(b))}
             className="h-9 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-[13px] font-bold">Listen</button>
         : pill('Sent', 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300');
     }
@@ -315,7 +335,7 @@ const HomeworkTab: React.FC<{
           </span>
           <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">{shortDate(a.rec.createdAt)}</span>
           <span className="col-span-full sm:col-span-1 sm:order-none order-last">{segments(b, a)}</span>
-          <span className="justify-self-end">{action(a)}</span>
+          <span className="justify-self-end">{action(b, a)}</span>
         </div>
       ))}
     </section>
