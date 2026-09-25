@@ -33,14 +33,24 @@ const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 /** A segment: one verse of the first try, as this try left it. */
-type CellState = 'pass' | 'fail' | 'open' | 'gone';
+type CellState = 'pass' | 'fail' | 'open' | 'done' | 'gone';
 
 const CELL: Record<CellState, string> = {
   pass: 'bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-200',
   fail: 'bg-rose-100 border-rose-400 text-rose-800 dark:bg-rose-900/40 dark:border-rose-700 dark:text-rose-200',
   open: 'bg-white border-slate-300 text-slate-600 dark:bg-gray-900/40 dark:border-gray-600 dark:text-slate-300',
+  done: 'bg-emerald-50 border-emerald-300 text-emerald-600 dark:bg-emerald-900/25 dark:border-emerald-800 dark:text-emerald-400',
   gone: 'border-dashed border-slate-200 text-transparent dark:border-gray-700',
 };
+
+/** Every segment is this size — small enough that a long surah still fits. */
+const SEG = 'min-w-[1.6rem] h-6 px-1 rounded-md border text-[11px] font-bold flex items-center justify-center';
+
+const Tick: React.FC = () => (
+  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m5 13 4 4L19 7" />
+  </svg>
+);
 
 interface Attempt {
   rec: RecitationHomework;
@@ -51,6 +61,8 @@ interface Attempt {
   /** Verses this try got right / was sent back for. Empty while undecided. */
   passed: Set<string>;
   failed: Set<string>;
+  /** Verses already read correctly in an earlier try — ticked, in their place. */
+  before: Set<string>;
   state: 'with-student' | 'submitted' | 'reviewed' | 'passed';
 }
 
@@ -119,6 +131,7 @@ const HomeworkTab: React.FC<{
       const tries = list
         .map(hw => ({ hw, rec: recitations[hw.recitationId!]! }))
         .sort((a, b) => a.rec.createdAt.localeCompare(b.rec.createdAt));
+      const settled = new Set<string>();
       const attempts: Attempt[] = tries.map(({ hw, rec }, i) => {
         const verses = versesOf(rec).map(([s, a]) => `${s}:${a}`);
         const next = tries[i + 1]?.rec;
@@ -130,7 +143,9 @@ const HomeworkTab: React.FC<{
           : rec.status === 'passed' ? 'passed'
           : rec.status === 'submitted' ? 'submitted'
           : 'with-student';
-        return { rec, hw, n: i + 1, verses, passed, failed, state };
+        const before = new Set(settled);
+        passed.forEach(v => settled.add(v));
+        return { rec, hw, n: i + 1, verses, passed, failed, state, before };
       });
       const last = attempts[attempts.length - 1];
       out.push({
@@ -163,22 +178,22 @@ const HomeworkTab: React.FC<{
 
   /** The segments of one row, lined up against the first try's verses. */
   const segments = (block: Block, a: Attempt) => (
-    <span className="flex flex-wrap gap-1.5">
+    <span className="flex flex-wrap gap-1">
       {block.columns.map(v => {
-        const state: CellState = !a.verses.includes(v) ? 'gone'
-          : a.passed.has(v) ? 'pass'
-          : a.failed.has(v) ? 'fail'
-          : 'open';
+        const state: CellState = a.verses.includes(v)
+          ? (a.passed.has(v) ? 'pass' : a.failed.has(v) ? 'fail' : 'open')
+          : a.before.has(v) ? 'done' : 'gone';
         return (
           <span key={v} aria-hidden={state === 'gone'}
-            className={`min-w-[2.25rem] h-8 px-2 rounded-[10px] border text-[13px] font-bold flex items-center justify-center ${CELL[state]}`}>
-            {state === 'gone' ? '' : verseNumber(v)}
+            title={state === 'done' ? `Verse ${verseNumber(v)} — already read correctly` : undefined}
+            className={`${SEG} ${CELL[state]}`}>
+            {state === 'done' ? <Tick /> : state === 'gone' ? '' : verseNumber(v)}
           </span>
         );
       })}
       {/* A later try can hold a verse the first one never had (a wider reassign). */}
       {a.verses.filter(v => !block.columns.includes(v)).map(v => (
-        <span key={v} className={`min-w-[2.25rem] h-8 px-2 rounded-[10px] border text-[13px] font-bold flex items-center justify-center ${CELL[a.passed.has(v) ? 'pass' : a.failed.has(v) ? 'fail' : 'open']}`}>
+        <span key={v} className={`${SEG} ${CELL[a.passed.has(v) ? 'pass' : a.failed.has(v) ? 'fail' : 'open']}`}>
           {verseNumber(v)}
         </span>
       ))}
@@ -318,40 +333,14 @@ const HomeworkTab: React.FC<{
         )}
       </div>
 
-      {/* Finished: the corrected reading only — the tries it took are gone. */}
+      {/* Finished: the whole block as it played out — every try, and the
+          verses that were sent back. */}
       {showFinished && doneBlocks.length > 0 && (
-        <div className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 divide-y divide-slate-100 dark:divide-gray-700 overflow-hidden">
-          {doneBlocks.map(b => {
-            const last = b.attempts[b.attempts.length - 1];
-            return (
-              <div key={b.key} className="px-4 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
-                <span className="w-7 h-7 rounded-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
-                </span>
-                <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">{shortDate(b.lastDate)}</span>
-                <span className="text-[15px] text-slate-700 dark:text-slate-200" style={{ fontFamily: SERIF, fontWeight: 600 }}>{b.title}</span>
-                {b.columns.length > 0 && (
-                  <span className="flex flex-wrap gap-1.5">
-                    {b.columns.map(v => (
-                      <span key={v} className={`min-w-[2rem] h-7 px-1.5 rounded-lg border text-[12px] font-bold flex items-center justify-center ${CELL.pass}`}>
-                        {verseNumber(v)}
-                      </span>
-                    ))}
-                  </span>
-                )}
-                <span className="flex-grow" />
-                <span className="text-[13px] font-bold text-emerald-700 dark:text-emerald-400">Read correctly</span>
-                {isTutor && last && Object.keys(last.rec.recordings).length > 0 && !last.rec.purgedAt && onListen && (
-                  <button onClick={() => onListen(last.rec)}
-                    className="h-8 px-3 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">
-                    Listen
-                  </button>
-                )}
-              </div>
-            );
-          })}
+        <div className="flex flex-col gap-4">
+          {doneBlocks.map(blockCard)}
         </div>
       )}
+
     </div>
   );
 };
