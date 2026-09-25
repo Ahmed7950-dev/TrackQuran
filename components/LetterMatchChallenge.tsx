@@ -27,7 +27,30 @@ import {
   listLetterMatchesForStudent, attemptResult,
 } from '../services/letterMatchService';
 
-export const GROUP_SIZE = 10;
+export const GROUP_SIZE = 6;
+
+/**
+ * Twelve colours, one per tile on the board — the outer ring takes the warm
+ * six, the inner ring the cool six, so no two tiles of a round ever look
+ * alike and a colour never pairs a letter with its shape. Decoration, not a
+ * hint: the answer is in the letter.
+ */
+const TILE_COLOURS = [
+  { face: '#FFE4E6', edge: '#FB7185', ink: '#9F1239' },   // rose
+  { face: '#FFEDD5', edge: '#FB923C', ink: '#9A3412' },   // orange
+  { face: '#FEF3C7', edge: '#FBBF24', ink: '#92400E' },   // amber
+  { face: '#ECFCCB', edge: '#A3E635', ink: '#3F6212' },   // lime
+  { face: '#DCFCE7', edge: '#4ADE80', ink: '#166534' },   // green
+  { face: '#CCFBF1', edge: '#2DD4BF', ink: '#115E59' },   // teal
+  { face: '#CFFAFE', edge: '#22D3EE', ink: '#155E75' },   // cyan
+  { face: '#DBEAFE', edge: '#60A5FA', ink: '#1E40AF' },   // blue
+  { face: '#E0E7FF', edge: '#818CF8', ink: '#3730A3' },   // indigo
+  { face: '#EDE9FE', edge: '#A78BFA', ink: '#5B21B6' },   // violet
+  { face: '#FAE8FF', edge: '#E879F9', ink: '#86198F' },   // fuchsia
+  { face: '#EFEBE9', edge: '#A1887F', ink: '#4E342E' },   // brown
+];
+/** The outer ring holds the first six; the inner ring starts after them. */
+const RING_OFFSET = 6;
 const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
 export const FORM_LABEL: Record<MatchForm, { en: string; ar: string }> = {
   initial: { en: 'Beginning', ar: 'أَوَّل' },
@@ -99,20 +122,23 @@ const Board: React.FC<{
   const interactive = !!onPick && snap.ph === 'playing';
 
   // Lines between matched pairs — drawn imperatively from measured tiles.
+  // Both rings are circles now, so a line runs centre to centre.
   useLayoutEffect(() => {
     const box = boxRef.current, svg = svgRef.current;
     if (!box || !svg) return;
     const draw = () => {
       const b = box.getBoundingClientRect();
       svg.setAttribute('viewBox', `0 0 ${b.width} ${b.height}`);
+      const centre = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        return [r.left + r.width / 2 - b.left, r.top + r.height / 2 - b.top] as const;
+      };
       const lines = snap.matched.map(l => {
         const a = box.querySelector<HTMLElement>(`[data-side="iso"][data-letter="${l}"]`);
         const c = box.querySelector<HTMLElement>(`[data-side="shp"][data-letter="${l}"]`);
         if (!a || !c) return '';
-        const ra = a.getBoundingClientRect(), rc = c.getBoundingClientRect();
-        // isolated column sits on the RIGHT (RTL), shapes on the left
-        const x1 = ra.left - b.left, y1 = ra.top + ra.height / 2 - b.top;
-        const x2 = rc.right - b.left, y2 = rc.top + rc.height / 2 - b.top;
+        const [x1, y1] = centre(a);
+        const [x2, y2] = centre(c);
         return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#10b981" stroke-width="4" stroke-linecap="round" />`
           + `<circle cx="${x1}" cy="${y1}" r="5" fill="#10b981"/><circle cx="${x2}" cy="${y2}" r="5" fill="#10b981"/>`;
       });
@@ -124,7 +150,7 @@ const Board: React.FC<{
     return () => ro.disconnect();
   }, [snap.matched, snap.iso, snap.shp, snap.gi]);
 
-  // Drag support: press on one tile, release over a tile of the OTHER column.
+  // Drag support: press on one tile, release over a tile of the OTHER ring.
   // A plain tap presses and releases on the same tile, which the press already
   // handled — so only a release on a different tile counts.
   const downRef = useRef<{ side: 'iso' | 'shp'; letter: string } | null>(null);
@@ -138,10 +164,27 @@ const Board: React.FC<{
     if (side !== down.side) onPick!(side, el.dataset.letter!);
   };
 
-  const tile = (side: 'iso' | 'shp', letter: string) => {
+  /** Where a tile sits: evenly round its ring, the first one at the top. */
+  const seat = (i: number, count: number, radius: number, turn: number) => {
+    const angle = (i / Math.max(1, count)) * 2 * Math.PI - Math.PI / 2 + turn;
+    return {
+      left: `${50 + radius * Math.cos(angle)}%`,
+      top: `${50 + radius * Math.sin(angle)}%`,
+    };
+  };
+
+  const tile = (side: 'iso' | 'shp', letter: string, i: number, count: number) => {
     const done = snap.matched.includes(letter);
     const selected = snap.sel?.side === side && snap.sel.letter === letter;
     const wrong = !!snap.wrong && (side === 'iso' ? snap.wrong.iso === letter : snap.wrong.shp === letter);
+    const outer = side === 'shp';
+    const c = TILE_COLOURS[(outer ? i : i + RING_OFFSET) % TILE_COLOURS.length];
+    const pos = seat(i, count, outer ? 39 : 16, outer ? 0 : Math.PI / count);
+    const paint = done
+      ? { background: '#D1FAE5', borderColor: '#34D399', color: '#065F46' }
+      : wrong
+        ? { background: '#FEE2E2', borderColor: '#EF4444', color: '#B91C1C' }
+        : { background: c.face, borderColor: c.edge, color: c.ink };
     return (
       <button
         key={`${side}-${letter}-${wrong ? snap.wrong!.n : 0}`}
@@ -152,14 +195,13 @@ const Board: React.FC<{
           downRef.current = { side, letter };
           onPick!(side, letter);
         }}
-        className={`relative w-full h-12 sm:h-14 rounded-2xl border-2 flex items-center justify-center select-none touch-none transition-colors duration-150 ${
-          done ? 'bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/40 dark:border-emerald-600 dark:text-emerald-200'
-          : wrong ? 'bg-red-100 border-red-500 text-red-700 dark:bg-red-900/40 dark:text-red-200 lm-shake'
-          : selected ? 'bg-sky-100 border-sky-500 text-sky-800 ring-4 ring-sky-300/60 dark:bg-sky-900/40 dark:text-sky-100'
-          : 'bg-white border-slate-200 text-slate-800 dark:bg-gray-800 dark:border-gray-600 dark:text-slate-100'
-        } ${interactive && !done ? 'cursor-pointer hover:border-sky-400 active:scale-95' : ''}`}
+        style={{ ...pos, ...paint, width: outer ? '3.4rem' : '2.9rem', height: outer ? '3.4rem' : '2.9rem' }}
+        className={`absolute -translate-x-1/2 -translate-y-1/2 z-20 rounded-full border-[3px] flex items-center justify-center
+          select-none touch-none transition-transform duration-150 shadow-sm ${wrong ? 'lm-shake' : ''} ${
+          selected ? 'ring-4 ring-sky-400/70 scale-105' : ''} ${
+          interactive && !done ? 'cursor-pointer active:scale-95' : ''}`}
       >
-        <span dir="rtl" style={{ fontFamily: LETTER_FONT, fontSize: 'clamp(1.8rem, 7vw, 2.6rem)', lineHeight: 1 }}>
+        <span dir="rtl" style={{ fontFamily: LETTER_FONT, fontSize: outer ? '1.65rem' : '1.4rem', lineHeight: 1 }}>
           {side === 'iso' ? shapeOf(letter, 'isolated') : shapeOf(letter, snap.form)}
         </span>
       </button>
@@ -167,18 +209,19 @@ const Board: React.FC<{
   };
 
   return (
-    <div ref={boxRef} className="relative grid grid-cols-[1fr_minmax(2.5rem,1fr)_1fr] gap-x-1 w-full max-w-md mx-auto" onPointerUp={onPointerUp}>
-      <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-10" />
-      {/* Left: the chosen shape */}
-      <div className="flex flex-col gap-1.5 sm:gap-2">
-        <p className="text-center text-[11px] font-black uppercase tracking-wide text-slate-400">{FORM_LABEL[snap.form].en}</p>
-        {snap.shp.map(l => tile('shp', l))}
-      </div>
-      <div />
-      {/* Right: isolated */}
-      <div className="flex flex-col gap-1.5 sm:gap-2">
-        <p className="text-center text-[11px] font-black uppercase tracking-wide text-slate-400">Isolated</p>
-        {snap.iso.map(l => tile('iso', l))}
+    <div className="w-full max-w-[22rem] mx-auto">
+      <p className="text-center text-[11px] font-black uppercase tracking-wide text-slate-400 mb-1">
+        {FORM_LABEL[snap.form].en} outside · Isolated inside
+      </p>
+      <div ref={boxRef} className="relative w-full aspect-square" onPointerUp={onPointerUp}>
+        <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-10" />
+        {/* the two rings the tiles sit on */}
+        <span aria-hidden="true" className="absolute rounded-full border border-dashed border-slate-200 dark:border-gray-700"
+          style={{ left: '50%', top: '50%', width: '78%', height: '78%', transform: 'translate(-50%, -50%)' }} />
+        <span aria-hidden="true" className="absolute rounded-full border border-dashed border-slate-200 dark:border-gray-700"
+          style={{ left: '50%', top: '50%', width: '32%', height: '32%', transform: 'translate(-50%, -50%)' }} />
+        {snap.shp.map((l, i) => tile('shp', l, i, snap.shp.length))}
+        {snap.iso.map((l, i) => tile('iso', l, i, snap.iso.length))}
       </div>
     </div>
   );
