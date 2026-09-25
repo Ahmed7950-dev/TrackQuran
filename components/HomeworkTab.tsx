@@ -208,19 +208,42 @@ const HomeworkTab: React.FC<{
     <span className={`inline-flex items-center h-8 px-3 rounded-full text-[13px] font-bold ${cls}`}>{text}</span>
   );
 
+  /** A try whose recording is still there can be played back at any time —
+   *  including the one that passed, which is the corrected reading. */
+  const canListen = (a: Attempt) =>
+    isTutor && !!onListen && !a.rec.purgedAt && Object.keys(a.rec.recordings).length > 0;
+
+  const listenGhost = (a: Attempt) => (
+    <button onClick={() => onListen!(a.rec)} title="Listen to this recording"
+      className="flex-shrink-0 h-8 px-3 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 inline-flex items-center gap-1.5">
+      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
+      Listen
+    </button>
+  );
+
   /** The last column of a row: what there is to do, or how it went. */
   const action = (a: Attempt) => {
     if (a.state === 'reviewed') {
       return (
-        <span className="inline-flex items-baseline gap-1.5">
-          <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
-            {a.passed.size}/{a.verses.length}
+        <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-baseline gap-1.5">
+            <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
+              {a.passed.size}/{a.verses.length}
+            </span>
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">read correctly</span>
           </span>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500">read correctly</span>
+          {canListen(a) && listenGhost(a)}
         </span>
       );
     }
-    if (a.state === 'passed') return pill('Passed', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200');
+    if (a.state === 'passed') {
+      return (
+        <span className="inline-flex items-center gap-2">
+          {pill('Passed', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200')}
+          {canListen(a) && listenGhost(a)}
+        </span>
+      );
+    }
     if (a.state === 'submitted') {
       return isTutor && onListen
         ? <button onClick={() => onListen(a.rec)}
