@@ -180,7 +180,11 @@ const HomeworkTab: React.FC<{
   const segments = (block: Block, a: Attempt) => (
     <span className="flex flex-wrap gap-1">
       {block.columns.map(v => {
-        const state: CellState = a.verses.includes(v)
+        // The try that passes closes the whole homework: it stands as the
+        // record that every verse set was read correctly, so it shows them
+        // all by number, not the ones it happened to redo with ticks beside.
+        const state: CellState = a.state === 'passed' ? 'pass'
+          : a.verses.includes(v)
           ? (a.passed.has(v) ? 'pass' : a.failed.has(v) ? 'fail' : 'open')
           : a.before.has(v) ? 'done' : 'gone';
         return (
