@@ -392,13 +392,38 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const BODY = "'Figtree', system-ui, sans-serif";
 
   const shell = (children: React.ReactNode) => (
-    <div className="min-h-[100dvh]" style={{ background: P.page, color: P.ink, fontFamily: BODY }}>{children}</div>
+    <div className="min-h-[100dvh]"
+      style={{
+        background: P.page, color: P.ink, fontFamily: BODY,
+        // Installed on a home screen there is no browser chrome, so without
+        // these the top row sits under the notch and the controls under the
+        // home indicator.
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>{children}</div>
   );
+
+  /** Somewhere to go from a screen that has no homework to go back from. */
+  const leave = () => {
+    let fromHere = false;
+    try { fromHere = !!document.referrer && new URL(document.referrer).origin === window.location.origin; } catch { /* bad referrer */ }
+    if (fromHere && window.history.length > 1) { window.history.back(); return; }
+    window.location.href = '/';
+  };
+
   if (rec === undefined) return shell(<p className="text-center py-24" style={{ color: P.faint }}>Loading your homework…</p>);
   if (!rec) return shell(
-    <div className="text-center py-24 px-4">
+    <div className="text-center py-24 px-4 flex flex-col items-center gap-3">
       <p className="font-bold text-lg" style={{ fontFamily: DISPLAY }}>Homework not found</p>
       <p className="text-sm" style={{ color: P.muted }}>It may have been removed — ask your teacher for a new link.</p>
+      <button onClick={leave}
+        className="mt-2 inline-flex items-center gap-2 h-11 px-5 rounded-full text-[15px] font-bold transition-colors"
+        style={{ background: P.primary, color: P.onPrimary, fontFamily: BODY }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+        Go back
+      </button>
     </div>,
   );
 
@@ -891,8 +916,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       </main>
 
       {/* ── Controls — pinned to the bottom while a long verse scrolls ── */}
-      <footer className="sticky bottom-2 sm:bottom-5 z-30 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
+      <footer className="sticky z-30 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
         style={{
+          bottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
           background: P.card,
           border: `1px solid ${take === 'recording' ? P.recordingSoft : P.cardBorder}`,
           boxShadow: theme === 'night' ? '0 18px 40px -20px rgba(0,0,0,.8)' : '0 18px 40px -22px rgba(120,90,40,.45)',
