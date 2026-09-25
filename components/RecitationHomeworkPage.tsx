@@ -28,7 +28,7 @@ import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
-  RecitationHomework, RECORDER_BITRATE, getRecitationHomework, isFullyRecorded, pickRecorderMime,
+  RecitationHomework, RECORDER_BITRATE, getFollowUpRecitation, getRecitationHomework, isFullyRecorded, pickRecorderMime,
   portalHomeworkUrl, rangeLabel, saveVerseRecording, saveWholeRecording, submitRecitationHomework,
   versesOf, WHOLE_TAKE,
 } from '../services/recitationHomeworkService';
@@ -87,6 +87,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [minePlaying, setMinePlaying] = useState(false);
   /** On a reassigned homework: the one the tutor checked — its takes can be replayed. */
   const [prevRec, setPrevRec] = useState<RecitationHomework | null>(null);
+  /** The homework assigned in place of this one; while it exists, this one is finished. */
+  const [followUp, setFollowUp] = useState<RecitationHomework | null>(null);
   const [prevPlaying, setPrevPlaying] = useState(false);
   // Viewport width — the verse and the comment pills scale with it (see LH).
   const [vw, setVw] = useState(() => window.innerWidth);
@@ -164,6 +166,18 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     return () => { live = false; };
   }, [parentId]);
 
+  // Reassigned away: the tutor sent some of these verses back as a homework of
+  // their own. This page is then a record of what was done, not somewhere to
+  // record again — otherwise the student re-does the wrong homework and the
+  // follow-up is left open behind them.
+  const reassignedFrom = rec?.status === 'needs_revision' ? rec.id : null;
+  useEffect(() => {
+    if (!reassignedFrom) { setFollowUp(null); return; }
+    let live = true;
+    getFollowUpRecitation(reassignedFrom).then(f => { if (live) setFollowUp(f); });
+    return () => { live = false; };
+  }, [reassignedFrom]);
+
   // The tutor opening this page from their own app is signed in; a student
   // arriving by link is not. Decides where Back leads when there is no history.
   const teacherId = rec?.teacherId;
@@ -227,7 +241,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
   useEffect(() => () => { releaseMic(); stopAudio(); }, []);
 
-  const editable = !!rec && (rec.status === 'assigned' || rec.status === 'needs_revision') && !rec.purgedAt;
+  const editable = !!rec && !rec.purgedAt && !followUp
+    && (rec.status === 'assigned' || rec.status === 'needs_revision');
 
   const playMinshawi = () => {
     if (!verses[idx] || take === 'recording') return;
@@ -498,7 +513,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const eyebrow = rec.status === 'submitted' ? 'Submitted' : rec.status === 'passed' ? 'Passed'
-    : rec.status === 'needs_revision' ? 'Needs revision' : isHifz ? 'Hifz homework' : 'Recitation homework';
+    : followUp ? 'Reassigned' : rec.status === 'needs_revision' ? 'Needs revision'
+    : isHifz ? 'Hifz homework' : 'Recitation homework';
   const subline = rec.status === 'submitted' ? 'Your teacher will listen and review it.'
     : rec.status === 'passed' ? 'Your teacher reviewed this homework — well done.'
     : isHifz ? (allRecorded
@@ -506,7 +522,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         : `Recite all ${verses.length} verse${verses.length === 1 ? '' : 's'} from memory in one recording`)
     : allRecorded ? `All ${verses.length} verses recorded — listen back once more, then send it to your teacher`
     : `${recordedCount} of ${verses.length} verses recorded`;
-  const notice = rec.status === 'needs_revision'
+  const notice = followUp
+    ? `Your teacher sent ${rangeLabel(followUp)} back as a new homework — record ${versesOf(followUp).length === 1 ? 'that verse' : 'those verses'} there. This one is finished.`
+    : rec.status === 'needs_revision'
     ? 'Your teacher left notes on this homework. Look at the mistakes in your Quran page, then record the verses again and resubmit.'
     : rec.status === 'passed' && portalLink ? 'See any notes your teacher left in your Quran page.'
     : null;
@@ -765,7 +783,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3 text-[14px] sm:text-[15px] leading-snug"
             style={{ background: P.noticeBg, border: `1px solid ${P.noticeBorder}`, color: P.noticeInk }}>
             <span className="flex-1 min-w-[14rem]">{notice}</span>
-            {portalLink && <a href={portalLink} className="font-bold whitespace-nowrap" style={{ color: P.noticeInk }}>Open my Quran page →</a>}
+            {followUp
+              ? <a href={`/recite/${followUp.id}`} className="font-bold whitespace-nowrap" style={{ color: P.noticeInk }}>Open that homework →</a>
+              : portalLink && <a href={portalLink} className="font-bold whitespace-nowrap" style={{ color: P.noticeInk }}>Open my Quran page →</a>}
           </div>
         )}
         {rec.purgedAt && (

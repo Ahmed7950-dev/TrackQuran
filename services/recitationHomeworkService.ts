@@ -291,6 +291,45 @@ export async function submitRecitationHomework(rec: RecitationHomework): Promise
   return done;
 }
 
+/**
+ * The homework the tutor assigned in place of this one, if they reassigned it.
+ * While it exists the parent is finished: the student records the follow-up.
+ */
+export async function getFollowUpRecitation(parentId: string): Promise<RecitationHomework | null> {
+  const { data, error } = await supabase.from('quran_recitation_homework').select('*')
+    .eq('parent_id', parentId).order('created_at', { ascending: false }).limit(1);
+  if (error) { console.error('getFollowUpRecitation:', error.message); return null; }
+  return data?.length ? fromRow(data[0] as Row) : null;
+}
+
+/**
+ * Passing a homework finishes the follow-ups it spawned. A tutor who reassigns
+ * some verses and then passes the original (the student re-recorded the whole
+ * thing, say) would otherwise leave the follow-up open for ever — still listed,
+ * its verses still marked on the Quran page. Returns the rows it closed.
+ */
+export async function closeFollowUps(rec: RecitationHomework): Promise<RecitationHomework[]> {
+  const closed: RecitationHomework[] = [];
+  let frontier = [rec.id];
+  for (let depth = 0; depth < 10 && frontier.length; depth++) {
+    const { data, error } = await supabase.from('quran_recitation_homework').select('*')
+      .in('parent_id', frontier);
+    if (error) { console.error('closeFollowUps:', error.message); break; }
+    const rows = (data ?? []) as Row[];
+    if (!rows.length) break;
+    const open = rows.filter(r => r.status !== 'passed');
+    if (open.length) {
+      const { data: done, error: upErr } = await supabase.from('quran_recitation_homework')
+        .update({ status: 'passed', reviewed_at: new Date().toISOString() })
+        .in('id', open.map(r => r.id)).select('*');
+      if (upErr) console.error('closeFollowUps update:', upErr.message);
+      else closed.push(...((done ?? []) as Row[]).map(fromRow));
+    }
+    frontier = rows.map(r => r.id);
+  }
+  return closed;
+}
+
 export async function reviewRecitationHomework(
   rec: RecitationHomework, verdict: 'passed' | 'needs_revision',
 ): Promise<RecitationHomework | null> {

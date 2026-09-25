@@ -69,7 +69,7 @@ import HomeworkTab from './components/HomeworkTab';
 import {
   RecitationHomework, clearRecitationHistory, createRecitationHomework, deleteRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
-  rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
+  closeFollowUps, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
 } from './services/recitationHomeworkService';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
@@ -1597,11 +1597,12 @@ const App: React.FC = () => {
   };
 
   // Mark a homework item done (tutor side) and push it to the student's portal.
-  const handleMarkHomeworkDone = async (studentId: string, homeworkId: string) => {
+  const handleMarkHomeworkDone = async (studentId: string, homeworkId: string | string[]) => {
     const student = students.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
+    const ids = new Set(Array.isArray(homeworkId) ? homeworkId : [homeworkId]);
     const updatedHomework = (student.quranHomework || []).map(hw =>
-      hw.id === homeworkId ? { ...hw, isDone: true } : hw);
+      ids.has(hw.id) ? { ...hw, isDone: true } : hw);
     handleUpdateStudent({ ...student, quranHomework: updatedHomework });
     const reportId = await getStudentReportId(currentUser.id, studentId);
     if (reportId) {
@@ -2328,10 +2329,22 @@ const App: React.FC = () => {
               onReassign={handleReassignRecitation}
               onJumpToVerse={key => setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }))}
               onClose={() => setReviewRec(null)}
-              onReviewed={done => {
+              onReviewed={async done => {
                 setRecitations(prev => ({ ...prev, [done.id]: done }));
-                if (done.status === 'passed') handleMarkHomeworkDone(done.studentId, done.homeworkId);
                 setReviewRec(null);
+                if (done.status !== 'passed') return;
+                // A homework the tutor reassigned earlier left a follow-up
+                // behind; passing this one finishes that too, so nothing is
+                // left open in the list or purple on the Quran page.
+                const alsoClosed = await closeFollowUps(done);
+                if (alsoClosed.length) {
+                  setRecitations(prev => {
+                    const next = { ...prev };
+                    for (const r of alsoClosed) next[r.id] = r;
+                    return next;
+                  });
+                }
+                handleMarkHomeworkDone(done.studentId, [done.homeworkId, ...alsoClosed.map(r => r.homeworkId)]);
               }}
             />
           )}
