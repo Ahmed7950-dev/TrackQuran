@@ -426,7 +426,12 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // letter by parseWordIntoLetters — the same split the Mistakes page uses.
   // Live marks first; the copy saved on a reassigned homework only if the live
   // lookup is unavailable.
-  const mistakes: Record<string, Mistake> = liveMistakes ?? rec.mistakes ?? {};
+  // The live lookup returns {} — not null — when the tutor has cleared the
+  // marks since reassigning, which used to leave the student staring at a
+  // homework that says "your teacher marked mistakes" and shows none. Live
+  // marks win while there are any; otherwise the copy saved with the homework.
+  const mistakes: Record<string, Mistake> =
+    (liveMistakes && Object.keys(liveMistakes).length ? liveMistakes : rec.mistakes) ?? {};
   // Comment pills sit above their letter; at the normal spacing they covered the
   // line above (measured), so a verse with comments gets taller lines. Mark
   // overlays are positioned from the line height, so it is passed to them too.

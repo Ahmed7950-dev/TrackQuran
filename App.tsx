@@ -541,6 +541,9 @@ const App: React.FC = () => {
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  /** The latest roster, for handlers that run after an await. */
+  const studentsRef = useRef<Student[]>([]);
+  useEffect(() => { studentsRef.current = students; }, [students]);
   // Navigation state is persisted to localStorage (see effect below) so a page
   // refresh keeps you on the same student / tab instead of dropping back to the list.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(() => localStorage.getItem('nav_selectedStudentId'));
@@ -1598,7 +1601,9 @@ const App: React.FC = () => {
 
   // Mark a homework item done (tutor side) and push it to the student's portal.
   const handleMarkHomeworkDone = async (studentId: string, homeworkId: string | string[]) => {
-    const student = students.find(s => s.id === studentId);
+    // Read the freshest copy: this can run after an await (closing follow-ups),
+    // and writing a stale student back would drop a mistake logged meanwhile.
+    const student = studentsRef.current.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
     const ids = new Set(Array.isArray(homeworkId) ? homeworkId : [homeworkId]);
     const updatedHomework = (student.quranHomework || []).map(hw =>

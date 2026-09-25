@@ -189,9 +189,9 @@ const RecitationReviewPanel: React.FC<{
   const pct = verses.length ? recorded / verses.length : 0;
   const multiSurah = rec.startSurah !== rec.endSurah;
   const nowPlaying = playing ? rec.recordings[playing] : null;
-  const playingLabel = playing
-    ? `${multiSurah ? `${QURAN_METADATA.find(m => m.number === Number(playing.split(':')[0]))?.transliteratedName} ` : 'Verse '}${playing.split(':')[1]}`
-    : '';
+  const playingLabel = !playing ? ''
+    : playing === WHOLE_TAKE ? rangeLabel(rec)
+    : `${multiSurah ? `${QURAN_METADATA.find(m => m.number === Number(playing.split(':')[0]))?.transliteratedName} ` : 'Verse '}${playing.split(':')[1]}`;
 
   const icon = {
     play: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>,
