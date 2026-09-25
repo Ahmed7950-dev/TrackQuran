@@ -24,6 +24,7 @@ import {
 } from '../utils/quranicMarks';
 import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { supabase } from '../lib/supabase';
+import { setBusy } from '../services/versionWatch';
 import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
@@ -112,6 +113,14 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     } catch { return 'morning'; }
   });
   useEffect(() => { try { localStorage.setItem('reciteTheme', theme); } catch { /* private mode */ } }, [theme]);
+
+  // Recording or uploading: hold off the "a new build is live" reload so a
+  // take is never cut short by the app refreshing itself underneath it.
+  useEffect(() => {
+    if (take === 'idle') return;
+    setBusy(true);
+    return () => setBusy(false);
+  }, [take]);
 
   // Quran font — the same setting the portal and live logging page use.
   const [quranFont, setQuranFont] = useState<string>(() => {
@@ -400,6 +409,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const recordedCount = isHifz
     ? (wholeTake ? verses.length : 0)
     : verses.filter(([vs, va]) => rec.recordings[`${vs}:${va}`]).length;
+  // Hifz is one recording for the range, so the ring counts recordings, not verses.
+  const ringDone = isHifz ? (wholeTake ? 1 : 0) : recordedCount;
+  const ringTotal = isHifz ? 1 : verses.length;
   const [s, a] = verses[idx] ?? [rec.startSurah, rec.startAyah];
   const text = texts[key];
   const takeKey = isHifz ? WHOLE_TAKE : key;
@@ -407,7 +419,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const takeMs = rec.recordings[takeKey]?.ms;
   const surahName = QURAN_METADATA.find(m => m.number === s);
   const portalLink = rec.reportId ? portalHomeworkUrl(rec.reportId, rec.homeworkId) : null;
-  const pct = verses.length ? recordedCount / verses.length : 0;
+  const pct = ringTotal ? ringDone / ringTotal : 0;
 
   // Back: return to where they came from inside the app (the portal's homework
   // tab, the tutor's page); opened fresh — a link, a push notification, a new
@@ -581,7 +593,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             style={{ transition: 'stroke-dashoffset .5s ease' }} />
         </svg>
         <span className="absolute inset-0 flex items-center justify-center font-bold tabular-nums" style={{ fontSize: size > 60 ? 17 : 13 }}>
-          {recordedCount}/{verses.length}
+          {ringDone}/{ringTotal}
         </span>
       </div>
     );
@@ -621,7 +633,10 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 sm:gap-2.5">
+      <div dir="rtl" lang="ar"
+        className="flex-grow rounded-[18px] sm:rounded-[22px] px-3 sm:px-8 py-6 sm:py-10 font-quranic text-center break-words"
+        style={{ background: P.stage, border: `${theme === 'morning' ? 2 : 1}px solid ${P.stageBorder}`,
+          color: P.verseInk, fontSize: 'clamp(1.8rem, 4.6vw, 3.6rem)', lineHeight: 2.15 }}>
         {verses.map(([vs, va]) => {
           const vk = `${vs}:${va}`;
           const vText = texts[vk];
@@ -630,63 +645,42 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           const firstWord = words.findIndex(w => parseWordIntoLetters(w).length > 0);
           const marks = Object.entries(mistakes).filter(([k, mm]) => k.startsWith(`${vk}:`) && mm?.errorType).length;
           return (
-            <button key={vk}
-              onClick={() => setRevealed(prev => {
-                const next = new Set(prev);
-                if (next.has(vk)) next.delete(vk); else next.add(vk);
-                return next;
-              })}
-              disabled={!vText}
-              aria-expanded={open}
-              aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${open ? ', open' : ', hidden — tap to reveal'}`}
-              className="w-full text-start rounded-[18px] sm:rounded-[22px] px-3 sm:px-6 py-3 sm:py-5 transition-colors"
-              style={{ background: P.stage, border: `${theme === 'morning' ? 2 : 1}px solid ${open ? P.primary : P.stageBorder}` }}>
-              <span className="flex items-center gap-2 mb-1.5">
-                <span className="inline-flex items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
-                  style={{ minWidth: 26, height: 26, padding: '0 6px', border: `2px solid ${P.gold}`, color: P.goldInk, fontFamily: BODY }}>
-                  {va}
-                </span>
-                {multiSurah && (
-                  <span className="text-[12px] font-semibold" style={{ color: P.faint }}>
-                    {QURAN_METADATA.find(m => m.number === vs)?.transliteratedName}
-                  </span>
-                )}
-                {marks > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                    style={{ background: 'rgba(239,68,68,0.12)', color: theme === 'night' ? '#FCA5A5' : '#B91C1C', fontFamily: BODY }}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#DC2626' }} />
-                    {marks} mistake{marks === 1 ? '' : 's'}
-                  </span>
-                )}
-                <span className="flex-grow" />
-                <span className="text-[12px] font-semibold" style={{ color: P.faint, fontFamily: BODY }}>
-                  {open ? 'tap to hide' : 'tap to reveal'}
-                </span>
+            <React.Fragment key={vk}>
+              <span
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                aria-label={`${QURAN_METADATA.find(m => m.number === vs)?.transliteratedName} verse ${va}${open ? ', open' : ', hidden — tap to reveal'}`}
+                onClick={() => setRevealed(prev => {
+                  const next = new Set(prev);
+                  if (next.has(vk)) next.delete(vk); else next.add(vk);
+                  return next;
+                })}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}
+                className="cursor-pointer transition-colors"
+                style={open ? undefined : { borderBottom: `2px dotted ${P.gold}` }}>
+                {!vText ? (
+                  <span style={{ color: P.faint }}>…</span>
+                ) : open ? (
+                  words.map((w, i2) => (
+                    <React.Fragment key={i2}>{markedWord(w, i2, vs, va, 2.15)}{i2 < words.length - 1 ? ' ' : ''}</React.Fragment>
+                  ))
+                ) : blind ? (
+                  <span style={{ color: P.faint, letterSpacing: '0.3em' }}>••••</span>
+                ) : (<>
+                  {firstWord >= 0 ? markedWord(words[firstWord], firstWord, vs, va, 2.15) : null}
+                  <span style={{ color: P.faint }}>{' '}…</span>
+                </>)}
               </span>
-
-              {!vText ? (
-                <span className="block py-3 text-[14px]" style={{ color: P.faint }}>Loading…</span>
-              ) : (
-                <p dir="rtl" lang="ar" className="font-quranic m-0 break-words text-center"
-                  style={{ color: P.verseInk, fontSize: 'clamp(1.7rem, 4.4vw, 3.4rem)', lineHeight: 2.1 }}>
-                  {open ? (<>
-                    {words.map((w, i) => (
-                      <React.Fragment key={i}>{markedWord(w, i, vs, va, 2.1)}{i < words.length - 1 ? ' ' : ''}</React.Fragment>
-                    ))}
-                    {' '}
-                    <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap"
-                      style={{ minWidth: '1.35em', height: '1.35em', padding: '0 0.25em', fontSize: '0.4em', lineHeight: 1, border: `3px solid ${P.gold}`, color: P.goldInk, fontFamily: BODY, fontWeight: 700 }}>
-                      {toArabicDigits(va)}
-                    </span>
-                  </>) : blind ? (
-                    <span style={{ color: P.faint, letterSpacing: '0.35em' }}>• • • • •</span>
-                  ) : (<>
-                    {firstWord >= 0 ? markedWord(words[firstWord], firstWord, vs, va, 2.1) : null}
-                    <span style={{ color: P.faint }}>{'  '}…</span>
-                  </>)}
-                </p>
-              )}
-            </button>
+              {' '}
+              <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap relative"
+                style={{ minWidth: '1.35em', height: '1.35em', padding: '0 0.25em', fontSize: '0.4em', lineHeight: 1,
+                  border: `3px solid ${marks > 0 ? '#DC2626' : P.gold}`, color: marks > 0 ? '#DC2626' : P.goldInk,
+                  fontFamily: BODY, fontWeight: 700 }}>
+                {toArabicDigits(va)}
+              </span>
+              {' '}
+            </React.Fragment>
           );
         })}
       </div>

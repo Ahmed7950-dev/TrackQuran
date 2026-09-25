@@ -5,6 +5,7 @@ import { I18nProvider } from './context/I18nProvider';
 import { AuthProvider } from './context/AuthProvider';
 import SharedReportPage from './components/SharedReportPage';
 import { initInstallCapture } from './services/installService';
+import { watchForNewBuild } from './services/versionWatch';
 import WordFlightJoinPage from './components/WordFlightJoinPage';
 
 // ── Route detection — done once before any React rendering ──────────────────
@@ -61,10 +62,27 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* not fatal */ });
   });
+  // Tapping a push should land on the page it is about. The worker asks us to
+  // go there, because an installed iOS app will not let it navigate us itself.
+  navigator.serviceWorker.addEventListener('message', event => {
+    const data = event.data;
+    if (!data || data.type !== 'navigate' || typeof data.url !== 'string') return;
+    let path = data.url;
+    try {
+      const u = new URL(data.url, window.location.origin);
+      if (u.origin !== window.location.origin) return;     // never follow elsewhere
+      path = u.pathname + u.search + u.hash;
+    } catch { return; }
+    if (path === window.location.pathname + window.location.search + window.location.hash) return;
+    window.location.assign(path);
+  });
 }
 
 // The install prompt fires once, early — catch it before React mounts.
 initInstallCapture();
+
+// An installed app can sit on one build for days; pick up new ones by itself.
+watchForNewBuild();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

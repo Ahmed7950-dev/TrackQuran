@@ -40,8 +40,14 @@ self.addEventListener('notificationclick', event => {
     for (const client of all) {
       if ('focus' in client) {
         await client.focus();
-        if ('navigate' in client && target !== '/') {
-          try { await client.navigate(target); } catch { /* cross-origin or blocked */ }
+        if (target === '/') return;
+        // An installed iOS app ignores (or rejects) client.navigate, which used
+        // to leave the student looking at whatever page they had open instead
+        // of the one the notification was about. Tell the page where to go as
+        // well — it routes itself (see index.tsx) — and let navigate try too.
+        try { client.postMessage({ type: 'navigate', url: target }); } catch { /* no channel */ }
+        if ('navigate' in client) {
+          try { await client.navigate(target); } catch { /* not allowed here */ }
         }
         return;
       }

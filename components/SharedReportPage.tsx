@@ -264,7 +264,12 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     document.addEventListener('visibilitychange', again);
     window.addEventListener('focus', again);
     window.addEventListener('pageshow', onShow);
+    // …and while it simply stays open: homework assigned mid-session used to
+    // wait for the next time the app was shown, which on a phone left on the
+    // page could be hours. Quiet enough to leave running (one small read).
+    const tick = window.setInterval(again, 60_000);
     return () => {
+      window.clearInterval(tick);
       document.removeEventListener('visibilitychange', again);
       window.removeEventListener('focus', again);
       window.removeEventListener('pageshow', onShow);

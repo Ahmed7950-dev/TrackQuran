@@ -423,8 +423,10 @@ export async function notifyRecitationAssigned(rec: RecitationHomework): Promise
   await createNotification({
     teacherId: rec.teacherId, studentId: rec.studentId, recipient: 'student', bookingId: null,
     type: 'quran_recitation_assigned',
-    title: '🎙 New recitation homework',
-    body: `Record your recitation of ${rangeLabel(rec)}, one verse at a time.`,
+    title: rec.kind === 'hifz' ? '🎙 New hifz homework' : '🎙 New recitation homework',
+    body: rec.kind === 'hifz'
+      ? `Recite ${rangeLabel(rec)} from memory — one recording for all of it.`
+      : `Record your recitation of ${rangeLabel(rec)}, one verse at a time.`,
     metadata: { recitationId: rec.id, homeworkId: rec.homeworkId, url: recitationUrl(rec.id) },
   });
 }
