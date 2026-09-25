@@ -402,7 +402,8 @@ const TajweedExercisePage: React.FC<{
       </div>
       <p className="text-center text-xs font-bold text-slate-400 dark:text-slate-500 mb-5">{item?.verseKey}</p>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 flex flex-col items-center gap-1 px-4 pt-6 pb-2 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-gray-900 dark:via-gray-900/95">
+      <div className="fixed inset-x-0 bottom-0 z-20 flex flex-col items-center gap-1 px-4 pt-6 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-gray-900 dark:via-gray-900/95"
+        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}>
         <div className="flex items-center justify-center gap-3 w-full max-w-2xl">
         <button onClick={() => advance(false)} aria-keyshortcuts="N"
           className="flex-1 max-w-[15rem] py-4 rounded-2xl bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white font-black text-lg shadow-lg ring-1 ring-white/15 transition-all active:scale-95 flex items-center justify-center gap-2.5">

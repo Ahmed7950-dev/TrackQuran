@@ -53,3 +53,11 @@ code {
 [data-theme="reading"] .vocab-reading-mode .vocab-muted {
   color: #7a6e5e;
 }
+
+/* Installed on a home screen there is no browser chrome: the page runs under
+ * the notch and the home indicator (viewport-fit=cover). Page headers carry
+ * the top inset themselves; this keeps the END of any page clear of the
+ * indicator, so a last button is never half-covered. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+}

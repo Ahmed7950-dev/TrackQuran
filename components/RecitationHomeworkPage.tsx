@@ -686,16 +686,22 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
                 style={open ? undefined : { borderBottom: `2px dotted ${P.gold}` }}>
                 {!vText ? (
                   <span style={{ color: P.faint }}>…</span>
-                ) : open ? (
-                  words.map((w, i2) => (
-                    <React.Fragment key={i2}>{markedWord(w, i2, vs, va, 2.15)}{i2 < words.length - 1 ? ' ' : ''}</React.Fragment>
-                  ))
-                ) : blind ? (
-                  <span style={{ color: P.faint, letterSpacing: '0.3em' }}>••••</span>
-                ) : (<>
-                  {firstWord >= 0 ? markedWord(words[firstWord], firstWord, vs, va, 2.15) : null}
-                  <span style={{ color: P.faint }}>{' '}…</span>
-                </>)}
+                ) : (
+                  // The verse always takes its full space; what is hidden is
+                  // blurred, exactly as hifz mode hides a verse on the Quran
+                  // page, so revealing it changes nothing but the sharpness.
+                  words.map((w, i2) => {
+                    const hidden = !open && (blind || i2 !== firstWord);
+                    return (
+                      <React.Fragment key={i2}>
+                        <span style={hidden ? { filter: 'blur(0.45em)', opacity: 0.5 } : undefined}>
+                          {markedWord(w, i2, vs, va, 2.15)}
+                        </span>
+                        {i2 < words.length - 1 ? ' ' : ''}
+                      </React.Fragment>
+                    );
+                  })
+                )}
               </span>
               {' '}
               <span className="inline-flex items-center justify-center rounded-full align-middle whitespace-nowrap relative"

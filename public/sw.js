@@ -34,24 +34,36 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   const target = (event.notification.data && event.notification.data.url) || '/';
 
+  // The payload links to the canonical host; this app may be installed from
+  // another one (www vs the bare domain), and a cross-origin navigate is
+  // simply refused. Keep the path and stay where we are.
+  let path = target;
+  try {
+    const u = new URL(target, self.location.origin);
+    path = u.pathname + u.search + u.hash;
+  } catch { /* leave it as it came */ }
+
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     // Reuse a tab that is already on this origin rather than opening another.
     for (const client of all) {
       if ('focus' in client) {
         await client.focus();
-        if (target === '/') return;
+        if (path === '/') return;
         // An installed iOS app ignores (or rejects) client.navigate, which used
         // to leave the student looking at whatever page they had open instead
         // of the one the notification was about. Tell the page where to go as
         // well — it routes itself (see index.tsx) — and let navigate try too.
-        try { client.postMessage({ type: 'navigate', url: target }); } catch { /* no channel */ }
+        try { client.postMessage({ type: 'navigate', url: path }); } catch { /* no channel */ }
         if ('navigate' in client) {
-          try { await client.navigate(target); } catch { /* not allowed here */ }
+          try {
+            await client.navigate(path);
+            return;
+          } catch { /* not allowed here — the message above has to carry it */ }
         }
         return;
       }
     }
-    if (self.clients.openWindow) await self.clients.openWindow(target);
+    if (self.clients.openWindow) await self.clients.openWindow(path);
   })());
 });

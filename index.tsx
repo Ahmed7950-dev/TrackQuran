@@ -64,18 +64,25 @@ if ('serviceWorker' in navigator) {
   });
   // Tapping a push should land on the page it is about. The worker asks us to
   // go there, because an installed iOS app will not let it navigate us itself.
+  // addEventListener alone leaves the messages queued — only assigning
+  // `onmessage` starts delivery implicitly, so start it by hand.
   navigator.serviceWorker.addEventListener('message', event => {
     const data = event.data;
     if (!data || data.type !== 'navigate' || typeof data.url !== 'string') return;
-    let path = data.url;
+    // Our pushes carry absolute links to the canonical host, which is not
+    // always the host the app was installed from (www vs the bare domain).
+    // Comparing origins therefore threw the good ones away; take the PATH and
+    // stay on this origin, which is both what we mean and safe.
+    let path: string;
     try {
       const u = new URL(data.url, window.location.origin);
-      if (u.origin !== window.location.origin) return;     // never follow elsewhere
       path = u.pathname + u.search + u.hash;
     } catch { return; }
+    if (!path.startsWith('/')) return;
     if (path === window.location.pathname + window.location.search + window.location.hash) return;
     window.location.assign(path);
   });
+  navigator.serviceWorker.startMessages?.();
 }
 
 // The install prompt fires once, early — catch it before React mounts.
