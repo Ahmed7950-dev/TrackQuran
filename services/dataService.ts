@@ -1,4 +1,4 @@
-import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework } from '../types';
+import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework, Mistake } from '../types';
 export type { QuranHomework };
 import { QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import { pageVerseList } from './quranPageData';
@@ -148,6 +148,33 @@ export const saveStudent = async (teacherId: string, student: Student): Promise<
   if (error) {
     console.error('saveStudent failed:', error.message, '| id:', row.id);
   }
+};
+
+/**
+ * Add or remove marks on a student's mistakes map WITHOUT rewriting the row.
+ *
+ * A whole-row save carries a snapshot of the mistakes map with it, so a second
+ * window holding an older copy wrote that copy back and the newest marks
+ * disappeared. This merges server side against whatever the row holds now.
+ *
+ * Throws when it does not land, so the caller can say so — a mark that is only
+ * on screen is worse than one that never appeared.
+ */
+export const mergeStudentMistakes = async (
+  studentId: string,
+  patch: Record<string, Mistake>,
+  remove: string[] = [],
+): Promise<Record<string, Mistake>> => {
+  const { data, error } = await supabase.rpc('merge_student_mistakes', {
+    p_student_id: studentId,
+    p_patch: patch,
+    p_remove: remove,
+  });
+  if (error) {
+    console.error('mergeStudentMistakes:', error.message, '| id:', studentId);
+    throw new Error(error.message);
+  }
+  return (data ?? {}) as Record<string, Mistake>;
 };
 
 export const deleteStudent = async (studentId: string): Promise<void> => {

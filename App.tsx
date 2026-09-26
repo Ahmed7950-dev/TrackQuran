@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework } from './types';
+import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework, Mistake } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage from './components/StudentProgressPage';
@@ -11,7 +11,7 @@ import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive
 import { withActivityLog } from './utils/activityLog';
 import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
+import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
 import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
@@ -541,6 +541,8 @@ const App: React.FC = () => {
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  /** A mark that is only on screen is worse than one that never appeared. */
+  const [markSaveFailed, setMarkSaveFailed] = useState(false);
   /** The latest roster, for handlers that run after an await. */
   const studentsRef = useRef<Student[]>([]);
   useEffect(() => { studentsRef.current = students; }, [students]);
@@ -1188,11 +1190,14 @@ const App: React.FC = () => {
     });
   };
 
-  const handleUpdateStudent = (updatedStudent: Student) => {
+  /** `rowSave: false`: the caller has already written what changed, by itself
+   *  and without carrying a copy of the rest of the row (see persistMistakes).
+   *  Everything else — the local state, the portal sync — still happens. */
+  const handleUpdateStudent = (updatedStudent: Student, opts?: { rowSave?: boolean }) => {
     const before = students.find(s => s.id === updatedStudent.id)?.subscriptionRenewalDate;
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
-      saveStudent(currentUser.id, updatedStudent); // async, fire & forget
+      if (opts?.rowSave !== false) saveStudent(currentUser.id, updatedStudent); // async, fire & forget
       // One subscription per family — see propagateRenewalDate.
       if (updatedStudent.subscriptionRenewalDate !== before) {
         void propagateRenewalDate(updatedStudent.id, updatedStudent.subscriptionRenewalDate);
@@ -1307,6 +1312,21 @@ const App: React.FC = () => {
     handleUpdateStudent({ ...student, mistakes });
   };
 
+  /**
+   * Write marks straight into the student's mistakes map, server side.
+   *
+   * A whole-row save carries a snapshot of every mistake with it, so a second
+   * window of the app — another tab, another device — writing its own older
+   * copy back wiped the newest marks, silently. This touches nothing but the
+   * keys that changed, and says so when it does not land.
+   */
+  const persistMistakes = (studentId: string, patch: Record<string, Mistake>, remove: string[] = []) => {
+    if (currentUser?.role !== 'teacher') return;
+    mergeStudentMistakes(studentId, patch, remove)
+      .then(() => setMarkSaveFailed(false))
+      .catch(() => setMarkSaveFailed(true));
+  };
+
   const handleCycleMistakeLevel = (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
@@ -1334,7 +1354,8 @@ const App: React.FC = () => {
         newStudentMistakes[key] = { level: 1, date: new Date().toISOString() };
       }
       const updatedStudent = { ...student, mistakes: newStudentMistakes };
-      handleUpdateStudent(updatedStudent);
+      handleUpdateStudent(updatedStudent, { rowSave: false });
+      persistMistakes(studentId, { [key]: newStudentMistakes[key] });
       return;
     }
 
@@ -1369,7 +1390,8 @@ const App: React.FC = () => {
     delete newStudentMistakes[key];
 
     const updatedStudent = { ...student, mistakes: newStudentMistakes };
-    handleUpdateStudent(updatedStudent);
+    handleUpdateStudent(updatedStudent, { rowSave: false });
+    persistMistakes(studentId, {}, [key]);
   };
 
   const handleLogRecitationRange = (studentId: string, range: { start: Progress; end: Progress }, quality: number = 8, isRevision: boolean = false) => {
@@ -1907,6 +1929,23 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
+      {/* A mark that did not reach the database — said out loud, because the
+          tutor would otherwise carry on marking a page that is not being kept. */}
+      {markSaveFailed && (
+        <div role="alert" className="fixed inset-x-0 bottom-0 z-[400] no-print"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="mx-auto max-w-2xl m-3 px-4 py-3 rounded-2xl bg-red-600 text-white shadow-2xl flex items-center gap-3">
+            <span className="text-sm font-semibold flex-1">
+              That mark did not save. Check the connection — the marks on screen are not being kept until this clears.
+            </span>
+            <button onClick={() => setMarkSaveFailed(false)}
+              className="flex-shrink-0 h-8 px-3 rounded-lg bg-white/20 hover:bg-white/30 text-[13px] font-bold">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40 no-print" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
             <button
