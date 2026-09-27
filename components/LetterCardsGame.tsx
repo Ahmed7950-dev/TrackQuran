@@ -32,7 +32,7 @@ import {
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
   markLetterCardsStarted, notifyLetterCardsInvite,
 } from '../services/letterCardsService';
-import { Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
+import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
   Card, Snap, deal, judge as judgeBoard, throwStudent, throwTutor,
 } from '../services/letterCardsEngine';
@@ -99,9 +99,7 @@ const Board: React.FC<{
   /** Everything the board paints over itself — nothing sits above the canvas. */
   onBack?: () => void;
   onRematch?: () => void;
-  onFullscreen?: () => void;
-  fullscreen?: boolean;
-}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, onBack, onRematch, onFullscreen, fullscreen }) => {
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, onBack, onRematch }) => {
   const bothOpen = snap.mode === 'tutor';
   const seeTutor = bothOpen || me === 'tutor';
   const seeStudent = bothOpen || me === 'student';
@@ -110,9 +108,10 @@ const Board: React.FC<{
 
   return (
     <div
-      className="relative w-full mx-auto select-none"
-      style={{ aspectRatio: '1672 / 941', maxWidth: 'min(100%, 1400px)', containerType: 'inline-size' }}
+      className="lc-board select-none"
+      style={{ aspectRatio: `${BOARD.w} / ${BOARD.h}`, containerType: 'inline-size' }}
     >
+      <BoardStyle />
       <img src={BOARD_BACKGROUND} alt="" draggable={false}
         className="absolute inset-0 w-full h-full object-cover rounded-2xl" />
 
@@ -169,86 +168,66 @@ const Board: React.FC<{
         </div>
       )}
 
-      {/* ── the chrome, painted on the board ── */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ fontSize: 'clamp(9px, 1.5cqw, 20px)' }}>
+      {/* ── one bar across the top: everything lives in it ── */}
+      <div className="absolute inset-x-0 top-0 flex items-center rounded-t-2xl"
+        style={{
+          height: '9.5%',
+          paddingInline: '1.2%',
+          gap: '1cqw',
+          fontSize: 'clamp(9px, 1.45cqw, 19px)',
+          background: 'linear-gradient(to bottom, rgba(8,6,3,.72), rgba(8,6,3,.34))',
+          boxShadow: 'inset 0 -0.9cqw 1.6cqw -0.6cqw rgba(0,0,0,.85), inset 0 0.35cqw 0.8cqw -0.4cqw rgba(255,235,190,.28)',
+          backdropFilter: 'blur(2px)',
+        }}>
 
-        {/* back to the letters */}
         {onBack && (
           <button onClick={onBack} aria-label="Back to the letters"
-            className="pointer-events-auto absolute flex items-center justify-center rounded-full
-                       bg-black/45 hover:bg-black/65 text-white backdrop-blur-sm"
-            style={{ left: '1.4%', top: '2.2%', width: '4.4cqw', height: '4.4cqw', minWidth: 30, minHeight: 30 }}>
+            className="flex-shrink-0 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white"
+            style={{ width: '2.4em', height: '2.4em' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6}
-              strokeLinecap="round" strokeLinejoin="round" style={{ width: '55%', height: '55%' }} aria-hidden="true">
+              strokeLinecap="round" strokeLinejoin="round" style={{ width: '60%', height: '60%' }} aria-hidden="true">
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
         )}
 
-        {/* what this game is */}
-        <div className="absolute text-center text-white whitespace-nowrap"
-          style={{ left: '50%', top: '1.6%', transform: 'translateX(-50%)', textShadow: '0 2px 8px rgba(0,0,0,.85)' }}>
-          <p className="font-black leading-none" style={{ fontSize: '1.35em' }}>
-            Letter cards · {FORM_LABEL[snap.form].en}
-          </p>
-        </div>
+        <span className="font-black text-white whitespace-nowrap truncate" style={{ fontSize: '1.25em' }}>
+          {FORM_LABEL[snap.form].en}
+        </span>
 
-        {/* full screen, and a rematch for the tutor */}
-        <div className="absolute flex items-center" style={{ right: '1.4%', top: '2.2%', gap: '0.8cqw' }}>
-          {onRematch && (
-            <button onClick={onRematch}
-              className="pointer-events-auto rounded-full bg-black/45 hover:bg-black/65 text-white
-                         backdrop-blur-sm font-black whitespace-nowrap"
-              style={{ padding: '0.5em 1.1em', fontSize: '1.1em' }}>
-              Play again
-            </button>
-          )}
-          {onFullscreen && (
-            <button onClick={onFullscreen} aria-label={fullscreen ? 'Leave full screen' : 'Full screen'}
-              className="pointer-events-auto flex items-center justify-center rounded-full
-                         bg-black/45 hover:bg-black/65 text-white backdrop-blur-sm"
-              style={{ width: '4.4cqw', height: '4.4cqw', minWidth: 30, minHeight: 30 }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}
-                strokeLinecap="round" strokeLinejoin="round" style={{ width: '55%', height: '55%' }} aria-hidden="true">
-                {fullscreen
-                  ? <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" />
-                  : <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />}
-              </svg>
-            </button>
-          )}
-        </div>
+        <span className="flex-grow" />
 
-        {/* the score and what is left of the lives, above the table */}
-        <div className="absolute flex items-center justify-center"
-          style={{ left: '50%', top: '30.5%', transform: 'translateX(-50%)', gap: '0.8cqw' }}>
-          <span className="rounded-full bg-emerald-900/70 text-emerald-50 font-black backdrop-blur-sm whitespace-nowrap"
-            style={{ padding: '0.35em 0.9em', fontSize: '1.15em' }}>
-            ✓ {snap.score} / {snap.total}
+        <span className="flex-shrink-0 rounded-full bg-emerald-500/25 text-emerald-50 font-black whitespace-nowrap"
+          style={{ padding: '0.3em 0.8em', fontSize: '1.15em' }}>
+          ✓ {snap.score} / {snap.total}
+        </span>
+
+        {snap.livesMax !== null && (
+          <span className="flex-shrink-0 rounded-full bg-rose-500/25 text-rose-50 font-black whitespace-nowrap"
+            style={{ padding: '0.3em 0.8em', fontSize: '1.15em' }}>
+            {'♥'.repeat(Math.max(0, snap.lives ?? 0))}
+            <span className="opacity-35">{'♥'.repeat(Math.max(0, snap.livesMax - (snap.lives ?? 0)))}</span>
           </span>
-          {snap.livesMax !== null && (
-            <span className="rounded-full bg-rose-900/70 text-rose-50 font-black backdrop-blur-sm whitespace-nowrap"
-              style={{ padding: '0.35em 0.9em', fontSize: '1.15em' }}>
-              {'♥'.repeat(Math.max(0, snap.lives ?? 0))}
-              <span className="opacity-35">{'♥'.repeat(Math.max(0, snap.livesMax - (snap.lives ?? 0)))}</span>
-            </span>
-          )}
-        </div>
+        )}
 
-        {/* whose turn it is, under the table */}
-        <div className="absolute" style={{ left: '50%', top: '61.5%', transform: 'translateX(-50%)' }}>
-          <span className={`rounded-full font-black whitespace-nowrap backdrop-blur-sm ${
-            snap.ph === 'over' ? 'bg-slate-900/75 text-slate-100'
-              : (snap.mode === 'tutor' || snap.turn === me) ? 'bg-amber-400 text-amber-950' : 'bg-slate-900/70 text-slate-200'}`}
-            style={{ padding: '0.4em 1.1em', fontSize: '1.2em' }}>
-            {snap.ph === 'over'
-              ? (snap.ended === 'done' ? 'Every letter answered' : 'Out of lives')
-              : snap.mode === 'tutor'
-                ? (snap.turn === 'tutor' ? 'Throw a card' : 'Their answer')
-                : snap.turn === me ? 'Your turn'
-                : `Waiting for ${snap.turn === 'tutor' ? 'the teacher' : 'the student'}`}
-          </span>
-        </div>
+        <span className={`flex-shrink-0 rounded-full font-black whitespace-nowrap ${
+          snap.ph === 'over' ? 'bg-white/20 text-white'
+            : (snap.mode === 'tutor' || snap.turn === me) ? 'bg-amber-400 text-amber-950' : 'bg-white/15 text-white/80'}`}
+          style={{ padding: '0.3em 0.9em', fontSize: '1.15em' }}>
+          {snap.ph === 'over'
+            ? (snap.ended === 'done' ? 'All answered' : 'Out of lives')
+            : snap.mode === 'tutor'
+              ? (snap.turn === 'tutor' ? 'Throw a card' : 'Their answer')
+              : snap.turn === me ? 'Your turn' : 'Waiting…'}
+        </span>
+
+        {onRematch && (
+          <button onClick={onRematch}
+            className="flex-shrink-0 rounded-full bg-white/15 hover:bg-white/25 text-white font-black whitespace-nowrap"
+            style={{ padding: '0.3em 0.9em', fontSize: '1.1em' }}>
+            Play again
+          </button>
+        )}
       </div>
 
       {/* right / wrong, over the middle */}
@@ -269,8 +248,32 @@ const Board: React.FC<{
   );
 };
 
-const FlashStyle: React.FC = () => (
-  <style>{`@keyframes lc-flash{0%{opacity:0;transform:scale(.7)}18%{opacity:1;transform:scale(1)}72%{opacity:1}100%{opacity:0;transform:scale(1.15)}}.lc-flash{animation:lc-flash 1s ease forwards}`}</style>
+/**
+ * The board is as large as the screen allows and centred on it. Held upright
+ * the screen is the wrong shape for a card table, so the board turns a quarter
+ * and fills the phone that way instead of sitting small in the middle.
+ */
+const BoardStyle: React.FC = () => (
+  <style>{`
+@keyframes lc-flash{0%{opacity:0;transform:scale(.7)}18%{opacity:1;transform:scale(1)}72%{opacity:1}100%{opacity:0;transform:scale(1.15)}}
+.lc-flash{animation:lc-flash 1s ease forwards}
+.lc-board{
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:min(
+    calc(100dvw - env(safe-area-inset-left) - env(safe-area-inset-right)),
+    calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * ${BOARD.w} / ${BOARD.h})
+  );
+}
+@media (orientation:portrait){
+  .lc-board{
+    transform:translate(-50%,-50%) rotate(90deg);
+    width:min(
+      calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)),
+      calc((100dvw - env(safe-area-inset-left) - env(safe-area-inset-right)) * ${BOARD.w} / ${BOARD.h})
+    );
+  }
+}`}</style>
 );
 
 export { Board as LetterCardsBoard };
@@ -284,29 +287,25 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   const [snap, setSnap] = useState<Snap | null>(null);
   const snapRef = useRef<Snap | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
   const chanRef = useRef<P2PGameChannel | null>(null);
   const startedAt = useRef(Date.now());
 
   useEffect(() => { document.title = 'Letter cards'; getLetterCardsGame(gameId).then(setGame); }, [gameId]);
 
-  // iPhone Safari allows full screen on video only, so the button is offered
-  // where it works and the board simply fills the window everywhere else.
-  const fullscreenAvailable = typeof document !== 'undefined'
-    && (document.fullscreenEnabled || !!(document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
-
+  // The board already fills the window; real full screen only hides the
+  // browser's own bars, and browsers hand it over on a gesture and not before,
+  // so the first touch anywhere takes it and nobody is asked to press anything.
+  // iPhone Safari never allows it outside video — there the board is enough.
   useEffect(() => {
-    const on = () => setFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', on);
-    return () => document.removeEventListener('fullscreenchange', on);
-  }, []);
-
-  const toggleFullscreen = useCallback(() => {
     const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) { void document.exitFullscreen?.(); return; }
-    void el.requestFullscreen?.().catch(() => { /* refused — the board still fills the window */ });
-  }, []);
+    if (!el || !document.fullscreenEnabled) return;
+    const take = () => {
+      document.removeEventListener('pointerdown', take);
+      if (!document.fullscreenElement) void el.requestFullscreen?.().catch(() => { /* refused */ });
+    };
+    document.addEventListener('pointerdown', take);
+    return () => document.removeEventListener('pointerdown', take);
+  }, [game]);
 
   /** Back to wherever they came from — the letters page for the tutor. */
   const leave = useCallback(() => {
@@ -413,17 +412,18 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
 
   const me: 'tutor' | 'student' = host ? 'tutor' : 'student';
   return (
-    <Shell wrapRef={wrapRef}>
-      <FlashStyle />
+    <div ref={wrapRef} className="fixed inset-0 overflow-hidden bg-black">
+      {/* the artwork itself carries the margins, so there is no coloured letterbox */}
+      <img src={BOARD_BACKGROUND} alt="" aria-hidden="true" draggable={false}
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ filter: 'blur(28px) brightness(.55)', transform: 'scale(1.12)' }} />
       <Board
         snap={snap} me={me}
         onPick={snap.ph === 'playing' ? onPick : undefined}
         onBack={leave}
         onRematch={host ? rematch : undefined}
-        onFullscreen={fullscreenAvailable ? toggleFullscreen : undefined}
-        fullscreen={fullscreen}
       />
-    </Shell>
+    </div>
   );
 };
 
