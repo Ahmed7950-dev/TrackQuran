@@ -171,19 +171,19 @@ const Board: React.FC<{
       {/* ── one bar across the top: everything lives in it ── */}
       <div className="absolute inset-x-0 top-0 flex items-center rounded-t-2xl"
         style={{
-          height: '9.5%',
-          paddingInline: '1.2%',
-          gap: '1cqw',
-          fontSize: 'clamp(9px, 1.45cqw, 19px)',
+          height: '5%',
+          paddingInline: '1%',
+          gap: '0.7cqw',
+          fontSize: 'clamp(7px, 0.95cqw, 13px)',
           background: 'linear-gradient(to bottom, rgba(8,6,3,.72), rgba(8,6,3,.34))',
-          boxShadow: 'inset 0 -0.9cqw 1.6cqw -0.6cqw rgba(0,0,0,.85), inset 0 0.35cqw 0.8cqw -0.4cqw rgba(255,235,190,.28)',
+          boxShadow: 'inset 0 -0.5cqw 0.9cqw -0.35cqw rgba(0,0,0,.85), inset 0 0.2cqw 0.5cqw -0.25cqw rgba(255,235,190,.28)',
           backdropFilter: 'blur(2px)',
         }}>
 
         {onBack && (
           <button onClick={onBack} aria-label="Back to the letters"
             className="flex-shrink-0 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white"
-            style={{ width: '2.4em', height: '2.4em' }}>
+            style={{ width: '2.2em', height: '2.2em' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6}
               strokeLinecap="round" strokeLinejoin="round" style={{ width: '60%', height: '60%' }} aria-hidden="true">
               <path d="M15 18l-6-6 6-6" />
@@ -191,20 +191,20 @@ const Board: React.FC<{
           </button>
         )}
 
-        <span className="font-black text-white whitespace-nowrap truncate" style={{ fontSize: '1.25em' }}>
+        <span className="font-black text-white whitespace-nowrap truncate" style={{ fontSize: '1.1em' }}>
           {FORM_LABEL[snap.form].en}
         </span>
 
         <span className="flex-grow" />
 
         <span className="flex-shrink-0 rounded-full bg-emerald-500/25 text-emerald-50 font-black whitespace-nowrap"
-          style={{ padding: '0.3em 0.8em', fontSize: '1.15em' }}>
+          style={{ padding: '0.22em 0.7em', fontSize: '1em' }}>
           ✓ {snap.score} / {snap.total}
         </span>
 
         {snap.livesMax !== null && (
           <span className="flex-shrink-0 rounded-full bg-rose-500/25 text-rose-50 font-black whitespace-nowrap"
-            style={{ padding: '0.3em 0.8em', fontSize: '1.15em' }}>
+            style={{ padding: '0.22em 0.7em', fontSize: '1em' }}>
             {'♥'.repeat(Math.max(0, snap.lives ?? 0))}
             <span className="opacity-35">{'♥'.repeat(Math.max(0, snap.livesMax - (snap.lives ?? 0)))}</span>
           </span>
@@ -213,7 +213,7 @@ const Board: React.FC<{
         <span className={`flex-shrink-0 rounded-full font-black whitespace-nowrap ${
           snap.ph === 'over' ? 'bg-white/20 text-white'
             : (snap.mode === 'tutor' || snap.turn === me) ? 'bg-amber-400 text-amber-950' : 'bg-white/15 text-white/80'}`}
-          style={{ padding: '0.3em 0.9em', fontSize: '1.15em' }}>
+          style={{ padding: '0.22em 0.8em', fontSize: '1em' }}>
           {snap.ph === 'over'
             ? (snap.ended === 'done' ? 'All answered' : 'Out of lives')
             : snap.mode === 'tutor'
@@ -224,7 +224,7 @@ const Board: React.FC<{
         {onRematch && (
           <button onClick={onRematch}
             className="flex-shrink-0 rounded-full bg-white/15 hover:bg-white/25 text-white font-black whitespace-nowrap"
-            style={{ padding: '0.3em 0.9em', fontSize: '1.1em' }}>
+            style={{ padding: '0.22em 0.8em', fontSize: '1em' }}>
             Play again
           </button>
         )}
