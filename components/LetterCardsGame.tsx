@@ -32,9 +32,7 @@ import {
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
   markLetterCardsStarted, notifyLetterCardsInvite,
 } from '../services/letterCardsService';
-import {
-  Box, DRAW_PILE, LETTER_BOX, STUDENT_HAND, THROWN_STUDENT, THROWN_TUTOR, TUTOR_HAND,
-} from './letterCardsLayout';
+import { Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
   Card, Snap, deal, judge as judgeBoard, throwStudent, throwTutor,
 } from '../services/letterCardsEngine';
@@ -51,8 +49,9 @@ const boxStyle = (b: Box): React.CSSProperties => ({
 
 /** One card: the animal, with its letter in the panel at the top. */
 const CardFace: React.FC<{
-  card: Card; form: MatchForm | 'isolated'; onClick?: () => void; dim?: boolean; glow?: string;
-}> = ({ card, form, onClick, dim, glow }) => (
+  card: Card; form: MatchForm | 'isolated'; layout: Layout;
+  onClick?: () => void; dim?: boolean; glow?: string;
+}> = ({ card, form, layout, onClick, dim, glow }) => (
   <button
     type="button"
     onClick={onClick}
@@ -60,19 +59,24 @@ const CardFace: React.FC<{
     aria-label={`${card.animal}, letter ${card.letter}`}
     className={`relative w-full h-full rounded-[8%] overflow-visible transition-transform duration-150 ${
       onClick ? 'cursor-pointer hover:-translate-y-[4%] active:scale-95' : ''}`}
-    style={{ opacity: dim ? 0.55 : 1, filter: glow ? `drop-shadow(0 0 10px ${glow})` : undefined }}
+    // Its own size container, so the letter is measured against the CARD.
+    style={{
+      containerType: 'inline-size',
+      opacity: dim ? 0.55 : 1,
+      filter: glow ? `drop-shadow(0 0 10px ${glow})` : undefined,
+    }}
   >
     <img src={animalSrc(card.animal)} alt="" draggable={false}
       className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
     <span
       className="absolute flex items-center justify-center pointer-events-none"
       style={{
-        left: `${LETTER_BOX.x}%`, top: `${LETTER_BOX.y}%`,
-        width: `${LETTER_BOX.w}%`, height: `${LETTER_BOX.h}%`,
+        left: `${layout.letterBox.x}%`, top: `${layout.letterBox.y}%`,
+        width: `${layout.letterBox.w}%`, height: `${layout.letterBox.h}%`,
       }}
     >
       <span dir="rtl" style={{
-        fontFamily: LETTER_FONT, fontSize: 'min(13cqw, 6.5vw)', lineHeight: 1,
+        fontFamily: LETTER_FONT, fontSize: `${layout.letterSize}cqw`, lineHeight: 1,
         color: '#1A1208', fontWeight: 700,
       }}>
         {shapeOf(card.letter, form)}
@@ -91,7 +95,9 @@ const Board: React.FC<{
   /** Whose screen this is. The tutor sees his own hand; in tutor mode, both. */
   me: 'tutor' | 'student';
   onPick?: (side: 'tutor' | 'student', index: number) => void;
-}> = ({ snap, me, onPick }) => {
+  /** Overridden only by the calibration tool. */
+  layout?: Layout;
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT }) => {
   const bothOpen = snap.mode === 'tutor';
   const seeTutor = bothOpen || me === 'tutor';
   const seeStudent = bothOpen || me === 'student';
@@ -101,30 +107,30 @@ const Board: React.FC<{
   return (
     <div
       className="relative w-full mx-auto select-none"
-      style={{ aspectRatio: '1672 / 941', maxWidth: 'min(100%, 1400px)', containerType: 'inline-size' }}
+      style={{ aspectRatio: '1672 / 941', maxWidth: 'min(100%, 1400px)' }}
     >
       <img src={BOARD_BACKGROUND} alt="" draggable={false}
         className="absolute inset-0 w-full h-full object-cover rounded-2xl" />
 
       {/* the pile everyone draws from */}
-      <div style={boxStyle(DRAW_PILE)} className="pointer-events-none">
+      <div style={boxStyle(layout.drawPile)} className="pointer-events-none">
         {snap.pile.length > 0 && <CardBack src={CARD_BACK_TUTOR} />}
         {snap.pile.length > 0 && (
           <span className="absolute inset-x-0 -bottom-[18%] text-center text-white font-black"
-            style={{ fontSize: 'clamp(11px, 1.3cqw, 18px)', textShadow: '0 2px 6px rgba(0,0,0,.8)' }}>
+            style={{ fontSize: 'clamp(11px, 2vw, 18px)', textShadow: '0 2px 6px rgba(0,0,0,.8)' }}>
             {snap.pile.length}
           </span>
         )}
       </div>
 
       {/* the student's five, along the top */}
-      {STUDENT_HAND.map((box, i) => {
+      {layout.studentHand.map((box, i) => {
         const card = snap.studentHand[i];
         if (!card) return null;
         return (
           <div key={`s${i}`} style={boxStyle(box)}>
             {seeStudent
-              ? <CardFace card={card} form={snap.form}
+              ? <CardFace card={card} form={snap.form} layout={layout}
                   onClick={myTurn('student') ? () => onPick!('student', i) : undefined}
                   glow={myTurn('student') ? 'rgba(255,220,120,.9)' : undefined} />
               : <CardBack src={CARD_BACK_STUDENT} />}
@@ -133,13 +139,13 @@ const Board: React.FC<{
       })}
 
       {/* the tutor's five, along the bottom */}
-      {TUTOR_HAND.map((box, i) => {
+      {layout.tutorHand.map((box, i) => {
         const card = snap.tutorHand[i];
         if (!card) return null;
         return (
           <div key={`t${i}`} style={boxStyle(box)}>
             {seeTutor
-              ? <CardFace card={card} form="isolated"
+              ? <CardFace card={card} form="isolated" layout={layout}
                   onClick={myTurn('tutor') ? () => onPick!('tutor', i) : undefined}
                   glow={myTurn('tutor') ? 'rgba(255,220,120,.9)' : undefined} />
               : <CardBack src={CARD_BACK_TUTOR} />}
@@ -149,13 +155,13 @@ const Board: React.FC<{
 
       {/* what is on the table */}
       {snap.thrownTutor && (
-        <div style={boxStyle(THROWN_TUTOR)}>
-          <CardFace card={snap.thrownTutor} form="isolated" />
+        <div style={boxStyle(layout.thrownTutor)}>
+          <CardFace card={snap.thrownTutor} form="isolated" layout={layout} />
         </div>
       )}
       {snap.thrownStudent && (
-        <div style={boxStyle(THROWN_STUDENT)}>
-          <CardFace card={snap.thrownStudent} form={snap.form} />
+        <div style={boxStyle(layout.thrownStudent)}>
+          <CardFace card={snap.thrownStudent} form={snap.form} layout={layout} />
         </div>
       )}
 
@@ -163,9 +169,9 @@ const Board: React.FC<{
       {snap.flash && (
         <div key={snap.flash.n}
           className="absolute inset-0 flex items-center justify-center pointer-events-none lc-flash">
-          <span className="rounded-full px-[3cqw] py-[1cqw] font-black text-white"
+          <span className="rounded-full px-6 py-3 font-black text-white"
             style={{
-              fontSize: 'clamp(16px, 3cqw, 46px)',
+              fontSize: 'clamp(16px, 4vw, 46px)',
               background: snap.flash.ok ? 'rgba(16,128,80,.92)' : 'rgba(176,32,32,.92)',
               boxShadow: '0 10px 40px rgba(0,0,0,.45)',
             }}>

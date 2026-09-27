@@ -58,14 +58,20 @@ export const refill = (s: Snap, rnd: () => number = Math.random): Snap => {
   const pile = [...s.pile];
   const used = animalsInPlay({ tutorHand, studentHand, thrownTutor: s.thrownTutor, thrownStudent: s.thrownStudent });
   const free = shuffle(ANIMALS.filter(a => !used.has(a)), rnd);
+  let dealt = false;
   while (tutorHand.length < HAND_SIZE && pile.length > 0) {
     const a1 = free.pop(); const a2 = free.pop();
     if (!a1 || !a2) break;                    // 21 animals covers ten in play
     const letter = pile.shift()!;
     tutorHand.push({ letter, animal: a1 });
     studentHand.push({ letter, animal: a2 });
+    dealt = true;
   }
-  return { ...s, tutorHand, studentHand, pile };
+  // A card drawn always lands at the end, which would leave the two hands in
+  // the same order — the student could then answer by POSITION without reading
+  // a letter. Shuffle both, separately, whenever anything was dealt.
+  if (!dealt) return { ...s, tutorHand, studentHand, pile };
+  return { ...s, tutorHand: shuffle(tutorHand, rnd), studentHand: shuffle(studentHand, rnd), pile };
 };
 
 export const deal = (
