@@ -95,9 +95,13 @@ const Board: React.FC<{
   /** Whose screen this is. The tutor sees his own hand; in tutor mode, both. */
   me: 'tutor' | 'student';
   onPick?: (side: 'tutor' | 'student', index: number) => void;
-  /** Overridden only by the calibration tool. */
   layout?: Layout;
-}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT }) => {
+  /** Everything the board paints over itself — nothing sits above the canvas. */
+  onBack?: () => void;
+  onRematch?: () => void;
+  onFullscreen?: () => void;
+  fullscreen?: boolean;
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, onBack, onRematch, onFullscreen, fullscreen }) => {
   const bothOpen = snap.mode === 'tutor';
   const seeTutor = bothOpen || me === 'tutor';
   const seeStudent = bothOpen || me === 'student';
@@ -107,7 +111,7 @@ const Board: React.FC<{
   return (
     <div
       className="relative w-full mx-auto select-none"
-      style={{ aspectRatio: '1672 / 941', maxWidth: 'min(100%, 1400px)' }}
+      style={{ aspectRatio: '1672 / 941', maxWidth: 'min(100%, 1400px)', containerType: 'inline-size' }}
     >
       <img src={BOARD_BACKGROUND} alt="" draggable={false}
         className="absolute inset-0 w-full h-full object-cover rounded-2xl" />
@@ -165,6 +169,88 @@ const Board: React.FC<{
         </div>
       )}
 
+      {/* ── the chrome, painted on the board ── */}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ fontSize: 'clamp(9px, 1.5cqw, 20px)' }}>
+
+        {/* back to the letters */}
+        {onBack && (
+          <button onClick={onBack} aria-label="Back to the letters"
+            className="pointer-events-auto absolute flex items-center justify-center rounded-full
+                       bg-black/45 hover:bg-black/65 text-white backdrop-blur-sm"
+            style={{ left: '1.4%', top: '2.2%', width: '4.4cqw', height: '4.4cqw', minWidth: 30, minHeight: 30 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6}
+              strokeLinecap="round" strokeLinejoin="round" style={{ width: '55%', height: '55%' }} aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
+
+        {/* what this game is */}
+        <div className="absolute text-center text-white whitespace-nowrap"
+          style={{ left: '50%', top: '1.6%', transform: 'translateX(-50%)', textShadow: '0 2px 8px rgba(0,0,0,.85)' }}>
+          <p className="font-black leading-none" style={{ fontSize: '1.35em' }}>
+            Letter cards · {FORM_LABEL[snap.form].en}
+          </p>
+        </div>
+
+        {/* full screen, and a rematch for the tutor */}
+        <div className="absolute flex items-center" style={{ right: '1.4%', top: '2.2%', gap: '0.8cqw' }}>
+          {onRematch && (
+            <button onClick={onRematch}
+              className="pointer-events-auto rounded-full bg-black/45 hover:bg-black/65 text-white
+                         backdrop-blur-sm font-black whitespace-nowrap"
+              style={{ padding: '0.5em 1.1em', fontSize: '1.1em' }}>
+              Play again
+            </button>
+          )}
+          {onFullscreen && (
+            <button onClick={onFullscreen} aria-label={fullscreen ? 'Leave full screen' : 'Full screen'}
+              className="pointer-events-auto flex items-center justify-center rounded-full
+                         bg-black/45 hover:bg-black/65 text-white backdrop-blur-sm"
+              style={{ width: '4.4cqw', height: '4.4cqw', minWidth: 30, minHeight: 30 }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}
+                strokeLinecap="round" strokeLinejoin="round" style={{ width: '55%', height: '55%' }} aria-hidden="true">
+                {fullscreen
+                  ? <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" />
+                  : <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />}
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* the score and what is left of the lives, above the table */}
+        <div className="absolute flex items-center justify-center"
+          style={{ left: '50%', top: '30.5%', transform: 'translateX(-50%)', gap: '0.8cqw' }}>
+          <span className="rounded-full bg-emerald-900/70 text-emerald-50 font-black backdrop-blur-sm whitespace-nowrap"
+            style={{ padding: '0.35em 0.9em', fontSize: '1.15em' }}>
+            ✓ {snap.score} / {snap.total}
+          </span>
+          {snap.livesMax !== null && (
+            <span className="rounded-full bg-rose-900/70 text-rose-50 font-black backdrop-blur-sm whitespace-nowrap"
+              style={{ padding: '0.35em 0.9em', fontSize: '1.15em' }}>
+              {'♥'.repeat(Math.max(0, snap.lives ?? 0))}
+              <span className="opacity-35">{'♥'.repeat(Math.max(0, snap.livesMax - (snap.lives ?? 0)))}</span>
+            </span>
+          )}
+        </div>
+
+        {/* whose turn it is, under the table */}
+        <div className="absolute" style={{ left: '50%', top: '61.5%', transform: 'translateX(-50%)' }}>
+          <span className={`rounded-full font-black whitespace-nowrap backdrop-blur-sm ${
+            snap.ph === 'over' ? 'bg-slate-900/75 text-slate-100'
+              : (snap.mode === 'tutor' || snap.turn === me) ? 'bg-amber-400 text-amber-950' : 'bg-slate-900/70 text-slate-200'}`}
+            style={{ padding: '0.4em 1.1em', fontSize: '1.2em' }}>
+            {snap.ph === 'over'
+              ? (snap.ended === 'done' ? 'Every letter answered' : 'Out of lives')
+              : snap.mode === 'tutor'
+                ? (snap.turn === 'tutor' ? 'Throw a card' : 'Their answer')
+                : snap.turn === me ? 'Your turn'
+                : `Waiting for ${snap.turn === 'tutor' ? 'the teacher' : 'the student'}`}
+          </span>
+        </div>
+      </div>
+
       {/* right / wrong, over the middle */}
       {snap.flash && (
         <div key={snap.flash.n}
@@ -187,30 +273,6 @@ const FlashStyle: React.FC = () => (
   <style>{`@keyframes lc-flash{0%{opacity:0;transform:scale(.7)}18%{opacity:1;transform:scale(1)}72%{opacity:1}100%{opacity:0;transform:scale(1.15)}}.lc-flash{animation:lc-flash 1s ease forwards}`}</style>
 );
 
-/** Score, lives and whose turn it is — above the board on every screen. */
-const Status: React.FC<{ snap: Snap; me: 'tutor' | 'student' }> = ({ snap, me }) => {
-  const waiting = snap.turn === 'tutor' ? 'the teacher' : 'the student';
-  const mine = snap.mode === 'tutor' || snap.turn === me;
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-3">
-      <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-sm font-black">
-        ✓ {snap.score} / {snap.total}
-      </span>
-      {snap.livesMax !== null && (
-        <span className="px-3 py-1.5 rounded-full bg-rose-100 text-rose-800 text-sm font-black">
-          {'♥'.repeat(Math.max(0, snap.lives ?? 0))}
-          <span className="opacity-30">{'♥'.repeat(Math.max(0, snap.livesMax - (snap.lives ?? 0)))}</span>
-        </span>
-      )}
-      <span className={`px-3 py-1.5 rounded-full text-sm font-black ${
-        mine ? 'bg-amber-400 text-amber-950' : 'bg-slate-200 text-slate-600'}`}>
-        {snap.ph === 'over' ? (snap.ended === 'done' ? 'Finished' : 'Out of lives')
-          : mine ? 'Your turn' : `Waiting for ${waiting}`}
-      </span>
-    </div>
-  );
-};
-
 export { Board as LetterCardsBoard };
 export type { Snap as LetterCardsSnap };
 
@@ -221,10 +283,39 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   const [isTutor, setIsTutor] = useState<boolean | null>(null);
   const [snap, setSnap] = useState<Snap | null>(null);
   const snapRef = useRef<Snap | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const chanRef = useRef<P2PGameChannel | null>(null);
   const startedAt = useRef(Date.now());
 
   useEffect(() => { document.title = 'Letter cards'; getLetterCardsGame(gameId).then(setGame); }, [gameId]);
+
+  // iPhone Safari allows full screen on video only, so the button is offered
+  // where it works and the board simply fills the window everywhere else.
+  const fullscreenAvailable = typeof document !== 'undefined'
+    && (document.fullscreenEnabled || !!(document as unknown as { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled);
+
+  useEffect(() => {
+    const on = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) { void document.exitFullscreen?.(); return; }
+    void el.requestFullscreen?.().catch(() => { /* refused — the board still fills the window */ });
+  }, []);
+
+  /** Back to wherever they came from — the letters page for the tutor. */
+  const leave = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+    let fromHere = false;
+    try { fromHere = !!document.referrer && new URL(document.referrer).origin === window.location.origin; } catch { /* bad referrer */ }
+    if (fromHere && window.history.length > 1) { window.history.back(); return; }
+    window.location.href = '/';
+  }, []);
 
   // The tutor opening his own link is signed in; a student arriving is not.
   useEffect(() => {
@@ -233,6 +324,9 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   }, [game]);
 
   const host = isTutor === true;
+
+  // The tutor's device records each finished game once.
+  const savedRef = useRef(false);
 
   const broadcast = useCallback((s: Snap | null) => {
     if (s) chanRef.current?.send({ type: 'broadcast', event: 'board', payload: s });
@@ -276,8 +370,6 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     // `pick` is stable enough: it only reads refs.
   }, [game, isTutor, host, broadcast, pick]);
 
-  // The tutor's device records the result once.
-  const savedRef = useRef(false);
   useEffect(() => {
     if (!host || !game || !snap || snap.ph !== 'over' || savedRef.current) return;
     savedRef.current = true;
@@ -286,6 +378,14 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
       endedReason: snap.ended ?? 'done', durationMs: Date.now() - startedAt.current,
     });
   }, [host, game, snap]);
+
+  /** Deal the whole thing again — the tutor's call. */
+  const rematch = useCallback(() => {
+    if (!host || !game) return;
+    savedRef.current = false;
+    startedAt.current = Date.now();
+    commit(deal(game.letters, game.form, game.lives, game.mode));
+  }, [host, game, commit]);
 
   const onPick = host
     ? pick
@@ -313,33 +413,25 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
 
   const me: 'tutor' | 'student' = host ? 'tutor' : 'student';
   return (
-    <Shell>
+    <Shell wrapRef={wrapRef}>
       <FlashStyle />
-      <div className="px-2 sm:px-4 py-3">
-        <h1 className="text-center text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
-          Letter cards · <span className="text-teal-700">{FORM_LABEL[snap.form].en}</span>
-        </h1>
-        <Status snap={snap} me={me} />
-        <Board snap={snap} me={me} onPick={snap.ph === 'playing' ? onPick : undefined} />
-        {snap.ph === 'over' && (
-          <div className="mt-4 text-center">
-            <p className="text-2xl font-black text-slate-800 dark:text-slate-100">
-              {snap.ended === 'done' ? '🎉 Every letter answered' : 'Out of lives'}
-            </p>
-            <p className="text-sm text-slate-500 mt-1">
-              {snap.score} of {snap.total} right{snap.mistakes ? ` · ${snap.mistakes} wrong` : ''}
-            </p>
-          </div>
-        )}
-      </div>
+      <Board
+        snap={snap} me={me}
+        onPick={snap.ph === 'playing' ? onPick : undefined}
+        onBack={leave}
+        onRematch={host ? rematch : undefined}
+        onFullscreen={fullscreenAvailable ? toggleFullscreen : undefined}
+        fullscreen={fullscreen}
+      />
     </Shell>
   );
 };
 
-const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-[100dvh] bg-slate-100 dark:bg-gray-900"
-    style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-    {children}
+const Shell: React.FC<{ children: React.ReactNode; wrapRef?: React.Ref<HTMLDivElement> }> = ({ children, wrapRef }) => (
+  <div ref={wrapRef}
+    className="min-h-[100dvh] w-full bg-slate-900 flex items-center justify-center p-1 sm:p-2"
+    style={{ paddingTop: 'max(0.25rem, env(safe-area-inset-top))', paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}>
+    <div className="w-full">{children}</div>
   </div>
 );
 
