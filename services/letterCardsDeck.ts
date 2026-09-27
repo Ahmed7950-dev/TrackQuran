@@ -20,3 +20,7 @@ export const animalSrc = (a: Animal): string => `/games/letter-cards/${a}.webp`;
 export const CARD_BACK_STUDENT = '/games/letter-cards/backred.webp';
 export const CARD_BACK_TUTOR = '/games/letter-cards/backblue.webp';
 export const BOARD_BACKGROUND = '/games/letter-cards/background.webp';
+
+/** A card landing on the table, and the chime for a letter answered right. */
+export const SOUND_THROW = '/games/letter-cards/card.mp3';
+export const SOUND_POINT = '/games/letter-cards/point.m4a';

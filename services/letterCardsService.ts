@@ -24,6 +24,7 @@ export const letterCardsChannel = (id: string): string => `letter-cards:${id}`;
 
 export {
   HAND_SIZE, ANIMALS, animalSrc, CARD_BACK_STUDENT, CARD_BACK_TUTOR, BOARD_BACKGROUND,
+  SOUND_THROW, SOUND_POINT,
 } from './letterCardsDeck';
 export type { Animal, CardsMode, CardsEnd } from './letterCardsDeck';
 

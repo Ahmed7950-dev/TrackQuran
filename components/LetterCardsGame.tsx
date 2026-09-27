@@ -30,7 +30,7 @@ import {
   ANIMALS, Animal, BOARD_BACKGROUND, CARD_BACK_STUDENT, CARD_BACK_TUTOR, CardsEnd,
   CardsMode, HAND_SIZE, LetterCardsGame as Game, animalSrc, completeLetterCardsGame,
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
-  markLetterCardsStarted, notifyLetterCardsInvite,
+  markLetterCardsStarted, notifyLetterCardsInvite, SOUND_POINT, SOUND_THROW,
 } from '../services/letterCardsService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
@@ -85,6 +85,36 @@ const CardFace: React.FC<{
   </button>
 );
 
+/**
+ * The table's two sounds. Both screens play them off the same snapshot, so the
+ * student hears the card the tutor threw. A refused play is nothing to answer
+ * for — some browsers hold sound back until the first tap, and the first tap
+ * is a card anyway.
+ */
+const play = (src: string) => {
+  try {
+    const a = new Audio(src);
+    a.volume = 0.7;
+    void a.play().catch(() => { /* not yet allowed */ });
+  } catch { /* no audio on this device */ }
+};
+
+/** Card down when one appears in the middle, a chime when the pair was right. */
+const useTableSounds = (snap: Snap) => {
+  const thrown = (snap.thrownTutor ? 1 : 0) + (snap.thrownStudent ? 1 : 0);
+  const was = useRef(thrown);
+  const flash = useRef(snap.flash?.n ?? 0);
+  useEffect(() => {
+    if (thrown > was.current) play(SOUND_THROW);
+    was.current = thrown;
+  }, [thrown]);
+  useEffect(() => {
+    const n = snap.flash?.n ?? 0;
+    if (n !== flash.current && snap.flash?.ok) play(SOUND_POINT);
+    flash.current = n;
+  }, [snap.flash]);
+};
+
 const CardBack: React.FC<{ src: string }> = ({ src }) => (
   <img src={src} alt="" draggable={false}
     className="absolute inset-0 w-full h-full object-contain pointer-events-none rounded-[8%]" />
@@ -100,6 +130,7 @@ const Board: React.FC<{
   onBack?: () => void;
   onRematch?: () => void;
 }> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, onBack, onRematch }) => {
+  useTableSounds(snap);
   const bothOpen = snap.mode === 'tutor';
   const seeTutor = bothOpen || me === 'tutor';
   const seeStudent = bothOpen || me === 'student';
