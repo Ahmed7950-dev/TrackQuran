@@ -4,9 +4,8 @@
 // (1672 × 941). The slot numbers were MEASURED from the frames painted into
 // Background.png, so cards land in the frames the artwork already draws.
 //
-// To change any of it: open a game with ?calibrate=1, drag the boxes and pull
-// the sliders, then paste what it prints back over DEFAULT_LAYOUT below.
-// Nothing else in the game reads pixels.
+// The numbers below were placed by hand against the artwork. Nothing else in
+// the game reads pixels, so this is the only file to touch to move anything.
 // -----------------------------------------------------------------------------
 
 export const BOARD = { w: 1672, h: 941 };
@@ -50,17 +49,9 @@ export const DEFAULT_LAYOUT: Layout = {
     pc(484, 648, 115, 172), pc(629, 648, 115, 172), pc(777, 648, 115, 172),
     pc(927, 648, 115, 172), pc(1073, 648, 115, 172),
   ],
-  drawPile: pc(35, 340, 133, 205),
-  thrownTutor: pc(700, 380, 115, 172),
-  thrownStudent: pc(857, 380, 115, 172),
-  letterBox: { x: 7.7, y: 8.2, w: 84.5, h: 28.7 },
-  letterSize: 30,
+  drawPile: pc(13, 342, 187, 218),
+  thrownTutor: pc(647, 339, 150, 226),
+  thrownStudent: pc(855, 339, 150, 226),
+  letterBox: { x: 9.5, y: 6.5, w: 84.5, h: 28.7 },
+  letterSize: 42,
 };
-
-/** Board pixels from a share of it — what the calibration tool prints. */
-export const toPx = (b: Box) => ({
-  x: Math.round((b.x / 100) * BOARD.w),
-  y: Math.round((b.y / 100) * BOARD.h),
-  w: Math.round((b.w / 100) * BOARD.w),
-  h: Math.round((b.h / 100) * BOARD.h),
-});
