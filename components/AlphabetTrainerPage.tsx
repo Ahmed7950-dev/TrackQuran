@@ -11,6 +11,7 @@ import ReadingBattleGame from './ReadingBattleGame';
 import FlappyLettersGame from './FlappyLettersGame';
 import OddLetterGame from './OddLetterGame';
 import { LetterMatchSetup } from './LetterMatchChallenge';
+import { LetterCardsSetup } from './LetterCardsGame';
 import { getFormMisses, clearFormMisses, FormMisses, MatchForm } from '../services/letterMatchService';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
@@ -108,7 +109,7 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch' | 'lettercards';
 type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt';
 
 const AlphabetTrainerPage: React.FC<{
@@ -1065,6 +1066,14 @@ const AlphabetTrainerPage: React.FC<{
               className="px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >{t('alphabetTrainer.letterMatch')}</button>
           )}
+          {!childMode && !isStudentView && (
+            <button
+              onClick={() => { if (unique > 0) setView('lettercards'); }}
+              disabled={unique === 0}
+              title="Play the same shapes as a card game — together by link, or on your screen"
+              className="px-5 py-2 text-sm font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >🃏 Letter cards</button>
+          )}
         </div>
       </div>
     </div>
@@ -1385,6 +1394,24 @@ const AlphabetTrainerPage: React.FC<{
       )}
       {view === 'oddletter' && (
         <OddLetterGame onExit={() => finishGame('Odd Letter')} />
+      )}
+      {view === 'lettercards' && (
+        logTarget ? (
+          <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-3xl border border-slate-200 dark:border-gray-700 my-6">
+            <LetterCardsSetup
+              letters={selectedLetters}
+              initialForm={letterForm}
+              student={logTarget}
+              onClose={() => setView('select')}
+            />
+          </div>
+        ) : (
+          <div className="max-w-md mx-auto my-10 p-6 text-center rounded-3xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700">
+            <p className="font-bold text-slate-700 dark:text-slate-200">Pick a student first</p>
+            <p className="text-sm text-slate-500 mt-1">Letter cards is played with one student.</p>
+            <button onClick={() => setView('select')} className="mt-4 h-10 px-5 rounded-xl bg-slate-100 dark:bg-gray-700 font-bold">Back</button>
+          </div>
+        )
       )}
       {view === 'lettermatch' && (
         <LetterMatchSetup

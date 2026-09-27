@@ -48,6 +48,7 @@ import StudentRegisterPage from './components/StudentRegisterPage';
 import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import PublicQuranPage from './components/PublicQuranPage';
+import { LetterCardsPage } from './components/LetterCardsGame';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import { renewalReminderOccurrence } from './utils/renewal';
 import { getFamilyGroupsByStudent, familyRenewalUpdates, type FamilyGroup } from './services/familyGroupService';
@@ -531,6 +532,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (letterMatchId) return <LetterMatchPage challengeId={letterMatchId} />;
+
+  // ── Letter cards — the same shapes, played as a card game, no auth ────────
+  const letterCardsId = (() => {
+    const m = window.location.pathname.match(/^\/letter-cards\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterCardsId) return <LetterCardsPage gameId={letterCardsId} />;
 
   // ── Recitation homework — the student records each verse, no auth ─────────
   const recitationId = (() => {
