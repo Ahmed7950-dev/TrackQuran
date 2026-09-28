@@ -30,7 +30,8 @@ import {
   ANIMALS, Animal, BOARD_BACKGROUND, CARD_BACK_STUDENT, CARD_BACK_TUTOR, CardsEnd,
   CardsMode, HAND_SIZE, LetterCardsGame as Game, animalSrc, completeLetterCardsGame,
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
-  markLetterCardsStarted, notifyLetterCardsInvite, SOUND_POINT, SOUND_THROW,
+  markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
+  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW,
 } from '../services/letterCardsService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
@@ -353,7 +354,11 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     supabase.auth.getSession().then(({ data }) => setIsTutor(data.session?.user?.id === game.teacherId));
   }, [game]);
 
-  const host = isTutor === true;
+  /** Homework: the student plays the tutor's side against the computer, on
+   *  their own device, with nobody on the other end of a channel. */
+  const solo = game?.mode === 'solo';
+  const host = solo || isTutor === true;
+  const me: 'tutor' | 'student' = solo ? 'student' : (host ? 'tutor' : 'student');
 
   // The tutor's device records each finished game once.
   const savedRef = useRef(false);
@@ -376,9 +381,27 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     window.setTimeout(() => commit(judgeBoard(snapRef.current ?? thrown)), 750);
   }, [commit]);
 
+  // ── Alone against the computer ──
+  useEffect(() => {
+    if (!solo || !game) return;
+    const first = deal(game.letters, game.form, game.lives, game.mode);
+    snapRef.current = first; setSnap(first);
+    startedAt.current = Date.now();
+    void markLetterCardsStarted(game.id);
+  }, [solo, game]);
+
+  /** The computer's turn: it takes a moment, then throws one of its cards. */
+  useEffect(() => {
+    if (!solo || !snap || snap.ph !== 'playing' || snap.turn !== 'tutor') return;
+    const n = snap.tutorHand.length;
+    if (!n) return;
+    const t = window.setTimeout(() => pick('tutor', Math.floor(Math.random() * n)), 900);
+    return () => window.clearTimeout(t);
+  }, [solo, snap, pick]);
+
   // ── The wire ──
   useEffect(() => {
-    if (!game || isTutor === null) return;
+    if (solo || !game || isTutor === null) return;
     const ch = createGameChannel(letterCardsChannel(game.id), host ? 'host' : 'guest');
     chanRef.current = ch;
     if (host) {
@@ -398,18 +421,28 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     ch.subscribe(status => { if (status === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'hello', payload: {} }); });
     return () => { ch.unsubscribe(); chanRef.current = null; };
     // `pick` is stable enough: it only reads refs.
-  }, [game, isTutor, host, broadcast, pick]);
+  }, [solo, game, isTutor, host, broadcast, pick]);
 
   useEffect(() => {
     if (!host || !game || !snap || snap.ph !== 'over' || savedRef.current) return;
     savedRef.current = true;
+    const durationMs = Date.now() - startedAt.current;
+    const endedReason = snap.ended ?? 'done';
     void completeLetterCardsGame({
       id: game.id, score: snap.score, mistakes: snap.mistakes, wrongLetters: snap.wrongLetters,
-      endedReason: snap.ended ?? 'done', durationMs: Date.now() - startedAt.current,
+      endedReason, durationMs,
     });
-  }, [host, game, snap]);
+    // Homework is played again and again, so every run is kept on its own.
+    if (solo) {
+      void recordLetterCardsAttempt({
+        gameId: game.id, studentId: game.studentId, score: snap.score, total: snap.total,
+        mistakes: snap.mistakes, wrongLetters: snap.wrongLetters, endedReason, durationMs,
+      });
+    }
+  }, [host, solo, game, snap]);
 
-  /** Deal the whole thing again — the tutor's call. */
+  /** Deal the whole thing again — the tutor's call, or the student's own on
+   *  homework, which may be played as often as they like. */
   const rematch = useCallback(() => {
     if (!host || !game) return;
     savedRef.current = false;
@@ -441,7 +474,6 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     </Shell>
   );
 
-  const me: 'tutor' | 'student' = host ? 'tutor' : 'student';
   return (
     <div ref={wrapRef} className="fixed inset-0 overflow-hidden bg-black">
       {/* the artwork itself carries the margins, so there is no coloured letterbox */}
@@ -501,10 +533,12 @@ export const LetterCardsSetup: React.FC<{
     return (
       <div className="p-5 sm:p-6 space-y-4">
         <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Ready to play</h3>
-        {mode === 'multiplayer' ? (
+        {mode !== 'tutor' ? (
           <>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Send this to {studentName}, then open it yourself — you deal from your side.
+              {mode === 'solo'
+                ? `${studentName} can play this against the computer whenever they like, from this link or from their homework tab.`
+                : `Send this to ${studentName}, then open it yourself — you deal from your side.`}
             </p>
             <div className="flex justify-center py-2"><QRCodeSVG value={url} size={168} /></div>
             <div className="flex gap-2">
@@ -513,9 +547,9 @@ export const LetterCardsSetup: React.FC<{
               <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
                 className="h-10 px-4 rounded-xl bg-slate-800 text-white text-sm font-bold">{copied ? '✓' : 'Copy'}</button>
             </div>
-            <button onClick={() => { void notifyLetterCardsInvite(game); }}
+            <button onClick={() => { void (mode === 'solo' ? notifyLetterCardsHomework(game) : notifyLetterCardsInvite(game)); }}
               className="w-full h-11 rounded-xl border-2 border-teal-600 text-teal-700 font-black">
-              Send it to {studentName}
+              {mode === 'solo' ? `Set it for ${studentName}` : `Send it to ${studentName}`}
             </button>
           </>
         ) : (
@@ -525,7 +559,7 @@ export const LetterCardsSetup: React.FC<{
         )}
         <a href={`/letter-cards/${game.id}`}
           className="block w-full h-12 rounded-xl bg-teal-700 text-white font-black flex items-center justify-center">
-          Open the board
+          {mode === 'solo' ? 'See the board' : 'Open the board'}
         </a>
         <button onClick={onClose} className="w-full py-2 text-sm text-slate-500">Close</button>
       </div>
@@ -537,7 +571,8 @@ export const LetterCardsSetup: React.FC<{
       <div>
         <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Letter cards</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          {letters.length} letter{letters.length === 1 ? '' : 's'} · you hold the isolated shape,
+          {letters.length} letter{letters.length === 1 ? '' : 's'} ·
+          {mode === 'solo' ? ' the computer holds' : ' you hold'} the isolated shape,
           {' '}{studentName} holds the {FORM_LABEL[form].en.toLowerCase()} shape.
         </p>
       </div>
@@ -548,6 +583,7 @@ export const LetterCardsSetup: React.FC<{
           {([
             ['multiplayer', 'Together, by link', 'Each of you sees only your own cards.'],
             ['tutor', 'On my screen only', 'Both hands face up. They tell you what to throw.'],
+            ['solo', 'Homework, on their own', 'They play the computer, as many times as they like.'],
           ] as const).map(([k, title, note]) => (
             <button key={k} onClick={() => setMode(k)}
               className={`text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${

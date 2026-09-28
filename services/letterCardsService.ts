@@ -106,6 +106,61 @@ export async function listLetterCardsGames(studentId: string): Promise<LetterCar
   return (data as Row[]).map(fromRow);
 }
 
+/** One finished run of a homework game. The row keeps the last one; this
+ *  keeps them all, because the student may play as often as they like. */
+export interface LetterCardsAttempt {
+  id: string;
+  gameId: string;
+  score: number;
+  total: number;
+  mistakes: number;
+  endedReason: CardsEnd | null;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+export async function recordLetterCardsAttempt(input: {
+  gameId: string; studentId: string; score: number; total: number; mistakes: number;
+  wrongLetters: Record<string, number>; endedReason: CardsEnd; durationMs: number;
+}): Promise<void> {
+  const { error } = await supabase.from('letter_cards_attempts').insert({
+    game_id: input.gameId, student_id: input.studentId, score: input.score, total: input.total,
+    mistakes: input.mistakes, wrong_letters: input.wrongLetters,
+    ended_reason: input.endedReason, duration_ms: input.durationMs,
+  });
+  if (error) console.error('recordLetterCardsAttempt:', error.message);
+}
+
+/** The homework a student has been set: the solo games, newest first. */
+export async function listLetterCardsHomework(studentId: string): Promise<LetterCardsGame[]> {
+  if (!studentId) return [];
+  const { data, error } = await supabase.from('letter_cards_games').select('*')
+    .eq('student_id', studentId).eq('mode', 'solo')
+    .order('created_at', { ascending: false }).limit(20);
+  if (error) { console.error('listLetterCardsHomework:', error.message); return []; }
+  return (data as Row[]).map(fromRow);
+}
+
+/** Every run of those games, newest first, keyed by the game they belong to. */
+export async function listLetterCardsAttempts(gameIds: string[]): Promise<Record<string, LetterCardsAttempt[]>> {
+  const out: Record<string, LetterCardsAttempt[]> = {};
+  if (!gameIds.length) return out;
+  const { data, error } = await supabase.from('letter_cards_attempts')
+    .select('id, game_id, score, total, mistakes, ended_reason, duration_ms, created_at')
+    .in('game_id', gameIds).order('created_at', { ascending: false });
+  if (error) { console.error('listLetterCardsAttempts:', error.message); return out; }
+  for (const r of (data ?? []) as Array<{
+    id: string; game_id: string; score: number; total: number; mistakes: number;
+    ended_reason: CardsEnd | null; duration_ms: number | null; created_at: string;
+  }>) {
+    (out[r.game_id] ??= []).push({
+      id: r.id, gameId: r.game_id, score: r.score, total: r.total, mistakes: r.mistakes,
+      endedReason: r.ended_reason, durationMs: r.duration_ms, createdAt: r.created_at,
+    });
+  }
+  return out;
+}
+
 /** Tell the student a game is waiting, with the link that opens it. */
 export async function notifyLetterCardsInvite(game: LetterCardsGame): Promise<void> {
   await createNotification({
@@ -113,6 +168,18 @@ export async function notifyLetterCardsInvite(game: LetterCardsGame): Promise<vo
     type: 'letter_cards_invite',
     title: '🃏 Letter cards',
     body: `Your teacher is waiting to play letter cards with you — ${game.letters.length} letters.`,
+    metadata: { gameId: game.id, url: letterCardsUrl(game.id) },
+  });
+}
+
+/** Tell the student a card game has been set as homework. Same notice type —
+ *  the table checks it — with the wording and the link of a homework. */
+export async function notifyLetterCardsHomework(game: LetterCardsGame): Promise<void> {
+  await createNotification({
+    teacherId: game.teacherId, studentId: game.studentId, recipient: 'student', bookingId: null,
+    type: 'letter_cards_invite',
+    title: '🃏 Letter cards homework',
+    body: `Play the letter cards against the computer — ${game.letters.length} letters. As many times as you like.`,
     metadata: { gameId: game.id, url: letterCardsUrl(game.id) },
   });
 }

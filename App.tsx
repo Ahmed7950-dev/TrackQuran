@@ -68,6 +68,9 @@ import RecitationReviewPanel from './components/RecitationReviewPanel';
 import TadabburLabPage from './components/TadabburLabPage';
 import HomeworkTab from './components/HomeworkTab';
 import {
+  LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
+} from './services/letterCardsService';
+import {
   RecitationHomework, clearRecitationHistory, createRecitationHomework, deleteRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
   closeFollowUps, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
@@ -946,6 +949,21 @@ const App: React.FC = () => {
     listRecitationHomework(hwStudentId).then(list => {
       if (live) setRecitations(Object.fromEntries(list.map(r => [r.id, r])));
     });
+    return () => { live = false; };
+  }, [currentUserRole, hwStudentId, activeTab]);
+
+  // The card games set as homework for that student, with every run of each.
+  const [cardGames, setCardGames] = useState<LetterCardsGame[]>([]);
+  const [cardAttempts, setCardAttempts] = useState<Record<string, LetterCardsAttempt[]>>({});
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !hwStudentId) { setCardGames([]); setCardAttempts({}); return; }
+    let live = true;
+    listLetterCardsHomework(hwStudentId).then(async games => {
+      if (!live) return;
+      setCardGames(games);
+      const tries = await listLetterCardsAttempts(games.map(g => g.id));
+      if (live) setCardAttempts(tries);
+    }).catch(() => {});
     return () => { live = false; };
   }, [currentUserRole, hwStudentId, activeTab]);
 
@@ -2360,6 +2378,8 @@ const App: React.FC = () => {
               onMarkDone={hw => handleMarkHomeworkDone(hw_student.id, hw.id)}
               onRemove={removeHomework}
               onClearFinished={clearFinished}
+              cardGames={cardGames}
+              cardAttempts={cardAttempts}
             />
           );
         })() : activeTab === 'bill' && currentUser?.role === 'teacher' && (sessionStudent ?? selectedStudent)?.studentType === 'platform' ? (

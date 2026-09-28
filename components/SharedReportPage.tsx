@@ -28,6 +28,9 @@ import HomeworkTab from './HomeworkTab';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
 import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
+import {
+  LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
+} from '../services/letterCardsService';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +208,17 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     listRecitationHomework(report.student_id)
       .then(list => setRecitations(Object.fromEntries(list.map(r => [r.id, r]))))
       .catch(() => {});
+  }, [report?.student_id, activeTab, refreshNonce]);
+
+  // The card games set as homework, with every run the student has played.
+  const [cardGames, setCardGames] = useState<LetterCardsGame[]>([]);
+  const [cardAttempts, setCardAttempts] = useState<Record<string, LetterCardsAttempt[]>>({});
+  useEffect(() => {
+    if (!report?.student_id) return;
+    listLetterCardsHomework(report.student_id).then(async games => {
+      setCardGames(games);
+      setCardAttempts(await listLetterCardsAttempts(games.map(g => g.id)));
+    }).catch(() => {});
   }, [report?.student_id, activeTab, refreshNonce]);
 
   // ?hw=<homeworkId> (the "see my mistakes" notification): open the Quran page
@@ -1119,6 +1133,9 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     changeTab('quran');
                   }}
                   onRecord={hw => { if (hw.recitationId) window.location.href = `/recite/${hw.recitationId}`; }}
+                  cardGames={cardGames}
+                  cardAttempts={cardAttempts}
+                  onPlayCards={g => { window.location.href = `/letter-cards/${g.id}`; }}
                 />
               );
             })()}

@@ -16,6 +16,7 @@ import ReactDOM from 'react-dom';
 import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
+import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
 
 const SERIF = "'Cormorant Garamond', Georgia, serif";
 
@@ -84,6 +85,9 @@ interface Block {
   lastDate: string;
 }
 
+/** The shape the student holds, as the card game names it. */
+const CARD_FORM: Record<string, string> = { initial: 'Beginning', medial: 'Middle', final: 'End' };
+
 const HomeworkTab: React.FC<{
   side: 'tutor' | 'student';
   homework: QuranHomework[];
@@ -99,9 +103,15 @@ const HomeworkTab: React.FC<{
   onClearFinished?: () => void;
   /** Student: open the recording page. */
   onRecord?: (hw: QuranHomework, rec: RecitationHomework | undefined) => void;
+  /** Letter-card games set as homework, newest first, with every run of each. */
+  cardGames?: LetterCardsGame[];
+  cardAttempts?: Record<string, LetterCardsAttempt[]>;
+  /** Student: open the board. */
+  onPlayCards?: (game: LetterCardsGame) => void;
 }> = ({
   side, homework, recitations, untilLesson,
   onOpenVerses, onListen, onCopyLink, onMarkDone, onRemove, onClearFinished, onRecord,
+  cardGames, cardAttempts, onPlayCards,
 }) => {
   const isTutor = side === 'tutor';
   const [showFinished, setShowFinished] = useState(false);
@@ -378,7 +388,63 @@ const HomeworkTab: React.FC<{
         )}
       </div>
 
-      {openBlocks.length === 0 ? (
+      {(cardGames ?? []).map(g => {
+        const tries = cardAttempts?.[g.id] ?? [];
+        const best = tries.reduce((m, a) => Math.max(m, a.score), 0);
+        return (
+          <div key={g.id} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <div className="px-5 py-4 flex items-center gap-3 flex-wrap">
+              <span className="text-2xl" aria-hidden="true">🃏</span>
+              <div className="min-w-0">
+                <p className="text-lg text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                  Letter cards · {CARD_FORM[g.form] ?? g.form}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {g.letters.length} letter{g.letters.length === 1 ? '' : 's'} against the computer ·
+                  {' '}set {shortDate(g.createdAt)} · play it as often as you like
+                </p>
+              </div>
+              <span className="flex-grow" />
+              {tries.length > 0 && (
+                <span className="inline-flex items-baseline gap-1.5">
+                  <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
+                    {best}/{tries[0].total}
+                  </span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">best of {tries.length}</span>
+                </span>
+              )}
+              {!isTutor && onPlayCards && (
+                <button onClick={() => onPlayCards(g)}
+                  className="flex-shrink-0 h-9 px-4 rounded-full bg-amber-500 text-white text-[13px] font-black hover:bg-amber-600">
+                  {tries.length ? 'Play again' : 'Play'}
+                </button>
+              )}
+            </div>
+            {tries.length > 0 && (
+              <div className="border-t border-slate-100 dark:border-gray-700 divide-y divide-slate-100 dark:divide-gray-700">
+                {tries.map((a, i) => (
+                  <div key={a.id} className="px-5 py-2 flex items-center gap-3 text-sm">
+                    <span className="w-6 text-slate-400 dark:text-slate-500 tabular-nums">{tries.length - i}</span>
+                    <span className="text-slate-500 dark:text-slate-400">{shortDate(a.createdAt)}</span>
+                    <span className="flex-grow" />
+                    {a.mistakes > 0 && (
+                      <span className="text-[11px] text-rose-600 dark:text-rose-400 font-bold">
+                        {a.mistakes} wrong
+                      </span>
+                    )}
+                    <span className={`text-[13px] font-black ${
+                      a.endedReason === 'done' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                      {a.score}/{a.total}{a.endedReason === 'lives' ? ' · out of lives' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {openBlocks.length === 0 && (cardGames ?? []).length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-10 text-center">
           <p className="text-lg text-slate-700 dark:text-slate-200" style={{ fontFamily: SERIF, fontWeight: 600 }}>
             {isTutor ? 'Nothing open' : 'All done'}

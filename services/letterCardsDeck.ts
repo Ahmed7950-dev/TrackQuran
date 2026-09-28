@@ -13,7 +13,9 @@ export const ANIMALS = [
 ] as const;
 export type Animal = typeof ANIMALS[number];
 
-export type CardsMode = 'multiplayer' | 'tutor';
+/** Together over a link, both hands on the tutor's screen, or alone against
+ *  the computer as homework. */
+export type CardsMode = 'multiplayer' | 'tutor' | 'solo';
 export type CardsEnd = 'done' | 'lives';
 
 export const animalSrc = (a: Animal): string => `/games/letter-cards/${a}.webp`;
