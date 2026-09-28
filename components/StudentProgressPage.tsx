@@ -7,6 +7,7 @@ import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchie
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
+import { loadRevealedNotes, SurahNotes } from '../data/revealedNotes';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import { listRecitationHomework, versesOf } from '../services/recitationHomeworkService';
 import ExportReportModal from './ExportReportModal';
@@ -1230,6 +1231,16 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => endVerseInfoPress, [endVerseInfoPress]);
 
     const tadabburMode = pageMode === 'tadabbur';
+    /** Our own notes for the open surah, and whether the panel is showing them
+     *  or the fetched tafsir. The choice is a preference, not a per-verse one. */
+    const [revealedNotes, setRevealedNotes] = useState<SurahNotes>({});
+    const REVEALED_PREF = 'quran:explanationSource';
+    const [useRevealed, setUseRevealed] = useState<boolean>(() => {
+        try { return localStorage.getItem(REVEALED_PREF) === 'revealed'; } catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(REVEALED_PREF, useRevealed ? 'revealed' : 'tafsir'); } catch { /* private mode */ }
+    }, [useRevealed]);
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
     /** Verses the student recorded for homework and the tutor passed. */
     const [recitedOkVerses, setRecitedOkVerses] = useState<Set<string>>(new Set());
@@ -1287,6 +1298,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
     const savedViewOnMount = useRef(readSavedView()).current;
     const [selectedSurahId, setSelectedSurahId] = useState<number>(savedViewOnMount?.surah || studentProgress?.surah || 1);
+    // Our own notes for whichever surah is open.
+    useEffect(() => {
+        if (!selectedSurahId) { setRevealedNotes({}); return; }
+        let live = true;
+        loadRevealedNotes(selectedSurahId).then(n => { if (live) setRevealedNotes(n); });
+        return () => { live = false; };
+    }, [selectedSurahId]);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -3918,21 +3936,51 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </p>
                             </section>
                         )}
-                        {showTranslation && (
-                            <section className={`${section} bg-slate-50 dark:bg-gray-700/40 border-slate-200 dark:border-gray-600`}>
-                                <p className={`${label} text-teal-700 dark:text-teal-400`}>Explanation</p>
-                                <p className={`${body} text-slate-700 dark:text-slate-200 ${tafsirOpen ? '' : 'line-clamp-3'}`}>
-                                    {tafsir ?? (isTafsirLoading ? 'Loading…' : tafsirError || '—')}
-                                </p>
-                                {tafsir && tafsir.length > 200 && (
-                                    <button
-                                        onClick={() => setExpandedTafsir(prev => { const n = new Set(prev); if (n.has(vk)) n.delete(vk); else n.add(vk); return n; })}
-                                        className="mt-1 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
-                                        {tafsirOpen ? 'Show less' : 'Read more'}
-                                    </button>
-                                )}
-                            </section>
-                        )}
+                        {showTranslation && (() => {
+                            const ours = revealedNotes[ayahNum];
+                            const showing = useRevealed && ours ? 'revealed' : 'tafsir';
+                            const text = showing === 'revealed'
+                                ? ours!
+                                : (tafsir ?? (isTafsirLoading ? 'Loading…' : tafsirError || '—'));
+                            return (
+                                <section className={`${section} bg-slate-50 dark:bg-gray-700/40 border-slate-200 dark:border-gray-600`}>
+                                    <div className="flex items-start gap-2 mb-1.5">
+                                        <p className={`${label} text-teal-700 dark:text-teal-400 mb-0`}>
+                                            {showing === 'revealed' ? 'Revealed App notes' : 'Explanation'}
+                                        </p>
+                                        <span className="flex-grow" />
+                                        {/* the two readings of this verse, in the corner */}
+                                        {Object.keys(revealedNotes).length > 0 && (
+                                            <span className="flex-shrink-0 -mt-1 inline-flex rounded-full bg-slate-200/70 dark:bg-gray-600/60 p-0.5">
+                                                {([['tafsir', 'Tafsir'], ['revealed', 'Ours']] as const).map(([k, lbl]) => (
+                                                    <button
+                                                        key={k}
+                                                        onClick={() => setUseRevealed(k === 'revealed')}
+                                                        title={k === 'revealed' ? 'Our own summary of this verse' : 'The classical tafsir'}
+                                                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold transition-colors ${
+                                                            showing === k
+                                                                ? 'bg-white dark:bg-gray-800 text-teal-700 dark:text-teal-300 shadow-sm'
+                                                                : 'text-slate-500 dark:text-slate-400'}`}
+                                                    >{lbl}</button>
+                                                ))}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className={`${body} text-slate-700 dark:text-slate-200 ${tafsirOpen ? '' : 'line-clamp-3'}`}>
+                                        {useRevealed && !ours && Object.keys(revealedNotes).length > 0
+                                            ? 'No note for this verse yet.'
+                                            : text}
+                                    </p>
+                                    {text.length > 200 && (
+                                        <button
+                                            onClick={() => setExpandedTafsir(prev => { const n = new Set(prev); if (n.has(vk)) n.delete(vk); else n.add(vk); return n; })}
+                                            className="mt-1 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
+                                            {tafsirOpen ? 'Show less' : 'Read more'}
+                                        </button>
+                                    )}
+                                </section>
+                            );
+                        })()}
                         {showReflection && (
                             <section className={`${section} bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800`} data-tadabbur="true">
                                 <p className={`${label} text-emerald-700 dark:text-emerald-400`}>{readOnly ? 'Your reflection' : 'Student’s reflection'}</p>
