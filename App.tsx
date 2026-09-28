@@ -1892,7 +1892,7 @@ const App: React.FC = () => {
             />
           ) : activeTab === 'vocabulary' ? (
             selectedArabicStudent ? (
-              <VocabularyPracticePage studentId={selectedArabicStudent.id} />
+              <VocabularyPracticePage studentId={selectedArabicStudent.id} studentName={selectedArabicStudent.name} />
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="text-4xl mb-4">📚</p>

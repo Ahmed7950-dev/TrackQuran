@@ -3,6 +3,9 @@ import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
+import WordFlightGame from './WordFlightGame';
+import LetterRaceGame from './LetterRaceGame';
+import { LetterCardsSetup } from './LetterCardsGame';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,9 +57,11 @@ const fmt = (s: number) => {
 
 interface Props {
   studentId: string;
+  /** Only for the games, which say whose game it is. */
+  studentName?: string;
 }
 
-const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
+const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'your student' }) => {
   // ── data ──────────────────────────────────────────────────────────────────
   const [lists, setLists] = useState<VocabList[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -80,6 +85,9 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   const [phraseSearch, setPhraseSearch] = useState('');
   const [phraseFilter, setPhraseFilter] = useState<'all' | 'red' | 'yellow' | 'any'>('all');
   const [newCatInput, setNewCatInput] = useState('');
+
+  // ── the games, played on the words of the list that is open ───────────────
+  const [game, setGame] = useState<null | 'flight' | 'race' | 'cards'>(null);
 
   // ── practice ──────────────────────────────────────────────────────────────
   const [practiceMode, setPracticeMode] = useState<'words' | 'phrases'>('words');
@@ -456,6 +464,9 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
   else if (phraseFilter === 'yellow') displayedPhrases = displayedPhrases.filter(p => p.clicks === 1);
   else if (phraseFilter === 'any') displayedPhrases = displayedPhrases.filter(p => p.clicks > 0);
 
+  /** A game needs both halves of the word. */
+  const gamePairs = words.filter(w => w.text.trim() && w.translation.trim());
+
   const currentCard = practiceQueue[practiceIdx];
   const practiceWon = practiceIdx >= practiceTotal && practiceTotal > 0;
 
@@ -785,6 +796,44 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
       {/* ═══════════════ WORDS TAB ═══════════════ */}
       {tab === 'words' && (
         <div className="space-y-3">
+
+          {/* Games — played on the words of this list */}
+          <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Games</p>
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                {gamePairs.length} word{gamePairs.length === 1 ? '' : 's'} in this list
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button onClick={() => setGame('cards')} disabled={gamePairs.length < 2}
+                className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
+                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
+                  <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">Throw a card, match its pair</span>
+                </span>
+              </button>
+
+              <button onClick={() => setGame('flight')} disabled={gamePairs.length === 0}
+                className="flex items-center gap-3 rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/60 dark:bg-sky-900/10 px-4 py-3 text-left hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
+                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-2xl">✈️</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-sky-800 dark:text-sky-200 truncate">Word Flight Game</span>
+                  <span className="block text-xs text-sky-600/70 dark:text-sky-300/60">Catch the falling words</span>
+                </span>
+              </button>
+
+              <button onClick={() => setGame('race')} disabled={gamePairs.length < 2}
+                className="flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-900/10 px-4 py-3 text-left hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
+                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-2xl">🏃</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-teal-800 dark:text-teal-200 truncate">Word Race Game</span>
+                  <span className="block text-xs text-teal-600/70 dark:text-teal-300/60">Run to the Arabic word</span>
+                </span>
+              </button>
+            </div>
+          </div>
 
           {/* Add card */}
           <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-4">
@@ -1266,6 +1315,34 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId }) => {
               </div>
             </div>
           ) : null}
+        </div>
+      )}
+
+      {game === 'flight' && (
+        <WordFlightGame
+          words={gamePairs.map(w => ({ arabic: w.text, meaning: w.translation }))}
+          onExit={() => setGame(null)}
+        />
+      )}
+      {game === 'race' && (
+        <LetterRaceGame
+          mode="words"
+          words={gamePairs.map(w => ({ prompt: w.translation, answer: w.text }))}
+          letters={[]}
+          onExit={() => setGame(null)}
+        />
+      )}
+      {game === 'cards' && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+          onClick={() => setGame(null)}>
+          <div onClick={e => e.stopPropagation()}
+            className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
+            <LetterCardsSetup
+              words={gamePairs.slice(0, 30).map(w => ({ id: w.id, arabic: w.text.trim(), english: w.translation.trim() }))}
+              student={{ id: studentId, name: studentName }}
+              onClose={() => setGame(null)}
+            />
+          </div>
         </div>
       )}
     </div>
