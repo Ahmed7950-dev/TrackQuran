@@ -26,6 +26,7 @@ import HomeworkBasket, { useHomeworkBasket } from './VocabHomeworkBasket';
 import {
   LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
 } from '../services/letterCardsService';
+import { LetterCardsSetup } from './LetterCardsGame';
 import WordFlightGame from './WordFlightGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
@@ -82,6 +83,8 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   // Homework basket (tutor) — the draft plus every homework already sent.
   const basket = useHomeworkBasket(student, !studentMode);
   const [basketOpen, setBasketOpen] = useState(false);
+  /** The card game, dealt from whatever the practice box is set to. */
+  const [cardsOpen, setCardsOpen] = useState(false);
 
   // Homework waiting for the student (portal).
   const [pendingHomework, setPendingHomework] = useState<VocabHomework[]>([]);
@@ -226,13 +229,22 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const shownCount   = visibleGroups.reduce((n, g) => n + g.items.length, 0);
 
   // The practice pool = words of the SELECTED lessons (all lessons if none picked).
-  const practicePool = useMemo(() => {
-    const pool = selected.size
-      ? words.filter(w => selected.has(w.lessonId))
-      : words;
-    return pool;
-  }, [words, selected]);
+  const lessonPool = useMemo(() => (
+    selected.size ? words.filter(w => selected.has(w.lessonId)) : words
+  ), [words, selected]);
+  /** The words the tutor has tapped into the basket — every game can run on
+   *  those instead of on whole lessons. */
+  const basketPool = useMemo(() => words.filter(w => basket.ids.has(w.id)), [words, basket.ids]);
+  const [useBasket, setUseBasket] = useState(false);
+  const onBasket = useBasket && basketPool.length > 0;
+  const practicePool = onBasket ? basketPool : lessonPool;
   const savedWords = useMemo(() => words.filter(w => revisionIds.has(w.id)), [words, revisionIds]);
+  /** A card needs both halves of the word, and a table of thirty is plenty. */
+  const cardWords = useMemo(() => practicePool
+    .filter(w => (w.arabic ?? '').trim() && (w.english ?? '').trim())
+    .slice(0, 30)
+    .map(w => ({ id: w.id, arabic: w.arabic.trim(), english: (w.english ?? '').trim() })),
+  [practicePool]);
   const racePairs: RacePair[] = practicePool
     .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
     .map(w => ({ prompt: w.english.trim(), answer: w.arabic.trim() }));
@@ -478,8 +490,21 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Practise</span>
           <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
-            {selected.size ? `${selected.size} lesson${selected.size === 1 ? '' : 's'} selected` : 'all lessons'} · {practicePool.length} words
+            {onBasket
+              ? `the ${basketPool.length} word${basketPool.length === 1 ? '' : 's'} you added`
+              : `${selected.size ? `${selected.size} lesson${selected.size === 1 ? '' : 's'} selected` : 'all lessons'} · ${practicePool.length} words`}
           </span>
+          {!studentMode && basketPool.length > 0 && (
+            <span className="inline-flex rounded-full bg-slate-100 dark:bg-gray-700 p-0.5">
+              {([[false, 'Lessons'], [true, `Added words (${basketPool.length})`]] as const).map(([v, label]) => (
+                <button key={label} onClick={() => setUseBasket(v)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                    onBasket === v ? 'bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {label}
+                </button>
+              ))}
+            </span>
+          )}
           <div className="flex flex-wrap items-center gap-1.5 ml-auto">
             {([1, 2, 3] as const).map(lvl => (
               <button key={lvl} onClick={() => selectLevel(lvl)}
@@ -550,6 +575,19 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                   {t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}
                 </span>
                 <span className="block text-xs text-rose-600/70 dark:text-rose-300/60">{t('arabicLessonDetail.reviseSavedDesc')}</span>
+              </span>
+            </button>
+          )}
+
+          {!studentMode && (
+            <button onClick={() => setCardsOpen(true)} disabled={cardWords.length < 2}
+              className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
+              <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
+                <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
+                  {cardWords.length < 2 ? 'Pick at least two words' : `Throw a card, match its pair · ${cardWords.length} words`}
+                </span>
               </span>
             </button>
           )}
@@ -661,6 +699,17 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {cardsOpen && !studentMode && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+          onClick={() => setCardsOpen(false)}>
+          <div onClick={e => e.stopPropagation()}
+            className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
+            <LetterCardsSetup words={cardWords} student={{ id: student.id, name: student.name }}
+              onClose={() => setCardsOpen(false)} />
+          </div>
         </div>
       )}
 

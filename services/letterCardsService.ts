@@ -14,7 +14,7 @@
 // -----------------------------------------------------------------------------
 
 import { supabase } from '../lib/supabase';
-import type { CardsKind, WordCard } from './letterCardsDeck';
+import type { CardsKind, WordCard, WordsSide } from './letterCardsDeck';
 import { createNotification } from './notificationService';
 import type { MatchForm } from './letterMatchService';
 import type { CardsMode, CardsEnd } from './letterCardsDeck';
@@ -27,7 +27,7 @@ export {
   HAND_SIZE, ANIMALS, animalSrc, CARD_BACK_STUDENT, CARD_BACK_TUTOR, BOARD_BACKGROUND,
   SOUND_THROW, SOUND_POINT,
 } from './letterCardsDeck';
-export type { Animal, CardsMode, CardsEnd, CardsKind, WordCard } from './letterCardsDeck';
+export type { Animal, CardsMode, CardsEnd, CardsKind, WordCard, WordsSide } from './letterCardsDeck';
 
 export interface LetterCardsGame {
   id: string;
@@ -39,8 +39,9 @@ export interface LetterCardsGame {
   /** Only a letters game has a shape. */
   form: MatchForm | null;
   kind: CardsKind;
-  /** A words game: what each card says, by id. */
+  /** A words game: what each card says, by id, and which half the student holds. */
   words: WordCard[] | null;
+  wordsSide: WordsSide;
   lives: number | null;
   mode: CardsMode;
   status: 'created' | 'playing' | 'completed';
@@ -56,7 +57,7 @@ export interface LetterCardsGame {
 interface Row {
   id: string; teacher_id: string; student_id: string; student_name: string | null;
   letters: string[]; form: MatchForm | null; kind: CardsKind | null; words: WordCard[] | null;
-  lives: number | null; mode: CardsMode;
+  words_side: WordsSide | null; lives: number | null; mode: CardsMode;
   status: LetterCardsGame['status']; score: number | null; mistakes: number | null;
   wrong_letters: Record<string, number> | null; ended_reason: CardsEnd | null;
   duration_ms: number | null; created_at: string; completed_at: string | null;
@@ -65,7 +66,7 @@ interface Row {
 const fromRow = (r: Row): LetterCardsGame => ({
   id: r.id, teacherId: r.teacher_id, studentId: r.student_id,
   studentName: r.student_name ?? undefined, letters: r.letters ?? [], form: r.form,
-  kind: r.kind ?? 'letters', words: r.words ?? null,
+  kind: r.kind ?? 'letters', words: r.words ?? null, wordsSide: r.words_side ?? 'english',
   lives: r.lives, mode: r.mode, status: r.status, score: r.score, mistakes: r.mistakes,
   wrongLetters: r.wrong_letters, endedReason: r.ended_reason, durationMs: r.duration_ms,
   createdAt: r.created_at, completedAt: r.completed_at,
@@ -74,12 +75,13 @@ const fromRow = (r: Row): LetterCardsGame => ({
 export async function createLetterCardsGame(input: {
   teacherId: string; studentId: string; studentName: string;
   letters: string[]; form: MatchForm | null; lives: number | null; mode: CardsMode;
-  kind?: CardsKind; words?: WordCard[] | null;
+  kind?: CardsKind; words?: WordCard[] | null; wordsSide?: WordsSide;
 }): Promise<LetterCardsGame | null> {
   const { data, error } = await supabase.from('letter_cards_games').insert({
     teacher_id: input.teacherId, student_id: input.studentId, student_name: input.studentName,
     letters: input.letters, form: input.form, lives: input.lives, mode: input.mode,
     kind: input.kind ?? 'letters', words: input.words ?? null,
+    words_side: input.wordsSide ?? 'english',
   }).select('*').single();
   if (error) { console.error('createLetterCardsGame:', error.message); return null; }
   return fromRow(data as Row);

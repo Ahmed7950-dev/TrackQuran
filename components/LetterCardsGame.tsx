@@ -31,7 +31,7 @@ import {
   CardsMode, HAND_SIZE, LetterCardsGame as Game, animalSrc, completeLetterCardsGame,
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
-  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard,
+  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsSide,
 } from '../services/letterCardsService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
@@ -146,13 +146,15 @@ const Board: React.FC<{
   me: 'tutor' | 'student';
   onPick?: (side: 'tutor' | 'student', index: number) => void;
   layout?: Layout;
-  /** A vocabulary game: the tutor holds the Arabic, the student the meaning.
+  /** A vocabulary game: one half of each word on each side of the table.
    *  Without it the cards are letters and their shapes. */
   words?: WordCard[] | null;
+  /** Which half the STUDENT holds; the tutor holds the other. */
+  wordsSide?: WordsSide;
   /** Everything the board paints over itself — nothing sits above the canvas. */
   onBack?: () => void;
   onRematch?: () => void;
-}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, words, onBack, onRematch }) => {
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, words, wordsSide = 'english', onBack, onRematch }) => {
   useTableSounds(snap);
   const wordById = useMemo(() => new Map((words ?? []).map(w => [w.id, w])), [words]);
   const isWords = wordById.size > 0;
@@ -161,7 +163,8 @@ const Board: React.FC<{
   const faceOf = (card: Card, side: 'tutor' | 'student'): Face => {
     if (isWords) {
       const w = wordById.get(card.letter);
-      return side === 'tutor'
+      const arabicSide = wordsSide === 'arabic' ? 'student' : 'tutor';
+      return side === arabicSide
         ? wordFace(w?.arabic ?? card.letter, true)
         : wordFace(w?.english ?? card.letter, false);
     }
@@ -169,10 +172,19 @@ const Board: React.FC<{
     return { text, rtl: true, size: layout.letterSize };
   };
   const bothOpen = snap.mode === 'tutor';
-  const seeTutor = bothOpen || me === 'tutor';
-  const seeStudent = bothOpen || me === 'student';
+  /** Whoever is looking sits at the bottom of the table, the other across it,
+   *  so both players see their own hand in the same place. */
+  const near: 'tutor' | 'student' = me;
+  const far: 'tutor' | 'student' = me === 'tutor' ? 'student' : 'tutor';
+  const handOf = (side: 'tutor' | 'student') => side === 'tutor' ? snap.tutorHand : snap.studentHand;
+  const thrownOf = (side: 'tutor' | 'student') => side === 'tutor' ? snap.thrownTutor : snap.thrownStudent;
+  const sees = (side: 'tutor' | 'student') => bothOpen || me === side;
   const myTurn = (side: 'tutor' | 'student') =>
     !!onPick && snap.ph === 'playing' && snap.turn === side && (bothOpen || me === side);
+  /** Each hand keeps its colour: the one across the table red, your own blue,
+   *  the way the table itself is painted. */
+  const FAR_GLOW = 'rgba(198,62,52,.85)';
+  const NEAR_GLOW = 'rgba(52,104,204,.85)';
 
   return (
     <div
@@ -194,45 +206,45 @@ const Board: React.FC<{
         )}
       </div>
 
-      {/* the student's five, along the top */}
+      {/* the hand across the table, along the top */}
       {layout.studentHand.map((box, i) => {
-        const card = snap.studentHand[i];
+        const card = handOf(far)[i];
         if (!card) return null;
         return (
-          <div key={`s${i}`} style={boxStyle(box)}>
-            {seeStudent
-              ? <CardFace card={card} face={faceOf(card, 'student')} layout={layout}
-                  onClick={myTurn('student') ? () => onPick!('student', i) : undefined}
-                  glow={myTurn('student') ? 'rgba(255,220,120,.9)' : undefined} />
+          <div key={`f${i}`} style={boxStyle(box)}>
+            {sees(far)
+              ? <CardFace card={card} face={faceOf(card, far)} layout={layout}
+                  onClick={myTurn(far) ? () => onPick!(far, i) : undefined}
+                  glow={myTurn(far) ? 'rgba(255,220,120,.9)' : FAR_GLOW} />
               : <CardBack src={CARD_BACK_STUDENT} />}
           </div>
         );
       })}
 
-      {/* the tutor's five, along the bottom */}
+      {/* your own five, along the bottom */}
       {layout.tutorHand.map((box, i) => {
-        const card = snap.tutorHand[i];
+        const card = handOf(near)[i];
         if (!card) return null;
         return (
-          <div key={`t${i}`} style={boxStyle(box)}>
-            {seeTutor
-              ? <CardFace card={card} face={faceOf(card, 'tutor')} layout={layout}
-                  onClick={myTurn('tutor') ? () => onPick!('tutor', i) : undefined}
-                  glow={myTurn('tutor') ? 'rgba(255,220,120,.9)' : undefined} />
+          <div key={`n${i}`} style={boxStyle(box)}>
+            {sees(near)
+              ? <CardFace card={card} face={faceOf(card, near)} layout={layout}
+                  onClick={myTurn(near) ? () => onPick!(near, i) : undefined}
+                  glow={myTurn(near) ? 'rgba(255,220,120,.9)' : NEAR_GLOW} />
               : <CardBack src={CARD_BACK_TUTOR} />}
           </div>
         );
       })}
 
-      {/* what is on the table */}
-      {snap.thrownTutor && (
+      {/* what is on the table: theirs on the left, yours on the right */}
+      {thrownOf(far) && (
         <div style={boxStyle(layout.thrownTutor)}>
-          <CardFace card={snap.thrownTutor} face={faceOf(snap.thrownTutor, 'tutor')} layout={layout} />
+          <CardFace card={thrownOf(far)!} face={faceOf(thrownOf(far)!, far)} layout={layout} glow={FAR_GLOW} />
         </div>
       )}
-      {snap.thrownStudent && (
+      {thrownOf(near) && (
         <div style={boxStyle(layout.thrownStudent)}>
-          <CardFace card={snap.thrownStudent} face={faceOf(snap.thrownStudent, 'student')} layout={layout} />
+          <CardFace card={thrownOf(near)!} face={faceOf(thrownOf(near)!, near)} layout={layout} glow={NEAR_GLOW} />
         </div>
       )}
 
@@ -517,7 +529,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
         className="absolute inset-0 w-full h-full object-cover"
         style={{ filter: 'blur(28px) brightness(.55)', transform: 'scale(1.12)' }} />
       <Board
-        snap={snap} me={me} words={game.words}
+        snap={snap} me={me} words={game.words} wordsSide={game.wordsSide}
         onPick={snap.ph === 'playing' ? onPick : undefined}
         onBack={leave}
         onRematch={host ? rematch : undefined}
@@ -552,6 +564,7 @@ export const LetterCardsSetup: React.FC<{
   const keys = isWords ? words!.map(w => w.id) : letters;
   const noun = isWords ? 'word' : 'letter';
   const [form, setForm] = useState<MatchForm>(initialForm === 'isolated' ? 'initial' : initialForm);
+  const [wordsSide, setWordsSide] = useState<WordsSide>('english');
   const [lives, setLives] = useState<number | null>(3);
   const [mode, setMode] = useState<CardsMode>('multiplayer');
   const [game, setGame] = useState<Game | null>(null);
@@ -568,7 +581,7 @@ export const LetterCardsSetup: React.FC<{
     const g = await createLetterCardsGame({
       teacherId, studentId: student.id, studentName, letters: keys,
       form: isWords ? null : form, kind: isWords ? 'words' : 'letters',
-      words: isWords ? words! : null, lives, mode,
+      words: isWords ? words! : null, wordsSide, lives, mode,
     });
     setBusy(false);
     if (g) setGame(g); else setErr('Could not start the game — check the connection.');
@@ -621,8 +634,9 @@ export const LetterCardsSetup: React.FC<{
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
           {keys.length} {noun}{keys.length === 1 ? '' : 's'} ·
           {mode === 'solo' ? ' the computer holds' : ' you hold'}
-          {isWords ? ' the Arabic, ' : ' the isolated shape, '}
-          {studentName} holds the {isWords ? 'meaning' : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
+          {isWords ? (wordsSide === 'arabic' ? ' the meaning, ' : ' the Arabic, ') : ' the isolated shape, '}
+          {studentName} holds the{' '}
+          {isWords ? (wordsSide === 'arabic' ? 'Arabic word' : 'meaning') : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
         </p>
       </div>
 
@@ -643,6 +657,25 @@ export const LetterCardsSetup: React.FC<{
           ))}
         </div>
       </div>
+
+      {isWords && (
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">What they hold</p>
+          <div className="flex gap-2">
+            {([
+              ['english', 'The meaning', 'You throw the Arabic word'],
+              ['arabic', 'The Arabic word', 'You throw the meaning'],
+            ] as const).map(([k, title, note]) => (
+              <button key={k} onClick={() => setWordsSide(k)}
+                className={`flex-1 text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${
+                  wordsSide === k ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-slate-200 dark:border-gray-600'}`}>
+                <span className="block text-sm font-black text-slate-800 dark:text-slate-100">{title}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{note}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={isWords ? 'hidden' : ''}>
         <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">The shape they hold</p>

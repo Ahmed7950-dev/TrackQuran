@@ -21,6 +21,9 @@ export type CardsEnd = 'done' | 'lives';
 /** Letters and their shapes, or vocabulary: an Arabic word and its meaning. */
 export type CardsKind = 'letters' | 'words';
 
+/** Which half of a word the student holds; the tutor holds the other. */
+export type WordsSide = 'english' | 'arabic';
+
 /** What a word card says on each side of the table. */
 export interface WordCard { id: string; arabic: string; english: string }
 
