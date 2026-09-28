@@ -3952,7 +3952,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         {/* the two readings of this verse, in the corner */}
                                         {Object.keys(revealedNotes).length > 0 && (
                                             <span className="flex-shrink-0 -mt-1 inline-flex rounded-full bg-slate-200/70 dark:bg-gray-600/60 p-0.5">
-                                                {([['tafsir', 'Tafsir'], ['revealed', 'Ours']] as const).map(([k, lbl]) => (
+                                                {([['tafsir', 'Tafsir'], ['revealed', 'Revealed']] as const).map(([k, lbl]) => (
                                                     <button
                                                         key={k}
                                                         onClick={() => setUseRevealed(k === 'revealed')}

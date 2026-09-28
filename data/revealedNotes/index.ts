@@ -13,7 +13,7 @@
 export type SurahNotes = Record<number, string>;
 
 const LOADERS: Record<number, () => Promise<{ default: SurahNotes }>> = {
-  // 67: () => import('./067'),
+  67: () => import('./067'),
 };
 
 /** Which surahs have notes — for the chip that offers them. */
