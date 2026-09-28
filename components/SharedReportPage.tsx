@@ -20,7 +20,6 @@ import NotificationCenter from './NotificationCenter';
 import TajweedPage from './TajweedPage';
 import QaedahPage from './QaedahPage';
 import AlphabetTrainerPage from './AlphabetTrainerPage';
-import LettersTrainerPage from './LettersTrainerPage';
 import { GameInviteContext, GameInvitePopup } from './GameInvite';
 import StudentProgressPage from './StudentProgressPage';
 import TadabburLabPage from './TadabburLabPage';
@@ -105,7 +104,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
    *  only seen after the student closes and opens the app a second time. */
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [notFound, setNotFound] = useState(false);
-  const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tadabburLab' | 'tajweed' | 'qaedah' | 'alphabetTrainer' | 'lettersTrainer'>('quran');
+  const [activeTab, setActiveTab] = useState<'progress' | 'calendar' | 'quran' | 'homework' | 'tadabburLab' | 'tajweed' | 'qaedah' | 'alphabetTrainer'>('quran');
   // Remember each tab's scroll position so returning to a tab (esp. Quran) lands
   // exactly where you left it instead of jumping/looking blank.
   const tabScrollRef = useRef<Record<string, number>>({});
@@ -762,25 +761,12 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                 </svg>
                 {t('studentPortal.tabAlphabet')}
               </button>
-              <button
-                onClick={() => changeTab('lettersTrainer')}
-                className={`flex-shrink-0 flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:px-4 sm:py-2.5 sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === 'lettersTrainer'
-                    ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
-                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-                </svg>
-                {t('studentPortal.tabLetters')}
-              </button>
             </div>
           </div>
         )}
       </header>
 
-      <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : activeTab === 'qaedah' || activeTab === 'alphabetTrainer' || activeTab === 'lettersTrainer' ? 'w-full px-2 sm:px-4' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
+      <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : activeTab === 'qaedah' || activeTab === 'alphabetTrainer' ? 'w-full px-2 sm:px-4' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
         {portalTab === 'about' ? (
           <AboutUsPage />
         ) : (
@@ -1094,9 +1080,6 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
               </GameInviteContext.Provider>
             )}
             <GameInvitePopup identity={inviteIdentity} />
-            {activeTab === 'lettersTrainer' && (
-              <LettersTrainerPage preSelectedStudent={{ id: report.student_id, name: report.student_name }} readOnly />
-            )}
 
             {activeTab === 'tadabburLab' && report && (
               <TadabburLabPage

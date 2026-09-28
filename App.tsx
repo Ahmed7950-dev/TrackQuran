@@ -24,7 +24,6 @@ import Logo from './components/Logo';
 import AddStudentModal from './components/AddStudentModal';
 import { useAuth } from './context/AuthProvider';
 import MistakesReviewPage from './components/MistakesReviewPage';
-import LettersTrainerPage from './components/LettersTrainerPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
 import QaedahPage from './components/QaedahPage';
 import AdminPanel from './components/AdminPanel';
@@ -798,10 +797,10 @@ const App: React.FC = () => {
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>(
     () => (localStorage.getItem('nav_currentStudentView') === 'mistakes' ? 'mistakes' : 'details'),
   );
-  type ActiveTab = 'main' | 'lettersTrainer' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest' | 'tadabburLab';
+  type ActiveTab = 'main' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest' | 'tadabburLab';
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     const saved = localStorage.getItem('nav_activeTab');
-    const allowed: ActiveTab[] = ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'];
+    const allowed: ActiveTab[] = ['main', 'alphabetTrainer', 'qaedah', 'aboutUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'];
     return saved && (allowed as string[]).includes(saved) ? (saved as ActiveTab) : 'main';
   });
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -2148,7 +2147,6 @@ const App: React.FC = () => {
                 <span>Calendar</span>
                 {pendingBookingCount > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingBookingCount}</span>}
               </button>
-              <button onClick={() => { setActiveTab('lettersTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'lettersTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔡 {t('header.lettersTrainer')}</button>
               <button onClick={() => { setActiveTab('alphabetTrainer'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'alphabetTrainer' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>🔤 {t('header.alphabetTrainer')}</button>
               <button onClick={() => { setActiveTab('qaedah'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'qaedah' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>📖 Qaedah</button>
               <button onClick={() => { setCurrentStudentView('details'); setActiveTab(t => t === 'tajweed' ? 'main' : 'tajweed'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'tajweed' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>{t('header.tajweed')}</button>
@@ -2159,7 +2157,7 @@ const App: React.FC = () => {
         )}
       </header>
       {/* ── Thin student-tools bar — visible on all student pages (detail + session) ── */}
-      {isDetailedView && ['main', 'lettersTrainer', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'].includes(activeTab) && (() => {
+      {isDetailedView && ['main', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab'].includes(activeTab) && (() => {
         const activeHwCount = (sessionStudent ?? selectedStudent)?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
         const tabs = [
           { id: 'main',            label: 'Main page',                  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.5a.75.75 0 0 0 .75.75H9.75v-6a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v6h4.5a.75.75 0 0 0 .75-.75V9.75M8.25 21h8.25" /></svg> },
@@ -2167,7 +2165,6 @@ const App: React.FC = () => {
           { id: 'qaedah',          label: 'Qaedah',                     icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
           { id: 'alphabetTrainer', label: t('header.alphabetTrainer'),  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" /></svg> },
           { id: 'quran',           label: 'Quran',                      icon: <LottieIcon src="/al-quran.json" size={20} /> },
-          { id: 'lettersTrainer',  label: t('header.lettersTrainer'),   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /></svg> },
           { id: 'fluencyTest',     label: 'Fluency Test',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg> },
           { id: 'mistakesStudy',   label: 'Mistakes Study',             icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" /></svg> },
           { id: 'tadabburLab',     label: 'Tadabbur Lab',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" /></svg> },
@@ -2278,15 +2275,6 @@ const App: React.FC = () => {
             userEmail={currentUser.email ?? ''}
             onBack={() => setActiveTab('main')}
             onAvailabilityChange={setAvailabilitySlots}
-          />
-        ) : activeTab === 'lettersTrainer' ? (
-          <LettersTrainerPage
-            onLogActivity={handleLogActivity}
-            preSelectedStudent={
-              selectedStudent ? { id: selectedStudent.id, name: selectedStudent.name } :
-              sessionStudent  ? { id: sessionStudent.id,  name: sessionStudent.name  } :
-              undefined
-            }
           />
         ) : activeTab === 'alphabetTrainer' ? (
           <GameInviteContext.Provider value={tutorInviteIdentity}>

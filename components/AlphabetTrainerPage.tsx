@@ -110,7 +110,45 @@ function buildQueue(priorities: number[]): string[] {
 }
 
 type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch' | 'lettercards';
-type GameChoice = 'tower' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt';
+
+/** Everything that can be started from this page: a challenge on the left rail,
+ *  a game on the right. One is chosen at a time, and Start opens it. */
+type PickId =
+  | 'guess' | 'wordchallenge' | 'formdrill' | 'lettermatch'
+  | 'lettercards' | 'tower' | 'airplane' | 'race' | 'battle' | 'flappy' | 'letterhunt' | 'oddletter';
+
+interface Activity {
+  id: PickId;
+  name: string;
+  hint: string;
+  icon: string;
+  /** The icon is Arabic type, not an emoji. */
+  arabic?: boolean;
+  tint: string;
+  soft: string;
+  /** False for the two that bring their own content. */
+  needsLetters: boolean;
+  /** Making a link or a shared board needs the tutor's account. */
+  tutorOnly?: boolean;
+}
+
+const CHALLENGES: Activity[] = [
+  { id: 'guess',        name: 'Guess the letter', hint: 'Name each letter as it comes', icon: '؟', arabic: true, tint: '#0d9488', soft: '#ccfbf1', needsLetters: true },
+  { id: 'wordchallenge',name: 'Word challenge',   hint: 'Read a word, letter by letter', icon: '✦',              tint: '#7c3aed', soft: '#ede9fe', needsLetters: true },
+  { id: 'formdrill',    name: 'Letter form drill',hint: 'Beginning, middle, end',        icon: 'ـبـ', arabic: true, tint: '#0284c7', soft: '#e0f2fe', needsLetters: true },
+  { id: 'lettermatch',  name: 'Letter shapes match', hint: 'Match a letter to its shape', icon: '⇄',             tint: '#4f46e5', soft: '#e0e7ff', needsLetters: true, tutorOnly: true },
+];
+
+const GAMES: Activity[] = [
+  { id: 'lettercards', name: 'Letter cards',      hint: 'Throw a card, match its pair',  icon: '🃏', tint: '#d97706', soft: '#fef3c7', needsLetters: true, tutorOnly: true },
+  { id: 'tower',       name: 'Castle battle',     hint: 'Send soldiers to win',          icon: '🏰', tint: '#6366f1', soft: '#e0e7ff', needsLetters: true },
+  { id: 'airplane',    name: 'Letter flight',     hint: 'Fly to the right letter',       icon: '✈️', tint: '#0891b2', soft: '#cffafe', needsLetters: true },
+  { id: 'race',        name: 'Letter race',       hint: 'Run to the letter you hear',    icon: '🏃', tint: '#0f766e', soft: '#ccfbf1', needsLetters: true },
+  { id: 'battle',      name: 'Reading battle',    hint: 'Read the verse and fight',      icon: '⚔️', tint: '#b91c1c', soft: '#fee2e2', needsLetters: false },
+  { id: 'flappy',      name: 'Flappy letters',    hint: 'Flap through the right gap',    icon: '🐦', tint: '#ca8a04', soft: '#fef9c3', needsLetters: true },
+  { id: 'letterhunt',  name: 'Letter hunt',       hint: 'Find the letter in the wild',   icon: '🔍', tint: '#be185d', soft: '#fce7f3', needsLetters: true },
+  { id: 'oddletter',   name: 'Find the odd letter', hint: 'Spot the imposter',           icon: '👀', tint: '#059669', soft: '#d1fae5', needsLetters: false },
+];
 
 const AlphabetTrainerPage: React.FC<{
   isStudentView?: boolean;
@@ -133,7 +171,12 @@ const AlphabetTrainerPage: React.FC<{
     return new Array(28).fill(0);
   });
 
-  const [childMode, setChildMode] = useState(false);
+  /** The one game or challenge that Start will open. */
+  const [pick, setPick] = useState<PickId>('guess');
+  const chosen = [...CHALLENGES, ...GAMES].find(a => a.id === pick) ?? null;
+  /** The castle battle plays the letter practice inside its arena — the rest of
+   *  the practice and win screens still ask for it by this name. */
+  const childMode = pick === 'tower';
   /** Hardcore: a wrong answer restarts the whole run (the old behaviour).
    *  Off by default — a mistake now just moves on and is counted. */
   const [hardcore, setHardcore] = useState<boolean>(() => {
@@ -150,16 +193,17 @@ const AlphabetTrainerPage: React.FC<{
   // the same letters into one entry for the day.
   const gameStartRef = useRef(0);
   // Who this session belongs to. Defaults to the student the tutor already has
-  // open; otherwise the tutor picks, and the choice is remembered.
+  // open; otherwise the one this device last worked with.
   const LOG_TO_KEY = 'alphabetTrainer:logTo';
-  const [logToId, setLogToId] = useState<string>(() => {
-    if (hostStudent) return hostStudent.id;
-    try { return localStorage.getItem(LOG_TO_KEY) ?? ''; } catch { return ''; }
-  });
-  useEffect(() => { if (hostStudent) setLogToId(hostStudent.id); }, [hostStudent?.id]);
   const logTarget = hostStudent
-    ?? students.find(x => x.id === logToId)
+    ?? students.find(x => {
+      try { return x.id === localStorage.getItem(LOG_TO_KEY); } catch { return false; }
+    })
     ?? null;
+  useEffect(() => {
+    if (!logTarget) return;
+    try { localStorage.setItem(LOG_TO_KEY, logTarget.id); } catch { /* private mode */ }
+  }, [logTarget?.id]);
   useEffect(() => { setMisses(readMisses(logTarget?.id)); }, [logTarget?.id]);
   // Wrong matches from the letter-shapes challenge, per shape. Only the shape
   // selected in the table shows them (see missedFor).
@@ -224,7 +268,6 @@ const AlphabetTrainerPage: React.FC<{
     }
     setView('select');
   };
-  const [gameChoice, setGameChoice] = useState<GameChoice>('tower');
   const [queue, setQueue] = useState<string[]>([]);
   const [pos, setPos] = useState(0);
   const [restartMsg, setRestartMsg] = useState('');
@@ -381,17 +424,11 @@ const AlphabetTrainerPage: React.FC<{
   };
 
   const handleStart = () => {
-    // Odd-letter has its own letter set → launch even with no alphabet selected.
-    if (gameChoice === 'wordchallenge' && unique > 0) { setView('wordchallenge'); return; }
-    if (childMode && gameChoice === 'letterhunt' && unique > 0) { setView('letterhunt'); return; }
-    if (childMode && gameChoice === 'oddletter') { setView('oddletter'); return; }
-    // Reading Battle brings its own Quran verse content — no letter selection needed.
-    if (childMode && gameChoice === 'battle') { setView('battle'); return; }
-    if (unique === 0) return;
-    if (childMode && (gameChoice === 'airplane' || gameChoice === 'race' || gameChoice === 'flappy')) {
-      setView(gameChoice);
-      return;
-    }
+    if (!chosen) return;
+    // Two of them bring their own content and need no letters chosen.
+    if (chosen.needsLetters && unique === 0) return;
+    // Everything except the two letter runs is a view of its own.
+    if (pick !== 'guess' && pick !== 'tower') { setView(pick as View); return; }
     const q = buildQueue(priorities);
     roundsRef.current = 0; runLoggedRef.current = false;
     setQueue(q); setPos(0); setRestartMsg(''); setView('practice');
@@ -490,17 +527,185 @@ const AlphabetTrainerPage: React.FC<{
   const letter = queue[pos] ?? '';
 
   // ─── SELECT VIEW ───────────────────────────────────────────────────────────
+  // ─── SELECT VIEW ───────────────────────────────────────────────────────────
+  /** One rectangle in a rail. */
+  const railCard = (a: Activity) => {
+    const active = pick === a.id;
+    const locked = a.needsLetters && unique === 0;
+    return (
+      <button
+        key={a.id}
+        onClick={() => setPick(a.id)}
+        title={locked ? 'Pick some letters first' : a.hint}
+        className={`group w-full flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-start transition-all duration-150 ${
+          active
+            ? 'border-transparent shadow-md ring-2 ring-offset-1 dark:ring-offset-gray-900'
+            : 'border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-slate-300 dark:hover:border-gray-600 hover:shadow-sm'
+        }`}
+        style={active ? { background: a.soft, boxShadow: `0 6px 18px -8px ${a.tint}`, ['--tw-ring-color' as string]: a.tint } : undefined}
+      >
+        <span
+          className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-[20px] leading-none"
+          style={{ background: active ? a.tint : a.soft, color: active ? '#fff' : a.tint }}
+        >
+          <span dir="rtl" style={a.arabic ? { fontFamily: "'Hafs','Amiri',serif", fontSize: 22 } : undefined}>{a.icon}</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={`block text-[13px] font-extrabold leading-tight truncate ${
+            active ? 'text-slate-900 dark:text-slate-900' : 'text-slate-700 dark:text-slate-100'}`}>
+            {a.name}
+          </span>
+          <span className={`block text-[11px] leading-tight truncate ${
+            active ? 'text-slate-600 dark:text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}>
+            {a.hint}
+          </span>
+        </span>
+        {active && (
+          <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: a.tint }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="m5 13 4 4L19 7" /></svg>
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const rail = (title: string, note: string, list: Activity[]) => (
+    <section className="flex flex-col gap-2">
+      <div className="px-1">
+        <h3 className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{title}</h3>
+        <p className="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">{note}</p>
+      </div>
+      {list.filter(a => !(a.tutorOnly && isStudentView)).map(railCard)}
+    </section>
+  );
+
   const renderSelect = () => (
-    <div className="max-w-3xl mx-auto px-4 pb-12 pt-2">
-      {/* Instructions */}
-      <p className={`text-center mb-4 ${childMode ? 'text-base font-bold text-blue-700' : 'text-sm text-slate-500 dark:text-slate-400'}`}>
-        {childMode ? t('alphabetTrainer.instrChild') : t('alphabetTrainer.instrAdult')}
-      </p>
-      {LETTERS.some(l => missedFor(l) > 0) && (
-        <p className="text-center mb-3 text-xs text-slate-500 dark:text-slate-400">
-          <span className="inline-block align-middle me-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-black">n</span>
-          {t('alphabetTrainer.missesLegend')} · {t('alphabetTrainer.longPressReset')}
-          {!isStudentView && (
+    <div className="mx-auto w-full max-w-[1500px] px-3 sm:px-5 pb-32">
+      <div className="grid gap-4 lg:gap-5 items-start lg:grid-cols-[minmax(215px,0.85fr)_minmax(0,2fr)_minmax(215px,0.85fr)]">
+
+        {/* ── Challenges ── */}
+        <div className="order-2 lg:order-1 lg:sticky lg:top-4">
+          {rail('Challenges', 'Reading and shapes', CHALLENGES)}
+        </div>
+
+        {/* ── The letters ── */}
+        <div className="order-1 lg:order-2 rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 sm:p-4">
+          {/* the shape they read */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            <span className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500 me-1">Shape</span>
+            {FORM_CONFIG.map(({ form, labelAr, labelEn }) => {
+              const active = letterForm === form;
+              return (
+                <button
+                  key={form}
+                  onClick={() => setLetterForm(form)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all duration-150 ${
+                    active
+                      ? 'bg-teal-600 dark:bg-amber-600 border-transparent text-white shadow-sm'
+                      : 'bg-slate-50 dark:bg-gray-900/40 border-slate-200 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:border-slate-300'
+                  }`}
+                >
+                  <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1.1rem', lineHeight: 1 }}>
+                    {getLetterInForm('ب', form)}
+                  </span>
+                  <span className="text-[11px] font-bold">{labelEn}</span>
+                  <span className="text-[10px] opacity-70 hidden sm:inline" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{labelAr}</span>
+                </button>
+              );
+            })}
+            <span className="flex-grow" />
+            <button
+              onClick={() => setPriorities(new Array(28).fill(1))}
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300"
+            >{t('alphabetTrainer.selectAll')}</button>
+            <button
+              onClick={() => setPriorities(new Array(28).fill(0))}
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300"
+            >{t('alphabetTrainer.clearAll')}</button>
+          </div>
+
+          {(letterForm === 'initial' || letterForm === 'medial') && (
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-2">
+              <span className="font-semibold" style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '0.85rem' }}>ا و ر ز د ذ</span>
+              {' '}only have 2 shapes — shown as{' '}
+              <span className="font-semibold">{letterForm === 'initial' ? 'Isolated' : 'End'}</span>
+            </p>
+          )}
+
+          {/* the 28, in the order they are recited */}
+          <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-7 gap-1.5 sm:gap-2" style={{ direction: 'rtl' }}>
+            {LETTERS.map((letter, i) => {
+              const p = priorities[i];
+              const missed = missedFor(letter);
+              const ms = missStyle(missed);
+              const pressHandlers = {
+                onPointerDown: () => startPress(letter),
+                onPointerUp: endPress,
+                onPointerLeave: endPress,
+                onPointerCancel: endPress,
+                onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+              };
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleLetterClick(i)}
+                  {...pressHandlers}
+                  title={missed > 0 ? t('alphabetTrainer.missedTimes', { count: missed }) : undefined}
+                  style={ms ? { borderColor: ms.border } : undefined}
+                  className={`relative aspect-[4/5] rounded-2xl border flex flex-col items-center justify-center cursor-pointer hover:-translate-y-0.5 active:scale-95 transition-all duration-150 select-none ${
+                    p === 0 ? 'bg-slate-50 dark:bg-gray-900/40 border-slate-200 dark:border-gray-700' :
+                    p === 1 ? 'bg-amber-50  dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
+                    p === 2 ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600' :
+                              'bg-amber-200 dark:bg-amber-900/50 border-amber-500'
+                  }`}
+                >
+                  {ms && (
+                    <span aria-hidden style={{
+                      position: 'absolute', inset: 0, borderRadius: 'inherit',
+                      background: `rgba(220, 38, 38, ${ms.alpha})`, pointerEvents: 'none',
+                    }} />
+                  )}
+                  {missed > 0 && (
+                    <span
+                      title={t('alphabetTrainer.missedTimes', { count: missed })}
+                      style={{
+                        position: 'absolute', top: 3, insetInlineEnd: 3,
+                        minWidth: 17, height: 17, padding: '0 4px',
+                        borderRadius: 9, background: '#dc2626', color: '#fff',
+                        fontSize: 10, fontWeight: 800, lineHeight: '17px',
+                        textAlign: 'center', pointerEvents: 'none',
+                      }}
+                    >{missed}</span>
+                  )}
+                  <span
+                    style={{ position: 'relative', fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2rem, 6vw, 3.4rem)', lineHeight: 1, ...(ms?.ink ? { color: ms.ink } : {}) }}
+                    className={
+                      p === 0 ? 'text-slate-500 dark:text-slate-400' :
+                      p === 3 ? 'text-amber-800 dark:text-amber-200' :
+                                'text-amber-700 dark:text-amber-300'
+                    }
+                  >{getLetterInForm(letter, letterForm)}</span>
+                  {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
+                    <span className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
+                    </span>
+                  )}
+                  <span className="flex gap-[3px] mt-1">
+                    {[1, 2, 3].map(d => (
+                      <span key={d} style={{
+                        width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                        background: d <= p
+                          ? (p === 3 ? '#d97706' : p === 2 ? '#f59e0b' : '#fbbf24')
+                          : 'rgba(148,163,184,0.22)',
+                      }} />
+                    ))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {LETTERS.some(l => missedFor(l) > 0) && !isStudentView && (
             <button
               onClick={() => {
                 setMisses({});
@@ -511,569 +716,36 @@ const AlphabetTrainerPage: React.FC<{
                   clearFormMisses(logTarget.id, form);
                 }
               }}
-              className="ms-2 underline font-semibold text-slate-400 hover:text-red-600"
+              className="mt-3 text-[11px] font-semibold text-slate-400 hover:text-red-600 underline"
             >{t('alphabetTrainer.clearMisses')}</button>
           )}
-        </p>
-      )}
-
-      {/* Legend (adult only — child mode is self-explanatory) */}
-      {!childMode && (
-        <div className="flex flex-wrap justify-center gap-4 mb-5">
-          {([
-            { label: t('alphabetTrainer.legendNone'),   cls: 'bg-slate-100 dark:bg-gray-700 border-slate-200 dark:border-gray-600' },
-            { label: t('alphabetTrainer.legendOnce'),   cls: 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' },
-            { label: t('alphabetTrainer.legendTwice'),  cls: 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600' },
-            { label: t('alphabetTrainer.legendThrice'), cls: 'bg-amber-200 dark:bg-amber-900/50 border-amber-500' },
-          ] as { label: string; cls: string }[]).map(({ label, cls }) => (
-            <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <div className={`w-4 h-4 rounded border ${cls}`} />
-              {label}
-            </div>
-          ))}
         </div>
-      )}
 
-      {/* ── Letter-form selector ──────────────────────────────────────────── */}
-      <div className="mb-5">
-        <p className={`text-center text-xs mb-2 ${childMode ? 'font-bold text-indigo-600' : 'text-slate-400 dark:text-slate-500'}`}>
-          Letter shape / شَكل الحَرف
-        </p>
-        <div className="flex gap-2 justify-center flex-wrap">
-          {FORM_CONFIG.map(({ form, labelAr, labelEn }) => {
-            const active = letterForm === form;
-            return (
-              <button
-                key={form}
-                onClick={() => setLetterForm(form)}
-                className={`flex flex-col items-center px-3 py-1.5 rounded-xl border-2 transition-all duration-150 select-none ${
-                  active
-                    ? (childMode
-                        ? 'bg-indigo-500 border-indigo-400 text-white shadow-md shadow-indigo-200'
-                        : 'bg-teal-600 dark:bg-amber-600 border-teal-500 dark:border-amber-500 text-white')
-                    : (childMode
-                        ? 'bg-white border-indigo-200 text-indigo-700 hover:border-indigo-400'
-                        : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400')
-                }`}
-              >
-                <span style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1.25rem', lineHeight: 1.1 }}>
-                  {getLetterInForm('ب', form)}
-                </span>
-                <span className="text-[10px] font-bold mt-0.5" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{labelAr}</span>
-                <span className={`text-[9px] ${active ? 'opacity-80' : 'opacity-60'}`}>{labelEn}</span>
-              </button>
-            );
-          })}
+        {/* ── Games ── */}
+        <div className="order-3 lg:sticky lg:top-4">
+          {rail('Games', 'Play the letters', GAMES)}
         </div>
-        {/* Note about non-connecting letters when a connected form is chosen */}
-        {(letterForm === 'initial' || letterForm === 'medial') && (
-          <p className="text-center text-[10px] mt-2 text-slate-400 dark:text-slate-500">
-            <span className="font-semibold" style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '0.85rem' }}>
-              ا و ر ز د ذ
-            </span>
-            {' '}only have 2 shapes — shown as{' '}
-            <span className="font-semibold">{letterForm === 'initial' ? 'Isolated' : 'End'}</span>
-          </p>
-        )}
       </div>
 
-      {/* Letter Grid — 5 columns, RTL order */}
-      <div className="grid grid-cols-5 gap-2 mb-6" style={{ direction: 'rtl' }}>
-        {LETTERS.map((letter, i) => {
-          const p  = priorities[i];
-          const cc = CHILD_CARD_COLORS[i % CHILD_CARD_COLORS.length];
-          const missed = missedFor(letter);
-          const ms = missStyle(missed);
-          // Painted as a layer INSIDE the card: it tints whatever background the
-          // card already has (priority amber, child colour, dark mode) without
-          // competing with the Tailwind bg-* class.
-          const missHeat = ms ? (
-            <span aria-hidden style={{
-              position: 'absolute', inset: 0, borderRadius: 'inherit',
-              background: `rgba(220, 38, 38, ${ms.alpha})`,
-              pointerEvents: 'none',
-            }} />
-          ) : null;
-          const pressHandlers = {
-            onPointerDown: () => startPress(letter),
-            onPointerUp: endPress,
-            onPointerLeave: endPress,
-            onPointerCancel: endPress,
-            onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-          };
-          // How often this student got the letter wrong in the challenge.
-          const missBadge = missed > 0 ? (
-            <span
-              title={t('alphabetTrainer.missedTimes', { count: missed })}
-              style={{
-                position: 'absolute', top: 3, insetInlineEnd: 3,
-                minWidth: 17, height: 17, padding: '0 4px',
-                borderRadius: 9, background: '#dc2626', color: '#fff',
-                fontSize: 10, fontWeight: 800, lineHeight: '17px',
-                textAlign: 'center', pointerEvents: 'none',
-              }}
-            >{missed}</span>
-          ) : null;
-          // Dot row — 3 slots; filled dots = chosen priority level
-          const dotRow = (dotFill: string, dotEmpty: string) => (
-            <div className="flex gap-[3px] mt-1.5">
-              {[1, 2, 3].map(d => (
-                <div
-                  key={d}
-                  style={{
-                    width: 5, height: 5, borderRadius: '50%',
-                    background: d <= p ? dotFill : dotEmpty,
-                    flexShrink: 0,
-                  }}
-                />
-              ))}
-            </div>
-          );
-
-          return childMode ? (
-            <button
-              key={i}
-              onClick={() => handleLetterClick(i)}
-              {...pressHandlers}
-              title={missed > 0 ? t('alphabetTrainer.missedTimes', { count: missed }) : undefined}
-              style={{
-                background: cc.bg,
-                borderColor: ms?.border ?? cc.border,
-                color: ms?.ink ?? cc.char,
-                outline: p > 0 ? `3px solid ${CHILD_PRIORITY_OUTLINES[p]}` : 'none',
-                outlineOffset: '1px',
-              }}
-              className={`relative rounded-2xl border-2 flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-90 transition-all duration-150 select-none`}
-            >
-              {missHeat}
-              {missBadge}
-              <span style={{ position: 'relative', fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.8rem, 14vw, 6rem)', lineHeight: 1, ...(ms?.ink ? { color: ms.ink } : {}) }}>
-                {getLetterInForm(letter, letterForm)}
-              </span>
-              {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-                <span style={{ fontSize: '0.55rem', opacity: 0.5, marginTop: 2 }}>
-                  ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
-                </span>
-              )}
-              {dotRow(CHILD_PRIORITY_OUTLINES[p] || 'rgba(148,163,184,0.5)', 'rgba(148,163,184,0.22)')}
-            </button>
-          ) : (
-            <button
-              key={i}
-              onClick={() => handleLetterClick(i)}
-              {...pressHandlers}
-              title={missed > 0 ? t('alphabetTrainer.missedTimes', { count: missed }) : undefined}
-              style={ms ? { borderColor: ms.border } : undefined}
-              className={`relative rounded-xl border flex flex-col items-center justify-center py-2 px-1 cursor-pointer hover:-translate-y-1 active:scale-90 transition-all duration-150 select-none ${
-                p === 0 ? 'bg-slate-100 dark:bg-gray-700/60 border-slate-200 dark:border-gray-600' :
-                p === 1 ? 'bg-amber-50  dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' :
-                p === 2 ? 'bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600' :
-                          'bg-amber-200 dark:bg-amber-900/50 border-amber-500'
-              }`}
-            >
-              {missHeat}
-              {missBadge}
-              <span
-                style={{ position: 'relative', fontFamily: "'Hafs', 'Amiri', serif", fontSize: 'clamp(2.6rem, 13vw, 5.8rem)', lineHeight: 1, ...(ms?.ink ? { color: ms.ink } : {}) }}
-                className={
-                  p === 0 ? 'text-slate-500 dark:text-slate-400' :
-                  p === 3 ? 'text-amber-800 dark:text-amber-200' :
-                            'text-amber-700 dark:text-amber-300'
-                }
-              >{getLetterInForm(letter, letterForm)}</span>
-              {NON_CONNECTORS.has(letter) && (letterForm === 'initial' || letterForm === 'medial') && (
-                <span className="text-[8px] text-slate-400 dark:text-slate-500" style={{ marginTop: 2 }}>
-                  ≡ {letterForm === 'initial' ? 'مُفرَد' : 'آخِر'}
-                </span>
-              )}
-              {dotRow(
-                p === 3 ? '#d97706' : p === 2 ? '#f59e0b' : '#fbbf24',
-                'rgba(148,163,184,0.22)',
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Game picker (child mode) ──────────────────────────────────────── */}
-      {childMode && (
-        <div className="mb-6">
-          <p className="text-center text-sm mb-3 font-extrabold text-indigo-600 tracking-wide">
-            🎮 Pick your game!
-          </p>
-          <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
-            {/* Castle Battle */}
-            {(() => {
-              const active = gameChoice === 'tower';
-              return (
-                <button
-                  onClick={() => setGameChoice('tower')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#6366f1' : '#e0e7ff',
-                    background: active
-                      ? 'linear-gradient(160deg,#6366f1 0%,#4f46e5 100%)'
-                      : 'linear-gradient(160deg,#f0f4ff 0%,#e8edff 100%)',
-                    boxShadow: active
-                      ? '0 8px 24px rgba(99,102,241,0.45), 0 2px 8px rgba(99,102,241,0.3)'
-                      : '0 2px 8px rgba(99,102,241,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
-                    }} />
-                  )}
-                  <div className="pt-3 px-2">
-                    <LottieAnim src="/sprites/knight.json" width={92} height={92} />
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-indigo-700'}`}>
-                      Castle Battle
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-indigo-100' : 'text-indigo-400'}`}>
-                      Send soldiers to win!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Letter Flight */}
-            {(() => {
-              const active = gameChoice === 'airplane';
-              return (
-                <button
-                  onClick={() => setGameChoice('airplane')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#06b6d4' : '#cffafe',
-                    background: active
-                      ? 'linear-gradient(160deg,#0891b2 0%,#0e7490 100%)'
-                      : 'linear-gradient(160deg,#f0feff 0%,#e0f9ff 100%)',
-                    boxShadow: active
-                      ? '0 8px 24px rgba(6,182,212,0.45), 0 2px 8px rgba(6,182,212,0.3)'
-                      : '0 2px 8px rgba(6,182,212,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
-                    }} />
-                  )}
-                  <div className="pt-3 px-2">
-                    <LottieAnim src="/sprites/airplane-game.json" width={92} height={92} />
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-cyan-700'}`}>
-                      Letter Flight
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-cyan-100' : 'text-cyan-400'}`}>
-                      Fly to the right letter!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Letter Race (2 players, one keyboard) */}
-            {(() => {
-              const active = gameChoice === 'race';
-              return (
-                <button
-                  onClick={() => setGameChoice('race')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#10b981' : '#d1fae5',
-                    background: active
-                      ? 'linear-gradient(160deg,#059669 0%,#047857 100%)'
-                      : 'linear-gradient(160deg,#f0fdf7 0%,#e2fbef 100%)',
-                    boxShadow: active
-                      ? '0 8px 24px rgba(16,185,129,0.45), 0 2px 8px rgba(16,185,129,0.3)'
-                      : '0 2px 8px rgba(16,185,129,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
-                    }} />
-                  )}
-                  <div className="pt-3 px-2">
-                    <LottieAnim src="/sprites/letter-race-icon.json" width={92} height={92} />
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-emerald-700'}`}>
-                      Letter Race
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-emerald-100' : 'text-emerald-500'}`}>
-                      2 players — race &amp; grab it!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Reading Battle (up to 5 players, read verses → earn gear → maze battle) */}
-            {(() => {
-              const active = gameChoice === 'battle';
-              return (
-                <button
-                  onClick={() => setGameChoice('battle')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#8b5cf6' : '#ede9fe',
-                    background: active
-                      ? 'linear-gradient(160deg,#7c3aed 0%,#6d28d9 100%)'
-                      : 'linear-gradient(160deg,#f8f5ff 0%,#efe9fd 100%)',
-                    boxShadow: active
-                      ? '0 8px 24px rgba(139,92,246,0.45), 0 2px 8px rgba(139,92,246,0.3)'
-                      : '0 2px 8px rgba(139,92,246,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
-                    }} />
-                  )}
-                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 92, height: 92, fontSize: 52 }}>
-                    📖⚔️
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-violet-700'}`}>
-                      Reading Battle
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-violet-100' : 'text-violet-500'}`}>
-                      5 players — read &amp; fight!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-violet-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Flappy Letters (1-2 players, flap to the announced letter) */}
-            {(() => {
-              const active = gameChoice === 'flappy';
-              return (
-                <button
-                  onClick={() => setGameChoice('flappy')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#f59e0b' : '#fde68a',
-                    background: active
-                      ? 'linear-gradient(160deg,#d97706 0%,#b45309 100%)'
-                      : 'linear-gradient(160deg,#fffbeb 0%,#fef3c7 100%)',
-                    boxShadow: active
-                      ? '0 8px 24px rgba(245,158,11,0.45), 0 2px 8px rgba(245,158,11,0.3)'
-                      : '0 2px 8px rgba(245,158,11,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{
-                      background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)',
-                    }} />
-                  )}
-                  <div className="pt-3 px-2">
-                    <LottieAnim src="/sprites/flappy-letters-icon.json" width={92} height={92} />
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-amber-700'}`}>
-                      Flappy Letters
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-amber-100' : 'text-amber-500'}`}>
-                      Catch words, win stars!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Letter Hunt (multiplayer) */}
-            {(() => {
-              const active = gameChoice === 'letterhunt';
-              return (
-                <button
-                  onClick={() => setGameChoice('letterhunt')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#0284c7' : '#bae6fd',
-                    background: active ? 'linear-gradient(160deg,#0284c7 0%,#0369a1 100%)' : 'linear-gradient(160deg,#f0f9ff 0%,#e0f2fe 100%)',
-                    boxShadow: active ? '0 8px 24px rgba(2,132,199,0.45), 0 2px 8px rgba(2,132,199,0.3)' : '0 2px 8px rgba(2,132,199,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)' }} />
-                  )}
-                  <div className="pt-3 px-2 flex items-center justify-center" style={{ width: 92, height: 92, fontSize: 42 }}>
-                    🔍
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-sky-700'}`}>
-                      Letter Hunt
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-sky-100' : 'text-sky-500'}`}>
-                      Hear it, find it first!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-sky-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
-
-            {/* Find the Odd Letter */}
-            {(() => {
-              const active = gameChoice === 'oddletter';
-              return (
-                <button
-                  onClick={() => setGameChoice('oddletter')}
-                  className="relative flex flex-col items-center rounded-3xl border-4 select-none active:scale-95 transition-all duration-200 overflow-hidden w-[104px] sm:w-[132px] flex-shrink-0"
-                  style={{
-                    minWidth: 0,
-                    borderColor: active ? '#0d9488' : '#99f6e4',
-                    background: active ? 'linear-gradient(160deg,#0d9488 0%,#0f766e 100%)' : 'linear-gradient(160deg,#f0fdfa 0%,#ccfbf1 100%)',
-                    boxShadow: active ? '0 8px 24px rgba(13,148,136,0.45), 0 2px 8px rgba(13,148,136,0.3)' : '0 2px 8px rgba(13,148,136,0.1)',
-                    transform: active ? 'scale(1.06)' : 'scale(1)',
-                  }}
-                >
-                  {active && (
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,0.18) 0%,transparent 70%)' }} />
-                  )}
-                  <div className="pt-3 px-2 flex items-center justify-center gap-1" style={{ width: 92, height: 92 }}>
-                    <span dir="rtl" style={{ fontFamily: "'Hafs','Amiri Quran',serif", fontSize: 40, lineHeight: 1, color: active ? '#fff' : '#0f766e' }}>ح</span>
-                    <span dir="rtl" style={{ fontFamily: "'Hafs','Amiri Quran',serif", fontSize: 40, lineHeight: 1, color: active ? '#fde047' : '#f59e0b' }}>ج</span>
-                  </div>
-                  <div className="pb-3 px-3 w-full text-center">
-                    <div className={`font-extrabold text-sm leading-tight ${active ? 'text-white' : 'text-teal-700'}`}>
-                      Find the Odd Letter
-                    </div>
-                    <div className={`text-[10px] mt-0.5 leading-tight ${active ? 'text-teal-100' : 'text-teal-500'}`}>
-                      Spot the imposter!
-                    </div>
-                  </div>
-                  {active && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center shadow">
-                      <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
-                    </div>
-                  )}
-                </button>
-              );
-            })()}
+      {/* ── Start ── */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 backdrop-blur"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="mx-auto max-w-[1500px] px-3 sm:px-5 py-2.5 flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-extrabold text-slate-800 dark:text-slate-100 truncate">
+              {chosen?.name ?? 'Pick a game or a challenge'}
+            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
+              {unique === 0
+                ? (chosen?.needsLetters === false ? 'Ready — no letters needed' : t('alphabetTrainer.noLetters'))
+                : <>{unique} {unique === 1 ? t('alphabetTrainer.letter') : t('alphabetTrainer.letters')} · {total} {t('alphabetTrainer.rounds')}</>}
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* Action row */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className={`text-sm px-4 py-2 rounded-lg border ${
-          childMode
-            ? 'font-bold bg-white border-blue-200 rounded-full text-blue-700'
-            : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-500 dark:text-slate-400'
-        }`}>
-          {unique === 0
-            ? (childMode ? t('alphabetTrainer.noLettersChild') : t('alphabetTrainer.noLetters'))
-            : <>{unique} {unique === 1 ? t('alphabetTrainer.letter') : t('alphabetTrainer.letters')} — {total} {t('alphabetTrainer.rounds')}</>
-          }
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setPriorities(new Array(28).fill(1))}
-            className={`px-4 py-2 text-sm border transition-colors ${
-              childMode
-                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
-                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400'
-            }`}
-          >{t('alphabetTrainer.selectAll')}</button>
-          <button
-            onClick={() => setPriorities(new Array(28).fill(0))}
-            className={`px-4 py-2 text-sm border transition-colors ${
-              childMode
-                ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
-                : 'rounded-lg border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-gray-400'
-            }`}
-          >{t('alphabetTrainer.clearAll')}</button>
           <button
             onClick={handleStart}
-            disabled={unique === 0 && !(childMode && gameChoice === 'oddletter')}
-            className={`px-6 py-2 text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-              childMode
-                ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md shadow-orange-200'
-                : 'rounded-lg bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white'
-            }`}
-          >{t('alphabetTrainer.startPractice')}</button>
-          <button
-            onClick={() => { if (unique > 0) setView('wordchallenge'); }}
-            disabled={unique === 0}
-            title={t('alphabetTrainer.wordChallengeHint')}
-            className={`px-5 py-2 text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-              childMode
-                ? 'rounded-full bg-violet-400 hover:bg-violet-500 text-white shadow-md shadow-violet-200'
-                : 'rounded-lg bg-violet-600 hover:bg-violet-700 text-white'
-            }`}
-          >{t('alphabetTrainer.wordChallenge')}</button>
-          {!childMode && (
-            <button
-              onClick={() => { if (unique > 0) setView('formdrill'); }}
-              disabled={unique === 0}
-              title={t('alphabetTrainer.formDrillHint')}
-              className="px-5 py-2 text-sm font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >{t('alphabetTrainer.formDrill')}</button>
-          )}
-          {!childMode && !isStudentView && (
-            <button
-              onClick={() => { if (unique > 0) setView('lettermatch'); }}
-              disabled={unique === 0}
-              title={t('alphabetTrainer.letterMatchHint')}
-              className="px-5 py-2 text-sm font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >{t('alphabetTrainer.letterMatch')}</button>
-          )}
-          {!childMode && !isStudentView && (
-            <button
-              onClick={() => { if (unique > 0) setView('lettercards'); }}
-              disabled={unique === 0}
-              title="Play the same shapes as a card game — together by link, or on your screen"
-              className="px-5 py-2 text-sm font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >🃏 Letter cards</button>
-          )}
+            disabled={!chosen || (chosen.needsLetters && unique === 0)}
+            className="flex-shrink-0 h-11 px-7 rounded-2xl bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white text-sm font-black transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >Start</button>
         </div>
       </div>
     </div>
@@ -1301,77 +973,30 @@ const AlphabetTrainerPage: React.FC<{
       )}
 
       {/* Page header */}
-      <div className="max-w-3xl mx-auto px-4 pt-6 pb-2">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold ${childMode ? 'bg-gradient-to-br from-pink-400 to-purple-400 text-white' : 'bg-gradient-to-br from-teal-500 to-amber-500 text-white'}`}>
-              ا
-            </div>
-            <h2 className={`text-2xl font-extrabold ${childMode ? 'text-blue-700' : 'text-slate-800 dark:text-slate-100'}`}>
+      <div className="mx-auto w-full max-w-[1500px] px-3 sm:px-5 pt-4 pb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold bg-gradient-to-br from-teal-500 to-amber-500 text-white">
+            ا
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 leading-tight">
               {t('alphabetTrainer.pageTitle')}
             </h2>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+              Choose the letters, then a challenge or a game
+            </p>
           </div>
-
-          {/* Who this session is logged to — tutor side only. Without it a
-              finished session has nobody to belong to and quietly vanishes. */}
-          {!isStudentView && onLogActivity && (
-            <div className="flex items-center gap-1.5 me-auto ms-3">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {t('alphabetTrainer.logTo')}
-              </span>
-              {hostStudent ? (
-                <span className="px-2 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-xs font-bold">
-                  {hostStudent.name}
-                </span>
-              ) : (
-                <select
-                  value={logToId}
-                  onChange={e => {
-                    setLogToId(e.target.value);
-                    try { localStorage.setItem(LOG_TO_KEY, e.target.value); } catch { /* private mode */ }
-                  }}
-                  className={`px-2 py-1 rounded-lg text-xs font-bold border ${
-                    logTarget
-                      ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300'
-                      : 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'}`}
-                >
-                  <option value="">{t('alphabetTrainer.logToNobody')}</option>
-                  {students.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-                </select>
-              )}
-            </div>
-          )}
-
-          {/* Hardcore: wrong answer restarts the run (tutor side only) */}
+          <span className="flex-grow" />
+          {/* Hardcore: a wrong answer restarts the run (tutor side only) */}
           {!isStudentView && (
-            <label className="flex items-center gap-1.5 cursor-pointer select-none me-3" title={t('alphabetTrainer.hardcoreHint')}>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title={t('alphabetTrainer.hardcoreHint')}>
               <input type="checkbox" checked={hardcore} onChange={e => setHardcore(e.target.checked)} className="accent-red-600" />
               <span className={`text-[11px] font-bold uppercase tracking-wide ${hardcore ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
                 {t('alphabetTrainer.hardcore')}
               </span>
             </label>
           )}
-
-          {/* Child mode toggle */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {childMode ? t('alphabetTrainer.childModeLabel') : t('alphabetTrainer.adultModeLabel')}
-            </span>
-            <div className="relative">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={childMode}
-                onChange={e => setChildMode(e.target.checked)}
-              />
-              <div className="w-11 h-6 rounded-full bg-slate-300 dark:bg-gray-600 peer-checked:bg-pink-400 transition-colors duration-200" />
-              <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 peer-checked:translate-x-5 flex items-center justify-center text-xs leading-none">
-                {childMode ? '☀️' : '🌙'}
-              </div>
-            </div>
-          </label>
         </div>
-        <div className={`w-16 h-1 rounded-full mb-6 ${childMode ? 'bg-gradient-to-r from-pink-400 to-purple-400' : 'bg-gradient-to-r from-teal-400 to-amber-400'}`} />
       </div>
 
       {/* Main content */}
