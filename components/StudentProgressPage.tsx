@@ -7,7 +7,7 @@ import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchie
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
-import { loadRevealedNotes, SurahNotes } from '../data/revealedNotes';
+import { loadRevealedNotes, NotesLang, revealedNotesHaveLang, SurahNotes } from '../data/revealedNotes';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import { listRecitationHomework, versesOf } from '../services/recitationHomeworkService';
 import ExportReportModal from './ExportReportModal';
@@ -1241,6 +1241,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         try { localStorage.setItem(REVEALED_PREF, useRevealed ? 'revealed' : 'tafsir'); } catch { /* private mode */ }
     }, [useRevealed]);
+    /** Which language the notes are read in — English or Arabic. */
+    const NOTES_LANG_PREF = 'quran:notesLang';
+    const [notesLang, setNotesLang] = useState<NotesLang>(() => {
+        try { return localStorage.getItem(NOTES_LANG_PREF) === 'ar' ? 'ar' : 'en'; } catch { return 'en'; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(NOTES_LANG_PREF, notesLang); } catch { /* private mode */ }
+    }, [notesLang]);
     const [verseNotes, setVerseNotes] = useState<Record<string, string>>({});
     /** Verses the student recorded for homework and the tutor passed. */
     const [recitedOkVerses, setRecitedOkVerses] = useState<Set<string>>(new Set());
@@ -1302,9 +1310,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     useEffect(() => {
         if (!selectedSurahId) { setRevealedNotes({}); return; }
         let live = true;
-        loadRevealedNotes(selectedSurahId).then(n => { if (live) setRevealedNotes(n); });
+        loadRevealedNotes(selectedSurahId, notesLang).then(n => { if (live) setRevealedNotes(n); });
         return () => { live = false; };
-    }, [selectedSurahId]);
+    }, [selectedSurahId, notesLang]);
     const [verses, setVerses] = useState<QuranVerse[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -3966,18 +3974,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             </span>
                                         )}
                                     </div>
-                                    <p className={`${body} text-slate-700 dark:text-slate-200 ${tafsirOpen ? '' : 'line-clamp-3'}`}>
+                                    <p
+                                        dir={showing === 'revealed' && notesLang === 'ar' ? 'rtl' : 'ltr'}
+                                        className={`${body} text-slate-700 dark:text-slate-200 ${tafsirOpen ? '' : 'line-clamp-3'} ${
+                                            showing === 'revealed' && notesLang === 'ar' ? 'text-right leading-[2]' : ''}`}
+                                        style={showing === 'revealed' && notesLang === 'ar'
+                                            ? { fontFamily: "'Amiri', 'Amiri Regular', serif", fontSize: '17px' }
+                                            : undefined}
+                                    >
                                         {useRevealed && !ours && Object.keys(revealedNotes).length > 0
-                                            ? 'No note for this verse yet.'
+                                            ? (notesLang === 'ar' ? 'لا توجد ملاحظة لهذه الآية بعد.' : 'No note for this verse yet.')
                                             : text}
                                     </p>
-                                    {text.length > 200 && (
-                                        <button
-                                            onClick={() => setExpandedTafsir(prev => { const n = new Set(prev); if (n.has(vk)) n.delete(vk); else n.add(vk); return n; })}
-                                            className="mt-1 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
-                                            {tafsirOpen ? 'Show less' : 'Read more'}
-                                        </button>
-                                    )}
+                                    <div className="mt-1 flex items-end gap-2">
+                                        {text.length > 200 && (
+                                            <button
+                                                onClick={() => setExpandedTafsir(prev => { const n = new Set(prev); if (n.has(vk)) n.delete(vk); else n.add(vk); return n; })}
+                                                className="text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
+                                                {tafsirOpen ? 'Show less' : 'Read more'}
+                                            </button>
+                                        )}
+                                        <span className="flex-grow" />
+                                        {/* the language of our own notes, in the far corner */}
+                                        {showing === 'revealed' && revealedNotesHaveLang(surahNum, 'ar') && (
+                                            <button
+                                                onClick={() => setNotesLang(l => (l === 'ar' ? 'en' : 'ar'))}
+                                                title={notesLang === 'ar' ? 'Read these notes in English' : 'اقرأ هذه الملاحظات بالعربية'}
+                                                className="flex-shrink-0 h-6 px-2 rounded-full border border-slate-300 dark:border-gray-500 text-[11px] font-extrabold text-slate-500 dark:text-slate-300 hover:border-teal-500 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+                                            >
+                                                {notesLang === 'ar' ? 'EN' : 'ع'}
+                                            </button>
+                                        )}
+                                    </div>
                                 </section>
                             );
                         })()}
