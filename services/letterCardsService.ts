@@ -14,6 +14,7 @@
 // -----------------------------------------------------------------------------
 
 import { supabase } from '../lib/supabase';
+import type { CardsKind, WordCard } from './letterCardsDeck';
 import { createNotification } from './notificationService';
 import type { MatchForm } from './letterMatchService';
 import type { CardsMode, CardsEnd } from './letterCardsDeck';
@@ -26,15 +27,20 @@ export {
   HAND_SIZE, ANIMALS, animalSrc, CARD_BACK_STUDENT, CARD_BACK_TUTOR, BOARD_BACKGROUND,
   SOUND_THROW, SOUND_POINT,
 } from './letterCardsDeck';
-export type { Animal, CardsMode, CardsEnd } from './letterCardsDeck';
+export type { Animal, CardsMode, CardsEnd, CardsKind, WordCard } from './letterCardsDeck';
 
 export interface LetterCardsGame {
   id: string;
   teacherId: string;
   studentId: string;
   studentName?: string;
+  /** The pile's keys: the letters themselves, or the ids of the words. */
   letters: string[];
-  form: MatchForm;
+  /** Only a letters game has a shape. */
+  form: MatchForm | null;
+  kind: CardsKind;
+  /** A words game: what each card says, by id. */
+  words: WordCard[] | null;
   lives: number | null;
   mode: CardsMode;
   status: 'created' | 'playing' | 'completed';
@@ -49,7 +55,8 @@ export interface LetterCardsGame {
 
 interface Row {
   id: string; teacher_id: string; student_id: string; student_name: string | null;
-  letters: string[]; form: MatchForm; lives: number | null; mode: CardsMode;
+  letters: string[]; form: MatchForm | null; kind: CardsKind | null; words: WordCard[] | null;
+  lives: number | null; mode: CardsMode;
   status: LetterCardsGame['status']; score: number | null; mistakes: number | null;
   wrong_letters: Record<string, number> | null; ended_reason: CardsEnd | null;
   duration_ms: number | null; created_at: string; completed_at: string | null;
@@ -58,6 +65,7 @@ interface Row {
 const fromRow = (r: Row): LetterCardsGame => ({
   id: r.id, teacherId: r.teacher_id, studentId: r.student_id,
   studentName: r.student_name ?? undefined, letters: r.letters ?? [], form: r.form,
+  kind: r.kind ?? 'letters', words: r.words ?? null,
   lives: r.lives, mode: r.mode, status: r.status, score: r.score, mistakes: r.mistakes,
   wrongLetters: r.wrong_letters, endedReason: r.ended_reason, durationMs: r.duration_ms,
   createdAt: r.created_at, completedAt: r.completed_at,
@@ -65,11 +73,13 @@ const fromRow = (r: Row): LetterCardsGame => ({
 
 export async function createLetterCardsGame(input: {
   teacherId: string; studentId: string; studentName: string;
-  letters: string[]; form: MatchForm; lives: number | null; mode: CardsMode;
+  letters: string[]; form: MatchForm | null; lives: number | null; mode: CardsMode;
+  kind?: CardsKind; words?: WordCard[] | null;
 }): Promise<LetterCardsGame | null> {
   const { data, error } = await supabase.from('letter_cards_games').insert({
     teacher_id: input.teacherId, student_id: input.studentId, student_name: input.studentName,
     letters: input.letters, form: input.form, lives: input.lives, mode: input.mode,
+    kind: input.kind ?? 'letters', words: input.words ?? null,
   }).select('*').single();
   if (error) { console.error('createLetterCardsGame:', error.message); return null; }
   return fromRow(data as Row);
@@ -166,8 +176,10 @@ export async function notifyLetterCardsInvite(game: LetterCardsGame): Promise<vo
   await createNotification({
     teacherId: game.teacherId, studentId: game.studentId, recipient: 'student', bookingId: null,
     type: 'letter_cards_invite',
-    title: '🃏 Letter cards',
-    body: `Your teacher is waiting to play letter cards with you — ${game.letters.length} letters.`,
+    title: game.kind === 'words' ? '🃏 Word cards' : '🃏 Letter cards',
+    body: game.kind === 'words'
+      ? `Your teacher is waiting to play word cards with you — ${game.letters.length} words.`
+      : `Your teacher is waiting to play letter cards with you — ${game.letters.length} letters.`,
     metadata: { gameId: game.id, url: letterCardsUrl(game.id) },
   });
 }
@@ -178,8 +190,9 @@ export async function notifyLetterCardsHomework(game: LetterCardsGame): Promise<
   await createNotification({
     teacherId: game.teacherId, studentId: game.studentId, recipient: 'student', bookingId: null,
     type: 'letter_cards_invite',
-    title: '🃏 Letter cards homework',
-    body: `Play the letter cards against the computer — ${game.letters.length} letters. As many times as you like.`,
+    title: game.kind === 'words' ? '🃏 Word cards homework' : '🃏 Letter cards homework',
+    body: `Play the ${game.kind === 'words' ? 'word' : 'letter'} cards against the computer — `
+      + `${game.letters.length} ${game.kind === 'words' ? 'words' : 'letters'}. As many times as you like.`,
     metadata: { gameId: game.id, url: letterCardsUrl(game.id) },
   });
 }

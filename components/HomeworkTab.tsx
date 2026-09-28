@@ -397,10 +397,10 @@ const HomeworkTab: React.FC<{
               <span className="text-2xl" aria-hidden="true">🃏</span>
               <div className="min-w-0">
                 <p className="text-lg text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
-                  Letter cards · {CARD_FORM[g.form] ?? g.form}
+                  {g.kind === 'words' ? 'Word cards' : `Letter cards · ${CARD_FORM[g.form ?? ''] ?? g.form}`}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {g.letters.length} letter{g.letters.length === 1 ? '' : 's'} against the computer ·
+                  {g.letters.length} {g.kind === 'words' ? 'word' : 'letter'}{g.letters.length === 1 ? '' : 's'} against the computer ·
                   {' '}set {shortDate(g.createdAt)} · play it as often as you like
                 </p>
               </div>

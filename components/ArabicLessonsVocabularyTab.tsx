@@ -23,6 +23,9 @@ import {
 } from '../services/vocabHomeworkService';
 import StrengthBar from './VocabStrengthBar';
 import HomeworkBasket, { useHomeworkBasket } from './VocabHomeworkBasket';
+import {
+  LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
+} from '../services/letterCardsService';
 import WordFlightGame from './WordFlightGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
@@ -88,6 +91,23 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     listVocabHomework(student.id).then(list => {
       if (live) setPendingHomework(list.filter(h => h.status === 'assigned' && !isHomeworkExpired(h)));
     });
+    return () => { live = false; };
+  }, [student.id, studentMode]);
+
+  // Card games set as homework — the student plays them against the computer,
+  // as often as they like.
+  const [cardGames, setCardGames] = useState<LetterCardsGame[]>([]);
+  const [cardAttempts, setCardAttempts] = useState<Record<string, LetterCardsAttempt[]>>({});
+  useEffect(() => {
+    if (!studentMode) return;
+    let live = true;
+    listLetterCardsHomework(student.id).then(async games => {
+      if (!live) return;
+      const mine = games.filter(g => g.kind === 'words');
+      setCardGames(mine);
+      const tries = await listLetterCardsAttempts(mine.map(g => g.id));
+      if (live) setCardAttempts(tries);
+    }).catch(() => {});
     return () => { live = false; };
   }, [student.id, studentMode]);
 
@@ -427,6 +447,31 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           <span className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold">Start →</span>
         </a>
       ))}
+
+      {/* Card games waiting for the student */}
+      {studentMode && cardGames.map(g => {
+        const tries = cardAttempts[g.id] ?? [];
+        const best = tries.reduce((m, a) => Math.max(m, a.score), 0);
+        return (
+          <a key={g.id} href={`/letter-cards/${g.id}`}
+            className="flex items-center gap-3 rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-2xl">🃏</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-amber-800 dark:text-amber-200">
+                Word cards · {g.letters.length} word{g.letters.length === 1 ? '' : 's'}
+              </span>
+              <span className="block text-xs text-amber-700/80 dark:text-amber-300/70">
+                {tries.length
+                  ? `Best ${best}/${tries[0].total} in ${tries.length} ${tries.length === 1 ? 'try' : 'tries'} · play it again`
+                  : 'Match each Arabic word with its meaning — as often as you like'}
+              </span>
+            </span>
+            <span className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">
+              {tries.length ? 'Again →' : 'Play →'}
+            </span>
+          </a>
+        );
+      })}
 
       {/* Practice launcher — runs on the SELECTED lessons (or everything) */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-5 space-y-3">

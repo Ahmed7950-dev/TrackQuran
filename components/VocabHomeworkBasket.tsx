@@ -14,6 +14,7 @@ import {
   HomeworkWord, VocabHomework, assignHomework, deleteVocabHomework, homeworkUrl,
   isHomeworkExpired, listVocabHomework, saveHomeworkBasket, toHomeworkWord,
 } from '../services/vocabHomeworkService';
+import { LetterCardsSetup } from './LetterCardsGame';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,8 @@ const HomeworkBasket: React.FC<Props> = ({ basket, student, courseWords, savedWo
   const [justSent, setJustSent] = useState<VocabHomework | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [openResults, setOpenResults] = useState<string | null>(null);
+  /** The card game dealt from these same words. */
+  const [cards, setCards] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -192,6 +195,22 @@ const HomeworkBasket: React.FC<Props> = ({ basket, student, courseWords, savedWo
     }
     return <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Waiting</span>;
   };
+
+  if (cards) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+        onClick={() => setCards(false)}>
+        <div onClick={e => e.stopPropagation()}
+          className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
+          <LetterCardsSetup
+            words={basket.words.map(w => ({ id: w.id, arabic: w.arabic, english: w.english }))}
+            student={{ id: student.id, name: student.name }}
+            onClose={() => setCards(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
@@ -305,6 +324,10 @@ const HomeworkBasket: React.FC<Props> = ({ basket, student, courseWords, savedWo
             <button onClick={generate} disabled={busy || basket.words.length === 0}
               className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-default">
               {busy ? 'Creating…' : `🔗 Generate homework link${basket.words.length ? ` · ${basket.words.length} word${basket.words.length === 1 ? '' : 's'}` : ''}`}
+            </button>
+            <button onClick={() => setCards(true)} disabled={basket.words.length === 0}
+              className="w-full py-3 rounded-xl border-2 border-amber-400 text-amber-700 dark:text-amber-300 font-bold text-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-40 disabled:cursor-default">
+              🃏 Play word cards with these words
             </button>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center">
               {student.name} is notified in their portal, and the link is copied so you can send it too.

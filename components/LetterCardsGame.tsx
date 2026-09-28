@@ -31,7 +31,7 @@ import {
   CardsMode, HAND_SIZE, LetterCardsGame as Game, animalSrc, completeLetterCardsGame,
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
-  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW,
+  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard,
 } from '../services/letterCardsService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
@@ -48,16 +48,33 @@ const boxStyle = (b: Box): React.CSSProperties => ({
   position: 'absolute', left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%`,
 });
 
-/** One card: the animal, with its letter in the panel at the top. */
+/** What a card says: a letter in one of its shapes, or a word. */
+export interface Face { text: string; rtl: boolean; size: number }
+
+/** A word has to fit the panel: the longest word of it on a line, the whole
+ *  of it in two or three. Sizes are in cqw — per cent of the CARD's width. */
+const fitWord = (text: string, rtl: boolean): number => {
+  // Harakat sit above and below the letters and take no width of their own,
+  // so a vowelled word must not be measured as though they did.
+  const bare = rtl ? text.replace(/[\u064B-\u0655\u0670\u06D6-\u06ED]/g, '') : text;
+  const words = bare.split(/\s+/).filter(Boolean);
+  const longest = Math.max(4, ...words.map(w => [...w].length));
+  const total = Math.max(6, [...bare].length);
+  return Math.max(7, Math.min(rtl ? 26 : 22, (rtl ? 130 : 145) / longest, (rtl ? 320 : 360) / total));
+};
+
+export const wordFace = (text: string, rtl: boolean): Face => ({ text, rtl, size: fitWord(text, rtl) });
+
+/** One card: the animal, with what it says in the panel at the top. */
 const CardFace: React.FC<{
-  card: Card; form: MatchForm | 'isolated'; layout: Layout;
+  card: Card; face: Face; layout: Layout;
   onClick?: () => void; dim?: boolean; glow?: string;
-}> = ({ card, form, layout, onClick, dim, glow }) => (
+}> = ({ card, face, layout, onClick, dim, glow }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={!onClick}
-    aria-label={`${card.animal}, letter ${card.letter}`}
+    aria-label={`${card.animal}, ${face.text}`}
     className={`relative w-full h-full rounded-[8%] overflow-visible transition-transform duration-150 ${
       onClick ? 'cursor-pointer hover:-translate-y-[4%] active:scale-95' : ''}`}
     // Its own size container, so the letter is measured against the CARD.
@@ -76,11 +93,13 @@ const CardFace: React.FC<{
         width: `${layout.letterBox.w}%`, height: `${layout.letterBox.h}%`,
       }}
     >
-      <span dir="rtl" style={{
-        fontFamily: LETTER_FONT, fontSize: `${layout.letterSize}cqw`, lineHeight: 1,
+      <span dir={face.rtl ? 'rtl' : 'ltr'} style={{
+        fontFamily: face.rtl ? LETTER_FONT : 'inherit',
+        fontSize: `${face.size}cqw`, lineHeight: 1.12,
         color: '#1A1208', fontWeight: 700,
+        textAlign: 'center', overflowWrap: 'anywhere',
       }}>
-        {shapeOf(card.letter, form)}
+        {face.text}
       </span>
     </span>
   </button>
@@ -127,11 +146,28 @@ const Board: React.FC<{
   me: 'tutor' | 'student';
   onPick?: (side: 'tutor' | 'student', index: number) => void;
   layout?: Layout;
+  /** A vocabulary game: the tutor holds the Arabic, the student the meaning.
+   *  Without it the cards are letters and their shapes. */
+  words?: WordCard[] | null;
   /** Everything the board paints over itself — nothing sits above the canvas. */
   onBack?: () => void;
   onRematch?: () => void;
-}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, onBack, onRematch }) => {
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, words, onBack, onRematch }) => {
   useTableSounds(snap);
+  const wordById = useMemo(() => new Map((words ?? []).map(w => [w.id, w])), [words]);
+  const isWords = wordById.size > 0;
+  /** The tutor's side says the Arabic, or the letter on its own; the student's
+   *  side says the meaning, or the letter in the shape being practised. */
+  const faceOf = (card: Card, side: 'tutor' | 'student'): Face => {
+    if (isWords) {
+      const w = wordById.get(card.letter);
+      return side === 'tutor'
+        ? wordFace(w?.arabic ?? card.letter, true)
+        : wordFace(w?.english ?? card.letter, false);
+    }
+    const text = shapeOf(card.letter, side === 'tutor' ? 'isolated' : snap.form);
+    return { text, rtl: true, size: layout.letterSize };
+  };
   const bothOpen = snap.mode === 'tutor';
   const seeTutor = bothOpen || me === 'tutor';
   const seeStudent = bothOpen || me === 'student';
@@ -165,7 +201,7 @@ const Board: React.FC<{
         return (
           <div key={`s${i}`} style={boxStyle(box)}>
             {seeStudent
-              ? <CardFace card={card} form={snap.form} layout={layout}
+              ? <CardFace card={card} face={faceOf(card, 'student')} layout={layout}
                   onClick={myTurn('student') ? () => onPick!('student', i) : undefined}
                   glow={myTurn('student') ? 'rgba(255,220,120,.9)' : undefined} />
               : <CardBack src={CARD_BACK_STUDENT} />}
@@ -180,7 +216,7 @@ const Board: React.FC<{
         return (
           <div key={`t${i}`} style={boxStyle(box)}>
             {seeTutor
-              ? <CardFace card={card} form="isolated" layout={layout}
+              ? <CardFace card={card} face={faceOf(card, 'tutor')} layout={layout}
                   onClick={myTurn('tutor') ? () => onPick!('tutor', i) : undefined}
                   glow={myTurn('tutor') ? 'rgba(255,220,120,.9)' : undefined} />
               : <CardBack src={CARD_BACK_TUTOR} />}
@@ -191,12 +227,12 @@ const Board: React.FC<{
       {/* what is on the table */}
       {snap.thrownTutor && (
         <div style={boxStyle(layout.thrownTutor)}>
-          <CardFace card={snap.thrownTutor} form="isolated" layout={layout} />
+          <CardFace card={snap.thrownTutor} face={faceOf(snap.thrownTutor, 'tutor')} layout={layout} />
         </div>
       )}
       {snap.thrownStudent && (
         <div style={boxStyle(layout.thrownStudent)}>
-          <CardFace card={snap.thrownStudent} form={snap.form} layout={layout} />
+          <CardFace card={snap.thrownStudent} face={faceOf(snap.thrownStudent, 'student')} layout={layout} />
         </div>
       )}
 
@@ -224,7 +260,7 @@ const Board: React.FC<{
         )}
 
         <span className="font-black text-white whitespace-nowrap truncate" style={{ fontSize: '1.1em' }}>
-          {FORM_LABEL[snap.form].en}
+          {isWords ? 'Word cards' : FORM_LABEL[snap.form].en}
         </span>
 
         <span className="flex-grow" />
@@ -384,7 +420,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   // ── Alone against the computer ──
   useEffect(() => {
     if (!solo || !game) return;
-    const first = deal(game.letters, game.form, game.lives, game.mode);
+    const first = deal(game.letters, game.form ?? 'initial', game.lives, game.mode);
     snapRef.current = first; setSnap(first);
     startedAt.current = Date.now();
     void markLetterCardsStarted(game.id);
@@ -405,7 +441,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     const ch = createGameChannel(letterCardsChannel(game.id), host ? 'host' : 'guest');
     chanRef.current = ch;
     if (host) {
-      const first = deal(game.letters, game.form, game.lives, game.mode);
+      const first = deal(game.letters, game.form ?? 'initial', game.lives, game.mode);
       snapRef.current = first; setSnap(first);
       startedAt.current = Date.now();
       void markLetterCardsStarted(game.id);
@@ -447,7 +483,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     if (!host || !game) return;
     savedRef.current = false;
     startedAt.current = Date.now();
-    commit(deal(game.letters, game.form, game.lives, game.mode));
+    commit(deal(game.letters, game.form ?? 'initial', game.lives, game.mode));
   }, [host, game, commit]);
 
   const onPick = host
@@ -481,7 +517,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
         className="absolute inset-0 w-full h-full object-cover"
         style={{ filter: 'blur(28px) brightness(.55)', transform: 'scale(1.12)' }} />
       <Board
-        snap={snap} me={me}
+        snap={snap} me={me} words={game.words}
         onPick={snap.ph === 'playing' ? onPick : undefined}
         onBack={leave}
         onRematch={host ? rematch : undefined}
@@ -501,12 +537,20 @@ const Shell: React.FC<{ children: React.ReactNode; wrapRef?: React.Ref<HTMLDivEl
 // ── Setting one up ──────────────────────────────────────────────────────────
 
 export const LetterCardsSetup: React.FC<{
-  letters: string[];
-  /** The shape the student will hold. 'isolated' means: ask here. */
-  initialForm: MatchForm | 'isolated';
+  /** A letters game: the letters, and the shape the student will hold
+   *  ('isolated' means: ask here). */
+  letters?: string[];
+  initialForm?: MatchForm | 'isolated';
+  /** A vocabulary game instead: the tutor throws the Arabic, the student
+   *  answers with the meaning. */
+  words?: WordCard[];
   student: { id: string; name: string };
   onClose: () => void;
-}> = ({ letters, initialForm, student, onClose }) => {
+}> = ({ letters = [], initialForm = 'isolated', words, student, onClose }) => {
+  const isWords = !!words?.length;
+  /** The pile's keys: the letters themselves, or the ids of the words. */
+  const keys = isWords ? words!.map(w => w.id) : letters;
+  const noun = isWords ? 'word' : 'letter';
   const [form, setForm] = useState<MatchForm>(initialForm === 'isolated' ? 'initial' : initialForm);
   const [lives, setLives] = useState<number | null>(3);
   const [mode, setMode] = useState<CardsMode>('multiplayer');
@@ -522,7 +566,9 @@ export const LetterCardsSetup: React.FC<{
     const teacherId = data.user?.id;
     if (!teacherId) { setBusy(false); setErr('Sign in again to start a game.'); return; }
     const g = await createLetterCardsGame({
-      teacherId, studentId: student.id, studentName, letters, form, lives, mode,
+      teacherId, studentId: student.id, studentName, letters: keys,
+      form: isWords ? null : form, kind: isWords ? 'words' : 'letters',
+      words: isWords ? words! : null, lives, mode,
     });
     setBusy(false);
     if (g) setGame(g); else setErr('Could not start the game — check the connection.');
@@ -569,11 +615,14 @@ export const LetterCardsSetup: React.FC<{
   return (
     <div className="p-5 sm:p-6 space-y-5">
       <div>
-        <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Letter cards</h3>
+        <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">
+          {isWords ? 'Word cards' : 'Letter cards'}
+        </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          {letters.length} letter{letters.length === 1 ? '' : 's'} ·
-          {mode === 'solo' ? ' the computer holds' : ' you hold'} the isolated shape,
-          {' '}{studentName} holds the {FORM_LABEL[form].en.toLowerCase()} shape.
+          {keys.length} {noun}{keys.length === 1 ? '' : 's'} ·
+          {mode === 'solo' ? ' the computer holds' : ' you hold'}
+          {isWords ? ' the Arabic, ' : ' the isolated shape, '}
+          {studentName} holds the {isWords ? 'meaning' : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
         </p>
       </div>
 
@@ -595,7 +644,7 @@ export const LetterCardsSetup: React.FC<{
         </div>
       </div>
 
-      <div>
+      <div className={isWords ? 'hidden' : ''}>
         <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">The shape they hold</p>
         <div className="flex gap-2">
           {(['initial', 'medial', 'final'] as const).map(f => (
@@ -624,7 +673,7 @@ export const LetterCardsSetup: React.FC<{
       {err && <p className="text-sm font-semibold text-red-600">{err}</p>}
       <div className="flex gap-3">
         <button onClick={onClose} className="flex-1 h-12 rounded-xl bg-slate-100 dark:bg-gray-700 font-bold">Cancel</button>
-        <button onClick={create} disabled={busy || letters.length === 0}
+        <button onClick={create} disabled={busy || keys.length === 0}
           className="flex-1 h-12 rounded-xl bg-teal-700 text-white font-black disabled:opacity-40">
           {busy ? 'Dealing…' : 'Start'}
         </button>

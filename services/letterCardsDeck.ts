@@ -18,6 +18,12 @@ export type Animal = typeof ANIMALS[number];
 export type CardsMode = 'multiplayer' | 'tutor' | 'solo';
 export type CardsEnd = 'done' | 'lives';
 
+/** Letters and their shapes, or vocabulary: an Arabic word and its meaning. */
+export type CardsKind = 'letters' | 'words';
+
+/** What a word card says on each side of the table. */
+export interface WordCard { id: string; arabic: string; english: string }
+
 export const animalSrc = (a: Animal): string => `/games/letter-cards/${a}.webp`;
 export const CARD_BACK_STUDENT = '/games/letter-cards/backred.webp';
 export const CARD_BACK_TUTOR = '/games/letter-cards/backblue.webp';
