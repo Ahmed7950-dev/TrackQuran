@@ -132,6 +132,11 @@ interface Activity {
   tutorOnly?: boolean;
 }
 
+/** Each card may have a painted background of its own, dropped in later; until
+ *  the file exists the card simply keeps its plain tinted look. The box is 4:1,
+ *  so the artwork is never cropped at any width. */
+const railArt = (id: PickId): string => `/games/rails/${id}.webp`;
+
 const CHALLENGES: Activity[] = [
   { id: 'guess',        name: 'Guess the letter', hint: 'Name each letter as it comes', icon: '؟', arabic: true, tint: '#0d9488', soft: '#ccfbf1', needsLetters: true },
   { id: 'wordchallenge',name: 'Word challenge',   hint: 'Read a word, letter by letter', icon: '✦',              tint: '#7c3aed', soft: '#ede9fe', needsLetters: true },
@@ -173,6 +178,8 @@ const AlphabetTrainerPage: React.FC<{
 
   /** The one game or challenge that Start will open. */
   const [pick, setPick] = useState<PickId>('guess');
+  /** Cards whose artwork is not there (yet) — they keep the plain look. */
+  const [noArt, setNoArt] = useState<Partial<Record<PickId, boolean>>>({});
   const chosen = [...CHALLENGES, ...GAMES].find(a => a.id === pick) ?? null;
   /** The castle battle plays the letter practice inside its arena — the rest of
    *  the practice and win screens still ask for it by this name. */
@@ -528,43 +535,64 @@ const AlphabetTrainerPage: React.FC<{
 
   // ─── SELECT VIEW ───────────────────────────────────────────────────────────
   // ─── SELECT VIEW ───────────────────────────────────────────────────────────
-  /** One rectangle in a rail. */
+  /** One rectangle in a rail: a 4:1 box, its own artwork across it if there is
+   *  any, and the name and hint over a scrim so they stay readable. */
   const railCard = (a: Activity) => {
     const active = pick === a.id;
     const locked = a.needsLetters && unique === 0;
+    const art = !noArt[a.id];
     return (
       <button
         key={a.id}
         onClick={() => setPick(a.id)}
         title={locked ? 'Pick some letters first' : a.hint}
-        className={`group w-full flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-start transition-all duration-150 ${
+        className={`group relative w-full aspect-[4/1] overflow-hidden rounded-2xl border text-start transition-all duration-150 ${
           active
             ? 'border-transparent shadow-md ring-2 ring-offset-1 dark:ring-offset-gray-900'
             : 'border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-slate-300 dark:hover:border-gray-600 hover:shadow-sm'
         }`}
         style={active ? { background: a.soft, boxShadow: `0 6px 18px -8px ${a.tint}`, ['--tw-ring-color' as string]: a.tint } : undefined}
       >
-        <span
-          className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-[20px] leading-none"
-          style={{ background: active ? a.tint : a.soft, color: active ? '#fff' : a.tint }}
-        >
-          <span dir="rtl" style={a.arabic ? { fontFamily: "'Hafs','Amiri',serif", fontSize: 22 } : undefined}>{a.icon}</span>
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={`block text-[13px] font-extrabold leading-tight truncate ${
-            active ? 'text-slate-900 dark:text-slate-900' : 'text-slate-700 dark:text-slate-100'}`}>
-            {a.name}
-          </span>
-          <span className={`block text-[11px] leading-tight truncate ${
-            active ? 'text-slate-600 dark:text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}>
-            {a.hint}
-          </span>
-        </span>
-        {active && (
-          <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: a.tint }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="m5 13 4 4L19 7" /></svg>
-          </span>
+        {art && (
+          <>
+            <img
+              src={railArt(a.id)} alt="" aria-hidden="true" draggable={false}
+              onError={() => setNoArt(m => ({ ...m, [a.id]: true }))}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* the words sit on the left, so the left side is darkened */}
+            <span aria-hidden className="absolute inset-0"
+              style={{ background: 'linear-gradient(90deg, rgba(8,10,14,.82) 0%, rgba(8,10,14,.55) 55%, rgba(8,10,14,.12) 100%)' }} />
+          </>
         )}
+
+        <span className="relative h-full flex items-center gap-3 px-3">
+          {!art && (
+            <span
+              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-[20px] leading-none"
+              style={{ background: active ? a.tint : a.soft, color: active ? '#fff' : a.tint }}
+            >
+              <span dir="rtl" style={a.arabic ? { fontFamily: "'Hafs','Amiri',serif", fontSize: 22 } : undefined}>{a.icon}</span>
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className={`block text-[13px] font-extrabold leading-tight truncate ${
+              art ? 'text-white' : active ? 'text-slate-900 dark:text-slate-900' : 'text-slate-700 dark:text-slate-100'}`}
+              style={art ? { textShadow: '0 1px 6px rgba(0,0,0,.7)' } : undefined}>
+              {a.name}
+            </span>
+            <span className={`block text-[11px] leading-tight truncate ${
+              art ? 'text-white/75' : active ? 'text-slate-600 dark:text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}
+              style={art ? { textShadow: '0 1px 6px rgba(0,0,0,.7)' } : undefined}>
+              {a.hint}
+            </span>
+          </span>
+          {active && (
+            <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: a.tint }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="m5 13 4 4L19 7" /></svg>
+            </span>
+          )}
+        </span>
       </button>
     );
   };
