@@ -10,13 +10,13 @@ look, so they can arrive one at a time.
 The card is rendered with `object-cover`, and because the box is also 4:1 the
 picture is never cropped — what you draw is what is shown.
 
-The name and the hint are written across the LEFT of the card, over a dark
-gradient (opaque on the left, clear on the right). So:
+A card with artwork shows NOTHING else — no name, no hint, no icon — so the
+picture has to carry the game's name itself. Keep the title away from the very
+edge: a 24 px margin all round clears the 16 px rounded corners.
 
-  * keep the left 55% quiet — texture, sky, a wall, not faces or small detail;
-  * put the subject in the right third, clear of the rounded corners;
-  * a 24 px margin all round stays clear of the 16 px corner radius and of the
-    tick that marks the chosen card (top right, inside 40 px).
+A card that is not the chosen one is dimmed (brightness .72); the chosen one is
+shown at full strength with a ring around it. Nothing else marks the choice, so
+draw for the bright state.
 
 File names, exactly:
 

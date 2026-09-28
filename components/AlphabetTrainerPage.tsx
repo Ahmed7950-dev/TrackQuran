@@ -535,8 +535,9 @@ const AlphabetTrainerPage: React.FC<{
 
   // ─── SELECT VIEW ───────────────────────────────────────────────────────────
   // ─── SELECT VIEW ───────────────────────────────────────────────────────────
-  /** One rectangle in a rail: a 4:1 box, its own artwork across it if there is
-   *  any, and the name and hint over a scrim so they stay readable. */
+  /** One rectangle in a rail. A card with artwork is nothing but the artwork —
+   *  the picture carries its own name — and a card without one keeps the plain
+   *  tinted look, with its icon, name and hint. */
   const railCard = (a: Activity) => {
     const active = pick === a.id;
     const locked = a.needsLetters && unique === 0;
@@ -553,46 +554,40 @@ const AlphabetTrainerPage: React.FC<{
         }`}
         style={active ? { background: a.soft, boxShadow: `0 6px 18px -8px ${a.tint}`, ['--tw-ring-color' as string]: a.tint } : undefined}
       >
-        {art && (
-          <>
-            <img
-              src={railArt(a.id)} alt="" aria-hidden="true" draggable={false}
-              onError={() => setNoArt(m => ({ ...m, [a.id]: true }))}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            {/* the words sit on the left, so the left side is darkened */}
-            <span aria-hidden className="absolute inset-0"
-              style={{ background: 'linear-gradient(90deg, rgba(8,10,14,.82) 0%, rgba(8,10,14,.55) 55%, rgba(8,10,14,.12) 100%)' }} />
-          </>
-        )}
-
-        <span className="relative h-full flex items-center gap-3 px-3">
-          {!art && (
+        {art ? (
+          /* The picture is the whole card. Until it is chosen it sits back a
+             little, so the one that is chosen is the one that shines. */
+          <img
+            src={railArt(a.id)} alt={a.name} draggable={false}
+            onError={() => setNoArt(m => ({ ...m, [a.id]: true }))}
+            className="absolute inset-0 w-full h-full object-cover transition-all duration-150"
+            style={{ filter: active ? 'none' : 'brightness(.72) saturate(.85)' }}
+          />
+        ) : (
+          <span className="relative h-full flex items-center gap-3 px-3">
             <span
               className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-[20px] leading-none"
               style={{ background: active ? a.tint : a.soft, color: active ? '#fff' : a.tint }}
             >
               <span dir="rtl" style={a.arabic ? { fontFamily: "'Hafs','Amiri',serif", fontSize: 22 } : undefined}>{a.icon}</span>
             </span>
-          )}
-          <span className="min-w-0 flex-1">
-            <span className={`block text-[13px] font-extrabold leading-tight truncate ${
-              art ? 'text-white' : active ? 'text-slate-900 dark:text-slate-900' : 'text-slate-700 dark:text-slate-100'}`}
-              style={art ? { textShadow: '0 1px 6px rgba(0,0,0,.7)' } : undefined}>
-              {a.name}
+            <span className="min-w-0 flex-1">
+              <span className={`block text-[13px] font-extrabold leading-tight truncate ${
+                active ? 'text-slate-900 dark:text-slate-900' : 'text-slate-700 dark:text-slate-100'}`}>
+                {a.name}
+              </span>
+              <span className={`block text-[11px] leading-tight truncate ${
+                active ? 'text-slate-600 dark:text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}>
+                {a.hint}
+              </span>
             </span>
-            <span className={`block text-[11px] leading-tight truncate ${
-              art ? 'text-white/75' : active ? 'text-slate-600 dark:text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}
-              style={art ? { textShadow: '0 1px 6px rgba(0,0,0,.7)' } : undefined}>
-              {a.hint}
-            </span>
+            {active && (
+              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: a.tint }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="m5 13 4 4L19 7" /></svg>
+              </span>
+            )}
           </span>
-          {active && (
-            <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: a.tint }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="m5 13 4 4L19 7" /></svg>
-            </span>
-          )}
-        </span>
+        )}
       </button>
     );
   };
