@@ -14,9 +14,9 @@ A card with artwork shows NOTHING else — no name, no hint, no icon — so the
 picture has to carry the game's name itself. Keep the title away from the very
 edge: a 24 px margin all round clears the 16 px rounded corners.
 
-A card that is not the chosen one is dimmed (brightness .72); the chosen one is
-shown at full strength with a ring around it. Nothing else marks the choice, so
-draw for the bright state.
+Every card is shown in its own colours; the chosen one is lifted a little
+brighter (brightness 1.14) and gets a ring around it. Nothing is ever dimmed,
+so draw for how it should normally look.
 
 File names, exactly:
 

@@ -555,13 +555,13 @@ const AlphabetTrainerPage: React.FC<{
         style={active ? { background: a.soft, boxShadow: `0 6px 18px -8px ${a.tint}`, ['--tw-ring-color' as string]: a.tint } : undefined}
       >
         {art ? (
-          /* The picture is the whole card. Until it is chosen it sits back a
-             little, so the one that is chosen is the one that shines. */
+          /* The picture is the whole card, in its own colours. The chosen one
+             lifts a little brighter; none of them is ever dimmed. */
           <img
             src={railArt(a.id)} alt={a.name} draggable={false}
             onError={() => setNoArt(m => ({ ...m, [a.id]: true }))}
             className="absolute inset-0 w-full h-full object-cover transition-all duration-150"
-            style={{ filter: active ? 'none' : 'brightness(.72) saturate(.85)' }}
+            style={{ filter: active ? 'brightness(1.14) saturate(1.06)' : 'none' }}
           />
         ) : (
           <span className="relative h-full flex items-center gap-3 px-3">
