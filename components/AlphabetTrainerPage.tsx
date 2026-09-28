@@ -137,6 +137,23 @@ interface Activity {
  *  so the artwork is never cropped at any width. */
 const railArt = (id: PickId): string => `/games/rails/${id}.webp`;
 
+/** #rrggbb → rgba(), for the glow around the chosen card. */
+const glowOf = (hex: string, a: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+
+const RailGlowStyle: React.FC = () => (
+  <style>{`
+@keyframes at-rail-glow {
+  0%, 100% { box-shadow: var(--at-glow-near), var(--at-glow-far); }
+  50%      { box-shadow: var(--at-glow-near), var(--at-glow-wide); }
+}
+.at-rail-on { animation: at-rail-glow 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .at-rail-on { animation: none; } }
+`}</style>
+);
+
 const CHALLENGES: Activity[] = [
   { id: 'guess',        name: 'Guess the letter', hint: 'Name each letter as it comes', icon: '؟', arabic: true, tint: '#0d9488', soft: '#ccfbf1', needsLetters: true },
   { id: 'wordchallenge',name: 'Word challenge',   hint: 'Read a word, letter by letter', icon: '✦',              tint: '#7c3aed', soft: '#ede9fe', needsLetters: true },
@@ -547,12 +564,18 @@ const AlphabetTrainerPage: React.FC<{
         key={a.id}
         onClick={() => setPick(a.id)}
         title={locked ? 'Pick some letters first' : a.hint}
-        className={`group relative w-full aspect-[4/1] overflow-hidden rounded-2xl border text-start transition-all duration-150 ${
+        className={`group relative w-full aspect-[4/1] overflow-hidden rounded-2xl border-2 text-start transition-all duration-150 ${
           active
-            ? 'border-transparent shadow-md ring-2 ring-offset-1 dark:ring-offset-gray-900'
+            ? 'at-rail-on -translate-y-0.5'
             : 'border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-slate-300 dark:hover:border-gray-600 hover:shadow-sm'
         }`}
-        style={active ? { background: a.soft, boxShadow: `0 6px 18px -8px ${a.tint}`, ['--tw-ring-color' as string]: a.tint } : undefined}
+        style={active ? {
+          background: art ? undefined : a.soft,
+          borderColor: a.tint,
+          ['--at-glow-near' as string]: `0 0 0 1px ${glowOf(a.tint, 0.9)}`,
+          ['--at-glow-far' as string]: `0 0 14px 1px ${glowOf(a.tint, 0.55)}, 0 8px 22px -8px ${glowOf(a.tint, 0.8)}`,
+          ['--at-glow-wide' as string]: `0 0 22px 4px ${glowOf(a.tint, 0.75)}, 0 8px 26px -8px ${glowOf(a.tint, 0.9)}`,
+        } : undefined}
       >
         {art ? (
           /* The picture is the whole card, in its own colours. The chosen one
@@ -594,6 +617,7 @@ const AlphabetTrainerPage: React.FC<{
 
   const rail = (title: string, note: string, list: Activity[]) => (
     <section className="flex flex-col gap-2">
+      <RailGlowStyle />
       <div className="px-1">
         <h3 className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{title}</h3>
         <p className="text-[11px] text-slate-400 dark:text-slate-600 mt-0.5">{note}</p>
