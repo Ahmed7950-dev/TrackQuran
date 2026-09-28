@@ -568,6 +568,15 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   // ticking clock so it can flip to "in progress" at start and vanish 10 min
   // before the end without refetching Google Calendar.
   const [nextLessons, setNextLessons] = useState<NextLesson[]>([]);
+  // Google Calendar answers a second or two after the page is up. Without this
+  // the card appears out of nowhere and shoves the whole roster down, so its
+  // place is held by a blurred stand-in of the same size until it lands.
+  // Whether there WAS a card last time is remembered, so a tutor with nothing
+  // in the calendar is not shown a space that then collapses.
+  const HAD_LESSON_KEY = `dashboard:hadNextLesson:${teacherId ?? ''}`;
+  const [lessonsLoading, setLessonsLoading] = useState(() => {
+    try { return localStorage.getItem(HAD_LESSON_KEY) !== '0'; } catch { return true; }
+  });
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -585,10 +594,11 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
   const [meetCopied, setMeetCopied] = useState(false);
 
   useEffect(() => {
-    if (!teacherId) { setNextLessons([]); return; }
+    if (!teacherId) { setNextLessons([]); setLessonsLoading(false); return; }
     const token = getStoredToken();
-    if (!token) { setNextLessons([]); return; }
+    if (!token) { setNextLessons([]); setLessonsLoading(false); return; }
     let cancelled = false;
+    setLessonsLoading(true);
     (async () => {
       try {
         const now = new Date();
@@ -622,8 +632,11 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
         }
         list.sort((a, b) => a.date.getTime() - b.date.getTime());
         setNextLessons(list);
+        try { localStorage.setItem(HAD_LESSON_KEY, list.length ? '1' : '0'); } catch { /* private mode */ }
       } catch (err) {
         if (!cancelled) { console.error('[Dashboard] next-lesson load failed:', err); setNextLessons([]); }
+      } finally {
+        if (!cancelled) setLessonsLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -900,6 +913,24 @@ const Dashboard: React.FC<DashboardProps> = ({ students, onSelectStudent, quranM
           A single student's card opens them when clicked. A FAMILY's card is
           not clickable at all: with several students on it there is no one
           student to open, so only the avatars and the Meet controls act. ── */}
+      {lessonsLoading && !nextLesson && (
+        <div aria-hidden className="mb-6 rounded-2xl border border-amber-200/70 dark:border-amber-800/50 overflow-hidden bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 dark:from-amber-900/20 dark:via-amber-900/10 dark:to-orange-900/15">
+          <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 animate-pulse" style={{ filter: 'blur(1.5px)' }}>
+            <div className="flex-shrink-0 w-[76px] h-[76px] rounded-2xl bg-amber-200/70 dark:bg-amber-700/30 ring-2 ring-white/70 dark:ring-white/10" />
+            {/* the chip, the name and the time, at exactly their real heights */}
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-5 w-36 rounded-full bg-amber-200/70 dark:bg-amber-700/30" />
+              <div className="h-9 w-56 max-w-full rounded-lg bg-amber-200/80 dark:bg-amber-700/40" />
+              <div className="h-5 w-44 max-w-full rounded-full bg-amber-200/60 dark:bg-amber-700/25" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+              <div className="h-10 w-28 rounded-lg bg-amber-200/70 dark:bg-amber-700/30" />
+              <div className="h-10 w-32 rounded-lg bg-amber-300/70 dark:bg-amber-600/30" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {nextLesson && (() => {
         const cardTone = lessonInProgress
           ? 'bg-gradient-to-r from-emerald-50 via-emerald-50 to-green-50 dark:from-emerald-900/25 dark:via-emerald-900/15 dark:to-green-900/20 border-emerald-300 dark:border-emerald-700 focus:ring-emerald-500'
