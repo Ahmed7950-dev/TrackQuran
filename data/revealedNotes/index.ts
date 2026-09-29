@@ -18,6 +18,7 @@ export type NotesLang = 'en' | 'ar';
 type Loader = () => Promise<{ default: SurahNotes }>;
 
 const LOADERS: Record<number, Partial<Record<NotesLang, Loader>>> = {
+  1: { en: () => import('./001'), ar: () => import('./001.ar') },
   67: { en: () => import('./067'), ar: () => import('./067.ar') },
 };
 

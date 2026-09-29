@@ -3830,6 +3830,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     });
     const noop = () => {};
 
+    /** A note's **headings** are drawn bold; everything else is left alone. */
+    const withBold = (text: string): React.ReactNode =>
+        text.split(/\*\*(.+?)\*\*/g).map((part, i) => (
+            i % 2 === 1
+                ? <strong key={i} className="font-extrabold text-slate-900 dark:text-slate-100">{part}</strong>
+                : <React.Fragment key={i}>{part}</React.Fragment>
+        ));
+
     /** Tadabbur mode: one block per verse — the words (with meanings above
      *  them), then translation, explanation, the student's reflection and the
      *  tutor's note. Same Quran font and size as reading. */
@@ -3984,7 +3992,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     >
                                         {useRevealed && !ours && Object.keys(revealedNotes).length > 0
                                             ? (notesLang === 'ar' ? 'لا توجد ملاحظة لهذه الآية بعد.' : 'No note for this verse yet.')
-                                            : text}
+                                            : showing === 'revealed' ? withBold(text) : text}
                                     </p>
                                     <div className="mt-1 flex items-end gap-2">
                                         {text.length > 200 && (
