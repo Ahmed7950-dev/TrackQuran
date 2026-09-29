@@ -27,6 +27,8 @@ import { supabase } from '../lib/supabase';
 import { setBusy } from '../services/versionWatch';
 import type { Mistake } from '../types';
 import { audioUrl } from './VerseAudioPlayer';
+import { alignWbw, fetchSurahWbw, WbwWord } from '../services/wordByWordService';
+import { wordAudioUrl } from '../services/tadabburLabService';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
   RecitationHomework, RECORDER_BITRATE, getFollowUpRecitation, getRecitationHomework, isFullyRecorded, pickRecorderMime,
@@ -197,6 +199,11 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   }, [teacherId]);
 
   const [liveMistakes, setLiveMistakes] = useState<Record<string, Mistake> | null>(null);
+  /** Quran.com's own word list per surah, for the word-by-word recitation. Only
+   *  fetched for a homework that carries mistakes — a fresh one has none. */
+  const [wbw, setWbw] = useState<Record<number, Map<string, WbwWord[]>>>({});
+  const [playingWord, setPlayingWord] = useState<string | null>(null);
+  const wordAudioRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     let live = true;
     const load = () => {
@@ -227,6 +234,41 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     return () => { live = false; };
   }, [rec, verses]);
 
+  /** A homework that carries marks is a reassignment; only then is the
+   *  word-by-word recitation of any use, so only then is it fetched. */
+  const hasMarks = useMemo(() => {
+    const m = (liveMistakes && Object.keys(liveMistakes).length ? liveMistakes : rec?.mistakes) ?? {};
+    return Object.values(m).some(x => x?.errorType);
+  }, [liveMistakes, rec]);
+
+  useEffect(() => {
+    if (!hasMarks || !verses.length) return;
+    let live = true;
+    const surahs = [...new Set(verses.map(v => v[0]))].filter(n => !wbw[n]);
+    surahs.forEach(n => {
+      fetchSurahWbw(n)
+        .then(map => { if (live) setWbw(prev => (prev[n] ? prev : { ...prev, [n]: map })); })
+        .catch(() => { /* the word simply falls back to the whole verse */ });
+    });
+    return () => { live = false; };
+  }, [hasMarks, verses, wbw]);
+
+  /** "Tap the word you got wrong" — shown to a student three times, ever. */
+  const [tip, setTip] = useState(false);
+  const tipCountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMarks || !rec || tipCountedRef.current) return;
+    tipCountedRef.current = true;
+    const k = `recite:wordTip:${rec.studentId}`;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(k) ?? 0); } catch { /* private mode */ }
+    if (seen >= 3) return;
+    try { localStorage.setItem(k, String(seen + 1)); } catch { /* private mode */ }
+    setTip(true);
+    const t = window.setTimeout(() => setTip(false), 12_000);
+    return () => window.clearTimeout(t);
+  }, [hasMarks, rec]);
+
   // Open on the first verse still without a recording.
   const openedRef = useRef(false);
   useEffect(() => {
@@ -248,10 +290,33 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     streamRef.current = null;
     if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
   };
-  useEffect(() => () => { releaseMic(); stopAudio(); }, []);
+  useEffect(() => () => { releaseMic(); stopAudio(); wordAudioRef.current?.pause(); }, []);
 
   const editable = !!rec && !rec.purgedAt && !followUp
     && (rec.status === 'assigned' || rec.status === 'needs_revision');
+
+  /** The word the tutor marked, read on its own. Falls back to the whole verse
+   *  if Quran.com's words cannot be lined up with the page's. */
+  const playWord = (vs: number, va: number, wordIndex: number) => {
+    if (take === 'recording') return;
+    const vk = `${vs}:${va}`;
+    const pageWords = splitVerseWords(texts[vk] ?? '');
+    const apiWords = wbw[vs]?.get(vk);
+    const align = apiWords ? alignWbw(pageWords, apiWords) : null;
+    const position = align && align[wordIndex] >= 0 ? align[wordIndex] + 1 : null;
+    if (!position) { playMinshawi(); return; }
+
+    const a = wordAudioRef.current ?? (wordAudioRef.current = new Audio());
+    const key = `${vk}:${wordIndex}`;
+    if (playingWord === key) { a.pause(); setPlayingWord(null); return; }
+    minshawiRef.current?.pause(); setMinshawiPlaying(false);
+    mineRef.current?.pause(); setMinePlaying(false);
+    prevRef.current?.pause(); setPrevPlaying(false);
+    a.src = wordAudioUrl(vs, va, position);
+    a.onended = () => setPlayingWord(null);
+    a.onerror = () => { setPlayingWord(null); playMinshawi(); };
+    a.play().then(() => setPlayingWord(key)).catch(() => setPlayingWord(null));
+  };
 
   const playMinshawi = () => {
     if (!verses[idx] || take === 'recording') return;
@@ -517,21 +582,40 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const hasLetterMistake = letters.some(l => mistakes[`${wordKey}:${l.index}`]);
     const wordMistake = mistakes[wordKey];
 
+    /** A marked word answers a tap with its own recitation; every other word
+     *  lets the tap through to the verse. */
+    const listenable = (node: React.ReactNode): React.ReactNode => {
+      if (!hasLetterMistake && !wordMistake) return node;
+      const sounding = playingWord === `${vs}:${va}:${wi}`;
+      return (
+        <span
+          role="button"
+          tabIndex={-1}
+          title="Listen to this word on its own"
+          onClick={e => { e.stopPropagation(); playWord(vs, va, wi); }}
+          className="relative inline cursor-pointer"
+          style={sounding ? { textShadow: `0 0 0.35em ${P.gold}` } : undefined}
+        >
+          {node}
+        </span>
+      );
+    };
+
     if (!hasLetterMistake) {
       if (!wordMistake) return renderWordWithMarks(word, `r${vs}-${va}-${wi}`, lh);
-      return (
+      return listenable(
         <span className="relative inline rounded-lg"
           style={wordMistake.errorType ? letterStyle(wordMistake) : { background: wordLevelBg(wordMistake.level), borderRadius: 8 }}>
           {bubble(wordMistake)}
           {renderWordWithMarks(word, `r${vs}-${va}-${wi}`, lh)}
-        </span>
+        </span>,
       );
     }
 
     // Letter by letter, exactly as the Mistakes page draws it, so the highlight
     // sits on the letter the tutor marked and the word still joins up.
     const plan = wordMarkPlan(word);
-    return (
+    return listenable(
       <span className="relative inline"
         style={{ display: 'inline', whiteSpace: 'nowrap', letterSpacing: 0,
           fontFamily: plan.mode === 'wholeWord' ? plan.font : 'inherit' }}>
@@ -550,7 +634,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             </span>
           );
         })}
-      </span>
+      </span>,
     );
   };
 
@@ -920,6 +1004,28 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         </button>
         )}
       </main>
+
+      {/* ── The one-off word-audio tip ── */}
+      {tip && (
+        <div role="status"
+          className="sticky z-40 mx-auto mb-2 flex items-start gap-3 rounded-2xl px-4 py-3 max-w-xl"
+          style={{
+            bottom: 'calc(6.5rem + env(safe-area-inset-bottom))',
+            background: theme === 'night' ? 'rgba(20,83,45,.92)' : '#ECFDF5',
+            border: `1.5px solid ${theme === 'night' ? '#15803D' : '#6EE7B7'}`,
+            color: theme === 'night' ? '#D1FAE5' : '#065F46',
+            fontFamily: BODY,
+            boxShadow: '0 14px 30px -18px rgba(0,0,0,.5)',
+          }}>
+          <span className="text-xl leading-none mt-0.5" aria-hidden="true">🔊</span>
+          <span className="flex-1 text-[13px] sm:text-[14px] font-semibold leading-snug">
+            New — tap a word your teacher marked to hear that word on its own.
+            Tapping anywhere else on the verse still plays Al-Minshawi.
+          </span>
+          <button onClick={() => setTip(false)} aria-label="Close"
+            className="flex-shrink-0 w-7 h-7 rounded-full text-lg leading-none opacity-70 hover:opacity-100">×</button>
+        </div>
+      )}
 
       {/* ── Controls — pinned to the bottom while a long verse scrolls ── */}
       <footer className="sticky z-30 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
