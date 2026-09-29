@@ -992,8 +992,10 @@ const App: React.FC = () => {
       try {
         const token = getStoredToken() ?? await refreshAccessToken();
         if (!token || cancelled) return;
-        const { pruned } = await syncGCalSessions(currentUserId, token);
+        const { changed, pruned } = await syncGCalSessions(currentUserId, token);
         if (pruned) console.info(`[gcal sync] removed ${pruned} lesson(s) no longer in Google Calendar`);
+        // Whoever is showing those rows is holding a copy from before the sync.
+        if (changed || pruned) window.dispatchEvent(new CustomEvent('lesson-sessions-changed'));
       } catch (e) {
         console.warn('[gcal sync] skipped:', e);   // offline / token expired / a calendar failed to load
       } finally {

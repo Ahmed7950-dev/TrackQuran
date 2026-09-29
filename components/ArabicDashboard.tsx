@@ -7,7 +7,7 @@
 
 const SITE_URL = 'https://www.lisanquran.com';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -117,17 +117,38 @@ const ArabicDashboard: React.FC<Props> = ({
   const [meetCopied,      setMeetCopied]      = useState(false);
 
   // ── load sessions ─────────────────────────────────────────────────────────
-  useEffect(() => {
+  // These rows are what the next-lesson card reads, and they change under us:
+  // the calendar sync prunes a lesson whose Google event was deleted and moves
+  // one that was rescheduled. Loading them once on mount left the card showing
+  // a lesson that no longer existed until the page was reloaded, so the list is
+  // refreshed when the sync reports a change, and on coming back to the tab.
+  const reload = useCallback(() => {
     getUpcomingSessions(teacherId)
       .then(setSessions)
       .catch(err => console.error('[Sessions] load failed:', err));
-  }, [teacherId]);
-
-  useEffect(() => {
     getTeacherBookings(teacherId)
       .then(all => setBookings(all.filter(b => b.status === 'confirmed' && b.portalType === 'arabic')))
       .catch(console.error);
   }, [teacherId]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  useEffect(() => {
+    let last = Date.now();
+    const onChanged = () => { last = Date.now(); reload(); };
+    const onVisible = () => {
+      // Tab switches are frequent; once a minute is enough.
+      if (document.visibilityState !== 'visible' || Date.now() - last < 60_000) return;
+      last = Date.now();
+      reload();
+    };
+    window.addEventListener('lesson-sessions-changed', onChanged);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('lesson-sessions-changed', onChanged);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [reload]);
 
   // DEV-only: lets the browser harness put a lesson in the card without live
   // calendar data (same trick as the Quran dashboard).
