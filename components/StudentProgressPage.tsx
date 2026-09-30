@@ -1911,6 +1911,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
     useEffect(() => {
         const handleManualInteraction = () => { if (isAutoScrolling) setIsAutoScrolling(false); };
+        // A TAP stops it too, not only a drag. A reader who set this going by
+        // accident touches the screen to make it stop — and a tap fires no wheel
+        // and no touchmove, so the page used to keep creeping to the bottom with
+        // nothing they did making any difference. Taps on the auto-scroll
+        // controls themselves are left alone, so the speed can still be changed
+        // while it runs.
+        const handleTap = (e: Event) => {
+            const el = e.target as HTMLElement | null;
+            if (el?.closest?.('[data-autoscroll-controls]')) return;
+            handleManualInteraction();
+        };
         // In focus mode the horizontal RAF loop drives scrolling — skip vertical scroll
         if (isAutoScrolling && !focusMode) {
             const intervalDelay = 155 - (scrollSpeed * 1.5);
@@ -1920,11 +1931,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             }, intervalDelay);
             window.addEventListener('wheel', handleManualInteraction);
             window.addEventListener('touchmove', handleManualInteraction);
+            window.addEventListener('pointerdown', handleTap, true);
         } else if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
         return () => {
             if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
             window.removeEventListener('wheel', handleManualInteraction);
             window.removeEventListener('touchmove', handleManualInteraction);
+            window.removeEventListener('pointerdown', handleTap, true);
         };
     }, [isAutoScrolling, scrollSpeed, focusMode]);
 
@@ -4850,7 +4863,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             </div>
 
                             {/* Auto-scroll */}
-                            <div className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} ${pageMode === 'tadabbur' ? 'sm:hidden' : 'sm:flex'} order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-100 dark:bg-gray-700/60 rounded-xl p-0.5 sm:p-1 transition-all duration-300 ease-in-out max-sm:mt-1 ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
+                            <div data-autoscroll-controls className={`${mobileTool === 'scroll' ? 'flex' : 'hidden'} ${pageMode === 'tadabbur' ? 'sm:hidden' : 'sm:flex'} order-last sm:order-none w-full justify-center items-center gap-1 sm:gap-2 bg-slate-100 dark:bg-gray-700/60 rounded-xl p-0.5 sm:p-1 transition-all duration-300 ease-in-out max-sm:mt-1 ${isAutoScrolling ? 'sm:w-32' : 'sm:w-auto'}`}>
                                 <button onClick={() => setIsAutoScrolling(prev => !prev)} className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-gray-600 font-bold transition flex-shrink-0" title={isAutoScrolling ? t('liveSession.toggleAutoScrollPause') : t('liveSession.toggleAutoScrollPlay')}>
                                     {isAutoScrolling ? <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5ZM12.5 3.5A1.5 1.5 0 0 1 14 5v10a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5" /></svg>}
                                 </button>
@@ -5231,6 +5244,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             {student && <ExportReportModal student={student} students={students} quranMetadata={QURAN_METADATA} isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />}
             {toastMessage && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg transition-all animate-bounce z-50">{toastMessage}</div>}
             {/* Back to the start of the current surah */}
+            {/* While the page is creeping on its own, one obvious way to stop it —
+                the toolbar button that started it may be a long way up by now. */}
+            {isAutoScrolling && !focusMode && (
+                <button
+                    data-autoscroll-controls
+                    onClick={() => setIsAutoScrolling(false)}
+                    className="fixed bottom-6 start-1/2 -translate-x-1/2 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-bold text-white bg-slate-900/85 dark:bg-black/80 backdrop-blur shadow-lg"
+                >
+                    <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+                    Scrolling on its own — tap to stop
+                </button>
+            )}
             {showScrollTop && (
                 <button
                     onClick={() => setScrollToVerseKey(`${selectedSurahId}:1`)}
