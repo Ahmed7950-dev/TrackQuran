@@ -235,8 +235,11 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   /** The words the tutor has tapped into the basket — every game can run on
    *  those instead of on whole lessons. */
   const basketPool = useMemo(() => words.filter(w => basket.ids.has(w.id)), [words, basket.ids]);
-  const [useBasket, setUseBasket] = useState(false);
-  const onBasket = useBasket && basketPool.length > 0;
+  /** Tapping words in the table selects them, and from then on every game and
+   *  the homework run on that selection — until the tutor asks for the whole
+   *  lessons again, which is what this remembers. */
+  const [wantLessons, setWantLessons] = useState(false);
+  const onBasket = basketPool.length > 0 && !wantLessons;
   const practicePool = onBasket ? basketPool : lessonPool;
   const savedWords = useMemo(() => words.filter(w => revisionIds.has(w.id)), [words, revisionIds]);
   /** A card needs both halves of the word, and a table of thirty is plenty. */
@@ -491,13 +494,13 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           <span className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Practise</span>
           <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
             {onBasket
-              ? `the ${basketPool.length} word${basketPool.length === 1 ? '' : 's'} you added`
+              ? `the ${basketPool.length} word${basketPool.length === 1 ? '' : 's'} you selected`
               : `${selected.size ? `${selected.size} lesson${selected.size === 1 ? '' : 's'} selected` : 'all lessons'} · ${practicePool.length} words`}
           </span>
           {!studentMode && basketPool.length > 0 && (
             <span className="inline-flex rounded-full bg-slate-100 dark:bg-gray-700 p-0.5">
-              {([[false, 'Lessons'], [true, `Added words (${basketPool.length})`]] as const).map(([v, label]) => (
-                <button key={label} onClick={() => setUseBasket(v)}
+              {([[false, 'Lessons'], [true, `Selected (${basketPool.length})`]] as const).map(([v, label]) => (
+                <button key={label} onClick={() => setWantLessons(!v)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
                     onBasket === v ? 'bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
                   {label}
@@ -520,6 +523,39 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             )}
           </div>
         </div>
+
+        {!studentMode && (
+          <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors ${
+            basketPool.length
+              ? 'border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10'
+              : 'border-dashed border-slate-200 dark:border-gray-700'}`}>
+            {basketPool.length === 0 ? (
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                Tap words in the table to select them — the games and the homework then use just those.
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-bold text-violet-800 dark:text-violet-200">
+                  {basketPool.length} word{basketPool.length === 1 ? '' : 's'} selected
+                </span>
+                <span className="text-xs text-violet-600/80 dark:text-violet-300/70">
+                  {onBasket
+                    ? '· every game below plays just these, and homework sends just these'
+                    : '· the games are running on the lessons instead'}
+                </span>
+                <span className="flex-grow" />
+                <button onClick={() => setWantLessons(onBasket)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/30">
+                  {onBasket ? 'Use the lessons' : 'Use my selection'}
+                </button>
+                <button onClick={basket.clear}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30">
+                  Clear selection
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {savedProgress && (
           <button onClick={resumeRun}
@@ -602,9 +638,13 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-bold text-violet-800 dark:text-violet-200 truncate">Homework Basket</span>
+                <span className="block text-sm font-bold text-violet-800 dark:text-violet-200 truncate">
+                  {basket.words.length ? 'Assign as homework' : 'Homework Basket'}
+                </span>
                 <span className="block text-xs text-violet-600/70 dark:text-violet-300/60">
-                  {basket.words.length ? `${basket.words.length} word${basket.words.length === 1 ? '' : 's'} ready to send` : 'Tap words in the table to add them'}
+                  {basket.words.length
+                    ? `Send the ${basket.words.length} word${basket.words.length === 1 ? '' : 's'} you selected`
+                    : 'Tap words in the table to select them'}
                 </span>
               </span>
             </button>
