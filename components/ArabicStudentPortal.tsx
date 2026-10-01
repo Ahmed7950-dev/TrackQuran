@@ -140,91 +140,42 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
 
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        {/* ── Top bar: logo + student badge ── */}
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap lg:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
-          {/* Back to family button — only shown when opened from a family link */}
+        {/* ── Row one: the logo, the controls, and whose portal this is ── */}
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2">
           {backUrl && (
-            <a
-              href={backUrl}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 transition-colors text-sm font-semibold flex-shrink-0"
-              aria-label="Back to family page"
-            >
+            <a href={backUrl} aria-label="Back to family page"
+              className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
               </svg>
-              <span className="hidden sm:inline">{t('arabicPortal.family')}</span>
             </a>
           )}
 
-          {/* Logo — clicking it goes back to lessons */}
-          <button onClick={() => setPortalTab('lessons')} className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0" aria-label="Go to lessons">
+          <button onClick={() => setPortalTab('lessons')} aria-label="Go to lessons"
+            className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity [&_img]:h-9 sm:[&_img]:h-12">
             <Logo />
           </button>
-          <span
-            className="hidden sm:block text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full flex-shrink-0"
-            style={{ fontFamily: 'Amiri Regular, serif' }}
-          >
+
+          <span className="hidden sm:flex flex-shrink-0 items-center text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2.5 py-1 rounded-full"
+            style={{ fontFamily: 'Amiri Regular, serif' }}>
             العربية
           </span>
 
-          {/* Switch to the paired Quran portal */}
           {switchPortal && (
-            <button
-              onClick={switchPortal.onSwitch}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors text-sm font-bold flex-shrink-0"
-              title={`Switch to ${switchPortal.label} portal`}
-            >
+            <button onClick={switchPortal.onSwitch} title={`Switch to ${switchPortal.label} portal`}
+              aria-label={`Switch to ${switchPortal.label} portal`}
+              className="flex-shrink-0 w-9 h-9 sm:w-auto sm:h-10 sm:px-3 flex items-center justify-center gap-1.5 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors text-sm font-bold">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
-              <span>📖 {switchPortal.label}</span>
+              <span className="hidden sm:inline">{switchPortal.label}</span>
             </button>
           )}
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm font-bold flex-shrink-0"
-              title={t('register.signOut')}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
-              </svg>
-              <span className="hidden sm:inline">{t('register.signOut')}</span>
-            </button>
-          )}
-
-          {/* Desktop nav — centred, only shows md+ */}
-          <nav className="flex-1 hidden lg:flex justify-center items-center gap-4">
-            <button
-              onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
-              className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              {t('arabicPortal.aboutUs')}
-            </button>
-            <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500 transition-colors">
-              {t('arabicPortal.contactUs')}
-            </a>
-            <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
-              {t('arabicPortal.supportUs')}
-            </a>
-            <span className="w-px h-5 bg-slate-200 dark:bg-gray-600" />
-            <button
-              onClick={() => setPortalTab(t => t === 'vocabulary' ? 'lessons' : 'vocabulary')}
-              className={`text-sm font-medium transition-colors ${portalTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              {t('arabicPortal.vocabulary')}
-            </button>
-          </nav>
 
           <NotificationCenter teacherId={student.teacherId} recipient="student" studentId={student.shareToken ?? ''} />
 
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="p-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-          >
+          <button onClick={toggleTheme} aria-label="Toggle theme"
+            className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
             {theme === 'dark' ? (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
@@ -240,57 +191,53 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
             )}
           </button>
 
-          {/* Student badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full flex-shrink-0">
-            <span className="text-emerald-600 dark:text-emerald-400 text-sm">🎓</span>
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 max-w-[100px] truncate">
+          {onLogout && (
+            <button onClick={onLogout} title={t('register.signOut')} aria-label={t('register.signOut')}
+              className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+              </svg>
+            </button>
+          )}
+
+          <span className="flex-grow" />
+
+          {/* whose portal this is — the name, and nothing else */}
+          <span className="flex-shrink min-w-0 flex items-center gap-1.5 px-3 h-9 sm:h-10 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full">
+            <span className="text-emerald-600 dark:text-emerald-400 text-sm leading-none">🎓</span>
+            <span className="text-[13px] sm:text-sm font-bold text-emerald-700 dark:text-emerald-300 truncate">
               {student.name}
             </span>
-            {totalVocabCount > 0 && (
-              <>
-                <span className="w-px h-3.5 bg-emerald-200 dark:bg-emerald-700" />
-                <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap flex items-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                  {totalVocabCount.toLocaleString()} words
-                </span>
-              </>
-            )}
-          </div>
+          </span>
         </div>
 
-        {/* ── Phones: the two portal tabs on their own line, the site links
-            under them. They used to share one wrapping row, which left
-            Vocabulary stranded on a line of its own. ── */}
-        <nav className="lg:hidden border-t border-slate-100 dark:border-gray-700 px-3 py-2 flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setPortalTab('lessons')}
-              className={`flex-1 min-w-0 truncate text-[13px] font-bold px-3 py-2 rounded-xl transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-50 dark:bg-gray-700/50 text-slate-500 dark:text-slate-400'}`}
-            >
-              {t('arabicPortal.lessons')}
-            </button>
-            <button
-              onClick={() => setPortalTab('vocabulary')}
-              className={`flex-1 min-w-0 truncate text-[13px] font-bold px-3 py-2 rounded-xl transition-colors ${portalTab === 'vocabulary' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'bg-slate-50 dark:bg-gray-700/50 text-slate-500 dark:text-slate-400'}`}
-            >
-              {t('arabicPortal.vocabulary')}
-            </button>
-          </div>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => setPortalTab('about')}
-              className={`text-[11px] font-semibold transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-400 dark:text-slate-500'}`}
-            >
-              {t('arabicPortal.aboutUs')}
-            </button>
-            <span className="w-px h-3 bg-slate-200 dark:bg-gray-600" />
-            <a href="#" className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-              {t('arabicPortal.contactUs')}
+        {/* ── Row two: the five places to go, filling the width ── */}
+        <nav className="border-t border-slate-100 dark:border-gray-700">
+          <div className="container mx-auto px-2 sm:px-4 lg:px-6 py-1.5 flex items-stretch gap-1 sm:gap-1.5">
+            {([
+              ['lessons', t('arabicPortal.lessons'), t('arabicPortal.lessons')],
+              ['vocabulary', t('arabicPortal.vocabulary'), 'Words'],
+              ['about', t('arabicPortal.aboutUs'), 'About'],
+            ] as const).map(([key, label, short]) => (
+              <button key={key}
+                onClick={() => setPortalTab(key as typeof portalTab)}
+                className={`flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                  portalTab === key
+                    ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
+                <span className="sm:hidden">{short}</span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+            <a href="#"
+              className="flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
+              <span className="sm:hidden">Contact</span>
+              <span className="hidden sm:inline">{t('arabicPortal.contactUs')}</span>
             </a>
-            <a href="#" className="text-[11px] font-bold text-teal-600 dark:text-orange-400">
-              {t('arabicPortal.supportUs')}
+            <a href="#"
+              className="flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors">
+              <span className="sm:hidden">Support</span>
+              <span className="hidden sm:inline">{t('arabicPortal.supportUs')}</span>
             </a>
           </div>
         </nav>
