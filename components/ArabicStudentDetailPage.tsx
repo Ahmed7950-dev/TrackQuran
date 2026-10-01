@@ -469,6 +469,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     }
   };
   const [showDelete, setShowDelete]   = useState(false);
+  /** Edit, archive and delete live behind one button now. */
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
   const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
@@ -568,6 +570,21 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Count only lessons that match the student's dialect(s) for the tab badge
   const studentLessonCount = dialectLessons.length;
 
+  const stroke = (d: string) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.9} stroke="currentColor" className="w-[18px] h-[18px]">
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  );
+  const RAIL_ICON: Record<string, React.ReactNode> = {
+    lessons:    stroke('M12 3v18M12 7.5a2.5 2.5 0 1 0 0-.01M12 17.5a2.5 2.5 0 1 0 0-.01'),
+    vocabulary: stroke('M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5Z'),
+    progress:   stroke('M4 19.5V13m5 6.5V8m5 11.5v-5m5 5V5'),
+    schedule:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
+    exams:      stroke('m9 11.5 2 2 4.5-4.5M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z'),
+    profile:    stroke('M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-7 7.5a7 7 0 0 1 14 0'),
+    calendar:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
+  };
+
   const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
@@ -591,249 +608,188 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     );
   }
 
+  const doneInCourse = dialectLessons.filter(l => student.completedLessonIds.includes(l.id)).length;
+  const courseTotal  = dialectLessons.length || 1;
+  const ringPct      = Math.round((doneInCourse / courseTotal) * 100);
+  const nextLesson   = upcomingLessons.find(l => new Date(l.startAt).getTime() > Date.now()) ?? null;
+  const untilNext    = (() => {
+    if (!nextLesson) return null;
+    const hrs = Math.round((new Date(nextLesson.startAt).getTime() - Date.now()) / 3_600_000);
+    if (hrs < 1) return 'starting now';
+    if (hrs < 24) return `in ${hrs} hour${hrs === 1 ? '' : 's'}`;
+    const d = Math.round(hrs / 24);
+    return `in ${d} day${d === 1 ? '' : 's'}`;
+  })();
+
+  /** One row of the rail's section list. */
+  const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode) => {
+    const on = activeSection === key;
+    return (
+      <button key={key} onClick={() => setActiveSection(key)}
+        className={`w-full flex items-center gap-3 h-11 px-3 rounded-xl text-sm transition-colors ${
+          on ? 'bg-slate-100 dark:bg-gray-700 font-bold text-slate-900 dark:text-white'
+             : 'font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
+        <span className="flex-shrink-0 w-[18px] h-[18px]">{icon}</span>
+        <span className="truncate">{label}</span>
+        {count && <span className="ms-auto text-xs font-semibold text-slate-400 dark:text-slate-500">{count}</span>}
+      </button>
+    );
+  };
+
   return (
-    <div className="space-y-6">
-      {/* ── Back + actions bar ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        {/* Back button — hidden in student mode (no list to go back to) */}
-        {!studentMode && (
-          <button onClick={onBack} className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-            <span className="font-semibold">{t('arabicStudentDetail.allStudents')}</span>
-          </button>
-        )}
-        {studentMode && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-full">
-            <span className="text-amber-600 dark:text-amber-400 text-sm">🎓</span>
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{t('arabicStudentDetail.studentPortal')}</span>
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          {!studentMode && (
-            <button
-              onClick={meetState === 'idle' ? handleMeetNow : undefined}
-              title={meetState === 'started' ? 'Meet started — link copied, student notified' : 'Start a Google Meet now'}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors ${
-                meetState === 'started'
-                  ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-                  : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-gray-700'}`}
-            >
-              {meetState === 'loading' ? (
-                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+    <div>
+      <div className="grid gap-5 lg:grid-cols-[292px_minmax(0,1fr)] items-start">
+
+        {/* ── The rail: who this is, what happens next, and where to go ── */}
+        <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
+
+          <div className="flex items-center gap-2">
+            {!studentMode ? (
+              <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                 </svg>
-              )}
-              {meetState === 'started' ? 'Meet started' : meetState === 'loading' ? 'Starting…' : 'Meet now'}
-            </button>
-          )}
-          {!studentMode && onToggleArchive && (
-            <button
-              onClick={() => onToggleArchive(!isArchived)}
-              title={isArchived ? 'Restore to active students' : 'Archive this student'}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors ${
-                isArchived
-                  ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
-                  : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'}`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-              </svg>
-              {isArchived ? 'Restore' : 'Archive'}
-            </button>
-          )}
-          <button onClick={() => setEditOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
-            </svg>
-            {t('arabicStudentDetail.editMyInfo')}
-          </button>
-          {/* Delete — only shown to tutor, never to student */}
-          {!studentMode && (!showDelete ? (
-            <button onClick={() => setShowDelete(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-              </svg>
-              {t('arabicStudentDetail.delete')}
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('arabicStudentDetail.areYouSure')}</span>
-              <button onClick={() => { onDeleteStudent(student.id); }}
-                className="px-3 py-1.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors">{t('arabicStudentDetail.yesDelete')}</button>
-              <button onClick={() => setShowDelete(false)}
-                className="px-3 py-1.5 bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">{t('arabicStudentDetail.cancel')}</button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Hero card ── */}
-      <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 p-6">
-        <div className="flex items-start gap-5">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-amber-400 dark:bg-amber-600">
-            {student.profileIcon
-              ? <StudentProfileIcon src={student.profileIcon} size={64} mode="always" />
-              : <span className="text-white text-3xl font-extrabold">{student.name.charAt(0).toUpperCase()}</span>}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{student.name}</h1>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {student.arabicDialects.map(d => (
-                <span key={d} className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">{dialectLabel(d)}</span>
-              ))}
-              {vocabCount > 0 && (
-                <span className="flex items-center gap-1 px-2.5 py-0.5 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-full text-xs font-semibold">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                  {t('arabicStudentDetail.wordsLearned', { count: vocabCount.toLocaleString() })}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Lesson plan widget */}
-          {lessonsPerWeek !== null && (
-            <div className="flex-shrink-0 text-right">
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wide">{t('arabicStudentDetail.lessonsPerWeek')}</p>
-              <p className="text-4xl font-extrabold text-amber-600 dark:text-amber-300">{lessonsPerWeek}</p>
-              {wl !== null && <p className="text-xs text-amber-500/80 mt-0.5">{t('arabicStudentDetail.weeksLeft', { count: wl })}</p>}
-            </div>
-          )}
-        </div>
-
-        {/* Milestone station progress track */}
-        <div className="mt-5">
-          {(() => {
-            const completedSet = new Set(student.completedLessonIds);
-            const levelCounts = ([1, 2, 3] as const).map(lvl => {
-              const lvlIds = dialectLessons.filter(l => l.level === lvl).map(l => l.id);
-              const done = lvlIds.filter(id => completedSet.has(id)).length;
-              return { lvl, done };
-            });
-            const currentLevel = levelCounts.find(lc => lc.done < 20)?.lvl ?? 3;
-            const cur          = levelCounts.find(lc => lc.lvl === currentLevel)!;
-            const lvlLessons   = dialectLessons
-              .filter(l => l.level === currentLevel)
-              .sort((a, b) => a.orderIndex - b.orderIndex);
-
-            return (
-              <>
-                {/* Level overview row */}
-                <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
-                  {levelCounts.map(({ lvl, done }) => {
-                    const isComplete = done >= 20;
-                    const isCurr    = lvl === currentLevel;
-                    return (
-                      <span key={lvl} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                        isComplete
-                          ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-                          : isCurr
-                          ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200'
-                          : 'bg-slate-100 dark:bg-gray-700 border-slate-200 dark:border-gray-600 text-slate-400 dark:text-slate-500'
-                      }`}>
-                        {isComplete ? '✓' : isCurr ? '▶' : '○'} Lvl {lvl}
-                      </span>
-                    );
-                  })}
-                  <span className="w-full sm:w-auto sm:ml-auto text-center text-xs text-slate-400 dark:text-slate-500 font-semibold">
-                    {cur.done} / {Math.min(lvlLessons.length, 20)} · {dialectLessons.filter(l => completedSet.has(l.id)).length} / {dialectLessons.length} total
-                  </span>
-                </div>
-
-                {/* Station tracks — every level's lessons, wrapped to fit the
-                    container (no left/right scrolling). */}
-                <div className="space-y-3">
-                  {([1, 2, 3] as const).map(lvl => {
-                    const levelLessons = dialectLessons
-                      .filter(l => l.level === lvl)
-                      .sort((a, b) => a.orderIndex - b.orderIndex);
-                    if (levelLessons.length === 0) return null;
-                    const firstInc = levelLessons.findIndex(l => !completedSet.has(l.id));
-                    return (
-                      <div key={lvl}>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1 text-center">
-                          Level {lvl}
-                        </p>
-                        <div className="flex flex-wrap justify-center items-start gap-x-1 gap-y-2">
-                          {levelLessons.map((lesson, idx) => {
-                            const isDone    = completedSet.has(lesson.id);
-                            const isCurrent = lvl === currentLevel && !isDone && idx === firstInc;
-                            return (
-                              <div key={lesson.id} className="flex flex-col items-center" style={{ width: 60 }}>
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 shadow-sm ${
-                                  isDone
-                                    ? 'bg-emerald-400 dark:bg-emerald-500 text-white'
-                                    : isCurrent
-                                    ? 'bg-amber-400 text-white ring-2 ring-amber-300 dark:ring-amber-500'
-                                    : 'bg-slate-200 dark:bg-gray-600 text-slate-400 dark:text-slate-300'
-                                }`}>
-                                  {isDone ? '✓' : idx + 1}
-                                </div>
-                                <p className={`mt-1 text-center leading-tight px-0.5 ${
-                                  isDone    ? 'text-emerald-600 dark:text-emerald-400' :
-                                  isCurrent ? 'text-amber-700 dark:text-amber-300 font-semibold' :
-                                              'text-slate-400 dark:text-slate-500'
-                                }`} style={{ fontSize: 9, width: 58, wordBreak: 'break-word' }}>
-                                  {lesson.title}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-
-        {/* ── Teacher's note (TUTOR ONLY) ──────────────────────────────────
-            Sits under the lesson circles inside the student card. Rendered
-            only when a note exists; teacherNote stays empty in student mode
-            (never fetched there), so the portal never shows it. */}
-        {!studentMode && teacherNote.trim() && (
-          <div className="mt-5 pt-4 border-t border-amber-200/70 dark:border-amber-800/60">
-            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-700/80 dark:text-amber-400/80 mb-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-              </svg>
-              {t('arabicStudentDetail.teacherNoteTitle')}
-              <span className="font-semibold normal-case tracking-normal text-amber-600/60 dark:text-amber-500/60">
-                {t('arabicStudentDetail.teacherNotePrivate')}
+                {t('arabicStudentDetail.allStudents')}
+              </button>
+            ) : (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: '#E4EDE8', color: '#1E4336' }}>
+                🎓 {t('arabicStudentDetail.studentPortal')}
               </span>
-            </p>
-            <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed" dir="auto">
-              {teacherNote}
-            </p>
+            )}
+            <span className="flex-grow" />
+            <div className="relative">
+              <button onClick={() => setActionsOpen(o => !o)} aria-label="More actions" aria-expanded={actionsOpen}
+                className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+              </button>
+              {actionsOpen && (
+                <>
+                  <span className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
+                  <div className="absolute end-0 top-11 z-50 w-56 py-1 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl flex flex-col">
+                    <button onClick={() => { setEditOpen(true); setActionsOpen(false); }}
+                      className="px-4 py-2.5 text-start text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700">
+                      {t('arabicStudentDetail.editMyInfo')}
+                    </button>
+                    {!studentMode && onToggleArchive && (
+                      <button onClick={() => { onToggleArchive(!isArchived); setActionsOpen(false); }}
+                        className="px-4 py-2.5 text-start text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700">
+                        {isArchived ? 'Restore to active students' : 'Archive this student'}
+                      </button>
+                    )}
+                    {!studentMode && (
+                      showDelete ? (
+                        <div className="px-4 py-2.5 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-red-600 dark:text-red-400">{t('arabicStudentDetail.areYouSure')}</span>
+                          <span className="flex-grow" />
+                          <button onClick={() => onDeleteStudent(student.id)}
+                            className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-bold">{t('arabicStudentDetail.yesDelete')}</button>
+                          <button onClick={() => setShowDelete(false)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 text-xs font-semibold">{t('arabicStudentDetail.cancel')}</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setShowDelete(true)}
+                          className="px-4 py-2.5 text-start text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                          {t('arabicStudentDetail.delete')}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* ── Section tabs ── */}
-      {/* Tabs WRAP onto as many rows as they need — no sideways scrolling, so
-          every tab (including Lessons Vocabulary) is visible at a glance. */}
-      <div className="flex flex-wrap gap-x-1 gap-y-0 border-b border-slate-200 dark:border-gray-700">
-        {TABS.map(tab => (
-          <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-            className={`px-2.5 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors -mb-px ${
-              activeSection === tab.key
-                ? 'border-amber-500 text-amber-600 dark:text-amber-400'
-                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}>
-            <span className="sm:hidden">{tab.mobileLabel}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+          {/* identity + how far through the course */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-[52px] h-[52px] flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden"
+                style={{ background: '#E4EDE8', border: '1px solid #CFDED6' }}>
+                {student.profileIcon
+                  ? <StudentProfileIcon src={student.profileIcon} size={52} mode="always" />
+                  : <span className="text-xl font-extrabold" style={{ color: '#2E5E4E' }}>{student.name.charAt(0).toUpperCase()}</span>}
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg font-extrabold leading-tight text-slate-900 dark:text-slate-100 truncate">{student.name}</h1>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+                  {student.arabicDialects.map(d => dialectLabel(d)).join(' · ')}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3.5">
+              <div className="w-[74px] h-[74px] flex-shrink-0 rounded-full flex items-center justify-center"
+                style={{ background: `conic-gradient(#2E5E4E 0% ${ringPct}%, rgba(148,163,184,.28) ${ringPct}% 100%)` }}>
+                <div className="w-[58px] h-[58px] rounded-full bg-white dark:bg-gray-800 flex flex-col items-center justify-center">
+                  <span className="text-[17px] font-extrabold leading-none text-slate-900 dark:text-slate-100">{doneInCourse}</span>
+                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">of {courseTotal}</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  {lessonsPerWeek !== null ? `${lessonsPerWeek} lesson${lessonsPerWeek === 1 ? '' : 's'} a week` : 'Lessons not planned yet'}
+                </p>
+                <p className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">
+                  {wl !== null && <>{t('arabicStudentDetail.weeksLeft', { count: wl })} · </>}
+                  {vocabCount > 0 ? t('arabicStudentDetail.wordsLearned', { count: vocabCount.toLocaleString() }) : 'No words logged yet'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* the next lesson, and the one action that belongs to it */}
+          <div className="rounded-2xl p-4" style={{ background: '#14161A' }}>
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: '#9BA3A0' }}>Next lesson</p>
+            {nextLesson ? (
+              <>
+                <p className="mt-1.5 text-lg font-extrabold text-white">
+                  {new Date(nextLesson.startAt).toLocaleDateString([], { weekday: 'short' })} · {new Date(nextLesson.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="mt-0.5 text-xs" style={{ color: '#B6BDB9' }}>{untilNext}{nextLesson.title ? ` · ${nextLesson.title}` : ''}</p>
+              </>
+            ) : (
+              <p className="mt-1.5 text-sm font-semibold" style={{ color: '#B6BDB9' }}>Nothing on the calendar yet</p>
+            )}
+            {!studentMode && (
+              <button
+                onClick={meetState === 'idle' ? handleMeetNow : undefined}
+                title={meetState === 'started' ? 'Meet started — link copied, student notified' : 'Start a Google Meet now'}
+                className="mt-3.5 w-full h-11 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-colors"
+                style={meetState === 'started' ? { background: '#CFE6DC', color: '#06231B' } : { background: '#4F9E85', color: '#06231B' }}>
+                {meetState === 'loading' ? (
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
+                )}
+                {meetState === 'started' ? 'Meet started' : meetState === 'loading' ? 'Starting…' : 'Meet now'}
+              </button>
+            )}
+          </div>
+
+          {/* where to go — the old tab row, stood up on its side */}
+          <nav className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-1.5 flex flex-col gap-0.5">
+            {TABS.map(tab => railLink(
+              tab.key,
+              tab.label.replace(/\s*\(\d+\)$/, ''),
+              tab.key === 'lessons' ? String(studentLessonCount) : tab.key === 'vocabulary' && vocabCount > 0 ? String(vocabCount) : null,
+              RAIL_ICON[tab.key],
+            ))}
+          </nav>
+
+          {/* the note nobody else sees */}
+          {!studentMode && teacherNote.trim() && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4">
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                {t('arabicStudentDetail.teacherNoteTitle')}
+              </p>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-slate-700 dark:text-slate-200 whitespace-pre-wrap" dir="auto">{teacherNote}</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── The pane ── */}
+        <div className="min-w-0 flex flex-col gap-4">
 
       {/* ── Lessons section ── */}
       {activeSection === 'lessons' && (
@@ -987,6 +943,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           )}
         </div>
       )}
+
+        </div>
+      </div>
 
       {/* Edit modal */}
       <ArabicAddStudentModal
