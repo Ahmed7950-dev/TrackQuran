@@ -37,18 +37,19 @@ export async function recordVocabReview(
   if (error) console.error('recordVocabReview:', error.message);
 }
 
-/** Record one answer from the word-cards game, the moment it is judged —
- *  not at the end, so a game left half-played still leaves its record.
+/** Record one answer on one word the moment it is given — a card judged in
+ *  the word-cards game, a flashcard turned over — and not at the end of the
+ *  run, so a game or a deck left half-finished still leaves its record.
  *  The word may not belong to a lesson (a custom vocabulary word), hence no
- *  lesson id. Best-effort: a failed write never interrupts the game. */
-export async function recordVocabCardAnswer(
+ *  lesson id. Best-effort: a failed write never interrupts the practice. */
+export async function recordVocabAnswer(
   studentId: string, wordId: string, correct: boolean,
 ): Promise<void> {
   if (!studentId || !wordId) return;
   const { error } = await supabase.from('arabic_vocab_reviews').insert({
     student_id: studentId, word_id: wordId, lesson_id: null, correct,
   });
-  if (error) console.error('recordVocabCardAnswer:', error.message);
+  if (error) console.error('recordVocabAnswer:', error.message);
 }
 
 /** wordId → the student's answers, OLDEST first, at most STRENGTH_SLOTS each. */

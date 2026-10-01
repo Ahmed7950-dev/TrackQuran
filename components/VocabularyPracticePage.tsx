@@ -3,6 +3,10 @@ import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
+import VocabStrengthBar from './VocabStrengthBar';
+import {
+  getVocabStrength, recordVocabAnswer, withReview, type StrengthMap,
+} from '../services/vocabHomeworkService';
 import WordFlightGame from './WordFlightGame';
 import LetterRaceGame from './LetterRaceGame';
 import { LetterCardsSetup } from './LetterCardsGame';
@@ -18,11 +22,13 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function buildQueue(items: { text: string; translation: string; clicks: number }[]) {
-  const expanded: { text: string; translation: string }[] = [];
+interface PracticeCard { id: string; text: string; translation: string }
+
+function buildQueue(items: { id: string; text: string; translation: string; clicks: number }[]) {
+  const expanded: PracticeCard[] = [];
   for (const item of items) {
     const reps = item.clicks + 1;
-    for (let i = 0; i < reps; i++) expanded.push({ text: item.text, translation: item.translation });
+    for (let i = 0; i < reps; i++) expanded.push({ id: item.id, text: item.text, translation: item.translation });
   }
   return shuffle(expanded);
 }
@@ -92,9 +98,25 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   // ── the games, played on the words of the list that is open ───────────────
   const [game, setGame] = useState<null | 'flight' | 'race' | 'cards'>(null);
 
+  // ── word strength ─────────────────────────────────────────────────────────
+  // The same ten red/green segments the lesson words carry. Every flashcard
+  // answer is written the moment it is given, so a deck left half-finished
+  // still leaves a record of the words that were actually practised.
+  const [strength, setStrength] = useState<StrengthMap>(new Map());
+  useEffect(() => {
+    let live = true;
+    getVocabStrength(studentId).then(m => { if (live) setStrength(m); });
+    return () => { live = false; };
+  }, [studentId]);
+  const recordCard = (card: PracticeCard | undefined, correct: boolean) => {
+    if (!card?.id) return;
+    setStrength(prev => withReview(prev, card.id, correct));
+    void recordVocabAnswer(studentId, card.id, correct);
+  };
+
   // ── practice ──────────────────────────────────────────────────────────────
   const [practiceMode, setPracticeMode] = useState<'words' | 'phrases'>('words');
-  const [practiceQueue, setPracticeQueue] = useState<{ text: string; translation: string }[]>([]);
+  const [practiceQueue, setPracticeQueue] = useState<PracticeCard[]>([]);
   const [practiceIdx, setPracticeIdx] = useState(0);
   const [practiceTotal, setPracticeTotal] = useState(0);
   const [showingArabic, setShowingArabic] = useState(true);
@@ -387,6 +409,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   }, [practiceMode, words, phrases, showToast, showArabicFirst]);
 
   const handleWrong = () => {
+    recordCard(practiceQueue[practiceIdx], false);
     const source = practiceMode === 'words' ? words : phrases;
     const filtered = source.filter(i => i.translation);
     const q = buildQueue(filtered);
@@ -397,6 +420,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   };
 
   const handleCorrect = () => {
+    recordCard(practiceQueue[practiceIdx], true);
     const newIdx = practiceIdx + 1;
     setPracticeIdx(newIdx);
     setShowingArabic(showArabicFirst);
@@ -951,6 +975,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                     <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left">Translation</th>
                     <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden md:table-cell">Transliteration</th>
                     <th className="px-3 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-left hidden sm:table-cell">Category</th>
+                    <th className="w-24 px-2 py-2.5 text-xs font-semibold text-slate-400 dark:text-slate-500 text-center">Strength</th>
                     <th className="w-8 px-2" />
                   </tr>
                 </thead>
@@ -1026,6 +1051,11 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                         >
                           {word.category}
                         </button>
+                      </td>
+
+                      {/* Strength — the last ten flashcard answers */}
+                      <td className="px-2 py-2.5">
+                        <VocabStrengthBar answers={strength.get(word.id) ?? []} />
                       </td>
 
                       {/* Delete */}
@@ -1129,13 +1159,16 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                     }`}
                   >
                     <div className="flex items-start gap-3 p-4">
-                      <button
-                        onClick={() => cyclePhraseClicks(phrase.id)}
-                        className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 mt-2 cursor-pointer hover:scale-105 transition-all ${clickBadge(phrase.clicks)}`}
-                        title="Click to cycle priority"
-                      >
-                        {clickLabel(phrase.clicks)}
-                      </button>
+                      <div className="flex-shrink-0 mt-2 flex flex-col items-center gap-1.5">
+                        <button
+                          onClick={() => cyclePhraseClicks(phrase.id)}
+                          className={`text-xs px-2 py-0.5 rounded-full font-bold cursor-pointer hover:scale-105 transition-all ${clickBadge(phrase.clicks)}`}
+                          title="Click to cycle priority"
+                        >
+                          {clickLabel(phrase.clicks)}
+                        </button>
+                        <VocabStrengthBar answers={strength.get(phrase.id) ?? []} />
+                      </div>
                       <div className="flex-1 min-w-0 space-y-1.5">
                         <p
                           className="text-right leading-relaxed text-slate-800 dark:text-slate-100"

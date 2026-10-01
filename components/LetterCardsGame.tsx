@@ -33,7 +33,7 @@ import {
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
   recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsScript, WordsSide,
 } from '../services/letterCardsService';
-import { recordVocabCardAnswer } from '../services/vocabHomeworkService';
+import { recordVocabAnswer } from '../services/vocabHomeworkService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
   Card, Snap, deal, judge as judgeBoard, throwStudent, throwTutor,
@@ -434,7 +434,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     if (!g || g.kind !== 'words' || !g.studentId) return;
     const asked = judged.thrownTutor, answered = judged.thrownStudent;
     if (!asked || !answered) return;
-    void recordVocabCardAnswer(g.studentId, asked.letter, asked.letter === answered.letter);
+    void recordVocabAnswer(g.studentId, asked.letter, asked.letter === answered.letter);
   }, []);
 
   /** Throwing a card. Judging only ever runs on the tutor's device. */
