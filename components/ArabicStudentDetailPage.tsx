@@ -471,6 +471,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [showDelete, setShowDelete]   = useState(false);
   /** Edit, archive and delete live behind one button now. */
   const [actionsOpen, setActionsOpen] = useState(false);
+  /** Phones: the sections live in a bar at the foot, the rest behind More. */
+  const [moreOpen, setMoreOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
   const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
@@ -621,6 +623,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     return `in ${d} day${d === 1 ? '' : 's'}`;
   })();
 
+  /** A bar slot is 70px wide: these names fit on one line there. */
+  const PHONE_LABEL: Record<string, string> = {
+    lessons: 'Lessons', vocabulary: 'Words', progress: 'Progress',
+    schedule: 'Schedule', exams: 'Exams', profile: 'Profile', calendar: 'Hours',
+  };
+
+  /** A phone's bar holds four; whatever is left goes behind More. */
+  const barTabs  = TABS.slice(0, 4);
+  const restTabs = TABS.slice(4);
+
   /** One row of the rail's section list. */
   const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode) => {
     const on = activeSection === key;
@@ -768,7 +780,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           </div>
 
           {/* where to go — the old tab row, stood up on its side */}
-          <nav className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-1.5 flex flex-col gap-0.5">
+          <nav className="hidden lg:flex bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-1.5 flex-col gap-0.5">
             {TABS.map(tab => railLink(
               tab.key,
               tab.label.replace(/\s*\(\d+\)$/, ''),
@@ -789,7 +801,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         </div>
 
         {/* ── The pane ── */}
-        <div className="min-w-0 flex flex-col gap-4">
+        <div className="min-w-0 flex flex-col gap-4 max-lg:pb-24">
 
       {/* ── Lessons section ── */}
       {activeSection === 'lessons' && (
@@ -946,6 +958,53 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
         </div>
       </div>
+
+      {/* ── Phones: the sections sit under the thumb, not above the content ── */}
+      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+        <div className="px-1.5 pt-1.5 grid grid-cols-5 gap-0.5">
+          {barTabs.map(tab => {
+            const on = activeSection === tab.key;
+            return (
+              <button key={tab.key} onClick={() => { setActiveSection(tab.key); setMoreOpen(false); }}
+                className={`h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
+                  on ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                {RAIL_ICON[tab.key]}
+                <span className={`text-[10.5px] leading-none ${on ? 'font-extrabold' : 'font-semibold'}`}>{PHONE_LABEL[tab.key] ?? tab.mobileLabel}</span>
+              </button>
+            );
+          })}
+          {restTabs.length > 0 && (
+            <button onClick={() => setMoreOpen(o => !o)} aria-expanded={moreOpen}
+              className={`h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
+                restTabs.some(x => x.key === activeSection) || moreOpen
+                  ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white'
+                  : 'text-slate-500 dark:text-slate-400'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+              <span className="text-[10.5px] leading-none font-semibold">More</span>
+            </button>
+          )}
+        </div>
+      </nav>
+
+      {moreOpen && (
+        <>
+          <span className="lg:hidden fixed inset-0 z-40 bg-slate-900/30" onClick={() => setMoreOpen(false)} />
+          <div className="lg:hidden fixed inset-x-3 z-50 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-1.5 flex flex-col gap-0.5"
+            style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}>
+            {restTabs.map(tab => (
+              <button key={tab.key} onClick={() => { setActiveSection(tab.key); setMoreOpen(false); }}
+                className={`w-full flex items-center gap-3 h-12 px-3 rounded-xl text-sm transition-colors ${
+                  activeSection === tab.key
+                    ? 'bg-slate-100 dark:bg-gray-700 font-bold text-slate-900 dark:text-white'
+                    : 'font-semibold text-slate-600 dark:text-slate-300'}`}>
+                <span className="flex-shrink-0 w-[18px] h-[18px]">{RAIL_ICON[tab.key]}</span>
+                {tab.label.replace(/\s*\(\d+\)$/, '')}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Edit modal */}
       <ArabicAddStudentModal
