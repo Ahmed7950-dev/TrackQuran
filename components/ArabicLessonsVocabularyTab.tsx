@@ -247,10 +247,10 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const onBasket = basketPool.length > 0 && !wantLessons;
   const practicePool = onBasket ? basketPool : lessonPool;
   const savedWords = useMemo(() => words.filter(w => revisionIds.has(w.id)), [words, revisionIds]);
-  /** A card needs both halves of the word, and a table of thirty is plenty. */
+  /** A card needs both halves of the word. However many are selected all go
+   *  on the pile: the hands hold five a side whatever its size. */
   const cardWords = useMemo(() => practicePool
     .filter(w => (w.arabic ?? '').trim() && (w.english ?? '').trim())
-    .slice(0, 30)
     .map(w => ({ id: w.id, arabic: w.arabic.trim(), english: (w.english ?? '').trim(),
                  translit: (w.transliteration ?? '').trim() })),
   [practicePool]);
