@@ -203,7 +203,7 @@ const HomeworkBasket: React.FC<Props> = ({ basket, student, courseWords, savedWo
         <div onClick={e => e.stopPropagation()}
           className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
           <LetterCardsSetup
-            words={basket.words.map(w => ({ id: w.id, arabic: w.arabic, english: w.english }))}
+            words={basket.words.map(w => ({ id: w.id, arabic: w.arabic, english: w.english, translit: w.transliteration }))}
             student={{ id: student.id, name: student.name }}
             onClose={() => setCards(false)}
           />

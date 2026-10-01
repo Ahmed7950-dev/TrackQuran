@@ -31,7 +31,7 @@ import {
   CardsMode, HAND_SIZE, LetterCardsGame as Game, animalSrc, completeLetterCardsGame,
   createLetterCardsGame, getLetterCardsGame, letterCardsChannel, letterCardsUrl,
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
-  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsSide,
+  recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsScript, WordsSide,
 } from '../services/letterCardsService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
@@ -151,10 +151,13 @@ const Board: React.FC<{
   words?: WordCard[] | null;
   /** Which half the STUDENT holds; the tutor holds the other. */
   wordsSide?: WordsSide;
+  /** How the word half is written — its own script, or transliterated. */
+  wordsScript?: WordsScript;
   /** Everything the board paints over itself — nothing sits above the canvas. */
   onBack?: () => void;
   onRematch?: () => void;
-}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, words, wordsSide = 'english', onBack, onRematch }) => {
+}> = ({ snap, me, onPick, layout = DEFAULT_LAYOUT, words, wordsSide = 'english',
+       wordsScript = 'arabic', onBack, onRematch }) => {
   useTableSounds(snap);
   const wordById = useMemo(() => new Map((words ?? []).map(w => [w.id, w])), [words]);
   const isWords = wordById.size > 0;
@@ -163,10 +166,12 @@ const Board: React.FC<{
   const faceOf = (card: Card, side: 'tutor' | 'student'): Face => {
     if (isWords) {
       const w = wordById.get(card.letter);
-      const arabicSide = wordsSide === 'arabic' ? 'student' : 'tutor';
-      return side === arabicSide
-        ? wordFace(w?.arabic ?? card.letter, true)
-        : wordFace(w?.english ?? card.letter, false);
+      const wordHalf = wordsSide === 'arabic' ? 'student' : 'tutor';
+      if (side !== wordHalf) return wordFace(w?.english ?? card.letter, false);
+      // The word itself: in Arabic, or transliterated when that was chosen and
+      // the word actually carries one.
+      const translit = wordsScript === 'translit' ? (w?.translit ?? '').trim() : '';
+      return translit ? wordFace(translit, false) : wordFace(w?.arabic ?? card.letter, true);
     }
     const text = shapeOf(card.letter, side === 'tutor' ? 'isolated' : snap.form);
     return { text, rtl: true, size: layout.letterSize };
@@ -529,7 +534,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
         className="absolute inset-0 w-full h-full object-cover"
         style={{ filter: 'blur(28px) brightness(.55)', transform: 'scale(1.12)' }} />
       <Board
-        snap={snap} me={me} words={game.words} wordsSide={game.wordsSide}
+        snap={snap} me={me} words={game.words} wordsSide={game.wordsSide} wordsScript={game.wordsScript}
         onPick={snap.ph === 'playing' ? onPick : undefined}
         onBack={leave}
         onRematch={host ? rematch : undefined}
@@ -565,6 +570,11 @@ export const LetterCardsSetup: React.FC<{
   const noun = isWords ? 'word' : 'letter';
   const [form, setForm] = useState<MatchForm>(initialForm === 'isolated' ? 'initial' : initialForm);
   const [wordsSide, setWordsSide] = useState<WordsSide>('english');
+  const [wordsScript, setWordsScript] = useState<WordsScript>('arabic');
+  /** Without a transliteration on the words there is nothing to offer. */
+  const haveTranslit = !!words?.some(w => (w.translit ?? '').trim());
+  /** What the word half is called in the setup's own wording. */
+  const wordLabel = wordsScript === 'translit' && haveTranslit ? 'transliteration' : 'Arabic word';
   const [lives, setLives] = useState<number | null>(3);
   const [mode, setMode] = useState<CardsMode>('multiplayer');
   const [game, setGame] = useState<Game | null>(null);
@@ -581,7 +591,8 @@ export const LetterCardsSetup: React.FC<{
     const g = await createLetterCardsGame({
       teacherId, studentId: student.id, studentName, letters: keys,
       form: isWords ? null : form, kind: isWords ? 'words' : 'letters',
-      words: isWords ? words! : null, wordsSide, lives, mode,
+      words: isWords ? words! : null, wordsSide,
+      wordsScript: haveTranslit ? wordsScript : 'arabic', lives, mode,
     });
     setBusy(false);
     if (g) setGame(g); else setErr('Could not start the game — check the connection.');
@@ -634,9 +645,13 @@ export const LetterCardsSetup: React.FC<{
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
           {keys.length} {noun}{keys.length === 1 ? '' : 's'} ·
           {mode === 'solo' ? ' the computer holds' : ' you hold'}
-          {isWords ? (wordsSide === 'arabic' ? ' the meaning, ' : ' the Arabic, ') : ' the isolated shape, '}
+          {isWords
+            ? (wordsSide === 'arabic' ? ' the meaning, ' : ` the ${wordLabel}, `)
+            : ' the isolated shape, '}
           {studentName} holds the{' '}
-          {isWords ? (wordsSide === 'arabic' ? 'Arabic word' : 'meaning') : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
+          {isWords
+            ? (wordsSide === 'arabic' ? wordLabel : 'meaning')
+            : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
         </p>
       </div>
 
@@ -663,14 +678,34 @@ export const LetterCardsSetup: React.FC<{
           <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">What they hold</p>
           <div className="flex gap-2">
             {([
-              ['english', 'The meaning', 'You throw the Arabic word'],
-              ['arabic', 'The Arabic word', 'You throw the meaning'],
+              ['english', 'The meaning', `You throw the ${wordLabel}`],
+              ['arabic', `The ${wordLabel}`, 'You throw the meaning'],
             ] as const).map(([k, title, note]) => (
               <button key={k} onClick={() => setWordsSide(k)}
                 className={`flex-1 text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${
                   wordsSide === k ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-slate-200 dark:border-gray-600'}`}>
                 <span className="block text-sm font-black text-slate-800 dark:text-slate-100">{title}</span>
                 <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">{note}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isWords && haveTranslit && (
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">How the word is written</p>
+          <div className="flex gap-2">
+            {([
+              ['arabic', 'Arabic', 'كِتاب'],
+              ['translit', 'Transliteration', 'kitaab'],
+            ] as const).map(([k, title, sample]) => (
+              <button key={k} onClick={() => setWordsScript(k)}
+                className={`flex-1 text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${
+                  wordsScript === k ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-slate-200 dark:border-gray-600'}`}>
+                <span className="block text-sm font-black text-slate-800 dark:text-slate-100">{title}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5"
+                  style={k === 'arabic' ? { fontFamily: LETTER_FONT, fontSize: 15 } : undefined}>{sample}</span>
               </button>
             ))}
           </div>

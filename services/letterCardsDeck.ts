@@ -24,8 +24,12 @@ export type CardsKind = 'letters' | 'words';
 /** Which half of a word the student holds; the tutor holds the other. */
 export type WordsSide = 'english' | 'arabic';
 
+/** How the word half is written: in its own script, or transliterated for a
+ *  student who cannot read it yet. The meaning half is unaffected. */
+export type WordsScript = 'arabic' | 'translit';
+
 /** What a word card says on each side of the table. */
-export interface WordCard { id: string; arabic: string; english: string }
+export interface WordCard { id: string; arabic: string; english: string; translit?: string }
 
 export const animalSrc = (a: Animal): string => `/games/letter-cards/${a}.webp`;
 export const CARD_BACK_STUDENT = '/games/letter-cards/backred.webp';

@@ -1338,7 +1338,10 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
           <div onClick={e => e.stopPropagation()}
             className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
             <LetterCardsSetup
-              words={gamePairs.slice(0, 30).map(w => ({ id: w.id, arabic: w.text.trim(), english: w.translation.trim() }))}
+              words={gamePairs.slice(0, 30).map(w => ({
+                id: w.id, arabic: w.text.trim(), english: w.translation.trim(),
+                translit: (w.transliteration ?? '').trim(),
+              }))}
               student={{ id: studentId, name: studentName }}
               onClose={() => setGame(null)}
             />

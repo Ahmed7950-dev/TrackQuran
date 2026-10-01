@@ -246,7 +246,8 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const cardWords = useMemo(() => practicePool
     .filter(w => (w.arabic ?? '').trim() && (w.english ?? '').trim())
     .slice(0, 30)
-    .map(w => ({ id: w.id, arabic: w.arabic.trim(), english: (w.english ?? '').trim() })),
+    .map(w => ({ id: w.id, arabic: w.arabic.trim(), english: (w.english ?? '').trim(),
+                 translit: (w.transliteration ?? '').trim() })),
   [practicePool]);
   const racePairs: RacePair[] = practicePool
     .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
