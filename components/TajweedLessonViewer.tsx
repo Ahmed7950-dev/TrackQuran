@@ -20,6 +20,23 @@ interface TextObj  { id: string; x: number; y: number; text: string; fontSize: n
 interface TableObj { id: string; x: number; y: number; rows: string[][]; cellW: number; cellH: number; }
 interface WBImg    { id: string; x: number; y: number; src: string; w: number; h: number; }
 
+/** Below lg the two panes cannot sit side by side — the board goes over the
+ *  slide instead, and the pager drops the thumbnails and fits the whole page. */
+const usePhoneLayout = (): boolean => {
+  const query = '(max-width: 1023px)';
+  const [phone, setPhone] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    setPhone(mq.matches);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+};
+
 export interface WhiteboardData {
   strokes: string;
   texts:   TextObj[];
@@ -79,6 +96,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
   vocabWords,
   progressMode = false, studentMode = false, getProgress, onMarkProgress, onMarkLessonDone, onLogRevision,
 }) => {
+  const phone = usePhoneLayout();
   const _fetchIds = fetchCompletedIds ?? getCompletedLessonIds;
   const _mark     = onMarkCompleted   ?? markLessonCompleted;
   const _unmark   = onUnmarkCompleted ?? unmarkLessonCompleted;
@@ -127,7 +145,9 @@ const TajweedLessonViewer: React.FC<Props> = ({
   const [color,      setColor]      = useState('#ef4444');
   const [lineWidth,  setLineWidth]  = useState(4);
   const [fontSize,   setFontSize]   = useState(28);
-  const [showCanvas, setShowCanvas] = useState(true);
+  const [showCanvas, setShowCanvas] = useState(
+    () => !(typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches),
+  );
 
   // ── Table modal ───────────────────────────────────────────────────────────
   const [tableModal, setTableModal] = useState<{ x: number; y: number } | null>(null);
@@ -644,7 +664,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
         )}
 
         {/* Canvas toggle — always legible: amber text on darker bg */}
-        <button onClick={() => setShowCanvas(v => !v)} title={showCanvas ? 'Hide whiteboard' : 'Show whiteboard'}
+        <button onClick={() => setShowCanvas(v => !v)} title={showCanvas ? 'Back to the slide' : 'Show the board over the slide'}
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors flex-shrink-0 whitespace-nowrap shadow-sm">
           {showCanvas ? (
             <><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg><span>PDF Only</span></>
@@ -690,11 +710,12 @@ const TajweedLessonViewer: React.FC<Props> = ({
       </div>
 
       {/* ── Body ── */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden relative">
 
-        {/* Left: PDF */}
+        {/* The slide. It keeps the whole width on a phone: the board goes over
+            it rather than beside it, because half of 390px is nothing. */}
         <div ref={pdfContainerRef}
-          className={`${showCanvas ? 'w-1/2 border-r border-gray-600' : 'w-full'} relative flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
+          className={`w-full ${showCanvas ? 'lg:w-1/2 lg:border-r lg:border-gray-600' : ''} relative flex items-center justify-center bg-gray-700 overflow-hidden transition-all`}>
           {progressMode && iframeSrc ? (
             // Paged PDF.js viewer — tracks the current slide for progress/resume.
             <PdfPager
@@ -702,8 +723,8 @@ const TajweedLessonViewer: React.FC<Props> = ({
               url={iframeSrc}
               initialPage={resumeSlide}
               onPageChange={(p, total) => { setCurrentSlide(p); setTotalSlides(total); }}
-              fitMode={showCanvas ? 'width' : 'contain'}
-              pageStrip={showCanvas}
+              fitMode={phone || !showCanvas ? 'contain' : 'width'}
+              pageStrip={!phone && showCanvas}
             />
           ) : (
             <>
@@ -725,8 +746,10 @@ const TajweedLessonViewer: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Right: Whiteboard */}
-        <div className={`${showCanvas ? 'w-1/2 flex' : 'hidden'} flex-col`}>
+        {/* The board. Over the slide on a phone, beside it from lg up. */}
+        <div className={`${showCanvas ? 'flex' : 'hidden'} flex-col bg-white
+          absolute inset-0 z-30 shadow-2xl
+          lg:static lg:inset-auto lg:z-auto lg:shadow-none lg:w-1/2`}>
 
           {/* ── Whiteboard toolbar ── */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-100 border-b border-gray-200 flex-shrink-0 flex-wrap select-none gap-y-1">

@@ -207,6 +207,45 @@ const PdfPager: React.FC<Props> = ({
     onPageChangeRef.current?.(clamped, numPages);
   };
 
+  // ── Scroll and swipe turn the page ─────────────────────────────────────────
+  // Only where the slide itself cannot scroll: when a page is taller than the
+  // box (fit-to-width on a desktop) the gesture belongs to the page, not to us.
+  const gestureAt = useRef(0);
+  const touchFrom = useRef<{ x: number; y: number } | null>(null);
+  const scrollable = () => {
+    const el = containerRef.current;
+    if (!el) return false;
+    const st = getComputedStyle(el);
+    const canY = /auto|scroll/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 4;
+    const canX = /auto|scroll/.test(st.overflowX) && el.scrollWidth  > el.clientWidth  + 4;
+    return canY || canX;
+  };
+  /** One gesture is one page, however long the finger or the wheel keeps going. */
+  const turn = (delta: number) => {
+    const now = Date.now();
+    if (now - gestureAt.current < 350) return;
+    gestureAt.current = now;
+    go(pageRef.current + delta);
+  };
+  const onWheel = (e: React.WheelEvent) => {
+    if (scrollable() || Math.abs(e.deltaY) < 8) return;
+    turn(e.deltaY > 0 ? 1 : -1);
+  };
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchFrom.current = e.touches.length === 1
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      : null;                                        // two fingers: a pinch, not a swipe
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const from = touchFrom.current;
+    touchFrom.current = null;
+    const t = e.changedTouches[0];
+    if (!from || !t || scrollable()) return;
+    const dx = t.clientX - from.x, dy = t.clientY - from.y;
+    if (Math.abs(dy) >= 48 && Math.abs(dy) > Math.abs(dx)) turn(dy < 0 ? 1 : -1);
+    else if (Math.abs(dx) >= 48) turn(dx < 0 ? 1 : -1);
+  };
+
   const isContain = fitMode === 'contain' && !pageStrip;
 
   return (
@@ -231,6 +270,7 @@ const PdfPager: React.FC<Props> = ({
           {/* Main slide — fills available space, canvas scales to contain */}
           <div
             ref={containerRef}
+            onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
             className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-3"
           >
             {!error && <canvas ref={canvasRef} className="shadow-lg bg-white max-w-full max-h-full" />}
@@ -290,11 +330,12 @@ const PdfPager: React.FC<Props> = ({
         /* ── Standard layout: scrollable (width) or contained (contain) ──────── */
         <div
           ref={containerRef}
+          onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
           className={`flex-1 min-h-0 flex justify-center p-3 ${
             isContain ? 'overflow-hidden items-center' : 'overflow-auto items-start'
           }`}
         >
-          {!error && <canvas ref={canvasRef} className="shadow-lg bg-white" />}
+          {!error && <canvas ref={canvasRef} className={`shadow-lg bg-white ${isContain ? 'max-w-full max-h-full' : ''}`} />}
         </div>
       )}
 

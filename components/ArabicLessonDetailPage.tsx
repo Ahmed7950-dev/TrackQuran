@@ -342,27 +342,28 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-white dark:bg-gray-900 flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 flex-shrink-0">
         <button onClick={onClose}
           className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
           </svg>
-          <span className="font-semibold text-sm">{t('arabicLessonDetail.allLessons')}</span>
+          <span className="font-semibold text-sm hidden sm:inline">{t('arabicLessonDetail.allLessons')}</span>
         </button>
         <div className="w-px h-5 bg-slate-200 dark:bg-gray-600" />
-        <h1 className="font-bold text-slate-800 dark:text-slate-100 text-base truncate flex-1">{lesson.title}</h1>
+        <h1 className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base truncate flex-1">{lesson.title}</h1>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 overflow-x-auto">
+      <div className="flex border-b border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 overflow-x-auto overflow-y-hidden">
         {tabs.map(tab => (
           <button key={tab.id}
             onClick={() => tab.popup ? openTeacherNoteWindow() : setActiveTab(tab.id)}
             title={tab.popup ? t('arabicLessonDetail.openPrivate') : undefined}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2.5 sm:py-3 text-[13px] sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-colors -mb-px ${
               tab.popup
                 ? 'border-transparent text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300'
                 : activeTab === tab.id
