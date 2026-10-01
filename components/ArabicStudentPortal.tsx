@@ -141,7 +141,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {/* ── Top bar: logo + student badge ── */}
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
+        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-3 flex flex-wrap lg:flex-nowrap items-center gap-x-2 gap-y-1 sm:gap-3">
           {/* Back to family button — only shown when opened from a family link */}
           {backUrl && (
             <a
@@ -195,7 +195,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           )}
 
           {/* Desktop nav — centred, only shows md+ */}
-          <nav className="flex-1 hidden md:flex justify-center items-center gap-4">
+          <nav className="flex-1 hidden lg:flex justify-center items-center gap-4">
             <button
               onClick={() => setPortalTab(t => t === 'about' ? 'lessons' : 'about')}
               className={`text-sm font-medium transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
@@ -260,34 +260,38 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           </div>
         </div>
 
-        {/* ── Mobile nav bar — wraps to fit, hidden on md+ (no side-scrolling) ── */}
-        <nav className="md:hidden border-t border-slate-100 dark:border-gray-700">
-          <div className="flex flex-wrap items-center justify-center gap-1 px-3 py-2">
+        {/* ── Phones: the two portal tabs on their own line, the site links
+            under them. They used to share one wrapping row, which left
+            Vocabulary stranded on a line of its own. ── */}
+        <nav className="lg:hidden border-t border-slate-100 dark:border-gray-700 px-3 py-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setPortalTab('lessons')}
-              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              className={`flex-1 min-w-0 truncate text-[13px] font-bold px-3 py-2 rounded-xl transition-colors ${portalTab === 'lessons' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'bg-slate-50 dark:bg-gray-700/50 text-slate-500 dark:text-slate-400'}`}
             >
               {t('arabicPortal.lessons')}
             </button>
             <button
-              onClick={() => setPortalTab('about')}
-              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'about' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
-            >
-              {t('arabicPortal.aboutUs')}
-            </button>
-            <a href="#" className="flex-shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500 px-3 py-1.5 rounded-full transition-colors">
-              {t('arabicPortal.contactUs')}
-            </a>
-            <a href="#" className="flex-shrink-0 text-xs font-medium text-white bg-teal-600 dark:bg-orange-600 px-3 py-1.5 rounded-full">
-              {t('arabicPortal.supportUs')}
-            </a>
-            <span className="flex-shrink-0 w-px h-4 bg-slate-200 dark:bg-gray-600 mx-1" />
-            <button
               onClick={() => setPortalTab('vocabulary')}
-              className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${portalTab === 'vocabulary' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-orange-500'}`}
+              className={`flex-1 min-w-0 truncate text-[13px] font-bold px-3 py-2 rounded-xl transition-colors ${portalTab === 'vocabulary' ? 'bg-teal-50 dark:bg-orange-900/20 text-teal-600 dark:text-orange-400' : 'bg-slate-50 dark:bg-gray-700/50 text-slate-500 dark:text-slate-400'}`}
             >
               {t('arabicPortal.vocabulary')}
             </button>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setPortalTab('about')}
+              className={`text-[11px] font-semibold transition-colors ${portalTab === 'about' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+              {t('arabicPortal.aboutUs')}
+            </button>
+            <span className="w-px h-3 bg-slate-200 dark:bg-gray-600" />
+            <a href="#" className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+              {t('arabicPortal.contactUs')}
+            </a>
+            <a href="#" className="text-[11px] font-bold text-teal-600 dark:text-orange-400">
+              {t('arabicPortal.supportUs')}
+            </a>
           </div>
         </nav>
       </header>

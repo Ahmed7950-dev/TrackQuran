@@ -565,23 +565,23 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       </div>
 
       {/* ── Level header: Show Plan button only ── */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-center justify-between gap-3">
-        <div>
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/10 rounded-2xl border border-amber-200 dark:border-amber-800 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="font-bold text-slate-800 dark:text-slate-100 text-base">
             {COURSE_LABELS[activeDialect]} — {t('arabicLessonPage.levelN', { n: activeLevel })} ({activeLevel === 1 ? t('arabicLessonPage.beginner') : activeLevel === 2 ? t('arabicLessonPage.intermediate') : t('arabicLessonPage.advanced')})
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('arabicLessonPage.levelSummary', { count: levelTotal, total: LESSONS_PER_LEVEL })}</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0 max-sm:w-full">
           {studentMode && preSelectedStudentId && (() => {
             const unlock = examUnlocks?.find(u => u.level === activeLevel);
             const unlocked = !!unlock;
             if (!unlocked) return (
-              <div className="flex flex-col items-end gap-0.5">
+              <div className="flex flex-col max-sm:items-start items-end gap-0.5 min-w-0">
                 <button disabled className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-not-allowed">
                   🔒 Do Exam
                 </button>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[140px] text-right leading-tight">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 sm:max-w-[140px] max-sm:text-start text-right leading-tight">
                   Your tutor has not unlocked this exam yet.
                 </span>
               </div>
