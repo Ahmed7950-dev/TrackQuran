@@ -26,6 +26,7 @@ import {
   saveLevelPlan,
 } from '../services/arabicService';
 import { getAttemptsForStudent } from '../services/examService';
+import FullPage from './FullPage';
 import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 import ExamFlow from './ExamFlow';
 
@@ -253,49 +254,48 @@ const LevelPlanModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col" onClick={onClose}>
+    <FullPage onBack={onClose} className="bg-black">
 
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/70 backdrop-blur-sm flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold text-white text-base tracking-wide">{COURSE_LABELS[dialect]} — Level {level} Plan</h3>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-              <button onClick={() => fileRef.current?.click()} disabled={uploading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
-                {uploading ? t('arabicLessonPage.uploading') : t('arabicLessonPage.uploadPlanImage')}
-              </button>
-            </>
-          )}
-          <button onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-lg transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-            {t('arabicLessonPage.close')}
-          </button>
-        </div>
+      {/* ── Top bar: the way back comes first ── */}
+      <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-black/70 flex-shrink-0">
+        <button onClick={onClose}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 -ms-1 rounded-lg text-white hover:bg-white/10 transition-colors flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+          <span className="text-sm font-semibold">{t('arabicLessonPage.back')}</span>
+        </button>
+        <h3 className="font-bold text-white text-sm sm:text-base tracking-wide truncate flex-1 min-w-0">
+          {COURSE_LABELS[dialect]} — Level {level} Plan
+        </h3>
+        {isAdmin && (
+          <>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+              {uploading ? t('arabicLessonPage.uploading') : t('arabicLessonPage.uploadPlanImage')}
+            </button>
+          </>
+        )}
       </div>
 
       {err && (
-        <p className="px-6 py-2 text-sm text-red-300 bg-red-900/40 flex-shrink-0" onClick={e => e.stopPropagation()}>
+        <p className="px-6 py-2 text-sm text-red-300 bg-red-900/40 flex-shrink-0">
           {err}
         </p>
       )}
 
-      {/* ── Full-screen image area ── */}
-      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden" onClick={onClose}>
+      {/* ── The plan itself, on the whole page ── */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={`Level ${level} plan`}
-            onClick={e => e.stopPropagation()}
             className="max-w-full max-h-full object-contain select-none"
             draggable={false}
           />
         ) : (
-          <div className="flex flex-col items-center gap-3 text-white/50" onClick={e => e.stopPropagation()}>
+          <div className="flex flex-col items-center gap-3 text-white/50">
             <span className="text-7xl">🗺</span>
             <p className="font-semibold text-lg">{t('arabicLessonPage.noPlanImage')}</p>
             {isAdmin && <p className="text-sm">{t('arabicLessonPage.noPlanImageHint')}</p>}
@@ -303,11 +303,7 @@ const LevelPlanModal: React.FC<{
         )}
       </div>
 
-      {/* Hint */}
-      <p className="text-center text-white/30 text-xs py-2 flex-shrink-0 select-none">
-        Click anywhere outside the image to close
-      </p>
-    </div>
+    </FullPage>
   );
 };
 

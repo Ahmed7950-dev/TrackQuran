@@ -672,7 +672,8 @@
     "openedOn": "فُتح في {{date}}",
     "revisedOnce": "روجع مرة واحدة",
     "revisedTimes": "روجع {{n}} مرات",
-    "notRevised": "لم يُراجع بعد"
+    "notRevised": "لم يُراجع بعد",
+    "back": "رجوع"
   },
   "arabicStudentDetail": {
     "allStudents": "جميع الطلاب",

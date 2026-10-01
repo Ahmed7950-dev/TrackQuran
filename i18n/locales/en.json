@@ -722,7 +722,8 @@
     "openedOn": "opened {{date}}",
     "revisedOnce": "Revised once",
     "revisedTimes": "Revised {{n}} times",
-    "notRevised": "Not revised yet"
+    "notRevised": "Not revised yet",
+    "back": "Back"
   },
   "arabicStudentDetail": {
     "allStudents": "All Students",

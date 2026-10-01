@@ -672,7 +672,8 @@
     "openedOn": "{{date}} tarihinde açıldı",
     "revisedOnce": "Bir kez tekrar edildi",
     "revisedTimes": "{{n}} kez tekrar edildi",
-    "notRevised": "Henüz tekrar edilmedi"
+    "notRevised": "Henüz tekrar edilmedi",
+    "back": "Geri"
   },
   "arabicStudentDetail": {
     "allStudents": "Tüm Öğrenciler",
