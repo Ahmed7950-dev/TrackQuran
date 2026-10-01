@@ -127,6 +127,13 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
     );
   }
 
+  /** The five places this portal goes. One row on a computer, two on a phone. */
+  const PLACES = [
+    { key: 'lessons',    label: t('arabicPortal.lessons'),    short: t('arabicPortal.lessons') },
+    { key: 'vocabulary', label: t('arabicPortal.vocabulary'), short: 'Words' },
+    { key: 'about',      label: t('arabicPortal.aboutUs'),    short: 'About' },
+  ] as const;
+
   // ── Student handlers — write to the same DB, tutor sees changes instantly ───
   const handleUpdate = async (updated: ArabicStudent) => {
     setStudent(updated);
@@ -140,8 +147,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
 
       {/* ── Header ── */}
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        {/* ── Row one: the logo, the controls, and whose portal this is ── */}
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2">
+        {/* ── One row on a computer: logo · the places · the name ── */}
+        <div className="container mx-auto px-3 sm:px-6 lg:px-6 xl:px-8 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2">
           {backUrl && (
             <a href={backUrl} aria-label="Back to family page"
               className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 transition-colors">
@@ -152,9 +159,28 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           )}
 
           <button onClick={() => setPortalTab('lessons')} aria-label="Go to lessons"
-            className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity [&_img]:h-9 sm:[&_img]:h-12">
+            className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity [&_img]:h-9 sm:[&_img]:h-12 lg:[&_img]:h-14">
             <Logo />
           </button>
+
+          {/* the places, in the middle, where the eye lands */}
+          <nav className="hidden lg:flex flex-grow min-w-0 items-center justify-center gap-1">
+            {PLACES.map(({ key, label }) => (
+              <button key={key} onClick={() => setPortalTab(key as typeof portalTab)}
+                className={`h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${
+                  portalTab === key
+                    ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
+                {label}
+              </button>
+            ))}
+            <a href="#" className="h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
+              {t('arabicPortal.contactUs')}
+            </a>
+            <a href="#" className="h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors">
+              {t('arabicPortal.supportUs')}
+            </a>
+          </nav>
 
           <span className="hidden sm:flex flex-shrink-0 items-center text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2.5 py-1 rounded-full"
             style={{ fontFamily: 'Amiri Regular, serif' }}>
@@ -200,7 +226,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
             </button>
           )}
 
-          <span className="flex-grow" />
+          <span className="flex-grow lg:hidden" />
 
           {/* whose portal this is — the name, and nothing else */}
           <span className="flex-shrink min-w-0 flex items-center gap-1.5 px-3 h-9 sm:h-10 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-full">
@@ -211,14 +237,10 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           </span>
         </div>
 
-        {/* ── Row two: the five places to go, filling the width ── */}
-        <nav className="border-t border-slate-100 dark:border-gray-700">
-          <div className="container mx-auto px-2 sm:px-4 lg:px-6 py-1.5 flex items-stretch gap-1 sm:gap-1.5">
-            {([
-              ['lessons', t('arabicPortal.lessons'), t('arabicPortal.lessons')],
-              ['vocabulary', t('arabicPortal.vocabulary'), 'Words'],
-              ['about', t('arabicPortal.aboutUs'), 'About'],
-            ] as const).map(([key, label, short]) => (
+        {/* ── Phones and tablets: the places take a row of their own ── */}
+        <nav className="lg:hidden border-t border-slate-100 dark:border-gray-700">
+          <div className="container mx-auto px-2 sm:px-4 py-1.5 flex items-stretch gap-1 sm:gap-1.5">
+            {PLACES.map(({ key, label, short }) => (
               <button key={key}
                 onClick={() => setPortalTab(key as typeof portalTab)}
                 className={`flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors ${

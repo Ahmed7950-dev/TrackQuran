@@ -659,7 +659,20 @@
     "studentSubtitle": "{{count}} ders — başlamak için bir seviye seçin.",
     "edit": "Düzenle",
     "delete": "Sil",
-    "flashcards": "Kartlar: {{n}}/5 tur"
+    "flashcards": "Kartlar: {{n}}/5 tur",
+    "statusNotStarted": "Başlanmadı",
+    "statusInProgress": "Devam ediyor",
+    "statusCompleted": "Tamamlandı",
+    "homeworkTodo": "Ödev bekliyor",
+    "wordsOne": "1 kelime",
+    "wordsOther": "{{n}} kelime",
+    "slideN": "slayt {{n}}",
+    "slideNofM": "{{m}} slayttan {{n}}.",
+    "finishedOn": "{{date}} tarihinde bitti",
+    "openedOn": "{{date}} tarihinde açıldı",
+    "revisedOnce": "Bir kez tekrar edildi",
+    "revisedTimes": "{{n}} kez tekrar edildi",
+    "notRevised": "Henüz tekrar edilmedi"
   },
   "arabicStudentDetail": {
     "allStudents": "Tüm Öğrenciler",

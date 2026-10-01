@@ -709,7 +709,20 @@
     "studentSubtitle": "{{count}} lessons — choose a level to begin.",
     "edit": "Edit",
     "delete": "Delete",
-    "flashcards": "Flashcards: {{n}}/5 rounds"
+    "flashcards": "Flashcards: {{n}}/5 rounds",
+    "statusNotStarted": "Not started",
+    "statusInProgress": "In progress",
+    "statusCompleted": "Completed",
+    "homeworkTodo": "Homework to do",
+    "wordsOne": "1 word",
+    "wordsOther": "{{n}} words",
+    "slideN": "slide {{n}}",
+    "slideNofM": "slide {{n}} of {{m}}",
+    "finishedOn": "finished {{date}}",
+    "openedOn": "opened {{date}}",
+    "revisedOnce": "Revised once",
+    "revisedTimes": "Revised {{n}} times",
+    "notRevised": "Not revised yet"
   },
   "arabicStudentDetail": {
     "allStudents": "All Students",

@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect, ArabicExamUnlock, ArabicExamAttempt } from '../types';
+import { ArabicLesson, ArabicStudent, ArabicLevelPlan, ArabicCourseDialect, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonProgress } from '../types';
 import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import {
@@ -20,7 +20,7 @@ import {
   getHomeworkCountsByLesson,
   getHomeworkCompletionsForStudent,
   getLessonProgressForStudent,
-  getVocabRoundsByLesson,
+  getVocabWordCountsByLesson,
   getLevelPlans,
   uploadLevelPlanImage,
   saveLevelPlan,
@@ -30,6 +30,13 @@ import ArabicLessonDetailPage from './ArabicLessonDetailPage';
 import ExamFlow from './ExamFlow';
 
 const LESSONS_PER_LEVEL = 20;
+
+/** Where a student stands in a lesson, in one word. */
+type LessonState = {
+  key: 'not_started' | 'in_progress' | 'done';
+  label: string;
+  cls: string;
+};
 const LEVELS = [1, 2, 3] as const;
 
 // ── Create / Edit modal ──────────────────────────────────────────────────────
@@ -347,7 +354,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   // Per-lesson stats for student badges
   const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
   const [hwDone,      setHwDone]      = useState<string[]>([]);
-  const [vocabRounds, setVocabRounds] = useState<Record<string, number>>({});
+  const [wordCounts,  setWordCounts]  = useState<Record<string, number>>({});
   const [lessonProgress, setLessonProgress] = useState<Awaited<ReturnType<typeof getLessonProgressForStudent>>>(new Map());
 
   // Drag-reorder (admin)
@@ -379,6 +386,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   useEffect(() => {
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
     getHomeworkCountsByLesson().then(setHwCounts);
+    getVocabWordCountsByLesson().then(setWordCounts);
     getLevelPlans().then(plans => {
       const map: Record<string, string> = {};
       plans.forEach(p => { if (p.planImageUrl) map[`${p.dialect}-${p.level}`] = p.planImageUrl; });
@@ -387,27 +395,20 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   }, []);
 
   useEffect(() => {
-    if (!preSelectedStudentId) { setHwDone([]); setVocabRounds({}); setLessonProgress(new Map()); return; }
+    if (!preSelectedStudentId) { setHwDone([]); setLessonProgress(new Map()); return; }
     getHomeworkCompletionsForStudent(preSelectedStudentId).then(setHwDone);
-    getVocabRoundsByLesson(preSelectedStudentId).then(setVocabRounds);
     getLessonProgressForStudent(preSelectedStudentId).then(setLessonProgress);
   }, [preSelectedStudentId]);
 
-  // Resolve the display status for a lesson (combines completion + progress row).
-  const lessonStatus = (lessonId: string): { label: string; cls: string } | null => {
+  // Where the student stands in one word — the row has its own columns for
+  // the homework and the revisions, so the status says nothing about either.
+  const lessonStatus = (lessonId: string): LessonState | null => {
     if (!preSelectedStudentId) return null;
     const prog = lessonProgress.get(lessonId);
     const done = prog?.status === 'done' || completedSet.has(lessonId);
-    if (done) {
-      const rev = prog?.revisionCount ?? 0;
-      return rev > 0
-        ? { label: `Done · revised ×${rev}`, cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' }
-        : { label: 'Done', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' };
-    }
-    if (prog?.status === 'in_progress') {
-      return { label: `In progress · slide ${prog.lastSlide}`, cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' };
-    }
-    return { label: 'Not started', cls: 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400' };
+    if (done) return { key: 'done', label: t('arabicLessonPage.statusCompleted'), cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' };
+    if (prog?.status === 'in_progress') return { key: 'in_progress', label: t('arabicLessonPage.statusInProgress'), cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' };
+    return { key: 'not_started', label: t('arabicLessonPage.statusNotStarted'), cls: 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-400' };
   };
 
   useEffect(() => {
@@ -539,7 +540,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
       )}
 
       {/* ── Level tabs ── */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-700 overflow-x-auto">
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-gray-700">
         {LEVELS.map(lvl => {
           const lvlLessons = dialectLessons.filter(l => (l.level ?? 1) === lvl);
           const lvlDone = lvlLessons.filter(l => completedSet.has(l.id)).length;
@@ -656,7 +657,8 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
                 isCompleted={isCompleted}
                 hwQuestionCount={hwCounts[lesson.id] ?? 0}
                 homeworkDone={hwDone.includes(lesson.id)}
-                vocabRounds={vocabRounds[lesson.id] ?? 0}
+                wordCount={wordCounts[lesson.id] ?? 0}
+                progress={lessonProgress.get(lesson.id) ?? null}
                 showStudentStats={!!preSelectedStudentId}
                 statusChip={lessonStatus(lesson.id)}
                 onView={() => setViewing(lesson)}
@@ -722,12 +724,12 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
             setViewing(null);
             setViewingFromDeepLink(false);
             if (preSelectedStudentId) {
-              const [dbDone, dbRounds] = await Promise.all([
+              const [dbDone, prog] = await Promise.all([
                 getHomeworkCompletionsForStudent(preSelectedStudentId),
-                getVocabRoundsByLesson(preSelectedStudentId),
+                getLessonProgressForStudent(preSelectedStudentId),
               ]);
               setHwDone(prev => [...new Set([...prev, ...dbDone])]);
-              setVocabRounds(dbRounds);
+              setLessonProgress(prog);
             }
           }}
           onStudentUpdated={onStudentUpdated}
@@ -741,12 +743,51 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 };
 
 // ── Lesson row ────────────────────────────────────────────────────────────────
+// One row answers the same five things in the same five places: which lesson,
+// what it teaches, where the student is, whether homework is owed, and how
+// often it has been revised.
+
+/** Five little bars; past five the count takes over. */
+const RevisionBars: React.FC<{ n: number }> = ({ n }) => {
+  const { t } = useI18n();
+  const title = n === 0 ? t('arabicLessonPage.notRevised')
+    : n === 1 ? t('arabicLessonPage.revisedOnce')
+    : t('arabicLessonPage.revisedTimes', { n });
+  return (
+  <span className="flex items-center gap-[3px]" title={title}>
+    {[0, 1, 2, 3, 4].map(i => (
+      <span key={i} className={`w-[10px] h-[6px] rounded-sm ${
+        i < Math.min(n, 5) ? 'bg-violet-600 dark:bg-violet-400' : 'bg-slate-200 dark:bg-gray-600'}`} />
+    ))}
+    {n > 0 && <span className="ms-1 text-[10px] font-extrabold text-violet-700 dark:text-violet-300">×{n}</span>}
+  </span>
+  );
+};
+
+const HomeworkChip: React.FC<{ assigned: boolean; done: boolean }> = ({ assigned, done }) => {
+  const { t } = useI18n();
+  if (!assigned) return <span className="text-xs font-semibold text-slate-300 dark:text-gray-600">—</span>;
+  return done ? (
+    <span className="inline-flex items-center gap-1 h-[25px] px-2.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
+      {t('arabicLessonPage.homeworkDone')}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 h-[25px] px-2.5 rounded-full bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-[11px] font-extrabold">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-2.5 h-2.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" /><circle cx="12" cy="12" r="9" />
+      </svg>
+      {t('arabicLessonPage.homeworkTodo')}
+    </span>
+  );
+};
 
 interface RowProps {
   lesson: ArabicLesson; index: number; isAdmin: boolean; isDragOver: boolean;
   isCompleted: boolean;
-  hwQuestionCount: number; homeworkDone: boolean; vocabRounds: number; showStudentStats: boolean;
-  statusChip?: { label: string; cls: string } | null;
+  hwQuestionCount: number; homeworkDone: boolean; wordCount: number; showStudentStats: boolean;
+  progress?: ArabicLessonProgress | null;
+  statusChip?: LessonState | null;
   onView: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
   onDragStart: () => void; onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void; onDragEnd: () => void;
@@ -755,25 +796,46 @@ interface RowProps {
 const ArabicLessonRow: React.FC<RowProps> = ({
   lesson, index, isAdmin, isDragOver,
   isCompleted,
-  hwQuestionCount, homeworkDone, vocabRounds, showStudentStats,
-  statusChip,
+  hwQuestionCount, homeworkDone, wordCount, showStudentStats,
+  progress, statusChip,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) => {
   const { t } = useI18n();
+  const state = statusChip?.key ?? (isCompleted ? 'done' : 'not_started');
+  const revisions = progress?.revisionCount ?? 0;
+  const assigned  = hwQuestionCount > 0;
+
+  // The quiet line: what the lesson teaches, where they stopped, when that was.
+  const meta: string[] = [];
+  if (wordCount > 0) meta.push(wordCount === 1 ? t('arabicLessonPage.wordsOne') : t('arabicLessonPage.wordsOther', { n: wordCount }));
+  if (showStudentStats && state === 'in_progress' && progress) {
+    meta.push(progress.totalSlides
+      ? t('arabicLessonPage.slideNofM', { n: progress.lastSlide, m: progress.totalSlides })
+      : t('arabicLessonPage.slideN', { n: progress.lastSlide }));
+  }
+  if (showStudentStats && progress?.updatedAt) {
+    const date = new Date(progress.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    meta.push(state === 'done' ? t('arabicLessonPage.finishedOn', { date }) : t('arabicLessonPage.openedOn', { date }));
+  }
+  if (!showStudentStats && lesson.description) meta.push(lesson.description);
+
+  const edge = state === 'done' ? 'border-s-emerald-500' : state === 'in_progress' ? 'border-s-amber-500' : 'border-s-slate-200 dark:border-s-gray-600';
+  const tint = isDragOver
+    ? 'bg-amber-50 dark:bg-amber-900/20'
+    : state === 'done'
+      ? 'bg-emerald-50/50 dark:bg-emerald-900/10 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+      : state === 'in_progress'
+        ? 'bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+        : 'hover:bg-slate-50 dark:hover:bg-gray-700/50';
+
   return (
   <div
     draggable={isAdmin}
     onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
     onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd}
     onClick={onView}
-    className={`group flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors
-      ${isDragOver
-        ? 'bg-amber-50 dark:bg-amber-900/20 border-t-2 border-amber-400'
-        : isCompleted
-          ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-          : 'hover:bg-slate-50 dark:hover:bg-gray-700/50'
-      }`}
+    className={`group flex items-center gap-3 px-3 sm:px-4 py-3 cursor-pointer transition-colors border-s-[3px] ${edge} ${tint}`}
   >
     {isAdmin && (
       <div
@@ -786,62 +848,63 @@ const ArabicLessonRow: React.FC<RowProps> = ({
         </svg>
       </div>
     )}
-    {/* Number / checkmark */}
-    {isCompleted ? (
-      <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-emerald-400 dark:bg-emerald-600 text-white">
+
+    {/* Which lesson — a number, or a tick once it is done */}
+    {state === 'done' ? (
+      <span className="flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full bg-emerald-500 dark:bg-emerald-600 text-white">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
           <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
         </svg>
       </span>
     ) : (
-      <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-xs font-bold">
+      <span className={`flex-shrink-0 w-[30px] h-[30px] flex items-center justify-center rounded-full text-xs font-extrabold ${
+        state === 'in_progress'
+          ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+          : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300'}`}>
         {index + 1}
       </span>
     )}
-    <div className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg ${isCompleted ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-slate-100 dark:bg-gray-700'}`}>
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5 ${isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-      </svg>
-    </div>
+
+    {/* What it is */}
     <div className="flex-1 min-w-0">
-      <p className={`font-semibold truncate ${isCompleted ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-800 dark:text-slate-100'}`}>{lesson.title}</p>
-      {lesson.description && <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{lesson.description}</p>}
-      {/* Student progress badges */}
+      <p className={`font-bold truncate ${state === 'done' ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-800 dark:text-slate-100'}`}>{lesson.title}</p>
+      {meta.length > 0 && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{meta.join(' · ')}</p>
+      )}
+      {/* Phones: the three columns fold under the title */}
       {showStudentStats && (
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+        <div className="flex sm:hidden items-center gap-2 mt-1.5 flex-wrap">
           {statusChip && (
-            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${statusChip.cls}`}>
-              {statusChip.label}
-            </span>
+            <span className={`inline-flex items-center h-[23px] px-2.5 rounded-full text-[11px] font-extrabold ${statusChip.cls}`}>{statusChip.label}</span>
           )}
-          {hwQuestionCount > 0 && (
-            homeworkDone ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-200 dark:border-emerald-800">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
-                {t('arabicLessonPage.homeworkDone')}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-200 dark:border-amber-700">
-                📝 {t('arabicLessonPage.questions', { n: hwQuestionCount })}
-              </span>
-            )
-          )}
-          {vocabRounds > 0 && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border ${
-              vocabRounds >= 5
-                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-700'
-            }`}>
-              🎴 {t('arabicLessonPage.flashcards', { n: vocabRounds })}
-            </span>
-          )}
+          {assigned && <HomeworkChip assigned={assigned} done={homeworkDone} />}
+          {revisions > 0 && <RevisionBars n={revisions} />}
         </div>
       )}
     </div>
+
+    {/* Where they are · homework · revisions — one column each, lined up */}
+    {showStudentStats && (
+      <>
+        <div className="hidden sm:flex flex-shrink-0 w-[104px] justify-center">
+          {statusChip && (
+            <span className={`inline-flex items-center h-[25px] px-2.5 rounded-full text-[11px] font-extrabold whitespace-nowrap ${statusChip.cls}`}>{statusChip.label}</span>
+          )}
+        </div>
+        <div className="hidden md:flex flex-shrink-0 w-[132px] justify-center">
+          <HomeworkChip assigned={assigned} done={homeworkDone} />
+        </div>
+        <div className="hidden lg:flex flex-shrink-0 w-[84px] justify-start">
+          <RevisionBars n={revisions} />
+        </div>
+      </>
+    )}
+
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-      className={`w-4 h-4 flex-shrink-0 transition-colors ${isCompleted ? 'text-emerald-400 group-hover:text-emerald-500' : 'text-slate-300 dark:text-gray-600 group-hover:text-amber-500'}`}>
+      className={`w-4 h-4 flex-shrink-0 transition-colors ${state === 'done' ? 'text-emerald-400 group-hover:text-emerald-500' : 'text-slate-300 dark:text-gray-600 group-hover:text-amber-500'}`}>
       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
     </svg>
+
     {isAdmin && (
       <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
         <button onClick={onEdit} title={t('arabicLessonPage.edit')} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-gray-700 rounded transition-colors">

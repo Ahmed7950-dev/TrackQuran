@@ -51,15 +51,12 @@ interface Props {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const LESSONS_PER_LEVEL = 20;
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 12);
 
 function formatHour(h: number) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   return `${h > 12 ? h - 12 : h}:00 ${ampm}`;
-}
-
-function progressPercent(s: ArabicStudent) {
-  return Math.min(100, Math.round((s.completedLessonIds.length / 60) * 100));
 }
 
 function weeksLeft(deadline?: string): number | null {
@@ -126,29 +123,6 @@ const InfoRow: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, 
       <dd className="text-sm text-slate-700 dark:text-slate-200 mt-0.5 sm:mt-0">{value}</dd>
     </div>
   ) : null;
-
-// ── Student's Progress Tab ────────────────────────────────────────────────────
-// The lesson-history calendar. (The spaced-repetition schedule and the wrong
-// words list used to live here; word strength now shows beside every word in
-// the Lessons Vocabulary tab instead.)
-
-interface ProgressTabProps {
-  lessons: ArabicLesson[];
-  lessonLogs: ArabicLessonLog[];
-  calendarDate: Date;
-  onMonthChange: (d: Date) => void;
-}
-
-const ProgressTab: React.FC<ProgressTabProps> = ({ lessons, lessonLogs, calendarDate, onMonthChange }) => (
-  <div className="space-y-8">
-    <ArabicLessonCalendar
-      logs={lessonLogs}
-      lessons={lessons}
-      calendarDate={calendarDate}
-      onMonthChange={onMonthChange}
-    />
-  </div>
-);
 
 // ── Exams tab (tutor) ─────────────────────────────────────────────────────────
 
@@ -469,12 +443,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     }
   };
   const [showDelete, setShowDelete]   = useState(false);
-  /** Edit, archive and delete live behind one button now. */
-  const [actionsOpen, setActionsOpen] = useState(false);
-  /** Phones: the sections live in a bar at the foot, the rest behind More. */
-  const [moreOpen, setMoreOpen] = useState(false);
+  /** Who this student is, and everything you can do to them: one sheet,
+      opened by tapping their name. (It replaced the ⋯ menu and the Profile tab.) */
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'profile' | 'lessons' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
+  const [activeSection, setActiveSection] = useState<'lessons' | 'schedule' | 'exams' | 'vocabulary'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -545,8 +518,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
   }, [upcomingLessons]);
 
-  const completedCount = student.completedLessonIds.length;
-  const pct            = progressPercent(student);
   const lessonsPerWeek = lpw(student);
   const wl             = weeksLeft(student.goalDeadline);
 
@@ -587,14 +558,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     calendar:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
   };
 
-  const TABS: Array<{ key: 'lessons' | 'profile' | 'progress' | 'calendar' | 'schedule' | 'exams' | 'vocabulary'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'schedule' | 'exams' | 'vocabulary'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
-    { key: 'progress', label: t('arabicPortal.tabProgress'),  mobileLabel: t('arabicPortal.tabProgress') },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [{ key: 'exams' as const, label: 'Exams', mobileLabel: 'Exams' }]),
-    { key: 'profile',          label: t('arabicPortal.tabProfile'),   mobileLabel: t('arabicPortal.tabProfile') },
-    ...(studentMode ? [{ key: 'calendar' as const, label: t('arabicPortal.tabAvailability'), mobileLabel: t('arabicPortal.tabAvailability') }] : []),
   ];
 
   // Marking overlay (tutor opens a submitted attempt to grade it)
@@ -612,7 +580,13 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
   const doneInCourse = dialectLessons.filter(l => student.completedLessonIds.includes(l.id)).length;
   const courseTotal  = dialectLessons.length || 1;
-  const ringPct      = Math.round((doneInCourse / courseTotal) * 100);
+  /** One bar per level: how many of its lessons are behind them. */
+  const levelStats = ([1, 2, 3] as const).map(level => {
+    const inLevel = dialectLessons.filter(l => (l.level ?? 1) === level);
+    const done    = inLevel.filter(l => student.completedLessonIds.includes(l.id)).length;
+    const total   = inLevel.length || LESSONS_PER_LEVEL;
+    return { level, done, total, pct: Math.round((done / Math.max(total, 1)) * 100) };
+  });
   const nextLesson   = upcomingLessons.find(l => new Date(l.startAt).getTime() > Date.now()) ?? null;
   const untilNext    = (() => {
     if (!nextLesson) return null;
@@ -625,13 +599,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
   /** A bar slot is 70px wide: these names fit on one line there. */
   const PHONE_LABEL: Record<string, string> = {
-    lessons: 'Lessons', vocabulary: 'Words', progress: 'Progress',
-    schedule: 'Schedule', exams: 'Exams', profile: 'Profile', calendar: 'Hours',
+    lessons: 'Lessons', vocabulary: 'Words', schedule: 'Schedule', exams: 'Exams',
   };
-
-  /** A phone's bar holds four; whatever is left goes behind More. */
-  const barTabs  = TABS.slice(0, 4);
-  const restTabs = TABS.slice(4);
 
   /** One row of the rail's section list. */
   const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode) => {
@@ -668,83 +637,55 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                 🎓 {t('arabicStudentDetail.studentPortal')}
               </span>
             )}
-            <span className="flex-grow" />
-            <div className="relative">
-              <button onClick={() => setActionsOpen(o => !o)} aria-label="More actions" aria-expanded={actionsOpen}
-                className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-              </button>
-              {actionsOpen && (
-                <>
-                  <span className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
-                  <div className="absolute end-0 top-11 z-50 w-56 py-1 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl flex flex-col">
-                    <button onClick={() => { setEditOpen(true); setActionsOpen(false); }}
-                      className="px-4 py-2.5 text-start text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700">
-                      {t('arabicStudentDetail.editMyInfo')}
-                    </button>
-                    {!studentMode && onToggleArchive && (
-                      <button onClick={() => { onToggleArchive(!isArchived); setActionsOpen(false); }}
-                        className="px-4 py-2.5 text-start text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700">
-                        {isArchived ? 'Restore to active students' : 'Archive this student'}
-                      </button>
-                    )}
-                    {!studentMode && (
-                      showDelete ? (
-                        <div className="px-4 py-2.5 flex items-center gap-2">
-                          <span className="text-xs font-semibold text-red-600 dark:text-red-400">{t('arabicStudentDetail.areYouSure')}</span>
-                          <span className="flex-grow" />
-                          <button onClick={() => onDeleteStudent(student.id)}
-                            className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-bold">{t('arabicStudentDetail.yesDelete')}</button>
-                          <button onClick={() => setShowDelete(false)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 text-xs font-semibold">{t('arabicStudentDetail.cancel')}</button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setShowDelete(true)}
-                          className="px-4 py-2.5 text-start text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
-                          {t('arabicStudentDetail.delete')}
-                        </button>
-                      )
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
           </div>
 
-          {/* identity + how far through the course */}
+          {/* identity + how far through each level — tap it for everything else */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5">
-            <div className="flex items-center gap-3">
+            <button onClick={() => setSheetOpen(true)} aria-haspopup="dialog"
+              className="w-full -m-1 p-1 rounded-xl flex items-center gap-3 text-start hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
               <div className="w-[52px] h-[52px] flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden"
                 style={{ background: '#E4EDE8', border: '1px solid #CFDED6' }}>
                 {student.profileIcon
                   ? <StudentProfileIcon src={student.profileIcon} size={52} mode="always" />
                   : <span className="text-xl font-extrabold" style={{ color: '#2E5E4E' }}>{student.name.charAt(0).toUpperCase()}</span>}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-grow">
                 <h1 className="text-lg font-extrabold leading-tight text-slate-900 dark:text-slate-100 truncate">{student.name}</h1>
                 <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
                   {student.arabicDialects.map(d => dialectLabel(d)).join(' · ')}
                 </p>
               </div>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor"
+                className="w-4 h-4 flex-shrink-0 text-slate-300 dark:text-gray-500">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+
+            {/* three levels, three bars */}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {levelStats.map(l => (
+                <div key={l.level} className="min-w-0">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">L{l.level}</span>
+                    <span className="flex-grow" />
+                    <span className={`text-[11px] font-extrabold ${l.done > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>{l.done}</span>
+                    <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">/{l.total}</span>
+                  </div>
+                  <div className="mt-1.5 h-3 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
+                    <div className="h-full bg-amber-500 dark:bg-amber-400 rounded-full transition-all" style={{ width: `${l.pct}%` }} />
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="mt-4 flex items-center gap-3.5">
-              <div className="w-[74px] h-[74px] flex-shrink-0 rounded-full flex items-center justify-center"
-                style={{ background: `conic-gradient(#2E5E4E 0% ${ringPct}%, rgba(148,163,184,.28) ${ringPct}% 100%)` }}>
-                <div className="w-[58px] h-[58px] rounded-full bg-white dark:bg-gray-800 flex flex-col items-center justify-center">
-                  <span className="text-[17px] font-extrabold leading-none text-slate-900 dark:text-slate-100">{doneInCourse}</span>
-                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">of {courseTotal}</span>
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                  {lessonsPerWeek !== null ? `${lessonsPerWeek} lesson${lessonsPerWeek === 1 ? '' : 's'} a week` : 'Lessons not planned yet'}
-                </p>
-                <p className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">
-                  {wl !== null && <>{t('arabicStudentDetail.weeksLeft', { count: wl })} · </>}
-                  {vocabCount > 0 ? t('arabicStudentDetail.wordsLearned', { count: vocabCount.toLocaleString() }) : 'No words logged yet'}
-                </p>
-              </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-gray-700 flex items-center justify-between gap-2">
+              <p className="text-[11.5px] font-bold text-slate-600 dark:text-slate-300 truncate">
+                {doneInCourse} of {courseTotal} lessons
+                {lessonsPerWeek !== null && <> · {lessonsPerWeek}/week</>}
+              </p>
+              <p className="text-[11.5px] font-extrabold text-amber-600 dark:text-amber-400 flex-shrink-0">
+                {vocabCount > 0 ? t('arabicStudentDetail.wordsLearned', { count: vocabCount.toLocaleString() }) : 'No words yet'}
+              </p>
             </div>
           </div>
 
@@ -803,7 +744,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         {/* ── The pane ── */}
         <div className="min-w-0 flex flex-col gap-4 max-lg:pb-24">
 
-      {/* ── Lessons section ── */}
+      {/* ── Lessons section — the history first, then the library ── */}
+      {activeSection === 'lessons' && (
+        <ArabicLessonCalendar
+          logs={lessonLogs}
+          lessons={dialectLessons}
+          calendarDate={calendarDate}
+          onMonthChange={setCalendarDate}
+        />
+      )}
       {activeSection === 'lessons' && (
         <ArabicLessonPage
           students={[student]}
@@ -841,33 +790,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         />
       )}
 
-      {/* ── Student's Progress section ── */}
-      {activeSection === 'progress' && (
-        <ProgressTab
-          lessons={dialectLessons}
-          lessonLogs={lessonLogs}
-          calendarDate={calendarDate}
-          onMonthChange={setCalendarDate}
-        />
-      )}
-
-      {/* ── Tutor's Availability section (student mode only) ── */}
-      {activeSection === 'calendar' && studentMode && (
-        <CalendarPage
-          gcalToken={gcalToken}
-          onTokenChange={setGcalToken}
-          isStudentView={true}
-          studentTimezone={student.timezone || undefined}
-          availabilitySlots={availabilitySlots}
-          teacherId={teacherId}
-          studentId={student.shareToken}
-          studentName={student.name}
-          studentWhatsApp={student.whatsapp}
-          portalType="arabic"
-        />
-      )}
-
-      {/* ── Schedule section ── */}
+      {/* ── Schedule section — their lessons, then the tutor's open hours ── */}
         {activeSection === 'schedule' && (
           <div className="space-y-4">
             {/* Next lesson banner */}
@@ -928,33 +851,29 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
                 emptyMessage="No upcoming lessons scheduled. Link calendar events or have the student book a lesson."
               />
             )}
+
+            {/* Book another one — the tutor's open hours, in the same place */}
+            {studentMode && (
+              <div className="pt-1">
+                <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">
+                  {t('arabicPortal.tabAvailability')}
+                </h3>
+                <CalendarPage
+                  gcalToken={gcalToken}
+                  onTokenChange={setGcalToken}
+                  isStudentView={true}
+                  studentTimezone={student.timezone || undefined}
+                  availabilitySlots={availabilitySlots}
+                  teacherId={teacherId}
+                  studentId={student.shareToken}
+                  studentName={student.name}
+                  studentWhatsApp={student.whatsapp}
+                  portalType="arabic"
+                />
+              </div>
+            )}
           </div>
         )}
-
-      {/* ── Profile section ── */}
-      {activeSection === 'profile' && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-700 p-6 space-y-5">
-          <dl className="space-y-4">
-            <InfoRow label={t('arabicStudentDetail.dob')}  value={student.dob ? new Date(student.dob).toLocaleDateString() : undefined} />
-            <InfoRow label={t('arabicStudentDetail.lessonsFor')}    value={student.forSelf ? t('arabicStudentDetail.themselves') : `${t('arabicStudentDetail.someoneElse')} (${student.forWhom || t('arabicStudentDetail.notSpecified')})`} />
-            <InfoRow label={t('arabicStudentDetail.whatsapp')}        value={student.whatsapp} />
-            <InfoRow label={t('arabicStudentDetail.nationality')}     value={student.nationality} />
-            <InfoRow label={t('arabicStudentDetail.timezone')}        value={student.timezone} />
-            <InfoRow label={t('arabicStudentDetail.goalDeadline')}   value={student.goalDeadline ? new Date(student.goalDeadline).toLocaleDateString() : undefined} />
-            <InfoRow label={t('arabicStudentDetail.learningGoals')}
-              value={student.learningPurposes.length ? student.learningPurposes.join(', ') : undefined} />
-            <InfoRow label={t('arabicStudentDetail.topicsToFocus')}
-              value={student.topicsToFocus.length ? student.topicsToFocus.join(', ') : undefined} />
-          </dl>
-
-          {student.availability.length > 0 && (
-            <div>
-              <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">{t('arabicStudentDetail.weeklyAvailability')}</h3>
-              <AvailabilityGrid slots={student.availability} timezone={student.timezone} />
-            </div>
-          )}
-        </div>
-      )}
 
         </div>
       </div>
@@ -962,11 +881,12 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       {/* ── Phones: the sections sit under the thumb, not above the content ── */}
       <nav className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
-        <div className="px-1.5 pt-1.5 grid grid-cols-5 gap-0.5">
-          {barTabs.map(tab => {
+        <div className="px-1.5 pt-1.5 grid gap-0.5"
+          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
+          {TABS.map(tab => {
             const on = activeSection === tab.key;
             return (
-              <button key={tab.key} onClick={() => { setActiveSection(tab.key); setMoreOpen(false); }}
+              <button key={tab.key} onClick={() => setActiveSection(tab.key)}
                 className={`h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
                   on ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
                 {RAIL_ICON[tab.key]}
@@ -974,34 +894,89 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
               </button>
             );
           })}
-          {restTabs.length > 0 && (
-            <button onClick={() => setMoreOpen(o => !o)} aria-expanded={moreOpen}
-              className={`h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
-                restTabs.some(x => x.key === activeSection) || moreOpen
-                  ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white'
-                  : 'text-slate-500 dark:text-slate-400'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-              <span className="text-[10.5px] leading-none font-semibold">More</span>
-            </button>
-          )}
         </div>
       </nav>
 
-      {moreOpen && (
+      {/* ── The student sheet: who they are, and everything you can do ── */}
+      {sheetOpen && (
         <>
-          <span className="lg:hidden fixed inset-0 z-40 bg-slate-900/30" onClick={() => setMoreOpen(false)} />
-          <div className="lg:hidden fixed inset-x-3 z-50 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-1.5 flex flex-col gap-0.5"
-            style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}>
-            {restTabs.map(tab => (
-              <button key={tab.key} onClick={() => { setActiveSection(tab.key); setMoreOpen(false); }}
-                className={`w-full flex items-center gap-3 h-12 px-3 rounded-xl text-sm transition-colors ${
-                  activeSection === tab.key
-                    ? 'bg-slate-100 dark:bg-gray-700 font-bold text-slate-900 dark:text-white'
-                    : 'font-semibold text-slate-600 dark:text-slate-300'}`}>
-                <span className="flex-shrink-0 w-[18px] h-[18px]">{RAIL_ICON[tab.key]}</span>
-                {tab.label.replace(/\s*\(\d+\)$/, '')}
+          <span className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[1px]" onClick={() => { setSheetOpen(false); setShowDelete(false); }} />
+          <div role="dialog" aria-label={student.name}
+            className="fixed z-50 inset-x-3 bottom-3 top-auto sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[480px]
+              max-h-[82vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl">
+
+            <div className="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 bg-white dark:bg-gray-800 border-b border-slate-100 dark:border-gray-700">
+              <div className="w-11 h-11 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden"
+                style={{ background: '#E4EDE8', border: '1px solid #CFDED6' }}>
+                {student.profileIcon
+                  ? <StudentProfileIcon src={student.profileIcon} size={44} mode="always" />
+                  : <span className="text-lg font-extrabold" style={{ color: '#2E5E4E' }}>{student.name.charAt(0).toUpperCase()}</span>}
+              </div>
+              <div className="min-w-0 flex-grow">
+                <h2 className="text-base font-extrabold text-slate-900 dark:text-slate-100 truncate">{student.name}</h2>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+                  {student.arabicDialects.map(d => dialectLabel(d)).join(' · ')}
+                </p>
+              </div>
+              <button onClick={() => { setSheetOpen(false); setShowDelete(false); }} aria-label={t('arabicStudentDetail.cancel')}
+                className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
               </button>
-            ))}
+            </div>
+
+            <div className="p-5 space-y-5">
+              <dl className="space-y-4">
+                <InfoRow label={t('arabicStudentDetail.dob')}  value={student.dob ? new Date(student.dob).toLocaleDateString() : undefined} />
+                <InfoRow label={t('arabicStudentDetail.lessonsFor')}    value={student.forSelf ? t('arabicStudentDetail.themselves') : `${t('arabicStudentDetail.someoneElse')} (${student.forWhom || t('arabicStudentDetail.notSpecified')})`} />
+                <InfoRow label={t('arabicStudentDetail.whatsapp')}        value={student.whatsapp} />
+                <InfoRow label={t('arabicStudentDetail.nationality')}     value={student.nationality} />
+                <InfoRow label={t('arabicStudentDetail.timezone')}        value={student.timezone} />
+                <InfoRow label={t('arabicStudentDetail.goalDeadline')}   value={student.goalDeadline ? new Date(student.goalDeadline).toLocaleDateString() : undefined} />
+                <InfoRow label={t('arabicStudentDetail.learningGoals')}
+                  value={student.learningPurposes.length ? student.learningPurposes.join(', ') : undefined} />
+                <InfoRow label={t('arabicStudentDetail.topicsToFocus')}
+                  value={student.topicsToFocus.length ? student.topicsToFocus.join(', ') : undefined} />
+              </dl>
+
+              {student.availability.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">{t('arabicStudentDetail.weeklyAvailability')}</h3>
+                  <AvailabilityGrid slots={student.availability} timezone={student.timezone} />
+                </div>
+              )}
+
+              <div className="pt-1 border-t border-slate-100 dark:border-gray-700 flex flex-col gap-1">
+                <button onClick={() => { setEditOpen(true); setSheetOpen(false); }}
+                  className="w-full h-11 px-3 rounded-xl text-start text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                  {t('arabicStudentDetail.editMyInfo')}
+                </button>
+                {!studentMode && onToggleArchive && (
+                  <button onClick={() => { onToggleArchive(!isArchived); setSheetOpen(false); }}
+                    className="w-full h-11 px-3 rounded-xl text-start text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                    {isArchived ? 'Restore to active students' : 'Archive this student'}
+                  </button>
+                )}
+                {!studentMode && (
+                  showDelete ? (
+                    <div className="h-11 px-3 flex items-center gap-2">
+                      <span className="text-xs font-semibold text-red-600 dark:text-red-400">{t('arabicStudentDetail.areYouSure')}</span>
+                      <span className="flex-grow" />
+                      <button onClick={() => onDeleteStudent(student.id)}
+                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold">{t('arabicStudentDetail.yesDelete')}</button>
+                      <button onClick={() => setShowDelete(false)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 text-xs font-semibold">{t('arabicStudentDetail.cancel')}</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowDelete(true)}
+                      className="w-full h-11 px-3 rounded-xl text-start text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      {t('arabicStudentDetail.delete')}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}

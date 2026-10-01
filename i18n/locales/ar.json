@@ -659,7 +659,20 @@
     "studentSubtitle": "{{count}} درس — اختر مستوى للبدء.",
     "edit": "تعديل",
     "delete": "حذف",
-    "flashcards": "البطاقات: {{n}}/5 جولات"
+    "flashcards": "البطاقات: {{n}}/5 جولات",
+    "statusNotStarted": "لم يبدأ",
+    "statusInProgress": "قيد التقدّم",
+    "statusCompleted": "مكتمل",
+    "homeworkTodo": "واجب مطلوب",
+    "wordsOne": "كلمة واحدة",
+    "wordsOther": "{{n}} كلمة",
+    "slideN": "الشريحة {{n}}",
+    "slideNofM": "الشريحة {{n}} من {{m}}",
+    "finishedOn": "أُنهي في {{date}}",
+    "openedOn": "فُتح في {{date}}",
+    "revisedOnce": "روجع مرة واحدة",
+    "revisedTimes": "روجع {{n}} مرات",
+    "notRevised": "لم يُراجع بعد"
   },
   "arabicStudentDetail": {
     "allStudents": "جميع الطلاب",
