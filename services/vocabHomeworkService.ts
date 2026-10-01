@@ -2,8 +2,10 @@
 // -----------------------------------------------------------------------------
 // Arabic vocabulary — word strength and the homework basket.
 //
-//   arabic_vocab_reviews   one row per FLASHCARD answer (never games). The last
-//                          ten per word draw the red/green strength bar.
+//   arabic_vocab_reviews   one row per answer the student gives on a single
+//                          word — a flashcard turned over, or a word thrown in
+//                          the card game. The last ten per word draw the
+//                          red/green strength bar.
 //   arabic_vocab_homework  the basket ('draft', one per student) → an assigned
 //                          homework with a link → completed with a score.
 //
@@ -33,6 +35,20 @@ export async function recordVocabReview(
     student_id: studentId, word_id: word.id, lesson_id: word.lessonId ?? null, correct,
   });
   if (error) console.error('recordVocabReview:', error.message);
+}
+
+/** Record one answer from the word-cards game, the moment it is judged —
+ *  not at the end, so a game left half-played still leaves its record.
+ *  The word may not belong to a lesson (a custom vocabulary word), hence no
+ *  lesson id. Best-effort: a failed write never interrupts the game. */
+export async function recordVocabCardAnswer(
+  studentId: string, wordId: string, correct: boolean,
+): Promise<void> {
+  if (!studentId || !wordId) return;
+  const { error } = await supabase.from('arabic_vocab_reviews').insert({
+    student_id: studentId, word_id: wordId, lesson_id: null, correct,
+  });
+  if (error) console.error('recordVocabCardAnswer:', error.message);
 }
 
 /** wordId → the student's answers, OLDEST first, at most STRENGTH_SLOTS each. */

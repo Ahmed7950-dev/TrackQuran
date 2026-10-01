@@ -190,12 +190,17 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     if (fetchedKeyRef.current === null) setLoading(true);
     fetchedKeyRef.current = lessonIdsKey;
     const ids = lessonIdsKey ? lessonIdsKey.split(',') : [];
+    let landed = false;
     getVocabWordsForLessons(ids)
-      .then(ws => { if (live) { setWords(ws); setLoading(false); } })
+      .then(ws => { landed = true; if (live) { setWords(ws); setLoading(false); } })
       .catch(() => {
+        landed = true;
         if (live) { setLoading(false); fetchedKeyRef.current = null; } // allow a retry
       });
-    return () => { live = false; };
+    // Torn down before the words arrived — forget the key, or the next run
+    // would see it as already fetched and leave "Loading vocabulary…" up for
+    // good. (React's development double-mount does exactly this.)
+    return () => { live = false; if (!landed) fetchedKeyRef.current = null; };
   }, [lessonIdsKey]);
 
   useEffect(() => { setFlipped(false); }, [cardIndex, phase]);
@@ -616,18 +621,20 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             </button>
           )}
 
-          {!studentMode && (
-            <button onClick={() => setCardsOpen(true)} disabled={cardWords.length < 2}
-              className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-              <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
-              <span className="min-w-0">
-                <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
-                <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
-                  {cardWords.length < 2 ? 'Pick at least two words' : `Throw a card, match its pair · ${cardWords.length} words`}
-                </span>
+          <button onClick={() => setCardsOpen(true)} disabled={cardWords.length < 2}
+            className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
+            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
+              <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
+                {cardWords.length < 2
+                  ? 'Pick at least two words'
+                  : studentMode
+                    ? `Play the computer · ${cardWords.length} words`
+                    : `Throw a card, match its pair · ${cardWords.length} words`}
               </span>
-            </button>
-          )}
+            </span>
+          </button>
 
           {!studentMode && (
             <button onClick={() => setBasketOpen(true)}
@@ -743,12 +750,13 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         </div>
       )}
 
-      {cardsOpen && !studentMode && (
+      {cardsOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
           onClick={() => setCardsOpen(false)}>
           <div onClick={e => e.stopPropagation()}
             className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
             <LetterCardsSetup words={cardWords} student={{ id: student.id, name: student.name }}
+              selfPlay={studentMode ? { teacherId: student.teacherId } : undefined}
               onClose={() => setCardsOpen(false)} />
           </div>
         </div>

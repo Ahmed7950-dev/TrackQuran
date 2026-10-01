@@ -59,9 +59,12 @@ interface Props {
   studentId: string;
   /** Only for the games, which say whose game it is. */
   studentName?: string;
+  /** Set when the STUDENT is the one looking: the card game then deals against
+   *  the computer instead of making a link for someone to send. */
+  selfPlay?: { teacherId: string };
 }
 
-const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'your student' }) => {
+const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'your student', selfPlay }) => {
   // ── data ──────────────────────────────────────────────────────────────────
   const [lists, setLists] = useState<VocabList[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -811,7 +814,9 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                 <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
                 <span className="min-w-0">
                   <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
-                  <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">Throw a card, match its pair</span>
+                  <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
+                    {selfPlay ? 'Play the computer' : 'Throw a card, match its pair'}
+                  </span>
                 </span>
               </button>
 
@@ -1343,6 +1348,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                 translit: (w.transliteration ?? '').trim(),
               }))}
               student={{ id: studentId, name: studentName }}
+              selfPlay={selfPlay}
               onClose={() => setGame(null)}
             />
           </div>

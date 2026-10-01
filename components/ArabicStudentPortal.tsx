@@ -331,7 +331,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
         {portalTab === 'about' ? (
           <AboutUsPage />
         ) : portalTab === 'vocabulary' ? (
-          <VocabularyPracticePage studentId={student.id} />
+          <VocabularyPracticePage studentId={student.id} studentName={student.name}
+            selfPlay={{ teacherId: student.teacherId }} />
         ) : (
           <ArabicStudentDetailPage
             student={student}

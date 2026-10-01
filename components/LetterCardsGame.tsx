@@ -33,6 +33,7 @@ import {
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
   recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsScript, WordsSide,
 } from '../services/letterCardsService';
+import { recordVocabCardAnswer } from '../services/vocabHomeworkService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
   Card, Snap, deal, judge as judgeBoard, throwStudent, throwTutor,
@@ -422,6 +423,20 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
 
   const commit = useCallback((s: Snap) => { snapRef.current = s; setSnap(s); broadcast(s); }, [broadcast]);
 
+  /** A words game writes every answer the moment it is judged, right or
+   *  wrong, so a game left half-played still leaves a record of the words that
+   *  were actually revised. The card thrown at the student is the word being
+   *  asked; the one they picked wrongly is not counted against itself. */
+  const gameRef = useRef<Game | null>(null);
+  useEffect(() => { gameRef.current = game ?? null; }, [game]);
+  const recordAnswer = useCallback((judged: Snap) => {
+    const g = gameRef.current;
+    if (!g || g.kind !== 'words' || !g.studentId) return;
+    const asked = judged.thrownTutor, answered = judged.thrownStudent;
+    if (!asked || !answered) return;
+    void recordVocabCardAnswer(g.studentId, asked.letter, asked.letter === answered.letter);
+  }, []);
+
   /** Throwing a card. Judging only ever runs on the tutor's device. */
   const pick = useCallback((side: 'tutor' | 'student', index: number) => {
     const s = snapRef.current;
@@ -431,8 +446,12 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     if (thrown === s) return;
     commit(thrown);
     // A beat with both cards face up, so the pair can be read before it goes.
-    window.setTimeout(() => commit(judgeBoard(snapRef.current ?? thrown)), 750);
-  }, [commit]);
+    window.setTimeout(() => {
+      const before = snapRef.current ?? thrown;
+      recordAnswer(before);
+      commit(judgeBoard(before));
+    }, 750);
+  }, [commit, recordAnswer]);
 
   // ── Alone against the computer ──
   useEffect(() => {
@@ -562,8 +581,12 @@ export const LetterCardsSetup: React.FC<{
    *  answers with the meaning. */
   words?: WordCard[];
   student: { id: string; name: string };
+  /** The STUDENT setting up their own game: no mode to pick, no lives to pick,
+   *  no link to send. They choose which half they hold and how the word is
+   *  written, and the board deals against the computer straight away. */
+  selfPlay?: { teacherId: string };
   onClose: () => void;
-}> = ({ letters = [], initialForm = 'isolated', words, student, onClose }) => {
+}> = ({ letters = [], initialForm = 'isolated', words, student, selfPlay, onClose }) => {
   const isWords = !!words?.length;
   /** The pile's keys: the letters themselves, or the ids of the words. */
   const keys = isWords ? words!.map(w => w.id) : letters;
@@ -577,6 +600,10 @@ export const LetterCardsSetup: React.FC<{
   const wordLabel = wordsScript === 'translit' && haveTranslit ? 'transliteration' : 'Arabic word';
   const [lives, setLives] = useState<number | null>(3);
   const [mode, setMode] = useState<CardsMode>('multiplayer');
+  /** Playing alone: one life for every ten words on the pile, never none. */
+  const soloLives = Math.max(1, Math.round(keys.length / 10));
+  const playMode: CardsMode = selfPlay ? 'solo' : mode;
+  const playLives = selfPlay ? soloLives : lives;
   const [game, setGame] = useState<Game | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -585,17 +612,23 @@ export const LetterCardsSetup: React.FC<{
 
   const create = async () => {
     setBusy(true); setErr('');
-    const { data } = await supabase.auth.getUser();
-    const teacherId = data.user?.id;
+    let teacherId = selfPlay?.teacherId;
+    if (!teacherId) {
+      const { data } = await supabase.auth.getUser();
+      teacherId = data.user?.id;
+    }
     if (!teacherId) { setBusy(false); setErr('Sign in again to start a game.'); return; }
     const g = await createLetterCardsGame({
       teacherId, studentId: student.id, studentName, letters: keys,
       form: isWords ? null : form, kind: isWords ? 'words' : 'letters',
       words: isWords ? words! : null, wordsSide,
-      wordsScript: haveTranslit ? wordsScript : 'arabic', lives, mode,
+      wordsScript: haveTranslit ? wordsScript : 'arabic', lives: playLives, mode: playMode,
     });
+    if (!g) { setBusy(false); setErr('Could not start the game — check the connection.'); return; }
+    // The student goes straight to the board; there is nobody to send a link to.
+    if (selfPlay) { window.location.href = `/letter-cards/${g.id}`; return; }
     setBusy(false);
-    if (g) setGame(g); else setErr('Could not start the game — check the connection.');
+    setGame(g);
   };
 
   if (game) {
@@ -642,20 +675,29 @@ export const LetterCardsSetup: React.FC<{
         <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">
           {isWords ? 'Word cards' : 'Letter cards'}
         </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          {keys.length} {noun}{keys.length === 1 ? '' : 's'} ·
-          {mode === 'solo' ? ' the computer holds' : ' you hold'}
-          {isWords
-            ? (wordsSide === 'arabic' ? ' the meaning, ' : ` the ${wordLabel}, `)
-            : ' the isolated shape, '}
-          {studentName} holds the{' '}
-          {isWords
-            ? (wordsSide === 'arabic' ? wordLabel : 'meaning')
-            : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
-        </p>
+        {selfPlay ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            {keys.length} {noun}{keys.length === 1 ? '' : 's'} · the computer throws{' '}
+            {wordsSide === 'arabic' ? 'the meaning' : `the ${wordLabel}`}, you answer with{' '}
+            {wordsSide === 'arabic' ? `the ${wordLabel}` : 'the meaning'} ·{' '}
+            {soloLives} {soloLives === 1 ? 'life' : 'lives'}.
+          </p>
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            {keys.length} {noun}{keys.length === 1 ? '' : 's'} ·
+            {mode === 'solo' ? ' the computer holds' : ' you hold'}
+            {isWords
+              ? (wordsSide === 'arabic' ? ' the meaning, ' : ` the ${wordLabel}, `)
+              : ' the isolated shape, '}
+            {studentName} holds the{' '}
+            {isWords
+              ? (wordsSide === 'arabic' ? wordLabel : 'meaning')
+              : `${FORM_LABEL[form].en.toLowerCase()} shape`}.
+          </p>
+        )}
       </div>
 
-      <div>
+      <div className={selfPlay ? 'hidden' : ''}>
         <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">How you play it</p>
         <div className="grid sm:grid-cols-2 gap-2">
           {([
@@ -675,11 +717,13 @@ export const LetterCardsSetup: React.FC<{
 
       {isWords && (
         <div>
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">What they hold</p>
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">
+            {selfPlay ? 'What you hold' : 'What they hold'}
+          </p>
           <div className="flex gap-2">
             {([
-              ['english', 'The meaning', `You throw the ${wordLabel}`],
-              ['arabic', `The ${wordLabel}`, 'You throw the meaning'],
+              ['english', 'The meaning', selfPlay ? `The computer throws the ${wordLabel}` : `You throw the ${wordLabel}`],
+              ['arabic', `The ${wordLabel}`, selfPlay ? 'The computer throws the meaning' : 'You throw the meaning'],
             ] as const).map(([k, title, note]) => (
               <button key={k} onClick={() => setWordsSide(k)}
                 className={`flex-1 text-start rounded-xl border-2 px-3 py-2.5 transition-colors ${
@@ -725,7 +769,7 @@ export const LetterCardsSetup: React.FC<{
         </div>
       </div>
 
-      <div>
+      <div className={selfPlay ? 'hidden' : ''}>
         <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">Lives</p>
         <div className="flex gap-2">
           {[3, 5, 7, null].map(n => (
@@ -743,7 +787,7 @@ export const LetterCardsSetup: React.FC<{
         <button onClick={onClose} className="flex-1 h-12 rounded-xl bg-slate-100 dark:bg-gray-700 font-bold">Cancel</button>
         <button onClick={create} disabled={busy || keys.length === 0}
           className="flex-1 h-12 rounded-xl bg-teal-700 text-white font-black disabled:opacity-40">
-          {busy ? 'Dealing…' : 'Start'}
+          {busy ? 'Dealing…' : selfPlay ? 'Play' : 'Start'}
         </button>
       </div>
     </div>

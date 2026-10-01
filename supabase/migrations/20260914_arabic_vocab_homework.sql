@@ -6,7 +6,8 @@
 --   arabic_vocab_reviews   one row per flashcard answer ("I know" = correct,
 --                          "Review later" = wrong). The last ten per word are
 --                          the red/green strength bar in Lessons Vocabulary.
---                          Games never write here.
+--                          The word-cards game writes here too (one row per
+--                          word, as it is judged).
 --   arabic_vocab_homework  the homework basket. One 'draft' row per student is
 --                          the basket being filled; generating a link turns it
 --                          'assigned'; the student finishing it makes it
