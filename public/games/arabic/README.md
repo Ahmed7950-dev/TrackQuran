@@ -5,7 +5,11 @@ look — icon, name and hint — so the pictures can arrive one at a time.
 
     aspect ratio   4 : 1   (the tile is exactly 4:1 at every screen size)
     master size    1280 × 320 px
-    format         .webp   (cwebp -q 78, roughly 25–60 KB each)
+    format         .webp   (cwebp -q 78; a flat illustration lands around
+                            35 KB, a busy painted one around 120 KB)
+
+The homework basket is the exception: it is not a game, it takes the whole row
+on its own, and it is 8 : 1 — master 1920 × 240 px, same format.
 
 The tile is rendered with `object-cover`, and because the box is also 4:1 the
 picture is never cropped: what you draw is what is shown.
@@ -30,7 +34,7 @@ File names, exactly:
   wordrace.webp     Word Race Game              (Run to the Arabic word)
   wordcards.webp    Word Cards Game             (Throw a card, match its pair)
   saved.webp        Revise saved words          (the 🔖 list)
-  basket.webp       Homework Basket             (tutor only)
+  basket.webp       Homework Basket             (tutor only, 8:1, full row)
 
 The same files serve both places the tiles appear: the Practise box in Lessons
 Vocabulary, and the Games row on the header's Vocabulary page.
@@ -41,5 +45,6 @@ How the real sizes land, measured in the portal:
     tablet  820 px wide   tile 334 × 84
     laptop 1280 px wide   tile 419 × 105   (Practise box, two columns)
                           tile 281 ×  70   (Vocabulary page, three columns)
+                          basket 848 × 106 (the whole row, at 8:1)
 
 So 1280 px across covers every case at 2× or better.

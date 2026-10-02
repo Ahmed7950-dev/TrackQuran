@@ -613,7 +613,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             onClick={() => setCardsOpen(true)} />
 
           {!studentMode && (
-            <GameTile art="basket" tone="violet" icon="🧺"
+            <GameTile art="basket" tone="violet" icon="🧺" wide
               name={basket.words.length ? 'Assign as homework' : 'Homework Basket'}
               hint={basket.words.length
                 ? `Send the ${basket.words.length} word${basket.words.length === 1 ? '' : 's'} you selected`

@@ -4,9 +4,10 @@
 // rails are: the artwork IS the tile. The picture carries the game's name, so
 // a tile with a file shows nothing else — no icon, no label, no hint.
 //
-// The box is exactly 4:1 and the picture is object-cover, so a 4:1 master is
-// never cropped: what you draw is what is shown. Art lives at
-// /games/arabic/<art>.webp — see public/games/arabic/README.md for the spec.
+// The box is exactly 4:1 — 8:1 for the one that takes a whole row — and the
+// picture is object-cover, so a master at that ratio is never cropped: what
+// you draw is what is shown. Art lives at /games/arabic/<art>.webp — see
+// public/games/arabic/README.md for the spec.
 //
 // A tile whose file is missing falls back to the icon-and-label card it had
 // before, so the pictures can arrive one at a time without anything breaking.
@@ -64,12 +65,14 @@ interface Props {
   icon: string;
   tone: GameTone;
   disabled?: boolean;
+  /** The basket is not a game: it takes the whole row, at 8:1. */
+  wide?: boolean;
   /** A count or flag that belongs on top of the picture (the basket's total). */
   badge?: React.ReactNode;
   onClick: () => void;
 }
 
-const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, badge, onClick }) => {
+const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, wide, badge, onClick }) => {
   const [noArt, setNoArt] = useState(false);
   const t = TONE[tone];
   return (
@@ -79,8 +82,9 @@ const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, badg
       disabled={disabled}
       title={hint ? `${name} — ${hint}` : name}
       aria-label={name}
-      className={`group relative w-full aspect-[4/1] overflow-hidden rounded-2xl border text-start transition-all duration-150
+      className={`group relative w-full overflow-hidden rounded-2xl border text-start transition-all duration-150
         disabled:opacity-40 disabled:cursor-default disabled:hover:translate-y-0 ${
+        wide ? 'aspect-[8/1] sm:col-span-2' : 'aspect-[4/1]'} ${
         noArt
           ? t.box
           : 'border-transparent hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/40'
