@@ -30,6 +30,7 @@ import { ensurePortalPair } from '../services/portalPairService';
 import { ensureFamilyLink, FamilyStudentRef } from '../services/familyLinkService';
 import { netEarning } from '../utils/timezones';
 import BookingModal from './BookingModal';
+import AvailabilitySender, { BookedBlock } from './AvailabilitySender';
 import { supabase } from '../lib/supabase';
 
 /* ------------------------------------------------------------------ */
@@ -287,6 +288,15 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   // directly (no separate "link mode" toggle).
   const canLink = !isStudentView && !!gcalToken && linkStudents.length > 0;
   const [monday,      setMonday]      = useState<Date>(() => getMonday(new Date()));
+  // ── "Send availability": the tutor taps day headers, then sends them ──
+  const [pickedDays,  setPickedDays]  = useState<Set<string>>(new Set());
+  const [senderOpen,  setSenderOpen]  = useState(false);
+  const toggleDay = (day: Date) => setPickedDays(prev => {
+    const key = istanbulDateString(day);
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
   const [events,      setEvents]      = useState<GCalEvent[]>([]);
   const [tutorBusy,   setTutorBusy]   = useState<BusySlot[]>([]); // student view: tutor's Google busy times (from DB)
   const [loading,     setLoading]     = useState(false);
@@ -1006,6 +1016,33 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
     return total;
   }, [isStudentView, events, linkedSessions, linkStudentById, linkStudents, myBookings, monday]);
 
+  /** The picked day headers, as dates, oldest first. */
+  const pickedDates = useMemo(() => [...pickedDays].sort().map(key => {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }), [pickedDays]);
+
+  /** Everything already on those days, in the tutor's own hours. Google events
+   *  and confirmed platform bookings both count as "taken". */
+  const pickedBooked = useMemo<BookedBlock[]>(() => {
+    const hourOf = (iso: string) => timeToOffsetInTZ(iso, TUTOR_TIMEZONE) / HOUR_HEIGHT_PX;
+    const out: BookedBlock[] = [];
+    for (const day of pickedDates) {
+      const dateISO = istanbulDateString(day);
+      const dayIdx  = (day.getDay() + 6) % 7;
+      for (const ev of events) {
+        const st = ev.start.dateTime, en = ev.end?.dateTime;
+        if (!st || !en || !isSameDay(new Date(st), day)) continue;
+        out.push({ dateISO, startHour: hourOf(st), endHour: hourOf(en), title: ev.summary || 'Lesson' });
+      }
+      for (const b of bookingsForDay(myBookings.filter(x => x.status === 'confirmed'), day, dayIdx)) {
+        const start = b.hour + (b.minute === 30 ? 0.5 : 0);
+        out.push({ dateISO, startHour: start, endHour: start + b.durationMinutes / 60, title: b.studentName });
+      }
+    }
+    return out;
+  }, [pickedDates, events, myBookings]);
+
   const eventsForDay = (day: Date): GCalEvent[] =>
     events.filter(ev => {
       const start = ev.start.dateTime ?? ev.start.date ?? '';
@@ -1108,6 +1145,23 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             </>
           )}
         </div>
+
+        {/* Days picked → offer to send them */}
+        {!isStudentView && pickedDays.size > 0 && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSenderOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold shadow-sm transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+              </svg>
+              Send availability ({pickedDays.size})
+            </button>
+            <button onClick={() => setPickedDays(new Set())}
+              className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors">
+              Clear
+            </button>
+          </div>
+        )}
 
         {/* Connect / disconnect (tutor only) */}
         {!isStudentView && (
@@ -1250,15 +1304,35 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
             )}
           </div>
           {weekDays.map((day, i) => {
-            const isToday = isSameDay(day, today);
-            return (
-              <div key={i} className={`py-1.5 sm:py-3 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${isToday ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}>
-                <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-wide ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>
+            const isToday  = isSameDay(day, today);
+            const picked   = pickedDays.has(istanbulDateString(day));
+            const pickable = !isStudentView;
+            const inner = (
+              <>
+                <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-wide ${
+                  picked ? 'text-white' : isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-400'}`}>
                   {DAYS[i]}
                 </p>
-                <p className={`text-sm sm:text-lg font-bold mt-0.5 ${isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                <p className={`text-sm sm:text-lg font-bold mt-0.5 ${
+                  picked ? 'text-white' : isToday ? 'text-teal-600 dark:text-teal-400' : 'text-slate-700 dark:text-slate-200'}`}>
                   {formatHeaderDate(day)}
                 </p>
+              </>
+            );
+            const tint = picked
+              ? 'bg-teal-700 dark:bg-teal-600'
+              : isToday ? 'bg-teal-50 dark:bg-teal-900/20' : '';
+            return pickable ? (
+              <button key={i} type="button" onClick={() => toggleDay(day)}
+                aria-pressed={picked}
+                title={picked ? 'Picked — tap to drop it' : 'Tap to add this day to the availability you send'}
+                className={`py-1.5 sm:py-3 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 transition-colors ${tint} ${
+                  picked ? '' : 'hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
+                {inner}
+              </button>
+            ) : (
+              <div key={i} className={`py-1.5 sm:py-3 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${tint}`}>
+                {inner}
               </div>
             );
           })}
@@ -1828,6 +1902,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           </div>
         );
       })()}
+
+      {/* ── Send availability: the picked days, tidied, as a picture or a message ── */}
+      {senderOpen && !isStudentView && (
+        <AvailabilitySender
+          days={pickedDates}
+          availabilitySlots={availabilitySlots}
+          booked={pickedBooked}
+          students={linkStudents.map(s => ({ id: s.id, name: s.name, kind: s.kind, timezone: s.timezone }))}
+          onClose={() => setSenderOpen(false)}
+        />
+      )}
 
       {/* Booking modal */}
       {bookingSlot && studentId && studentName && teacherId && portalType && (
