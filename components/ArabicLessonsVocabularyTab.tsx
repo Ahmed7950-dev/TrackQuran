@@ -22,6 +22,7 @@ import {
   listVocabHomework, VocabHomework, isHomeworkExpired, homeworkUrl,
 } from '../services/vocabHomeworkService';
 import StrengthBar from './VocabStrengthBar';
+import GameTile from './GameTile';
 import HomeworkBasket, { useHomeworkBasket } from './VocabHomeworkBasket';
 import {
   LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
@@ -577,85 +578,52 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <button onClick={() => startChallenge(practicePool)} disabled={practicePool.length === 0}
-            className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-3 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-2xl">🗂️</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-amber-800 dark:text-amber-200 truncate">
-                {t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
-              </span>
-              <span className="block text-xs text-amber-600/70 dark:text-amber-300/60">Flip · memorise · repeat</span>
-            </span>
-          </button>
+          <GameTile art="flashcards" tone="amber" icon="🗂️"
+            name={t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
+            hint="Flip · memorise · repeat"
+            disabled={practicePool.length === 0}
+            onClick={() => startChallenge(practicePool)} />
 
-          <button onClick={() => setShowWordFlight(true)} disabled={practicePool.length === 0}
-            className="flex items-center gap-3 rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/60 dark:bg-sky-900/10 px-4 py-3 text-left hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-2xl">✈️</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-sky-800 dark:text-sky-200 truncate">Word Flight Game</span>
-              <span className="block text-xs text-sky-600/70 dark:text-sky-300/60">Catch the falling words</span>
-            </span>
-          </button>
+          <GameTile art="wordflight" tone="sky" icon="✈️"
+            name="Word Flight Game" hint="Catch the falling words"
+            disabled={practicePool.length === 0}
+            onClick={() => setShowWordFlight(true)} />
 
           {racePairs.length >= 2 && (
-            <button onClick={() => setShowWordRace(true)}
-              className="flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-900/10 px-4 py-3 text-left hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all">
-              <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-2xl">🏃</span>
-              <span className="min-w-0">
-                <span className="block text-sm font-bold text-teal-800 dark:text-teal-200 truncate">Word Race Game</span>
-                <span className="block text-xs text-teal-600/70 dark:text-teal-300/60">Run to the Arabic word</span>
-              </span>
-            </button>
+            <GameTile art="wordrace" tone="teal" icon="🏃"
+              name="Word Race Game" hint="Run to the Arabic word"
+              onClick={() => setShowWordRace(true)} />
           )}
 
           {savedWords.length > 0 && (
-            <button onClick={() => startChallenge(savedWords, true)}
-              className="flex items-center gap-3 rounded-xl border border-rose-200 dark:border-rose-800/60 bg-rose-50/60 dark:bg-rose-900/10 px-4 py-3 text-left hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
-              <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-2xl">🔖</span>
-              <span className="min-w-0">
-                <span className="block text-sm font-bold text-rose-800 dark:text-rose-200 truncate">
-                  {t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}
-                </span>
-                <span className="block text-xs text-rose-600/70 dark:text-rose-300/60">{t('arabicLessonDetail.reviseSavedDesc')}</span>
-              </span>
-            </button>
+            <GameTile art="saved" tone="rose" icon="🔖"
+              name={t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}
+              hint={t('arabicLessonDetail.reviseSavedDesc')}
+              onClick={() => startChallenge(savedWords, true)} />
           )}
 
-          <button onClick={() => setCardsOpen(true)} disabled={cardWords.length < 2}
-            className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
-              <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
-                {cardWords.length < 2
-                  ? 'Pick at least two words'
-                  : studentMode
-                    ? `Play the computer · ${cardWords.length} words`
-                    : `Throw a card, match its pair · ${cardWords.length} words`}
-              </span>
-            </span>
-          </button>
+          <GameTile art="wordcards" tone="orange" icon="🃏"
+            name="Word Cards Game"
+            hint={cardWords.length < 2
+              ? 'Pick at least two words'
+              : studentMode
+                ? `Play the computer · ${cardWords.length} words`
+                : `Throw a card, match its pair · ${cardWords.length} words`}
+            disabled={cardWords.length < 2}
+            onClick={() => setCardsOpen(true)} />
 
           {!studentMode && (
-            <button onClick={() => setBasketOpen(true)}
-              className="flex items-center gap-3 rounded-xl border border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10 px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">
-              <span className="relative flex-shrink-0 w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-2xl">
-                🧺
-                {basket.words.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center">{basket.words.length}</span>
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-bold text-violet-800 dark:text-violet-200 truncate">
-                  {basket.words.length ? 'Assign as homework' : 'Homework Basket'}
+            <GameTile art="basket" tone="violet" icon="🧺"
+              name={basket.words.length ? 'Assign as homework' : 'Homework Basket'}
+              hint={basket.words.length
+                ? `Send the ${basket.words.length} word${basket.words.length === 1 ? '' : 's'} you selected`
+                : 'Tap words in the table to select them'}
+              badge={basket.words.length > 0 ? (
+                <span className="absolute top-2 end-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center shadow-md">
+                  {basket.words.length}
                 </span>
-                <span className="block text-xs text-violet-600/70 dark:text-violet-300/60">
-                  {basket.words.length
-                    ? `Send the ${basket.words.length} word${basket.words.length === 1 ? '' : 's'} you selected`
-                    : 'Tap words in the table to select them'}
-                </span>
-              </span>
-            </button>
+              ) : undefined}
+              onClick={() => setBasketOpen(true)} />
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import {
   VocabList, VocabWord, VocabPhrase, GrammarNote,
 } from '../services/vocabularyService';
 import VocabStrengthBar from './VocabStrengthBar';
+import GameTile from './GameTile';
 import {
   getVocabStrength, recordVocabAnswer, withReview, type StrengthMap,
 } from '../services/vocabHomeworkService';
@@ -833,34 +834,21 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <button onClick={() => setGame('cards')} disabled={gamePairs.length < 2}
-                className="flex items-center gap-3 rounded-xl border border-orange-200 dark:border-orange-800/60 bg-orange-50/60 dark:bg-orange-900/10 px-4 py-3 text-left hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl">🃏</span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-orange-800 dark:text-orange-200 truncate">Word Cards Game</span>
-                  <span className="block text-xs text-orange-600/70 dark:text-orange-300/60">
-                    {selfPlay ? 'Play the computer' : 'Throw a card, match its pair'}
-                  </span>
-                </span>
-              </button>
+              <GameTile art="wordcards" tone="orange" icon="🃏"
+                name="Word Cards Game"
+                hint={selfPlay ? 'Play the computer' : 'Throw a card, match its pair'}
+                disabled={gamePairs.length < 2}
+                onClick={() => setGame('cards')} />
 
-              <button onClick={() => setGame('flight')} disabled={gamePairs.length === 0}
-                className="flex items-center gap-3 rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/60 dark:bg-sky-900/10 px-4 py-3 text-left hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center text-2xl">✈️</span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-sky-800 dark:text-sky-200 truncate">Word Flight Game</span>
-                  <span className="block text-xs text-sky-600/70 dark:text-sky-300/60">Catch the falling words</span>
-                </span>
-              </button>
+              <GameTile art="wordflight" tone="sky" icon="✈️"
+                name="Word Flight Game" hint="Catch the falling words"
+                disabled={gamePairs.length === 0}
+                onClick={() => setGame('flight')} />
 
-              <button onClick={() => setGame('race')} disabled={gamePairs.length < 2}
-                className="flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-900/10 px-4 py-3 text-left hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all disabled:opacity-40 disabled:cursor-default">
-                <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-2xl">🏃</span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-teal-800 dark:text-teal-200 truncate">Word Race Game</span>
-                  <span className="block text-xs text-teal-600/70 dark:text-teal-300/60">Run to the Arabic word</span>
-                </span>
-              </button>
+              <GameTile art="wordrace" tone="teal" icon="🏃"
+                name="Word Race Game" hint="Run to the Arabic word"
+                disabled={gamePairs.length < 2}
+                onClick={() => setGame('race')} />
             </div>
           </div>
 
