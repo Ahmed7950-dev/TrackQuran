@@ -3,14 +3,19 @@
 // "Send availability" — the tutor picks days in the calendar, picks a student,
 // tidies the hours, and sends them a picture or a message.
 //
+// The hours are laid out as a time grid, half an hour to a cell, the same way
+// the calendar itself reads, so a lesson that starts at half past is a cell of
+// its own and not a rounding error.
+//
 // The one rule that shapes everything here: the student sees ONLY their own
-// clock. The tutor works in Istanbul (always UTC+3), so every hour is turned
+// clock. The tutor works in Istanbul (always UTC+3), so every slot is turned
 // into a real instant and then formatted in the student's timezone — which
 // also means a late Istanbul hour can land on the student's NEXT day, and the
 // sheet groups by the student's date, not the tutor's.
 //
 // What the student is shown is deliberately thinner than what the tutor edits:
-// a booked hour says "Booked" and never the name of the student who booked it.
+// the picture marks taken time black but never names who took it, and the
+// message leaves it out altogether.
 // ---------------------------------------------------------------------------
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,6 +25,10 @@ import { safeCopy } from '../utils';
 /** Istanbul never changes offset: Turkey abolished DST in 2016. */
 const TUTOR_TZ = 'Europe/Istanbul';
 const TUTOR_UTC_OFFSET = 3;
+
+/** Half an hour to a cell, 64px to an hour — the calendar's own rhythm. */
+const STEP_MIN = 30;
+const CELL_H = 32;
 
 /** One lesson already on the calendar, in the tutor's own hours. */
 export interface BookedBlock {
@@ -55,16 +64,18 @@ interface Props {
 const pad = (n: number) => String(n).padStart(2, '0');
 const istanbulDateISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** The real instant of <hour>:00 Istanbul on this calendar day. */
-function instantOf(day: Date, hour: number): Date {
-  return new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), hour - TUTOR_UTC_OFFSET, 0, 0));
+/** The real instant of <minutes past midnight> Istanbul on this calendar day. */
+function instantOf(day: Date, minutes: number): Date {
+  return new Date(Date.UTC(
+    day.getFullYear(), day.getMonth(), day.getDate(),
+    -TUTOR_UTC_OFFSET, minutes, 0,
+  ));
 }
 
 const timeIn = (d: Date, tz: string) =>
   d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
 
-const dateKeyIn = (d: Date, tz: string) =>
-  d.toLocaleDateString('en-CA', { timeZone: tz });            // YYYY-MM-DD
+const dateKeyIn = (d: Date, tz: string) => d.toLocaleDateString('en-CA', { timeZone: tz });
 
 const dateLabelIn = (d: Date, tz: string) =>
   d.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long' });
@@ -77,8 +88,8 @@ const cityOf = (tz: string) => (tz.split('/').pop() ?? tz).replace(/_/g, ' ');
 interface Run { start: Date; end: Date; state: Cell }
 interface DayRun { key: string; label: string; runs: Run[] }
 
-/** Hour slots → one block per unbroken run of the same state, in the student's
- *  own days. Three free hours read as "14:00 – 17:00", not as three lines. */
+/** Slots → one block per unbroken run of the same state, in the student's own
+ *  days. Three free hours read as "14:00 – 17:00", not as six half-hours. */
 function groupForStudent(
   slots: Array<{ start: Date; end: Date; state: Cell }>,
   tz: string,
@@ -100,68 +111,70 @@ function groupForStudent(
 // ── the picture the student gets ────────────────────────────────────────────
 
 const SHEET_W = 1080;
+/** A free block is drawn to its length; a taken one stays a thin bar. */
+const SHEET_PX_PER_HOUR = 58;
+const SHEET_FREE_MIN_H = 70;
+const SHEET_BUSY_H = 64;
+
+const hoursOf = (r: Run) => (r.end.getTime() - r.start.getTime()) / 3_600_000;
 
 const Sheet: React.FC<{ studentName: string; tz: string; days: DayRun[] }> = ({ studentName, tz, days }) => (
   <div style={{
     width: SHEET_W, boxSizing: 'border-box', background: '#FFFFFF', color: '#16181C',
     fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
   }}>
-    <div style={{ background: '#0F3D2E', color: '#FFFFFF', padding: '40px 48px 36px' }}>
+    <div style={{ background: '#0F3D2E', color: '#FFFFFF', padding: '40px 48px 34px' }}>
       <p style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9FC9B8' }}>
         Lisan &amp; Quran
       </p>
       <h1 style={{ margin: '14px 0 0', fontSize: 68, fontWeight: 800, lineHeight: 1.05 }}>When I am free</h1>
-      <p style={{ margin: '16px 0 0', fontSize: 32, fontWeight: 600, color: '#CFE6DC' }}>For {studentName}</p>
-      <div style={{ marginTop: 28, background: '#FFFFFF', borderRadius: 18, padding: '22px 26px' }}>
-        <p style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#16181C' }}>
-          All the times below are <span style={{ color: '#0D6B57' }}>your own time in {cityOf(tz)}</span>.
-        </p>
-        <p style={{ margin: '10px 0 0', fontSize: 24, fontWeight: 500, color: '#55606B' }}>
-          You do not need to count any hours.
-        </p>
-      </div>
+      <p style={{ margin: '14px 0 0', fontSize: 32, fontWeight: 600, color: '#CFE6DC' }}>For {studentName}</p>
+      <p style={{ margin: '22px 0 0', background: '#FFFFFF', borderRadius: 16, padding: '18px 24px', fontSize: 27, fontWeight: 700, color: '#16181C' }}>
+        All times are <span style={{ color: '#0D6B57' }}>your time in {cityOf(tz)}</span>.
+      </p>
     </div>
 
-    <div style={{ display: 'flex', gap: 14, padding: '26px 48px 10px' }}>
-      <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, background: '#15803D', color: '#FFFFFF', borderRadius: 14, padding: '16px 20px', fontSize: 26, fontWeight: 800 }}>
-        ✓&nbsp; Green = I am free
+    <div style={{ display: 'flex', gap: 14, padding: '24px 48px 6px' }}>
+      <span style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#15803D', color: '#FFFFFF', borderRadius: 14, padding: '14px 20px', fontSize: 25, fontWeight: 800 }}>
+        ✓&nbsp; Green = free
       </span>
-      <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, background: '#1C1F24', color: '#FFFFFF', borderRadius: 14, padding: '16px 20px', fontSize: 26, fontWeight: 800 }}>
-        ✕&nbsp; Black = already taken
+      <span style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#1C1F24', color: '#FFFFFF', borderRadius: 14, padding: '14px 20px', fontSize: 25, fontWeight: 800 }}>
+        ✕&nbsp; Black = taken
       </span>
     </div>
 
-    <div style={{ padding: '18px 48px 0', display: 'flex', flexDirection: 'column', gap: 26 }}>
+    <div style={{ padding: '16px 48px 0', display: 'flex', flexDirection: 'column', gap: 24 }}>
       {days.map(day => (
         <div key={day.key}>
-          <p style={{ margin: '0 0 12px', fontSize: 34, fontWeight: 800 }}>{day.label}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {day.runs.map((r, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 18, borderRadius: 16, padding: '20px 26px',
-                background: r.state === 'free' ? '#15803D' : '#1C1F24', color: '#FFFFFF',
-              }}>
-                <span style={{ flexGrow: 1, fontSize: 40, fontWeight: 800 }}>
-                  {timeIn(r.start, tz)} – {timeIn(r.end, tz)}
-                </span>
-                <span style={{
-                  fontSize: 24, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                  color: r.state === 'free' ? '#FFFFFF' : '#B9C0C8',
+          <p style={{ margin: '0 0 10px', fontSize: 34, fontWeight: 800 }}>{day.label}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {day.runs.map((r, i) => {
+              const free = r.state === 'free';
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 18, borderRadius: 16, padding: '0 26px',
+                  background: free ? '#15803D' : '#1C1F24', color: '#FFFFFF',
+                  height: free ? Math.max(SHEET_FREE_MIN_H, Math.round(hoursOf(r) * SHEET_PX_PER_HOUR)) : SHEET_BUSY_H,
                 }}>
-                  {r.state === 'free' ? 'Available' : 'Booked'}
-                </span>
-              </div>
-            ))}
+                  <span style={{ flexGrow: 1, fontSize: free ? 42 : 34, fontWeight: 800 }}>
+                    {timeIn(r.start, tz)} – {timeIn(r.end, tz)}
+                  </span>
+                  <span style={{
+                    fontSize: free ? 25 : 22, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: free ? '#FFFFFF' : '#B9C0C8',
+                  }}>
+                    {free ? 'Available' : 'Booked'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}
     </div>
 
-    <div style={{ margin: '28px 48px 40px', background: '#FDF6E8', border: '2px solid #E8D6B0', borderRadius: 20, padding: '26px 30px' }}>
+    <div style={{ margin: '26px 48px 40px', background: '#FDF6E8', border: '2px solid #E8D6B0', borderRadius: 20, padding: '24px 30px' }}>
       <p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: '#4A3A18' }}>Tell me which green time you want.</p>
-      <p style={{ margin: '10px 0 0', fontSize: 25, fontWeight: 500, lineHeight: 1.45, color: '#6B5A33' }}>
-        Send me the day and the time and I will book it for you.
-      </p>
     </div>
   </div>
 );
@@ -169,7 +182,8 @@ const Sheet: React.FC<{ studentName: string; tz: string; days: DayRun[] }> = ({ 
 // ── the panel ───────────────────────────────────────────────────────────────
 
 const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, students, onClose }) => {
-  const [studentId, setStudentId] = useState<string>(students[0]?.id ?? '');
+  const [studentId, setStudentId] = useState<string>(students.length === 1 ? students[0].id : '');
+  const [search, setSearch] = useState('');
   const student = students.find(s => s.id === studentId) ?? null;
   const tz = student?.timezone?.trim() || TUTOR_TZ;
 
@@ -193,55 +207,57 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  const hours = useMemo(
-    () => Array.from({ length: Math.max(0, to - from) }, (_, i) => from + i),
-    [from, to],
-  );
+  /** Minutes past midnight, Istanbul, one entry per half hour on offer. */
+  const steps = useMemo(() => {
+    const out: number[] = [];
+    for (let m = from * 60; m < to * 60; m += STEP_MIN) out.push(m);
+    return out;
+  }, [from, to]);
 
-  /** The lesson sitting on this hour, if any — the tutor's view of it. */
-  const blockAt = (dateISO: string, hour: number): BookedBlock | null =>
-    booked.find(b => b.dateISO === dateISO && b.startHour < hour + 1 && b.endHour > hour) ?? null;
+  /** The lesson sitting on this half hour, if any — the tutor's view of it. */
+  const blockAt = (dateISO: string, mins: number): BookedBlock | null =>
+    booked.find(b => b.dateISO === dateISO && b.startHour * 60 < mins + STEP_MIN && b.endHour * 60 > mins) ?? null;
 
-  const stateOf = (dateISO: string, hour: number): Cell =>
-    overrides[`${dateISO}-${hour}`] ?? (blockAt(dateISO, hour) ? 'busy' : 'free');
+  const stateOf = (dateISO: string, mins: number): Cell =>
+    overrides[`${dateISO}-${mins}`] ?? (blockAt(dateISO, mins) ? 'busy' : 'free');
 
-  const flip = (dateISO: string, hour: number) =>
-    setOverrides(m => ({ ...m, [`${dateISO}-${hour}`]: stateOf(dateISO, hour) === 'free' ? 'busy' : 'free' }));
+  const flip = (dateISO: string, mins: number) =>
+    setOverrides(m => ({ ...m, [`${dateISO}-${mins}`]: stateOf(dateISO, mins) === 'free' ? 'busy' : 'free' }));
 
-  /** Every offered hour of every picked day, as real instants. */
+  /** Every offered half hour of every picked day, as real instants. */
   const sheetDays = useMemo(() => {
     const slots = days.flatMap(day => {
       const dateISO = istanbulDateISO(day);
-      return hours.map(h => ({
-        start: instantOf(day, h),
-        end:   instantOf(day, h + 1),
-        state: stateOf(dateISO, h),
+      return steps.map(m => ({
+        start: instantOf(day, m),
+        end:   instantOf(day, m + STEP_MIN),
+        state: stateOf(dateISO, m),
       }));
     });
     return groupForStudent(slots, tz);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, hours, overrides, booked, tz]);
+  }, [days, steps, overrides, booked, tz]);
 
   const freeHours = sheetDays.reduce(
-    (n, d) => n + d.runs.filter(r => r.state === 'free').reduce((m, r) => m + (r.end.getTime() - r.start.getTime()) / 3_600_000, 0),
+    (n, d) => n + d.runs.filter(r => r.state === 'free').reduce((m, r) => m + hoursOf(r), 0),
     0,
   );
 
-  /** The same sheet, said in words — for WhatsApp, where a picture is heavy. */
+  /** The same sheet, said in words. Only the free times: a student scanning a
+   *  message does not need a list of hours they cannot have. */
   const asText = useMemo(() => {
     const lines: string[] = [];
     lines.push(`When I am free — for ${student?.name ?? ''}`.trim());
-    lines.push(`All times below are YOUR time (${cityOf(tz)}).`);
+    lines.push(`All times are YOUR time (${cityOf(tz)}).`);
     lines.push('');
     for (const day of sheetDays) {
+      const free = day.runs.filter(r => r.state === 'free');
+      if (!free.length) continue;
       lines.push(day.label.toUpperCase());
-      for (const r of day.runs) {
-        const span = `${timeIn(r.start, tz)} - ${timeIn(r.end, tz)}`;
-        lines.push(r.state === 'free' ? `  ✅ ${span}  free` : `  ❌ ${span}  taken`);
-      }
+      for (const r of free) lines.push(`  ✅ ${timeIn(r.start, tz)} - ${timeIn(r.end, tz)}`);
       lines.push('');
     }
-    lines.push('Tell me which free time you want — just send the day and the time.');
+    lines.push('Tell me which time you want — just send the day and the time.');
     return lines.join('\n');
   }, [sheetDays, student, tz]);
 
@@ -252,9 +268,8 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
     setBusy(true);
     try {
       const canvas = await h2c(node, { backgroundColor: '#FFFFFF', scale: 1, useCORS: true, windowWidth: SHEET_W });
-      const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
-      a.href = url;
+      a.href = canvas.toDataURL('image/png');
       a.download = `availability-${(student?.name ?? 'student').replace(/\s+/g, '-').toLowerCase()}.png`;
       a.click();
     } catch (e) {
@@ -269,6 +284,12 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
+
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return students.slice(0, 8);
+    return students.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [search, students]);
 
   const dayLabel = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -295,22 +316,46 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
         </div>
 
         <div className="flex flex-wrap items-center gap-2 px-3 sm:px-5 pb-3">
-          <label htmlFor="av-student" className="text-[11px] font-bold uppercase tracking-wide text-slate-400">To</label>
-          <select id="av-student" value={studentId} onChange={e => setStudentId(e.target.value)}
-            className="h-9 px-2.5 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-bold text-slate-800 dark:text-slate-100 max-w-[220px]">
-            {students.length === 0 && <option value="">No students yet</option>}
-            {students.map(s => (
-              <option key={s.id} value={s.id}>{s.name} — {s.kind === 'arabic' ? 'Arabic' : 'Quran'}</option>
-            ))}
-          </select>
+          {/* Who it is for — type the name */}
+          {student ? (
+            <span className="inline-flex items-center gap-2 h-9 ps-3 pe-1.5 rounded-full bg-slate-900 dark:bg-black text-white text-sm font-bold">
+              {student.name}
+              <span className="text-[10px] font-semibold opacity-60 uppercase">{student.kind}</span>
+              <button onClick={() => { setStudentId(''); setSearch(''); }} aria-label="Choose someone else"
+                className="w-6 h-6 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.6} stroke="currentColor" className="w-3 h-3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ) : (
+            <div className="relative">
+              <input value={search} onChange={e => setSearch(e.target.value)} autoFocus
+                placeholder="Type a student's name…"
+                aria-label="Search for a student"
+                className="h-9 w-[220px] px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400" />
+              <div className="absolute z-10 mt-1 w-[260px] max-h-64 overflow-y-auto rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl py-1">
+                {matches.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Nobody by that name.</p>}
+                {matches.map(s => (
+                  <button key={s.id} onClick={() => { setStudentId(s.id); setSearch(''); }}
+                    className="w-full flex items-center gap-2 px-3 h-9 text-start hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</span>
+                    <span className="ms-auto text-[10px] font-bold uppercase text-slate-400">{s.kind}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-          <span className="inline-flex items-center gap-2 h-9 px-3 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold">
-            Their time: {cityOf(tz)}
-            <span className="w-1 h-1 rounded-full bg-emerald-400" />
-            <span className="font-semibold text-emerald-600/80 dark:text-emerald-400/80">you: {cityOf(TUTOR_TZ)}</span>
-          </span>
+          {student && (
+            <span className="inline-flex items-center gap-2 h-9 px-3 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold">
+              Their time: {cityOf(tz)}
+              <span className="w-1 h-1 rounded-full bg-emerald-400" />
+              <span className="font-semibold text-emerald-600/80 dark:text-emerald-400/80">you: {cityOf(TUTOR_TZ)}</span>
+            </span>
+          )}
 
-          {!student?.timezone && student && (
+          {student && !student.timezone && (
             <span className="text-[11.5px] font-semibold text-amber-600 dark:text-amber-400">
               No timezone saved for {student.name} — showing your own.
             </span>
@@ -331,54 +376,80 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
         </div>
       </div>
 
-      {/* ── The hours, one block per picked day ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4">
+      {/* ── The time grid: a column per day, half an hour to a cell ── */}
+      <div className="flex-1 min-h-0 overflow-auto px-3 sm:px-5 py-4">
         <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-3">
-          Tap an hour to flip it. A lesson nobody attends can go green; an hour you want back can go black.
-          The names below are yours only — the student is told “Booked” and nothing else.
+          Tap a half hour to flip it. A lesson nobody attends can go green; an hour you want back can go black.
+          The names below are yours only — the picture says “Booked” and the message leaves it out.
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {days.map(day => {
-            const dateISO = istanbulDateISO(day);
-            return (
-              <div key={dateISO} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-3">
-                <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mb-2">
-                  {day.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+        <div className="inline-block min-w-full bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+          <div className="grid" style={{ gridTemplateColumns: `78px repeat(${days.length}, minmax(96px, 1fr))` }}>
+            {/* header row */}
+            <div className="border-e border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50" />
+            {days.map(day => (
+              <div key={istanbulDateISO(day)}
+                className="border-e last:border-e-0 border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50 py-2 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {day.toLocaleDateString('en-GB', { weekday: 'short' })}
                 </p>
-                <div className="flex flex-col gap-1">
-                  {hours.map(h => {
-                    const state = stateOf(dateISO, h);
-                    const block = blockAt(dateISO, h);
-                    const inst  = instantOf(day, h);
+                <p className="text-sm font-extrabold text-slate-700 dark:text-slate-200">
+                  {day.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </p>
+              </div>
+            ))}
+
+            {/* one row per half hour */}
+            {steps.map(m => {
+              const onTheHour = m % 60 === 0;
+              const firstDay  = days[0];
+              return (
+                <React.Fragment key={m}>
+                  <div className={`border-e border-slate-200 dark:border-gray-700 pe-1.5 text-end ${
+                    onTheHour ? 'border-t border-slate-200 dark:border-gray-700' : 'border-t border-slate-100 dark:border-gray-700/40'}`}
+                    style={{ height: CELL_H }}>
+                    {onTheHour && firstDay && (
+                      <>
+                        <span className="block text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">
+                          {timeIn(instantOf(firstDay, m), tz)}
+                        </span>
+                        <span className="block text-[9px] font-semibold text-slate-400 dark:text-slate-500 leading-tight">
+                          you {pad(Math.floor(m / 60))}:00
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {days.map(day => {
+                    const dateISO = istanbulDateISO(day);
+                    const state   = stateOf(dateISO, m);
+                    const block   = blockAt(dateISO, m);
+                    const startsHere = !!block && Math.abs(block.startHour * 60 - m) < STEP_MIN;
                     return (
-                      <button key={h} onClick={() => flip(dateISO, h)}
-                        className={`w-full h-11 rounded-xl px-3 flex items-center gap-2 text-start transition-colors ${
-                          state === 'free'
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-black dark:hover:bg-slate-900'
-                        }`}>
-                        <span className="text-[13px] font-extrabold tabular-nums flex-shrink-0">{timeIn(inst, tz)}</span>
-                        <span className="text-[10px] font-semibold opacity-60 tabular-nums flex-shrink-0">you {pad(h)}:00</span>
-                        <span className="flex-grow" />
+                      <button key={dateISO + m} onClick={() => flip(dateISO, m)}
+                        title={state === 'free' ? 'Available — tap to mark it taken' : `${block?.title ?? 'Taken'} — tap to free it`}
+                        className={`border-e last:border-e-0 border-slate-200 dark:border-gray-700 px-1.5 text-start overflow-hidden transition-colors ${
+                          onTheHour ? 'border-t border-slate-200 dark:border-gray-700' : 'border-t border-slate-100/60 dark:border-gray-700/30'
+                        } ${state === 'free'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-black'}`}
+                        style={{ height: CELL_H }}>
                         {state === 'free' ? (
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider">Available</span>
+                          onTheHour && <span className="text-[9.5px] font-extrabold uppercase tracking-wider opacity-90">Available</span>
                         ) : (
-                          <span className="min-w-0 text-end">
-                            <span className="block text-[10px] font-extrabold uppercase tracking-wider leading-tight">Booked</span>
-                            {block && <span className="block text-[10px] font-semibold opacity-60 truncate leading-tight">{block.title}</span>}
+                          <span className="block text-[9.5px] font-bold leading-tight truncate">
+                            {startsHere && block ? block.title : 'Booked'}
                           </span>
                         )}
                       </button>
                     );
                   })}
-                  {hours.length === 0 && (
-                    <p className="text-xs text-slate-400 py-4 text-center">Widen the hours above to offer something.</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {steps.length === 0 && (
+            <p className="text-xs text-slate-400 py-6 text-center">Widen the hours above to offer something.</p>
+          )}
         </div>
 
         {mode === 'text' && (
@@ -392,7 +463,7 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
       {/* ── Send it ── */}
       <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-slate-200 dark:border-gray-700 px-3 sm:px-5 py-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-          {Math.round(freeHours)} free hour{Math.round(freeHours) === 1 ? '' : 's'} offered
+          {freeHours % 1 ? freeHours.toFixed(1) : freeHours} free hour{freeHours === 1 ? '' : 's'} offered
         </span>
         <span className="flex-grow" />
         <div className="flex rounded-xl bg-slate-100 dark:bg-gray-700 p-1">
