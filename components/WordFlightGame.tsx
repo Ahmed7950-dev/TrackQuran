@@ -407,16 +407,20 @@ interface WordFlightGameProps {
   onExit: () => void;
   roomId?: string;
   playerRole?: '1' | '2';
+  /** A student playing on their own: no second seat and no link to send, just
+   *  the computer in the other plane. */
+  vsComputer?: boolean;
 }
 
-const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: propRoomId, playerRole }) => {
+const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: propRoomId, playerRole, vsComputer = false }) => {
   const isP2 = playerRole === '2';
 
   const [bgImage] = useState(() => BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)]);
   const [status, setStatus]       = useState<GameStatus>('start');
-  const [gameMode, setGameMode]   = useState<GameMode>('1p');
+  const [gameMode, setGameMode]   = useState<GameMode>(vsComputer ? '2p' : '1p');
   const [p1Plane, setP1Plane]     = useState(0);
-  const [p2Plane, setP2Plane]     = useState(1);
+  /** The computer flies whatever it likes. */
+  const [p2Plane, setP2Plane]     = useState(() => vsComputer ? Math.floor(Math.random() * PLANES.length) : 1);
   const [fuel, setFuel]           = useState(START_FUEL);
   const [p2Fuel, setP2Fuel]       = useState(START_FUEL);
   const [score, setScore]         = useState(0);
@@ -515,6 +519,16 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
   // Analog joystick state. active=false → that plane uses the legacy keyboard model.
   const p1StickRef        = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local P1
   const p2StickRef        = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // local-2P P2
+  // ── The computer's pilot ──
+  // It flies the same plane with the same stick the second player would use,
+  // so nothing downstream knows the difference. It is deliberately beatable:
+  // it takes a beat to notice each new word, steers at 85% of full lean, and
+  // wanders a little, so a child who knows the answer gets there first.
+  const aiRef        = useRef(vsComputer);
+  const aiTargetRef  = useRef<string | null>(null);
+  const aiWakeRef    = useRef(0);
+  const aiDriftRef   = useRef({ x: 0, y: 0, until: 0 });
+  useEffect(() => { aiRef.current = vsComputer; }, [vsComputer]);
   const p2RemoteStickRef  = useRef<{ ax: number; ay: number; active: boolean }>({ ax: 0, ay: 0, active: false }); // host: remote P2 / joiner: own
   const fuelRef           = useRef(START_FUEL);
   const p2FuelRef         = useRef(START_FUEL);
@@ -894,6 +908,28 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
           p2.y += (rp.y - p2.y) * k35;
           p2Tilt.current += (rp.tilt - p2Tilt.current) * k35;
         } else {
+        if (aiRef.current && !isOnlineNow) {
+          const target = bubblesRef.current.find(b => !b.popped && b.isCorrect) ?? null;
+          if (target?.id !== aiTargetRef.current) {
+            aiTargetRef.current = target?.id ?? null;
+            aiWakeRef.current   = now + 450 + Math.random() * 700;   // sees it late
+          }
+          if (now > aiDriftRef.current.until) {
+            aiDriftRef.current = { x: (Math.random() - 0.5) * 0.3, y: (Math.random() - 0.5) * 0.3, until: now + 600 + Math.random() * 700 };
+          }
+          if (!target || now < aiWakeRef.current) {
+            p2StickRef.current = { ax: 0, ay: 0, active: false };
+          } else {
+            const dx = target.x - p2.x, dy = target.y - p2.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const d = aiDriftRef.current;
+            p2StickRef.current = {
+              ax: Math.max(-1, Math.min(1, (dx / len) * 0.85 + d.x)),
+              ay: Math.max(-1, Math.min(1, (dy / len) * 0.85 + d.y)),
+              active: true,
+            };
+          }
+        }
         const stick2 = isOnlineNow ? p2RemoteStickRef.current : p2StickRef.current;
         if (stick2.active) {
           steerPlane(v2, stick2.ax, stick2.ay, dtF);
@@ -1746,7 +1782,12 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
             <p className="text-base font-extrabold text-sky-700 mt-1 text-center">Your pilot is ready to fly, Captain!</p>
           </div>
 
-          {/* Mode tabs */}
+          {/* Mode tabs — a student on their own plays the computer, full stop */}
+          {vsComputer ? (
+            <p className="text-center text-xs font-extrabold text-sky-600 bg-sky-50 border-2 border-sky-200 rounded-2xl py-2 mb-4">
+              🤖 You are flying against the computer
+            </p>
+          ) : (
           <div className="flex gap-1 justify-center mb-4 p-1 rounded-2xl bg-slate-100">
             {(['1p','2p','2p-online'] as const).map(m => (
               <button key={m} onClick={() => { setGameMode(m); if (m !== '2p-online') setOnlineRoomId(null); setP2Joined(false); setLinkCopied(false); }}
@@ -1756,6 +1797,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
               </button>
             ))}
           </div>
+          )}
 
           {/* Name */}
           <div className="mb-3">
@@ -1802,7 +1844,7 @@ const WordFlightGame: React.FC<WordFlightGameProps> = ({ words, onExit, roomId: 
 
           {/* Action buttons */}
           <div className="flex gap-2 mt-4">
-            {is2p && gameMode !== '2p-online' ? (
+            {is2p && gameMode !== '2p-online' && !vsComputer ? (
               <button onClick={() => setStatus('select_p2')} className="flex-1 py-3 rounded-2xl text-white font-black text-base shadow-lg active:scale-95 transition-all" style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)' }}>Next → P2 ✈️</button>
             ) : gameMode === '2p-online' ? (
               <button onClick={startGame} disabled={!p2Joined} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-white font-black text-base shadow-xl active:scale-95 transition-all disabled:opacity-40" style={{ background:p2Joined?'linear-gradient(135deg,#ea580c,#f97316,#fb923c)':'#94a3b8', boxShadow:p2Joined?'0 4px 18px rgba(249,115,22,0.45)':'none' }}>

@@ -264,8 +264,10 @@ interface LetterRaceProps {
   playerRole?: '1' | '2';   // '2' = the joining guest
   mode?: 'letters' | 'words';
   words?: RacePair[];       // required when mode === 'words'
+  /** A student playing on their own: one seat, no link, the computer races. */
+  vsComputer?: boolean;
 }
-const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, playerRole, mode = 'letters', words = [] }: LetterRaceProps) => {
+const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, playerRole, mode = 'letters', words = [], vsComputer = false }: LetterRaceProps) => {
   // Word mode needs at least 2 distinct answers to build a row with a distractor.
   const wordMode = mode === 'words' && words.length >= 2;
   const pool = wordMode ? words.map(w => w.answer) : (letters.length ? letters : ARABIC_LETTERS);
@@ -288,10 +290,17 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   const [phase, setPhase] = useState<Phase>('select');
   const [fieldBg] = useState(() => FIELDS[Math.floor(Math.random() * FIELDS.length)]);
   const [p1Char, setP1Char] = useState<CharKey>('fennec');
-  const [p2Char, setP2Char] = useState<CharKey>('panda');
+  /** The computer runs as whoever it fancies. */
+  const [p2Char, setP2Char] = useState<CharKey>(
+    () => vsComputer ? (CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)]?.key ?? 'panda') : 'panda',
+  );
   const [p1Name, setP1Name] = useState('');
   const [p2Name, setP2Name] = useState('');
   const [selStep, setSelStep] = useState<1 | 2 | 'share'>(1); // P1 picks, then P2 — or the online share panel
+  /** The computer races in the second lane when the student is on their own. */
+  const aiRef     = useRef(vsComputer);
+  const aiWakeRef = useRef(0);
+  useEffect(() => { aiRef.current = vsComputer; }, [vsComputer]);
   const [, setTick] = useState(0);
   const [, setRosterTick] = useState(0); // re-render the lobby when players join
   const [scores, setScores] = useState<number[]>([0, 0]);
@@ -323,7 +332,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   };
 
   // ── Online state ────────────────────────────────────────────────────────────
-  const [netMode, setNetMode] = useState<'local' | 'online'>(isGuest ? 'online' : 'local');
+  const [netMode, setNetMode] = useState<'local' | 'online'>(isGuest && !vsComputer ? 'online' : 'local');
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(roomId ?? null);
   const [guestJoined, setGuestJoined] = useState(false);  // guest: pressed Join
   const [gotFirstSnap, setGotFirstSnap] = useState(false);
@@ -758,6 +767,7 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
     // listen → 3 → 2 → 1 → GO → race
     after(2200, () => {
       setPhase('count'); setCountNum('3'); playFx('countdown', 0.9);
+      aiWakeRef.current = performance.now() + 2600 + Math.random() * 900;  // after "GO", and late
       after(800,  () => setCountNum('2'));
       after(1600, () => setCountNum('1'));
       // The race goes live the INSTANT "GO!" appears — no dead-input window
@@ -1191,6 +1201,27 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       // Online, EITHER key set drives the ONE racer this device owns.
       const held = keys.current;
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME * dtF + 360) % 360; };
+      /** The computer's runner: head for the right box, carry it home. It
+       *  waits a beat at the start of each round, turns a touch slower than a
+       *  player can and never tackles, so it can be beaten by anyone who
+       *  knows the answer. */
+      const runComputer = (pl: RacePlayer) => {
+        if (now < aiWakeRef.current || now < pl.fallenUntil) return;
+        const target = pl.carrying
+          ? { x: pl.x, y: START_Y }
+          : (g.boxes.find(b => b.isTarget && !b.taken) ?? null);
+        if (!target) return;
+        const ty = pl.carrying ? START_Y : LETTER_Y;
+        const dx = target.x - pl.x, dy = ty - pl.y;
+        const want = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+        let diff = ((want - pl.heading + 540) % 360) - 180;
+        const turn = Math.min(Math.abs(diff), ROT_PER_FRAME * 0.8 * dtF) * Math.sign(diff);
+        pl.heading = (pl.heading + turn + 360) % 360;
+        // Only run once roughly pointed the right way, and never quite flat out.
+        if (Math.abs(diff) < 42 && now >= pl.tackleUntil) {
+          pl.speed = Math.min(maxFor(pl) * 0.88, pl.speed + RUN_ACCEL * 0.9 * dtF);
+        }
+      };
       const maxFor = (pl: RacePlayer) => pl.carrying ? MAX_SPEED * CARRY_SLOW : MAX_SPEED;
       if (online) {
         const own = g.players[Math.max(0, ownIdxRef.current)];
@@ -1208,11 +1239,15 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       } else {
         const [a, b] = g.players;
         if (a && held.has('KeyW') && now >= a.fallenUntil && now >= a.tackleUntil) a.speed = Math.min(maxFor(a), a.speed + RUN_ACCEL * dtF);
-        if (b && held.has('ArrowUp') && now >= b.fallenUntil && now >= b.tackleUntil) b.speed = Math.min(maxFor(b), b.speed + RUN_ACCEL * dtF);
         if (a && held.has('KeyA'))       rot(a, -1);
         if (a && held.has('KeyD'))       rot(a, +1);
-        if (b && held.has('ArrowLeft'))  rot(b, -1);
-        if (b && held.has('ArrowRight')) rot(b, +1);
+        if (b && aiRef.current) {
+          runComputer(b);
+        } else {
+          if (b && held.has('ArrowUp') && now >= b.fallenUntil && now >= b.tackleUntil) b.speed = Math.min(maxFor(b), b.speed + RUN_ACCEL * dtF);
+          if (b && held.has('ArrowLeft'))  rot(b, -1);
+          if (b && held.has('ArrowRight')) rot(b, +1);
+        }
         // Virtual joystick drives PLAYER 1 in local play on a touch device —
         // same mapping as the online branch (local games used to be
         // keyboard-only, which left phones with no way to play at all).
@@ -1775,7 +1810,12 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
                   {who === 2 && (
                     <button onClick={() => setSelStep(1)} style={{ ...btnBase, background: 'rgba(255,255,255,0.10)', border: '2px solid rgba(255,255,255,0.25)', color: '#e2e8f0', padding: '13px 26px' }}>‹ Back</button>
                   )}
-                  {who === 1 ? (
+                  {who === 1 && vsComputer ? (
+                    <button onClick={() => { setP2Name('Computer'); setupRound(); }} disabled={!assetsReady}
+                      style={{ ...btnBase, background: assetsReady ? 'linear-gradient(135deg,#16a34a,#15803d)' : '#47556988', boxShadow: assetsReady ? '0 8px 22px rgba(22,163,74,0.5)' : 'none', cursor: assetsReady ? 'pointer' : 'default' }}>
+                      {assetsReady ? '🤖 Race the computer!' : '⏳ Loading characters…'}
+                    </button>
+                  ) : who === 1 ? (
                     <>
                       <button onClick={() => setSelStep(2)} style={{ ...btnBase, background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', boxShadow: '0 8px 22px rgba(59,130,246,0.5)' }}>Play here — Player 2 ›</button>
                       <button onClick={() => { setNetMode('online'); setSelStep('share'); }} style={{ ...btnBase, background: 'linear-gradient(135deg,#0ea5e9,#0284c7)', boxShadow: '0 8px 22px rgba(14,165,233,0.5)' }}>🌐 Online</button>

@@ -1347,6 +1347,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
       {game === 'flight' && (
         <WordFlightGame
           words={gamePairs.map(w => ({ arabic: w.text, meaning: w.translation }))}
+          vsComputer={!!selfPlay}
           onExit={() => setGame(null)}
         />
       )}
@@ -1355,6 +1356,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
           mode="words"
           words={gamePairs.map(w => ({ prompt: w.translation, answer: w.text }))}
           letters={[]}
+          vsComputer={!!selfPlay}
           onExit={() => setGame(null)}
         />
       )}

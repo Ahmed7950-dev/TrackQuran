@@ -744,6 +744,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
       {showWordFlight && (
         <WordFlightGame
           words={practicePool.map(w => ({ arabic: w.arabic, meaning: w.english }))}
+          vsComputer={studentMode}
           onExit={() => setShowWordFlight(false)}
         />
       )}
@@ -753,6 +754,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           words={racePairs}
           letters={[]}
           letterForm="isolated"
+          vsComputer={studentMode}
           onExit={() => setShowWordRace(false)}
         />
       )}
