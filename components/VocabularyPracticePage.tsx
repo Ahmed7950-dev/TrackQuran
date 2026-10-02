@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   getVocabularyLists, saveVocabularyList, deleteVocabularyList,
   VocabList, VocabWord, VocabPhrase, GrammarNote,
@@ -75,6 +75,12 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   // ── data ──────────────────────────────────────────────────────────────────
   const [lists, setLists] = useState<VocabList[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
+  /** Lists feeding the games and the flashcards. Empty = whichever list is
+   *  open; the list being EDITED is still only ever the open one. */
+  const [playIds, setPlayIds] = useState<Set<string>>(new Set());
+  /** Mirrors of the words in play — the practice run is declared above them. */
+  const playWordsRef   = useRef<VocabWord[]>([]);
+  const playPhrasesRef = useRef<VocabPhrase[]>([]);
   const [words, setWords] = useState<VocabWord[]>([]);
   const [phrases, setPhrases] = useState<VocabPhrase[]>([]);
   const [listName, setListName] = useState('');
@@ -397,7 +403,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   // ─── practice ─────────────────────────────────────────────────────────────
 
   const startPractice = useCallback(() => {
-    const source = practiceMode === 'words' ? words : phrases;
+    const source = practiceMode === 'words' ? playWordsRef.current : playPhrasesRef.current;
     const filtered = source.filter(i => i.translation);
     if (!filtered.length) { showToast('Add translations first!'); return; }
     const q = buildQueue(filtered);
@@ -407,11 +413,11 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
     setShowingArabic(showArabicFirst);
     practiceAttemptRecordedRef.current = false; // allow recording for this new session
     setTab('practice');
-  }, [practiceMode, words, phrases, showToast, showArabicFirst]);
+  }, [practiceMode, showToast, showArabicFirst]);
 
   const handleWrong = () => {
     recordCard(practiceQueue[practiceIdx], false);
-    const source = practiceMode === 'words' ? words : phrases;
+    const source = practiceMode === 'words' ? playWordsRef.current : playPhrasesRef.current;
     const filtered = source.filter(i => i.translation);
     const q = buildQueue(filtered);
     setPracticeQueue(q);
@@ -428,7 +434,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
 
     // Record SRS attempt when the final card is answered correctly
     const justWon = newIdx >= practiceTotal && practiceTotal > 0;
-    if (justWon && !practiceAttemptRecordedRef.current && activeListId) {
+    if (justWon && !practiceAttemptRecordedRef.current && activeListId && playSet.size <= 1) {
       practiceAttemptRecordedRef.current = true;
 
       if (currentSrsAttempts.length >= 5) {
@@ -492,8 +498,40 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   else if (phraseFilter === 'yellow') displayedPhrases = displayedPhrases.filter(p => p.clicks === 1);
   else if (phraseFilter === 'any') displayedPhrases = displayedPhrases.filter(p => p.clicks > 0);
 
+  /** The lists in play: the ones ticked, or the open one when none are. */
+  const playSet = useMemo(
+    () => (playIds.size ? playIds : new Set(activeListId ? [activeListId] : [])),
+    [playIds, activeListId],
+  );
+  const playingAll = lists.length > 0 && lists.every(l => playSet.has(l.id));
+
+  /** Words from every list in play. The open list contributes what is on
+   *  screen, unsaved edits included; the rest contribute what was loaded. The
+   *  same word in two lists is only played once. */
+  const collect = <T extends { id: string; text: string }>(
+    pick: (l: VocabList) => T[], live: T[],
+  ): T[] => {
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const l of lists) {
+      if (!playSet.has(l.id)) continue;
+      for (const item of (l.id === activeListId ? live : (pick(l) ?? []))) {
+        const key = item.text.trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+      }
+    }
+    return out;
+  };
+  const playWords   = useMemo(() => collect<VocabWord>(l => l.words, words),     [lists, playSet, activeListId, words]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const playPhrases = useMemo(() => collect<VocabPhrase>(l => l.phrases, phrases), [lists, playSet, activeListId, phrases]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  playWordsRef.current   = playWords;
+  playPhrasesRef.current = playPhrases;
+
   /** A game needs both halves of the word. */
-  const gamePairs = words.filter(w => w.text.trim() && w.translation.trim());
+  const gamePairs = playWords.filter(w => w.text.trim() && w.translation.trim());
 
   const currentCard = practiceQueue[practiceIdx];
   const practiceWon = practiceIdx >= practiceTotal && practiceTotal > 0;
@@ -701,6 +739,46 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
 
       {/* ═══════════════ TOP CONTROLS ═══════════════ */}
       <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-4 py-3">
+        {/* Which lists the games and the flashcards run on. Editing still
+            belongs to the open list; this only widens what is PLAYED. */}
+        {lists.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-2.5 pb-2.5 border-b border-slate-100 dark:border-gray-700">
+            <span className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500 me-1">Practise with</span>
+            <button
+              onClick={() => setPlayIds(playingAll ? new Set() : new Set(lists.map(l => l.id)))}
+              className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                playingAll
+                  ? 'bg-teal-600 dark:bg-orange-500 text-white'
+                  : 'border border-slate-200 dark:border-gray-600 text-slate-500 dark:text-slate-300 hover:border-teal-400 dark:hover:border-orange-400'
+              }`}>
+              {playingAll ? '✓ All lists' : 'All lists'}
+            </button>
+            {lists.map(list => {
+              const on = playSet.has(list.id);
+              return (
+                <button key={list.id}
+                  onClick={() => setPlayIds(prev => {
+                    const base = prev.size ? prev : new Set(activeListId ? [activeListId] : []);
+                    const next = new Set(base);
+                    next.has(list.id) ? next.delete(list.id) : next.add(list.id);
+                    // Back to none ticked = back to following the open list.
+                    if (activeListId && next.size === 1 && next.has(activeListId)) return new Set<string>();
+                    return next;
+                  })}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    on
+                      ? 'bg-teal-50 dark:bg-orange-900/30 text-teal-700 dark:text-orange-300 border border-teal-300 dark:border-orange-700'
+                      : 'border border-slate-200 dark:border-gray-600 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                  }`}>
+                  {on ? '✓ ' : ''}{list.name}
+                </button>
+              );
+            })}
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 ms-1">
+              {playWords.length} word{playWords.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* List badges */}
@@ -830,7 +908,8 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Games</p>
               <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
-                {gamePairs.length} word{gamePairs.length === 1 ? '' : 's'} in this list
+                {gamePairs.length} word{gamePairs.length === 1 ? '' : 's'}
+                {playSet.size > 1 ? ` from ${playSet.size} lists` : ' in this list'}
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
