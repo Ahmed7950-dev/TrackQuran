@@ -118,6 +118,27 @@ const SHEET_BUSY_H = 64;
 
 const hoursOf = (r: Run) => (r.end.getTime() - r.start.getTime()) / 3_600_000;
 
+/** The longer the free run, the deeper the green — the shade says at a glance
+ *  how many half hours are in it. Every step keeps white text above 4.5:1. */
+function greenFor(halfHours: number): string {
+  if (halfHours <= 1) return '#1E8A4C';
+  if (halfHours === 2) return '#17803F';
+  if (halfHours <= 4) return '#146B38';
+  if (halfHours <= 8) return '#115C30';
+  return '#0D4A27';
+}
+
+/** A stretch of the same thing in one day's column. A booked stretch is split
+ *  by title, so two lessons back to back stay two blocks. */
+interface GridRun {
+  startIdx: number;
+  count: number;
+  state: Cell;
+  title?: string;
+  startMin: number;
+  endMin: number;
+}
+
 const Sheet: React.FC<{ studentName: string; tz: string; days: DayRun[] }> = ({ studentName, tz, days }) => (
   <div style={{
     width: SHEET_W, boxSizing: 'border-box', background: '#FFFFFF', color: '#16181C',
@@ -173,9 +194,7 @@ const Sheet: React.FC<{ studentName: string; tz: string; days: DayRun[] }> = ({ 
       ))}
     </div>
 
-    <div style={{ margin: '26px 48px 40px', background: '#FDF6E8', border: '2px solid #E8D6B0', borderRadius: 20, padding: '24px 30px' }}>
-      <p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: '#4A3A18' }}>Tell me which green time you want.</p>
-    </div>
+    <div style={{ height: 40 }} />
   </div>
 );
 
@@ -223,6 +242,24 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
 
   const flip = (dateISO: string, mins: number) =>
     setOverrides(m => ({ ...m, [`${dateISO}-${mins}`]: stateOf(dateISO, mins) === 'free' ? 'busy' : 'free' }));
+
+  /** One block per unbroken stretch in a day's column. */
+  const runsFor = (day: Date): GridRun[] => {
+    const dateISO = istanbulDateISO(day);
+    const out: GridRun[] = [];
+    steps.forEach((m, i) => {
+      const state = stateOf(dateISO, m);
+      const title = state === 'busy' ? (blockAt(dateISO, m)?.title ?? 'Booked') : undefined;
+      const last  = out[out.length - 1];
+      if (last && last.state === state && last.title === title && last.startIdx + last.count === i) {
+        last.count += 1;
+        last.endMin = m + STEP_MIN;
+      } else {
+        out.push({ startIdx: i, count: 1, state, title, startMin: m, endMin: m + STEP_MIN });
+      }
+    });
+    return out;
+  };
 
   /** Every offered half hour of every picked day, as real instants. */
   const sheetDays = useMemo(() => {
@@ -379,16 +416,17 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
       {/* ── The time grid: a column per day, half an hour to a cell ── */}
       <div className="flex-1 min-h-0 overflow-auto px-3 sm:px-5 py-4">
         <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-3">
-          Tap a half hour to flip it. A lesson nobody attends can go green; an hour you want back can go black.
-          The names below are yours only — the picture says “Booked” and the message leaves it out.
+          Tap a half hour to flip it — the dotted lines are the half hours, the solid ones the hours.
+          A deeper green means a longer free stretch. The names below are yours only: the picture says
+          “Booked” and the message leaves it out.
         </p>
 
         <div className="inline-block min-w-full bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-          <div className="grid" style={{ gridTemplateColumns: `78px repeat(${days.length}, minmax(96px, 1fr))` }}>
+          <div className="grid" style={{ gridTemplateColumns: `78px repeat(${days.length}, minmax(120px, 1fr))` }}>
             {/* header row */}
             <div className="border-e border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50" />
             {days.map(day => (
-              <div key={istanbulDateISO(day)}
+              <div key={`h-${istanbulDateISO(day)}`}
                 className="border-e last:border-e-0 border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-700/50 py-2 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   {day.toLocaleDateString('en-GB', { weekday: 'short' })}
@@ -399,19 +437,20 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
               </div>
             ))}
 
-            {/* one row per half hour */}
-            {steps.map(m => {
-              const onTheHour = m % 60 === 0;
-              const firstDay  = days[0];
-              return (
-                <React.Fragment key={m}>
-                  <div className={`border-e border-slate-200 dark:border-gray-700 pe-1.5 text-end ${
-                    onTheHour ? 'border-t border-slate-200 dark:border-gray-700' : 'border-t border-slate-100 dark:border-gray-700/40'}`}
-                    style={{ height: CELL_H }}>
-                    {onTheHour && firstDay && (
+            {/* the hours down the side: the student's clock, then yours */}
+            <div className="border-e border-slate-200 dark:border-gray-700 relative" style={{ height: steps.length * CELL_H }}>
+              {steps.map((m, i) => {
+                const onTheHour = m % 60 === 0;
+                return (
+                  <div key={m} className="absolute inset-x-0 pe-1.5 text-end"
+                    style={{
+                      top: i * CELL_H, height: CELL_H,
+                      borderTop: onTheHour ? '1px solid rgba(100,116,139,.35)' : '1px dotted rgba(100,116,139,.35)',
+                    }}>
+                    {onTheHour && days[0] && (
                       <>
                         <span className="block text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">
-                          {timeIn(instantOf(firstDay, m), tz)}
+                          {timeIn(instantOf(days[0], m), tz)}
                         </span>
                         <span className="block text-[9px] font-semibold text-slate-400 dark:text-slate-500 leading-tight">
                           you {pad(Math.floor(m / 60))}:00
@@ -419,31 +458,57 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
                       </>
                     )}
                   </div>
-                  {days.map(day => {
-                    const dateISO = istanbulDateISO(day);
-                    const state   = stateOf(dateISO, m);
-                    const block   = blockAt(dateISO, m);
-                    const startsHere = !!block && Math.abs(block.startHour * 60 - m) < STEP_MIN;
+                );
+              })}
+            </div>
+
+            {/* one column per day: blocks, not cells */}
+            {days.map(day => {
+              const dateISO = istanbulDateISO(day);
+              return (
+                <div key={dateISO} className="relative border-e last:border-e-0 border-slate-200 dark:border-gray-700"
+                  style={{ height: steps.length * CELL_H }}>
+
+                  {runsFor(day).map(run => {
+                    const free = run.state === 'free';
                     return (
-                      <button key={dateISO + m} onClick={() => flip(dateISO, m)}
-                        title={state === 'free' ? 'Available — tap to mark it taken' : `${block?.title ?? 'Taken'} — tap to free it`}
-                        className={`border-e last:border-e-0 border-slate-200 dark:border-gray-700 px-1.5 text-start overflow-hidden transition-colors ${
-                          onTheHour ? 'border-t border-slate-200 dark:border-gray-700' : 'border-t border-slate-100/60 dark:border-gray-700/30'
-                        } ${state === 'free'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-black'}`}
-                        style={{ height: CELL_H }}>
-                        {state === 'free' ? (
-                          onTheHour && <span className="text-[9.5px] font-extrabold uppercase tracking-wider opacity-90">Available</span>
-                        ) : (
-                          <span className="block text-[9.5px] font-bold leading-tight truncate">
-                            {startsHere && block ? block.title : 'Booked'}
+                      <div key={run.startIdx} className="absolute inset-x-0 overflow-hidden"
+                        style={{
+                          top: run.startIdx * CELL_H,
+                          height: run.count * CELL_H,
+                          background: free ? greenFor(run.count) : '#0B0F14',
+                          borderTop: run.startMin % 60 === 0 ? '1px solid rgba(148,163,184,.45)' : '1px dotted rgba(148,163,184,.55)',
+                        }}>
+                        {/* inside a block: solid on the hour, dotted on the half */}
+                        {Array.from({ length: run.count - 1 }, (_, k) => k + 1).map(k => (
+                          <span key={k} className="absolute inset-x-1.5 pointer-events-none"
+                            style={{
+                              top: k * CELL_H,
+                              borderTop: (run.startMin + k * STEP_MIN) % 60 === 0
+                                ? '1px solid rgba(255,255,255,.34)'
+                                : '1px dotted rgba(255,255,255,.42)',
+                            }} />
+                        ))}
+                        <span className="absolute inset-0 flex items-center px-2 pointer-events-none">
+                          <span className="text-[11px] font-extrabold text-white truncate">
+                            {free
+                              ? `${timeIn(instantOf(day, run.startMin), tz)} - ${timeIn(instantOf(day, run.endMin), tz)}`
+                              : `${run.title} — Booked`}
                           </span>
-                        )}
-                      </button>
+                        </span>
+                      </div>
                     );
                   })}
-                </React.Fragment>
+
+                  {/* the half hours themselves, invisible, for tapping */}
+                  {steps.map((m, i) => (
+                    <button key={m} onClick={() => flip(dateISO, m)}
+                      title={stateOf(dateISO, m) === 'free' ? 'Free — tap to mark it taken' : 'Taken — tap to free it'}
+                      aria-label={`${pad(Math.floor(m / 60))}:${pad(m % 60)} — ${stateOf(dateISO, m) === 'free' ? 'free' : 'taken'}`}
+                      className="absolute inset-x-0 bg-transparent hover:bg-white/10 transition-colors"
+                      style={{ top: i * CELL_H, height: CELL_H }} />
+                  ))}
+                </div>
               );
             })}
           </div>
