@@ -83,6 +83,11 @@ const dateLabelIn = (d: Date, tz: string) =>
 /** "Asia/Riyadh" → "Riyadh" */
 const cityOf = (tz: string) => (tz.split('/').pop() ?? tz).replace(/_/g, ' ');
 
+/** Minutes past midnight in the tutor's own clock, as HH:MM. The grid is the
+ *  tutor's working view, so it reads in the hours they actually keep; only
+ *  what is exported is turned into the student's time. */
+const tutorTime = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+
 // ── the sheet's shape ───────────────────────────────────────────────────────
 
 interface Run { start: Date; end: Date; state: Cell }
@@ -203,6 +208,7 @@ const Sheet: React.FC<{ studentName: string; tz: string; days: DayRun[] }> = ({ 
 const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, students, onClose }) => {
   const [studentId, setStudentId] = useState<string>(students.length === 1 ? students[0].id : '');
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const student = students.find(s => s.id === studentId) ?? null;
   const tz = student?.timezone?.trim() || TUTOR_TZ;
 
@@ -367,20 +373,25 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
             </span>
           ) : (
             <div className="relative">
-              <input value={search} onChange={e => setSearch(e.target.value)} autoFocus
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                onFocus={() => setSearchOpen(true)}
+                /* a click on a name is a blur first — let it land before closing */
+                onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
                 placeholder="Type a student's name…"
                 aria-label="Search for a student"
                 className="h-9 w-[220px] px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400" />
-              <div className="absolute z-10 mt-1 w-[260px] max-h-64 overflow-y-auto rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl py-1">
-                {matches.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Nobody by that name.</p>}
-                {matches.map(s => (
-                  <button key={s.id} onClick={() => { setStudentId(s.id); setSearch(''); }}
-                    className="w-full flex items-center gap-2 px-3 h-9 text-start hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</span>
-                    <span className="ms-auto text-[10px] font-bold uppercase text-slate-400">{s.kind}</span>
-                  </button>
-                ))}
-              </div>
+              {searchOpen && (
+                <div className="absolute z-10 mt-1 w-[260px] max-h-64 overflow-y-auto rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-xl py-1">
+                  {matches.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">Nobody by that name.</p>}
+                  {matches.map(s => (
+                    <button key={s.id} onClick={() => { setStudentId(s.id); setSearch(''); setSearchOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 h-9 text-start hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{s.name}</span>
+                      <span className="ms-auto text-[10px] font-bold uppercase text-slate-400">{s.kind}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -417,8 +428,9 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
       <div className="flex-1 min-h-0 overflow-auto px-3 sm:px-5 py-4">
         <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-3">
           Tap a half hour to flip it — the dotted lines are the half hours, the solid ones the hours.
-          A deeper green means a longer free stretch. The names below are yours only: the picture says
-          “Booked” and the message leaves it out.
+          A deeper green means a longer free stretch. These are <strong>your</strong> hours, with the
+          student&rsquo;s clock beside them; what you send is turned into theirs. The names are yours
+          only: the picture says “Booked” and the message leaves it out.
         </p>
 
         <div className="inline-block min-w-full bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden">
@@ -449,11 +461,11 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
                     }}>
                     {onTheHour && days[0] && (
                       <>
-                        <span className="block text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">
-                          {timeIn(instantOf(days[0], m), tz)}
+                        <span className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-200 leading-tight">
+                          {tutorTime(m)}
                         </span>
-                        <span className="block text-[9px] font-semibold text-slate-400 dark:text-slate-500 leading-tight">
-                          you {pad(Math.floor(m / 60))}:00
+                        <span className="block text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 leading-tight">
+                          {cityOf(tz)} {timeIn(instantOf(days[0], m), tz)}
                         </span>
                       </>
                     )}
@@ -492,7 +504,7 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
                         <span className="absolute inset-0 flex items-center px-2 pointer-events-none">
                           <span className="text-[11px] font-extrabold text-white truncate">
                             {free
-                              ? `${timeIn(instantOf(day, run.startMin), tz)} - ${timeIn(instantOf(day, run.endMin), tz)}`
+                              ? `${tutorTime(run.startMin)} - ${tutorTime(run.endMin)}`
                               : `${run.title} — Booked`}
                           </span>
                         </span>
