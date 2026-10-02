@@ -300,6 +300,10 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
   /** The computer races in the second lane when the student is on their own. */
   const aiRef     = useRef(vsComputer);
   const aiWakeRef = useRef(0);
+  /** The lunge it is already committed to, and the tackle it has already
+   *  decided whether to leap over — so it rolls the dice once, not per frame. */
+  const aiNextLungeRef = useRef(0);
+  const aiDodgedRef    = useRef(0);
   useEffect(() => { aiRef.current = vsComputer; }, [vsComputer]);
   const [, setTick] = useState(0);
   const [, setRosterTick] = useState(0); // re-render the lobby when players join
@@ -1201,28 +1205,70 @@ const LetterRaceGame = ({ letters, letterForm = 'isolated', onExit, roomId, play
       // Online, EITHER key set drives the ONE racer this device owns.
       const held = keys.current;
       const rot = (pl: RacePlayer, d: number) => { if (now >= pl.fallenUntil) pl.heading = (pl.heading + d * ROT_PER_FRAME * dtF + 360) % 360; };
-      /** The computer's runner: head for the right box, carry it home. It
-       *  waits a beat at the start of each round, turns a touch slower than a
-       *  player can and never tackles, so it can be beaten by anyone who
-       *  knows the answer. */
+      const maxFor = (pl: RacePlayer) => pl.carrying ? MAX_SPEED * CARRY_SLOW : MAX_SPEED;
+      /** The computer's runner. It fetches the word, and when the student gets
+       *  there first it goes after them: chase, lunge, grab what falls, carry
+       *  it home — and leap a lunge coming the other way. Deliberately
+       *  fallible: it waits a beat each round, turns and runs a touch slower
+       *  than a player can, lunges on a delay and does not always dodge. */
+      const aiLunge = (p2: RacePlayer) => {                 // same guards as the keyboard's
+        if (now < p2.tackleCd || now < p2.fallenUntil || now - p2.jumpAt < JUMP_ANIM_MS) return;
+        p2.tackleUntil = now + TACKLE_MS;
+        p2.tackleCd    = now + TACKLE_COOLDOWN;
+        p2.tackleHit   = false;
+        p2.speed       = TACKLE_SPEED;
+        playFx('tackle', 0.9);
+      };
+      const aiLeap = (p2: RacePlayer) => {
+        if (now - p2.jumpAt < JUMP_CD_MS || now < p2.fallenUntil || now < p2.tackleUntil) return;
+        p2.jumpAt = now;
+        playFx('jump', 0.8);
+      };
       const runComputer = (pl: RacePlayer) => {
         if (now < aiWakeRef.current || now < pl.fallenUntil) return;
-        const target = pl.carrying
-          ? { x: pl.x, y: START_Y }
-          : (g.boxes.find(b => b.isTarget && !b.taken) ?? null);
-        if (!target) return;
-        const ty = pl.carrying ? START_Y : LETTER_Y;
-        const dx = target.x - pl.x, dy = ty - pl.y;
+        const foe = g.players.find(p => p !== pl) ?? null;
+        const near = foe ? Math.hypot(foe.x - pl.x, foe.y - pl.y) : Infinity;
+
+        // Carrying it home, with someone lunging at them: leap. The decision is
+        // made once per lunge, and it misses one in four.
+        if (pl.carrying && foe && now < foe.tackleUntil && near < TACKLE_REACH + 5) {
+          if (aiDodgedRef.current !== foe.tackleUntil) {
+            aiDodgedRef.current = foe.tackleUntil;
+            if (Math.random() < 0.75) aiLeap(pl);
+          }
+        }
+
+        // Where it is going, in order of what matters.
+        let tx: number, ty: number, chasing = false;
+        if (pl.carrying) {
+          tx = pl.x; ty = START_Y;                       // home with the prize
+        } else if (g.dropped) {
+          tx = g.dropped.x; ty = g.dropped.y;            // a loose word on the grass
+        } else if (foe?.carrying) {
+          tx = foe.x; ty = foe.y; chasing = true;        // rob the carrier
+        } else {
+          const box = g.boxes.find(b => b.isTarget && !b.taken);
+          if (!box) return;
+          tx = box.x; ty = LETTER_Y;
+        }
+
+        const dx = tx - pl.x, dy = ty - pl.y;
         const want = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
-        let diff = ((want - pl.heading + 540) % 360) - 180;
+        const diff = ((want - pl.heading + 540) % 360) - 180;
         const turn = Math.min(Math.abs(diff), ROT_PER_FRAME * 0.8 * dtF) * Math.sign(diff);
         pl.heading = (pl.heading + turn + 360) % 360;
-        // Only run once roughly pointed the right way, and never quite flat out.
         if (Math.abs(diff) < 42 && now >= pl.tackleUntil) {
           pl.speed = Math.min(maxFor(pl) * 0.88, pl.speed + RUN_ACCEL * 0.9 * dtF);
         }
+
+        // In range of the carrier and roughly facing them: lunge, after a beat.
+        if (chasing && Math.abs(diff) < 50 && near < TACKLE_REACH + 3.5) {
+          if (!aiNextLungeRef.current) aiNextLungeRef.current = now + 220 + Math.random() * 320;
+          else if (now >= aiNextLungeRef.current) { aiLunge(pl); aiNextLungeRef.current = 0; }
+        } else {
+          aiNextLungeRef.current = 0;
+        }
       };
-      const maxFor = (pl: RacePlayer) => pl.carrying ? MAX_SPEED * CARRY_SLOW : MAX_SPEED;
       if (online) {
         const own = g.players[Math.max(0, ownIdxRef.current)];
         if (own) {
