@@ -224,6 +224,11 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  /** The sheet as a real file, drawn ahead of the tap. A phone's share sheet
+   *  only opens while the tap is still "live", and drawing takes long enough
+   *  to lose that — so the picture is ready before the button is pressed. */
+  const [png, setPng] = useState<{ blob: Blob; url: string } | null>(null);
+  const [drawing, setDrawing] = useState(false);
 
   // Nothing behind this moves while it is open.
   useEffect(() => {
@@ -304,19 +309,65 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
     return lines.join('\n');
   }, [sheetDays, student, tz]);
 
-  const exportPng = async () => {
-    const node = sheetRef.current;
-    const h2c = (window as any).html2canvas;
-    if (!node || !h2c) return;
+  const pngName = `availability-${(student?.name ?? 'student').replace(/\s+/g, '-').toLowerCase()}.png`;
+
+  /** Draw the sheet whenever it changes, while the picture tab is open. */
+  useEffect(() => {
+    if (mode !== 'png' || !student || sheetDays.length === 0) return;
+    let live = true;
+    const t = window.setTimeout(async () => {
+      const node = sheetRef.current;
+      const h2c  = (window as any).html2canvas;
+      if (!node || !h2c) return;
+      setDrawing(true);
+      try {
+        const canvas: HTMLCanvasElement = await h2c(node, {
+          backgroundColor: '#FFFFFF', scale: 1, useCORS: true, windowWidth: SHEET_W,
+        });
+        const blob: Blob | null = await new Promise(res => canvas.toBlob(b => res(b), 'image/png'));
+        if (!live || !blob) return;
+        setPng(prev => {
+          if (prev) URL.revokeObjectURL(prev.url);
+          return { blob, url: URL.createObjectURL(blob) };
+        });
+      } catch (e) {
+        console.error('availability png:', e);
+      } finally {
+        if (live) setDrawing(false);
+      }
+    }, 450);
+    return () => { live = false; window.clearTimeout(t); };
+  }, [mode, student, sheetDays]);
+
+  useEffect(() => () => { if (png) URL.revokeObjectURL(png.url); }, [png]);
+
+  /** A phone opened from the home screen cannot download a file: iOS ignores
+   *  the download attribute, and a standalone window has nowhere to put it.
+   *  The share sheet does the job properly — and better, since the picture is
+   *  going to WhatsApp anyway. Desktop keeps the plain download. */
+  const canShareFile = (): boolean => {
+    try {
+      if (!png || !navigator.share || !navigator.canShare) return false;
+      return navigator.canShare({ files: [new File([png.blob], pngName, { type: 'image/png' })] });
+    } catch { return false; }
+  };
+
+  const sendPng = async () => {
+    if (!png) return;
     setBusy(true);
     try {
-      const canvas = await h2c(node, { backgroundColor: '#FFFFFF', scale: 1, useCORS: true, windowWidth: SHEET_W });
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `availability-${(student?.name ?? 'student').replace(/\s+/g, '-').toLowerCase()}.png`;
-      a.click();
-    } catch (e) {
-      console.error('availability png:', e);
+      const file = new File([png.blob], pngName, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'My available times' });
+      } else {
+        const a = document.createElement('a');
+        a.href = png.url;
+        a.download = pngName;
+        a.click();
+      }
+    } catch (e: any) {
+      // The share sheet being dismissed is not a failure worth shouting about.
+      if (e?.name !== 'AbortError') console.error('availability share:', e);
     } finally {
       setBusy(false);
     }
@@ -529,6 +580,23 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
           )}
         </div>
 
+        {mode === 'png' && student && (
+          <div className="mt-4 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">What they will see</p>
+            {png ? (
+              <>
+                <img src={png.url} alt="The availability sheet" className="w-full max-w-[320px] rounded-xl border border-slate-200 dark:border-gray-600" />
+                <p className="mt-2 text-[11.5px] text-slate-500 dark:text-slate-400 max-w-[420px] leading-relaxed">
+                  On a phone, press and hold the picture to save or send it — that works even with the app
+                  opened from the home screen, where a download has nowhere to go.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-400 py-6">{drawing ? 'Drawing the picture…' : 'Pick a student to draw the picture.'}</p>
+            )}
+          </div>
+        )}
+
         {mode === 'text' && (
           <div className="mt-4 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">What they will read</p>
@@ -553,9 +621,9 @@ const AvailabilitySender: React.FC<Props> = ({ days, availabilitySlots, booked, 
           ))}
         </div>
         {mode === 'png' ? (
-          <button onClick={exportPng} disabled={busy || !student || sheetDays.length === 0}
+          <button onClick={sendPng} disabled={busy || drawing || !png}
             className="h-11 px-5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-extrabold disabled:opacity-40">
-            {busy ? 'Drawing…' : 'Download picture'}
+            {drawing ? 'Drawing…' : busy ? 'Sending…' : canShareFile() ? 'Send picture' : 'Download picture'}
           </button>
         ) : (
           <button onClick={copyText} disabled={!student || sheetDays.length === 0}
