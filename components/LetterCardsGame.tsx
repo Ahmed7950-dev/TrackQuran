@@ -462,14 +462,33 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     void markLetterCardsStarted(game.id);
   }, [solo, game]);
 
-  /** The computer's turn: it takes a moment, then throws one of its cards. */
+  /** The computer's turn: it takes a moment, then throws one of its cards.
+   *  It keeps checking rather than firing once, so a throw that is skipped —
+   *  the board moved under it, a tab slept through the beat — is simply tried
+   *  again on the next look instead of leaving the game sitting there. */
   useEffect(() => {
     if (!solo || !snap || snap.ph !== 'playing' || snap.turn !== 'tutor') return;
-    const n = snap.tutorHand.length;
-    if (!n) return;
-    const t = window.setTimeout(() => pick('tutor', Math.floor(Math.random() * n)), 900);
-    return () => window.clearTimeout(t);
+    if (!snap.tutorHand.length) return;
+    let fired = false;
+    const throwOne = () => {
+      const s = snapRef.current;
+      if (!s || s.ph !== 'playing' || s.turn !== 'tutor' || s.thrownTutor || !s.tutorHand.length) return;
+      fired = true;
+      pick('tutor', Math.floor(Math.random() * s.tutorHand.length));
+    };
+    const t = window.setTimeout(throwOne, 900);
+    const retry = window.setInterval(() => { if (!fired) throwOne(); }, 1200);
+    return () => { window.clearTimeout(t); window.clearInterval(retry); };
   }, [solo, snap, pick]);
+
+  /** Neither side can move and the pile cannot help: that is the end of the
+   *  game, not a pause. Finish it instead of leaving the board frozen. */
+  useEffect(() => {
+    if (!solo || !snap || snap.ph !== 'playing' || snap.pile.length > 0) return;
+    const stuck = snap.turn === 'tutor' ? !snap.tutorHand.length : !snap.studentHand.length;
+    if (!stuck) return;
+    commit({ ...snap, ph: 'over', ended: 'done' });
+  }, [solo, snap, commit]);
 
   // ── The wire ──
   useEffect(() => {

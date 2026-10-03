@@ -59,7 +59,9 @@ export const refill = (s: Snap, rnd: () => number = Math.random): Snap => {
   const used = animalsInPlay({ tutorHand, studentHand, thrownTutor: s.thrownTutor, thrownStudent: s.thrownStudent });
   const free = shuffle(ANIMALS.filter(a => !used.has(a)), rnd);
   let dealt = false;
-  while (tutorHand.length < HAND_SIZE && pile.length > 0) {
+  // Deal while EITHER hand is short: if the two ever drift apart, the short one
+  // fills up again instead of staying short for the rest of the game.
+  while (Math.min(tutorHand.length, studentHand.length) < HAND_SIZE && pile.length > 0) {
     const a1 = free.pop(); const a2 = free.pop();
     if (!a1 || !a2) break;                    // 21 animals covers ten in play
     const letter = pile.shift()!;
@@ -85,17 +87,23 @@ export const deal = (
   wrongLetters: {}, flash: null, ended: null,
 }, rnd);
 
-/** The tutor throws the card at `index`; it is the student's turn next. */
+/** The tutor throws the card at `index`; it is the student's turn next.
+ *  One card at a time: a card already on the table is not replaced, or the
+ *  first one would leave the hand and never be seen again. */
 export const throwTutor = (s: Snap, index: number): Snap => {
   const card = s.tutorHand[index];
-  if (s.ph !== 'playing' || s.turn !== 'tutor' || !card) return s;
+  if (s.ph !== 'playing' || s.turn !== 'tutor' || s.thrownTutor || !card) return s;
   return { ...s, thrownTutor: card, tutorHand: s.tutorHand.filter((_, i) => i !== index), turn: 'student' };
 };
 
-/** The student answers with the card at `index` — not yet judged. */
+/** The student answers with the card at `index` — not yet judged. The same
+ *  rule: while one answer is face up waiting to be judged, a second tap does
+ *  nothing. Without that guard a quick double-tap threw a card, dropped it
+ *  from the hand, and then overwrote it — the hand shrank by one for good, and
+ *  a hand that reaches zero can never answer again. */
 export const throwStudent = (s: Snap, index: number): Snap => {
   const card = s.studentHand[index];
-  if (s.ph !== 'playing' || s.turn !== 'student' || !card) return s;
+  if (s.ph !== 'playing' || s.turn !== 'student' || s.thrownStudent || !card) return s;
   return { ...s, thrownStudent: card, studentHand: s.studentHand.filter((_, i) => i !== index) };
 };
 
