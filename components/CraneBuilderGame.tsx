@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { wordAudioUrl, speakWord } from '../services/wordAudioService';
 import { supabase } from '../lib/supabase';
 import { GameInviteButton } from './GameInvite';
+import { shapeOf, NON_CONNECTORS } from './LetterMatchChallenge';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crane Builder — a Qaedah word-building game.
@@ -26,8 +27,8 @@ const CUBE = 58;            // cube edge (stage units)
 const RAIL_Y = 64;          // gantry rail height
 const HOOK_MIN = 104;       // highest the magnet rises (just under the rail)
 const HOOK_MAX = 540;       // lowest the magnet drops (near the ground)
-const TROLLEY_SPEED = 5.5;
-const HOOK_SPEED = 6;
+const TROLLEY_SPEED = 3.2;  // a crane is heavy — it should feel it
+const HOOK_SPEED = 3.6;
 const GRAB_RADIUS = 46;
 const DROP_RADIUS = 58;
 const BASE_Y = 458;         // y-centre of each column's bottom slot
@@ -66,9 +67,9 @@ interface Layout {
 const DEFAULT_LAYOUT: Layout = {
   stage: { x: 261, y: 231, w: 560, h: 284 },   // brick-wall backdrop (tutor-tuned)
   crane: { x: -38, y: -26, w: 957, h: 522 },
-  cube: { w: 59, h: 60 },
+  cube: { w: 50, h: 51 },
   build: { x: 480, y: 448 },
-  colGap: 68.44, rowGap: 58,
+  colGap: 78, rowGap: 54,
   groundY: 548,
   ropeTop: 92,
   hook: { w: 62, dy: 10 },
@@ -88,12 +89,22 @@ const MARK_POS: Record<string, 'above' | 'below'> = {
 };
 const isMark = (ch: string) => ch in MARK_POS || (ch >= 'ً' && ch <= 'ْ');
 
+// Fatha and kasra are the same stroke; only where it goes decides which it is.
+// They therefore share ONE block, and the slot it lands in names it.
+const STROKE = 'َ|ِ';
+const markKey = (m: string) => (m === 'َ' || m === 'ِ') ? STROKE : m;
+/** The loose block for a mark — the shared stroke shows as a plain slash. */
+const loseGlyph = (m: string) => dottedMark(markKey(m) === STROKE ? 'َ' : m);
+
 // Distractor pools (cubes that are NOT in the word, to make it a real puzzle).
 const FILLER_LETTERS = ['ب','ت','ج','د','ر','س','ع','ف','ك','ل','م','ن','ه','و','ي'];
 const FILLER_MARKS = ['َ','ُ','ِ','ْ'];
 
 // A target slot in the building, and (once placed) the cube occupying it.
-interface Slot { matchKey: string; glyph: string; kind: 'letter' | 'mark'; x: number; y: number; }
+// `glyph` is what the loose cube shows (a letter on its own); `shaped` is what
+// it becomes once it lands in this slot — the form the letter really takes at
+// that point in the word.
+interface Slot { matchKey: string; glyph: string; shaped?: string; kind: 'letter' | 'mark'; x: number; y: number; }
 // A cube the player can pick up.
 interface Cube {
   id: number; matchKey: string; glyph: string; kind: 'letter' | 'mark';
@@ -102,36 +113,79 @@ interface Cube {
 
 const dottedMark = (mark: string) => `◌${mark}`; // ◌ + combining mark renders the mark alone
 
-/** Decompose a word into per-letter columns and the ordered slot sequence,
- *  positioned according to the (editable) layout. */
-function buildPlan(word: string, L: Layout): { slots: Slot[]; cols: number } {
-  const chars = Array.from(word).filter(ch => ch.trim() !== '');
-  type Col = { letter: string; below: string[]; above: string[] };
+/** A clear step between two words, as a fraction of one column. */
+const WORD_GAP = 0.62;
+/** Breathing room between the building and the edge of the wall behind it. */
+const WALL_PAD = 12;
+/** However small the wall forces it, a block still has to be readable. */
+const MIN_FIT = 0.42;
+
+/** Decompose a word (or two) into per-letter columns and the ordered slot
+ *  sequence, positioned according to the (editable) layout.
+ *
+ *  Three things the plain left-to-right walk did not do: it ran off the end of
+ *  the wall on a long word, it ignored the space between two words, and every
+ *  letter stood in its isolated form wherever it landed. So the columns are
+ *  measured first, scaled to whatever the wall can hold, stepped apart at a
+ *  word break, and each letter is given the shape it really takes there. */
+function buildPlan(word: string, L: Layout): { slots: Slot[]; cols: number; scale: number } {
+  type Col = { letter: string; below: string[]; above: string[]; word: number };
   const cols: Col[] = [];
-  for (const ch of chars) {
+  let wordNo = 0;
+  for (const ch of Array.from(word)) {
+    if (ch.trim() === '') { if (cols.length) wordNo += 1; continue; }   // a space starts the next word
     if (isMark(ch) && cols.length > 0) {
       const pos = MARK_POS[ch] ?? 'above';
       (pos === 'below' ? cols[cols.length - 1].below : cols[cols.length - 1].above).push(ch);
     } else if (!isMark(ch)) {
-      cols.push({ letter: ch, below: [], above: [] });
+      cols.push({ letter: ch, below: [], above: [], word: wordNo });
     }
   }
 
-  const numCols = cols.length;
+  // Where each column sits, in columns from the right-hand anchor.
+  const offs: number[] = [];
+  let acc = 0;
+  cols.forEach((col, i) => {
+    if (i > 0) acc += 1 + (col.word !== cols[i - 1].word ? WORD_GAP : 0);
+    offs.push(acc);
+  });
+  const levels = Math.max(0, ...cols.map(c => c.below.length + c.above.length));
+
+  // Fit it to the wall: first slide the right-hand anchor over to use the
+  // whole width, and only then shrink — a long word gets the full wall before
+  // it gets small, and a short one stays exactly where it was tuned to sit.
+  const leftLimit  = L.stage.x + WALL_PAD;
+  const rightLimit = L.stage.x + L.stage.w - WALL_PAD;
+  const need = acc * L.colGap + L.cube.w / 2;          // anchor centre → left edge, unscaled
+  let anchor = L.build.x;
+  if (anchor - need < leftLimit) anchor = Math.min(rightLimit - L.cube.w / 2, leftLimit + need);
+  const across = (anchor - leftLimit) / Math.max(1e-6, need);
+  const upward = (L.build.y - (L.stage.y + WALL_PAD)) / Math.max(1e-6, levels * L.rowGap + L.cube.h / 2);
+  const scale = Math.max(MIN_FIT, Math.min(1, across, upward));
+
+  /** A letter joins the one before it only if that one is a joiner and belongs
+   *  to the same word; shapeOf settles what the letter itself allows. */
+  const form = (i: number): 'initial' | 'medial' | 'final' | 'isolated' => {
+    const prev = cols[i - 1], next = cols[i + 1];
+    const before = !!prev && prev.word === cols[i].word && !NON_CONNECTORS.has(prev.letter);
+    const after  = !!next && next.word === cols[i].word && !NON_CONNECTORS.has(cols[i].letter);
+    return before && after ? 'medial' : before ? 'final' : after ? 'initial' : 'isolated';
+  };
+
   const slots: Slot[] = [];
   cols.forEach((col, i) => {
-    const colX = L.build.x - i * L.colGap; // column 0 (first letter) sits on the right (RTL)
+    const colX = anchor - offs[i] * L.colGap * scale;  // column 0 (first letter) sits on the right (RTL)
     // bottom → top: below marks (foundation), then the letter, then above marks
-    const stack: Array<{ glyph: string; matchKey: string; kind: 'letter' | 'mark' }> = [
-      ...col.below.map(m => ({ glyph: dottedMark(m), matchKey: m, kind: 'mark' as const })),
-      { glyph: col.letter, matchKey: col.letter, kind: 'letter' as const },
-      ...col.above.map(m => ({ glyph: dottedMark(m), matchKey: m, kind: 'mark' as const })),
+    const stack: Array<{ glyph: string; shaped?: string; matchKey: string; kind: 'letter' | 'mark' }> = [
+      ...col.below.map(m => ({ glyph: loseGlyph(m), shaped: dottedMark(m), matchKey: markKey(m), kind: 'mark' as const })),
+      { glyph: col.letter, shaped: shapeOf(col.letter, form(i)), matchKey: col.letter, kind: 'letter' as const },
+      ...col.above.map(m => ({ glyph: loseGlyph(m), shaped: dottedMark(m), matchKey: markKey(m), kind: 'mark' as const })),
     ];
-    stack.forEach((s, level) => {
-      slots.push({ ...s, x: colX, y: L.build.y - level * L.rowGap });
+    stack.forEach((sl, level) => {
+      slots.push({ ...sl, x: colX, y: L.build.y - level * L.rowGap * scale });
     });
   });
-  return { slots, cols: numCols };
+  return { slots, cols: cols.length, scale };
 }
 
 let cubeIdSeq = 1;
@@ -181,6 +235,7 @@ interface CraneSnap {
   trolleyX: number; hookY: number; held: boolean; placed: number;
   cubes: Array<{ id: number; glyph: string; kind: 'letter' | 'mark'; x: number; y: number; state: 'ground' | 'held' | 'placed' }>;
   slots: Array<{ glyph: string; kind: 'letter' | 'mark'; x: number; y: number }>;
+  scale?: number;
   wrong: { x: number; y: number } | null;
 }
 
@@ -232,6 +287,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
     held: null as number | null,
     cubes: [] as Cube[],
     slots: [] as Slot[],
+    scale: 1,            // how far the building had to shrink to fit the wall
     placed: 0,
     wrongUntil: 0,
     wrongAt: null as { x: number; y: number } | null,
@@ -296,15 +352,15 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
   // ── Set up a word: build plan + scatter cubes ───────────────────────────────
   const setupWord = useCallback((w: string) => {
-    const { slots } = buildPlan(w, layoutRef.current);
+    const { slots, scale } = buildPlan(w, layoutRef.current);
     // Required cubes (one per slot) + distractors.
     const usedLetters = new Set(slots.filter(s => s.kind === 'letter').map(s => s.matchKey));
     const usedMarks = new Set(slots.filter(s => s.kind === 'mark').map(s => s.matchKey));
     const distractors: Array<{ matchKey: string; glyph: string; kind: 'letter' | 'mark' }> = [];
     FILLER_LETTERS.filter(l => !usedLetters.has(l)).sort(() => Math.random() - 0.5).slice(0, 3)
       .forEach(l => distractors.push({ matchKey: l, glyph: l, kind: 'letter' }));
-    FILLER_MARKS.filter(m => !usedMarks.has(m)).sort(() => Math.random() - 0.5).slice(0, 2)
-      .forEach(m => distractors.push({ matchKey: m, glyph: dottedMark(m), kind: 'mark' }));
+    FILLER_MARKS.filter(m => !usedMarks.has(markKey(m))).sort(() => Math.random() - 0.5).slice(0, 2)
+      .forEach(m => distractors.push({ matchKey: markKey(m), glyph: loseGlyph(m), kind: 'mark' }));
 
     const pool = [
       ...slots.map(s => ({ matchKey: s.matchKey, glyph: s.glyph, kind: s.kind })),
@@ -325,6 +381,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
 
     game.current.cubes = cubes;
     game.current.slots = slots;
+    game.current.scale = scale;
     game.current.placed = 0;
     game.current.held = null;
     game.current.trolleyX = STAGE_W / 2;
@@ -347,7 +404,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   // Re-position the building slots live when the layout is edited (design mode).
   useEffect(() => {
     if (word && game.current.cubes.length) {
-      game.current.slots = buildPlan(word, layout).slots;
+      const plan = buildPlan(word, layout);
+      game.current.slots = plan.slots;
+      game.current.scale = plan.scale;
       setTick(t => t + 1);
     }
   }, [layout, word]);
@@ -377,7 +436,9 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
       const overSomeSlot = g.slots.some((s, i) => i >= g.placed && dist(s.x, s.y, g.trolleyX, g.hookY) < DROP_RADIUS);
       if (overNext && cube.matchKey === next.matchKey && cube.kind === next.kind) {
         // Correct!
-        cube.state = 'placed'; cube.x = next.x; cube.y = next.y; g.held = null; g.placed += 1;
+        cube.state = 'placed'; cube.x = next.x; cube.y = next.y;
+        cube.glyph = next.shaped ?? next.glyph;   // beginning / middle / end form
+        g.held = null; g.placed += 1;
         g.placedFx = { x: next.x, y: next.y + CUBE / 2, until: performance.now() + 500 };
         sfxPlace();
         if (g.placed >= g.slots.length) {
@@ -500,6 +561,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         held: g.held !== null, placed: g.placed,
         cubes: g.cubes.map(c => ({ id: c.id, glyph: c.glyph, kind: c.kind, x: Math.round(c.x), y: Math.round(c.y), state: c.state })),
         slots: g.slots.map(s => ({ glyph: s.glyph, kind: s.kind, x: Math.round(s.x), y: Math.round(s.y) })),
+        scale: g.scale,
         wrong: g.wrongUntil > now ? g.wrongAt : null,
       } satisfies CraneSnap });
     }, 33);
@@ -524,6 +586,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const vPlaced   = snap ? snap.placed   : g.placed;
   const vCubes    = snap ? snap.cubes    : g.cubes;
   const vSlots    = snap ? snap.slots    : g.slots;
+  const vScale    = (snap ? snap.scale : g.scale) ?? 1;
   const vWrongAt  = snap ? snap.wrong    : (wrongActive ? g.wrongAt : null);
   const vWordIndex = snap ? snap.wordIndex : wordIndex;
   const vPhase    = snap ? snap.phase    : phase;
@@ -533,9 +596,11 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
   const pct = (x: number) => `${(x / STAGE_W) * 100}%`;
   const pcy = (y: number) => `${(y / STAGE_H) * 100}%`;
 
-  // px size of a cube relative to the stage, used by CSS (from the editable layout).
-  const cubePctW = `${(layout.cube.w / STAGE_W) * 100}%`;
-  const cubePctH = `${(layout.cube.h / STAGE_H) * 100}%`;
+  // px size of a cube relative to the stage, used by CSS (from the editable
+  // layout, shrunk by whatever the word needed to fit inside the wall).
+  const fitCube  = { w: layout.cube.w * vScale, h: layout.cube.h * vScale };
+  const cubePctW = `${(fitCube.w / STAGE_W) * 100}%`;
+  const cubePctH = `${(fitCube.h / STAGE_H) * 100}%`;
 
   // Drag/resize handle used in the layout editor — works in stage coordinates.
   const EditBox: React.FC<{ rect: Rect; color: string; label: string; onChange: (r: Rect) => void; resizable?: boolean }>
@@ -744,7 +809,7 @@ const CraneBuilderGame: React.FC<{ words: string[]; topicTitle?: string; onExit:
         {/* ── Building ghost slots (remaining) — sized to match the block footprint ── */}
         {vSlots.map((s, i) => i >= vPlaced && (
           <div key={`slot-${i}`} style={{ position: 'absolute', left: pct(s.x), top: pcy(s.y), width: cubePctW, height: cubePctH, transform: 'translate(-50%,-50%)', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: `${bookFootprint(layout.cube).w * 100}%`, height: `${bookFootprint(layout.cube).h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
+            <div style={{ width: `${bookFootprint(fitCube).w * 100}%`, height: `${bookFootprint(fitCube).h * 100}%`, boxSizing: 'border-box', borderRadius: 10,
               border: i === vPlaced ? '3px dashed #fde047' : '2px dashed rgba(255,255,255,0.55)',
               background: i === vPlaced ? 'rgba(253,224,71,0.18)' : 'rgba(255,255,255,0.06)',
               boxShadow: i === vPlaced ? '0 0 18px rgba(253,224,71,0.6)' : 'none',

@@ -51,7 +51,7 @@ const TILE_COLOURS = [
 ];
 /** The outer ring holds the first six; the inner ring starts after them. */
 const RING_OFFSET = 6;
-const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+export const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
 export const FORM_LABEL: Record<MatchForm, { en: string; ar: string }> = {
   initial: { en: 'Beginning', ar: 'أَوَّل' },
   medial:  { en: 'Middle',    ar: 'وَسَط' },
