@@ -40,6 +40,7 @@ import { listVocabHomework, type VocabHomework } from '../services/vocabHomework
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicFlashcard from './ArabicFlashcard';
 import { recordVocabReview } from '../services/vocabHomeworkService';
+import { PictureEditor, PictureAnswer, PictureReview, parseOverlay, blanksOf } from './HomeworkPictureItem';
 import { createNotification } from '../services/notificationService';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -87,6 +88,7 @@ const ADD_BUTTONS: { type: ArabicExamItemType; label: string; icon: string }[] =
   { type: 'instruction', label: 'Instruction', icon: '📌' },
   { type: 'paragraph',   label: 'Paragraph',   icon: '📝' },
   { type: 'image',       label: 'Image',       icon: '🖼️' },
+  { type: 'picture',     label: 'Picture task', icon: '🏞️' },
   { type: 'divider',     label: 'Divider',     icon: '➖' },
 ];
 
@@ -764,7 +766,9 @@ export const HomeworkTab: React.FC<{
     getHomeworkSubmissions(lessonId, studentId).then(setPastAttempts);
   }, [studentMode, studentId, lessonId]);
 
-  const practiceItems = items.filter(i => i.itemType === 'question');
+  // A picture task is answered and marked like a question, so it counts as one
+  // everywhere: the count on the cover, the submission, and the review.
+  const practiceItems = items.filter(i => i.itemType === 'question' || i.itemType === 'picture');
 
   const submitHomework = async () => {
     if (submitting) return;
@@ -774,6 +778,9 @@ export const HomeworkTab: React.FC<{
     let correct = 0;
     let autoTotal = 0;
     for (const q of practiceItems) {
+      // The tutor reads a picture task and decides: the words are written by
+      // hand, where a letter out of place is a conversation, not a cross.
+      if (q.itemType === 'picture') { res[q.id] = 'manual'; continue; }
       const qtype = q.questionType;
       // fill_blank is MANUAL: spelling/diacritic variants make string matching
       // unfair, so the tutor decides right/wrong (same as short_answer).
@@ -834,9 +841,16 @@ export const HomeworkTab: React.FC<{
     reload();
   };
 
+  /** A picture task and a plain image both start by asking for the picture;
+   *  which one is being added is remembered until the file comes back. */
+  const pendingImage = useRef<'image' | 'picture'>('image');
   const onAddClick = (type: ArabicExamItemType) => {
     if (type === 'question') { setAddingQ(true); return; }
-    if (type === 'image')    { fileRef.current?.click(); return; }
+    if (type === 'image' || type === 'picture') {
+      pendingImage.current = type === 'picture' ? 'picture' : 'image';
+      fileRef.current?.click();
+      return;
+    }
     addTextItem(type);
   };
 
@@ -845,7 +859,13 @@ export const HomeworkTab: React.FC<{
     e.target.value = '';
     if (!file) return;
     const url = await uploadHomeworkImage(file);
-    if (url) { await createHomeworkItem({ lessonId, itemType: 'image', imageUrl: url }); reload(); }
+    if (!url) return;
+    if (pendingImage.current === 'picture') {
+      await createHomeworkItem({ lessonId, itemType: 'picture', imageUrl: url, content: JSON.stringify({ texts: [] }) });
+    } else {
+      await createHomeworkItem({ lessonId, itemType: 'image', imageUrl: url });
+    }
+    reload();
   };
 
   const handleDragEnd = async () => {
@@ -1059,6 +1079,16 @@ export const HomeworkTab: React.FC<{
               {item.content}
             </p>
           )}
+          {item.itemType === 'picture' && item.imageUrl && (
+            <>
+              <span className="block text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">
+                Fill in the missing words
+              </span>
+              <PictureAnswer imageUrl={item.imageUrl} overlay={parseOverlay(item.content)}
+                answers={subAnswers[item.id] ?? {}} readOnly={submitted}
+                onAnswer={(n, value) => setSubAnswers(p => ({ ...p, [item.id]: { ...(p[item.id] ?? {}), [n]: value } }))} />
+            </>
+          )}
           {item.itemType === 'question' && (
             <>
               <div className="flex items-center justify-between">
@@ -1116,8 +1146,16 @@ export const HomeworkTab: React.FC<{
               <div className="pointer-events-none select-none space-y-3 p-1">
                 {practiceItems.map((q, i) => (
                   <div key={q.id} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-5">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Q{i + 1} · {QUESTION_TYPE_LABELS[q.questionType ?? 'short_answer']}</span>
-                    <p className="mt-1 text-base text-slate-700 dark:text-slate-200 line-clamp-2" dir="auto">{q.content}</p>
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Q{i + 1} · {q.itemType === 'picture' ? 'Picture task' : QUESTION_TYPE_LABELS[q.questionType ?? 'short_answer']}
+                    </span>
+                    {q.itemType === 'picture' ? (
+                      <p className="mt-1 text-base text-slate-700 dark:text-slate-200">
+                        {blanksOf(parseOverlay(q.content)).length} word{blanksOf(parseOverlay(q.content)).length === 1 ? '' : 's'} to fill in on a picture
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-base text-slate-700 dark:text-slate-200 line-clamp-2" dir="auto">{q.content}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1624,7 +1662,8 @@ export const HomeworkTab: React.FC<{
         {submission && practiceItems.map(item => {
           reviewQNum++;
           const qtype = item.questionType;
-          const isManual = manualTypes.includes(qtype ?? 'short_answer');
+          const isPicture = item.itemType === 'picture';
+          const isManual = isPicture || manualTypes.includes(qtype ?? 'short_answer');
           const g = grading[item.id];
           const autoCorrect = !isManual && (() => {
             const ans = submission.answers?.[item.id];
@@ -1652,7 +1691,7 @@ export const HomeworkTab: React.FC<{
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">Q{reviewQNum}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 font-medium">
-                    {QUESTION_TYPE_LABELS[qtype ?? 'short_answer']}
+                    {isPicture ? 'Picture task' : QUESTION_TYPE_LABELS[qtype ?? 'short_answer']}
                   </span>
                   {item.marks != null && item.marks > 0 && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium">
@@ -1673,15 +1712,21 @@ export const HomeworkTab: React.FC<{
               </div>
 
               {/* Question prompt */}
-              {qtype !== 'fill_blank' && (
+              {!isPicture && qtype !== 'fill_blank' && (
                 <p className="text-base font-semibold text-slate-800 dark:text-slate-100" dir="auto">{item.content}</p>
               )}
 
-              {/* Student's answer */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Student's Answer</p>
-                {renderStudentAnswer(item)}
-              </div>
+              {/* Student's answer — a picture task shows the picture as they
+                  left it, and the words they wrote beside the ones you took out */}
+              {isPicture && item.imageUrl ? (
+                <PictureReview imageUrl={item.imageUrl} overlay={parseOverlay(item.content)}
+                  answers={submission.subAnswers?.[item.id] ?? {}} />
+              ) : (
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Student's Answer</p>
+                  {renderStudentAnswer(item)}
+                </div>
+              )}
 
               {/* Correct answer (for auto-graded wrong answers) */}
               {!isManual && !autoCorrect && item.correctAnswer && qtype !== 'matching' && qtype !== 'fill_blank' && qtype !== 'multiple_choice' && qtype !== 'fill_blank_options' && qtype !== 'true_false' && (
@@ -1935,6 +1980,14 @@ export const HomeworkTab: React.FC<{
                     <p className="text-sm text-slate-700 dark:text-slate-200" dir="auto">
                       {item.content || <span className="text-slate-400">No prompt</span>}
                     </p>
+                  )}
+                  {item.itemType === 'picture' && item.imageUrl && (
+                    <PictureEditor imageUrl={item.imageUrl} overlay={parseOverlay(item.content)}
+                      onChange={next => {
+                        const text = JSON.stringify(next);
+                        setItems(list => list.map(i => (i.id === item.id ? { ...i, content: text } : i)));
+                        void updateHomeworkItem(item.id, { content: text });
+                      }} />
                   )}
                 </div>
               </div>
