@@ -4,7 +4,7 @@ import { listVocabHomework, homeworkUrl, type VocabHomework } from '../services/
 import { homeworkStatus, setArabicHomeworkStatus } from '../services/arabicHomeworkService';
 import PushToggle from './PushToggle';
 import InstallButton from './InstallButton';
-import ArabicLessonDetailPage from './ArabicLessonDetailPage';
+import ArabicLessonDetailPage, { HomeworkTab } from './ArabicLessonDetailPage';
 
 export default function ArabicHomeworkTab({ student, lessons, studentMode = false }: {
   student: ArabicStudent; lessons: ArabicLesson[]; studentMode?: boolean;
@@ -14,6 +14,9 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [lesson, setLesson] = useState<ArabicLesson | null>(null);
+  /** A homework the tutor wrote on its own — it opens on the template it was
+   *  assigned from, in the same screen a lesson's homework uses. */
+  const [custom, setCustom] = useState<VocabHomework | null>(null);
   const [now, setNow] = useState(Date.now());
   const load = useCallback(async () => {
     try { setRows((await listVocabHomework(student.id)).filter(h => h.status !== 'draft')); setError(''); }
@@ -37,7 +40,8 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
       </div>
       <p className="text-sm text-slate-600 dark:text-slate-300">{hw.deadline ? `Due ${new Date(hw.deadline).toLocaleString()}` : 'No deadline'}{hw.correctCount != null && hw.totalCount != null && ` · ${hw.correctCount}/${hw.totalCount} correct`}</p>
       <div className="flex flex-wrap gap-2">
-        {hw.kind === 'lesson' ? <button onClick={() => { const found = lessons.find(l => l.id === hw.lessonId); if (found) setLesson(found); else setError('Lesson not found.'); }} className="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm font-bold">{studentMode ? active ? 'Open homework' : 'View homework' : 'Review homework'}</button>
+        {hw.kind === 'custom' ? <button onClick={() => { if (hw.lessonId) setCustom(hw); else setError('This homework is missing.'); }} className="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm font-bold">{studentMode ? active ? 'Open homework' : 'View homework' : 'Review homework'}</button>
+          : hw.kind === 'lesson' ? <button onClick={() => { const found = lessons.find(l => l.id === hw.lessonId); if (found) setLesson(found); else setError('Lesson not found.'); }} className="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm font-bold">{studentMode ? active ? 'Open homework' : 'View homework' : 'Review homework'}</button>
           : (active || !studentMode) && <a href={homeworkUrl(hw.id)} className="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm font-bold">{studentMode ? hw.progress ? 'Continue homework' : 'Start homework' : 'View homework'}</a>}
         {!studentMode && hw.status === 'assigned' && <>
           <button disabled={busy === hw.id} onClick={() => change(hw, 'completed')} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-800 text-sm">Mark done</button>
@@ -55,6 +59,17 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
       <section className="space-y-3"><h3 className="font-bold text-slate-600 dark:text-slate-300">With student · {active.length}</h3>{active.length ? active.map(render) : <p className="text-sm text-slate-500">No homework waiting.</p>}</section>
       <section className="space-y-3"><h3 className="font-bold text-slate-600 dark:text-slate-300">History · {history.length}</h3>{history.length ? history.map(render) : <p className="text-sm text-slate-500">Finished, missed and cancelled homework will appear here.</p>}</section>
     </>}
+    {custom && custom.lessonId && <section className="fixed inset-0 z-[80] bg-slate-100 dark:bg-gray-900 overflow-y-auto">
+      <div className="max-w-4xl mx-auto p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => { setCustom(null); void load(); }} className="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 text-sm font-bold text-slate-700 dark:text-slate-200">‹ Back</button>
+          <h2 className="text-lg font-extrabold text-slate-800 dark:text-white truncate">{custom.title}</h2>
+        </div>
+        <HomeworkTab lessonId={custom.lessonId} lessonTitle={custom.title} isAdmin={false} studentMode={studentMode}
+          studentId={student.id} studentName={student.name} teacherId={student.teacherId}
+          onHomeworkComplete={() => { void load(); }} />
+      </div>
+    </section>}
     {lesson && <ArabicLessonDetailPage lesson={lesson} students={[student]} preSelectedStudentId={student.id} teacherId={student.teacherId} studentMode={studentMode}
       initialTab="homework" onClose={() => { setLesson(null); void load(); }} onHomeworkComplete={() => { void load(); }} />}
   </div>;

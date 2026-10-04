@@ -105,7 +105,7 @@ export function withReview(map: StrengthMap, wordId: string, correct: boolean): 
 export interface HomeworkWord { id: string; arabic: string; english: string; transliteration?: string }
 export interface HomeworkResult { wordId: string; correct: boolean }
 export type HomeworkStatus = 'draft' | 'assigned' | 'completed' | 'missed' | 'cancelled';
-export type HomeworkKind = 'orbit' | 'flashcards' | 'word_cards' | 'lesson';
+export type HomeworkKind = 'orbit' | 'flashcards' | 'word_cards' | 'lesson' | 'custom';
 
 export interface VocabHomework {
   id: string;

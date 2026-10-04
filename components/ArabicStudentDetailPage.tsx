@@ -23,6 +23,7 @@ import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ArabicHomeworkTab from './ArabicHomeworkTab';
 import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
+import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
 import ExamMarkingPage from './ExamMarkingPage';
 import LeaderboardPage from './LeaderboardPage';
 import CalendarPage from './CalendarPage';
@@ -448,7 +449,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       opened by tapping their name. (It replaced the ⋯ menu and the Profile tab.) */
   const [sheetOpen, setSheetOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework'>('lessons');
+  const [activeSection, setActiveSection] = useState<'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'>('lessons');
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -552,6 +553,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const RAIL_ICON: Record<string, React.ReactNode> = {
     lessons:    stroke('M12 3v18M12 7.5a2.5 2.5 0 1 0 0-.01M12 17.5a2.5 2.5 0 1 0 0-.01'),
     homework: stroke('M8 4h8M8 3h8v4H8zM6 5H4v16h16V5h-2M8 12h8M8 16h5'),
+    createHomework: stroke('M8 4h8M8 3h8v4H8zM6 5H4v16h16V5h-2M12 11v6M9 14h6'),
     vocabulary: stroke('M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5Z'),
     progress:   stroke('M4 19.5V13m5 6.5V8m5 11.5v-5m5 5V5'),
     schedule:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
@@ -560,12 +562,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     calendar:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
   };
 
-  const TABS: Array<{ key: 'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
     { key: 'homework', label: 'Homework', mobileLabel: 'Homework' },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
-    ...(studentMode ? [] : [{ key: 'exams' as const, label: 'Exams', mobileLabel: 'Exams' }]),
+    ...(studentMode ? [] : [
+      { key: 'createHomework' as const, label: 'Create homework', mobileLabel: 'Create' },
+      { key: 'exams' as const, label: 'Exams', mobileLabel: 'Exams' },
+    ]),
   ];
 
   // Marking overlay (tutor opens a submitted attempt to grade it)
@@ -602,7 +607,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
   /** A bar slot is 70px wide: these names fit on one line there. */
   const PHONE_LABEL: Record<string, string> = {
-    lessons: 'Lessons', vocabulary: 'Words', homework: 'Homework', schedule: 'Schedule', exams: 'Exams',
+    lessons: 'Lessons', vocabulary: 'Words', homework: 'Homework', createHomework: 'Create', schedule: 'Schedule', exams: 'Exams',
   };
 
   /** One row of the rail's section list. */
@@ -781,6 +786,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       )}
 
       {activeSection === 'homework' && <ArabicHomeworkTab student={student} lessons={dialectLessons} studentMode={studentMode} />}
+
+      {/* ── Create homework (tutor only): the library, written once for everyone ── */}
+      {activeSection === 'createHomework' && !studentMode && (
+        <ArabicCreateHomeworkTab student={student} teacherId={teacherId} nextLessonAt={nextLessonAt} />
+      )}
 
       {/* ── Exams section (tutor only) ── */}
       {activeSection === 'exams' && !studentMode && (

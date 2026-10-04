@@ -422,6 +422,7 @@ export type ArabicExamItemType =
   | 'instruction'  // instruction text
   | 'paragraph'    // body paragraph text
   | 'image'        // image
+  | 'picture'      // a picture with text written over it, some words blanked
   | 'question';    // a gradeable question (reuses HomeworkQuestionType)
 
 export interface ArabicExam {

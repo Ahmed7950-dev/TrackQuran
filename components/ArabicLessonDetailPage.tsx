@@ -672,7 +672,9 @@ const GrammarTab: React.FC<{
 // HOMEWORK TAB
 // ═══════════════════════════════════════════════════════
 
-const HomeworkTab: React.FC<{
+/** Exported so the tutor's own homework library can use the very same builder,
+ *  runner and marking screen — a template is just another id in lessonId. */
+export const HomeworkTab: React.FC<{
   lessonId: string;
   lessonTitle: string;
   isAdmin: boolean;
@@ -712,7 +714,7 @@ const HomeworkTab: React.FC<{
   const [assignment, setAssignment] = useState<VocabHomework | null>(null);
   useEffect(() => {
     if (!studentId || !studentMode) return;
-    void listVocabHomework(studentId).then(rows => setAssignment(rows.find(h => h.kind === 'lesson' && h.lessonId === lessonId) ?? null))
+    void listVocabHomework(studentId).then(rows => setAssignment(rows.find(h => (h.kind === 'lesson' || h.kind === 'custom') && h.lessonId === lessonId) ?? null))
       .catch(() => setHomeworkError('Could not check homework status. Please refresh.'));
   }, [studentId, studentMode, lessonId]);
   const assignmentClosed = assignment && ['Cancelled', 'Wasn’t done'].includes(homeworkStatus(assignment));
