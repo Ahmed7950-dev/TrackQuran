@@ -36,6 +36,9 @@ import {
   saveArabicStudentNote,
   getLessonProgressForStudent, markLessonProgress, markLessonDone, logLessonRevision,
 } from '../services/arabicService';
+import { listVocabHomework, type VocabHomework } from '../services/vocabHomeworkService';
+import { homeworkStatus } from '../services/arabicHomeworkService';
+import ArabicFlashcard from './ArabicFlashcard';
 import { recordVocabReview } from '../services/vocabHomeworkService';
 import { createNotification } from '../services/notificationService';
 
@@ -333,7 +336,8 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   })) as unknown as Student[];
 
   const handleMarkDone = async (studentId: string, lessonId: string, done: boolean) => {
-    await setArabicLessonCompletion(teacherId, studentId, lessonId, done);
+    try { await setArabicLessonCompletion(teacherId, studentId, lessonId, done); }
+    catch (e) { window.alert(e instanceof Error ? e.message : 'Could not assign lesson homework.'); throw e; }
     const s = students.find(x => x.id === studentId);
     if (!s) return;
     const ids = new Set(s.completedLessonIds);
@@ -399,7 +403,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
                 return p ? { status: p.status, lastSlide: p.lastSlide, revisionCount: p.revisionCount } : null;
               }}
               onMarkProgress={async (sid, lid, slide, total) => { await markLessonProgress(sid, lid, slide, total); }}
-              onMarkLessonDone={async (sid, lid, total) => { await markLessonDone(studentMode ? null : teacherId, sid, lid, total); }}
+              onMarkLessonDone={async (sid, lid, total) => { try { await markLessonDone(studentMode ? null : teacherId, sid, lid, total); } catch (e) { window.alert(e instanceof Error ? e.message : 'Could not assign lesson homework.'); throw e; } }}
               onLogRevision={async (sid, lid) => { await logLessonRevision(sid, lid); }}
               onClose={() => {}}
               onSaveWhiteboard={async (data) => { await saveWhiteboardData(lesson.id, wbAuthorId, data); }}
@@ -701,6 +705,31 @@ const HomeworkTab: React.FC<{
   // student past attempts
   const [pastAttempts, setPastAttempts]     = useState<HomeworkSubmission[]>([]);
   const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
+  const draftKey = `arabicLessonHomework:${studentId}:${lessonId}`;
+  const [draftReady, setDraftReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [homeworkError, setHomeworkError] = useState('');
+  const [assignment, setAssignment] = useState<VocabHomework | null>(null);
+  useEffect(() => {
+    if (!studentId || !studentMode) return;
+    void listVocabHomework(studentId).then(rows => setAssignment(rows.find(h => h.kind === 'lesson' && h.lessonId === lessonId) ?? null))
+      .catch(() => setHomeworkError('Could not check homework status. Please refresh.'));
+  }, [studentId, studentMode, lessonId]);
+  const assignmentClosed = assignment && ['Cancelled', 'Wasn’t done'].includes(homeworkStatus(assignment));
+
+  useEffect(() => {
+    if (!studentMode) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(draftKey) ?? 'null');
+      if (saved) { setAnswers(saved.answers ?? {}); setSubAnswers(saved.subAnswers ?? {}); setHwMode('answering'); }
+    } catch { /* no usable draft */ }
+    setDraftReady(true);
+  }, [draftKey, studentMode]);
+  useEffect(() => {
+    if (!studentMode || !draftReady || hwMode !== 'answering') return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ answers, subAnswers })); } catch { /* storage unavailable */ }
+  }, [answers, subAnswers, hwMode, draftReady, studentMode, draftKey]);
+
 
   const reload = useCallback(async () => {
     const its = await getHomeworkItems(lessonId);
@@ -735,7 +764,9 @@ const HomeworkTab: React.FC<{
 
   const practiceItems = items.filter(i => i.itemType === 'question');
 
-  const submitHomework = () => {
+  const submitHomework = async () => {
+    if (submitting) return;
+    setSubmitting(true); setHomeworkError('');
     const res: Record<string, 'correct' | 'wrong' | 'manual'> = {};
     const autoGrading: Record<string, { correct: boolean }> = {};
     let correct = 0;
@@ -772,33 +803,27 @@ const HomeworkTab: React.FC<{
     setResults(res);
     // total = auto-graded count only; manual questions are not included in the immediate score
     setHwScore({ correct, total: autoTotal });
-    setHwMode('submitted');
-    if (studentId) {
-      markHomeworkComplete(studentId, lessonId).catch(console.error);
-      onHomeworkComplete?.(lessonId);
-      // Save answers + auto-grading to Supabase so tutor can review, then refresh attempts list
-      saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers, autoGrading)
-        .then(() => getHomeworkSubmissions(lessonId, studentId).then(setPastAttempts))
-        .catch(console.error);
-      // Notify the tutor
-      createNotification({
-        teacherId,
-        studentId,
-        recipient: 'tutor',
-        bookingId: null,
-        type: 'homework_submitted',
-        title: `${studentName ?? 'Student'} submitted homework`,
-        body: lessonTitle,
-        metadata: { lessonId },
-      }).catch(console.error);
-    }
+    try {
+      if (studentId) {
+        await saveHomeworkSubmission(lessonId, studentId, teacherId, answers, subAnswers, autoGrading);
+        await markHomeworkComplete(studentId, lessonId);
+        onHomeworkComplete?.(lessonId);
+        setPastAttempts(await getHomeworkSubmissions(lessonId, studentId));
+        await createNotification({ teacherId, studentId, recipient: 'tutor', bookingId: null,
+          type: 'homework_submitted', title: `${studentName ?? 'Student'} submitted homework`, body: lessonTitle, metadata: { lessonId } });
+      }
+      try { localStorage.removeItem(draftKey); } catch { /* optional */ }
+      setHwMode('submitted');
+    } catch (e) { setHomeworkError(e instanceof Error ? e.message : 'Could not submit. Your answers are saved; try again.'); }
+    finally { setSubmitting(false); }
   };
 
   const saveGrading = async (newGrading: Record<string, { correct: boolean; note?: string }>) => {
     if (!submission) return;
     setGradeSaving(true);
-    await updateHomeworkGrading(submission.id, newGrading);
-    setGradeSaving(false);
+    try { await updateHomeworkGrading(submission.id, newGrading); }
+    catch (e) { window.alert(e instanceof Error ? e.message : 'Could not save marking.'); }
+    finally { setGradeSaving(false); }
   };
 
   // Admin builder helpers
@@ -1080,9 +1105,9 @@ const HomeworkTab: React.FC<{
                   {practiceItems.length} question{practiceItems.length !== 1 ? 's' : ''} ready
                   {pastAttempts.length > 0 && ` · Attempt ${pastAttempts.length + 1}`}
                 </p>
-                <button onClick={() => setHwMode('answering')}
+                <button disabled={!!assignmentClosed} onClick={() => setHwMode('answering')}
                   className="px-8 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-xl shadow-lg transition-colors">
-                  📝 Do Homework
+                  {assignmentClosed ? homeworkStatus(assignment) : '📝 Do Homework'}
                 </button>
               </div>
               {/* Blurred question list */}
@@ -1353,12 +1378,13 @@ const HomeworkTab: React.FC<{
         })}
 
         {/* Submit button */}
-        {!submitted && (
-          <button onClick={submitHomework}
+        {!submitted && (<>
+          {homeworkError && <p role="alert" className="text-red-600">{homeworkError}</p>}
+          <button disabled={submitting || !!assignmentClosed} onClick={submitHomework}
             className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-base shadow">
-            Submit Homework
+            {submitting ? 'Submitting…' : 'Submit Homework'}
           </button>
-        )}
+        </>)}
 
         {/* Past attempts */}
         {submitted && pastAttempts.length > 0 && (
@@ -2377,7 +2403,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   if (phase === 'active') {
     const word = shuffled[cardIndex];
     return (
-      <div className="max-w-3xl mx-auto p-10 space-y-8">
+      <div className="max-w-3xl mx-auto p-4 sm:p-10 space-y-8">
         <div className="flex items-center justify-between">
           <span className="text-base text-slate-500 dark:text-slate-400">
             {reviewingSaved && <span className="mr-2 inline-block px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-bold align-middle">🔖 {t('arabicLessonDetail.revisionSession')}</span>}
@@ -2389,46 +2415,8 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
-        {/* Flip card */}
-        <div style={{ perspective: '1200px' }} onClick={() => setFlipped(f => !f)} className="cursor-pointer select-none">
-          <div style={{ transformStyle: 'preserve-3d', transition: 'transform 0.55s cubic-bezier(0.4,0.2,0.2,1)', transform: flipped ? 'rotateY(180deg)' : 'none', position: 'relative', minHeight: '200px' }}>
-            {/* Front — English */}
-            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-              className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-16 px-12 text-center shadow-sm space-y-4 absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest">{t('arabicLessonDetail.doYouKnow')}</p>
-              <p className="text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
-              <p className="text-xs text-slate-300 dark:text-slate-600 mt-2">tap to reveal</p>
-            </div>
-            {/* Back — Arabic + transliteration */}
-            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-700 py-16 px-12 text-center shadow-sm space-y-3 absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-6xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
-              {word.transliteration && <p className="text-xl text-amber-700 dark:text-amber-300 italic">{word.transliteration}</p>}
-              <p className="text-base text-slate-500 dark:text-slate-400 mt-1">= {word.english}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:gap-5 mt-4">
-          {/* Review later — save to the personal revision list, keep going */}
-          <button onClick={handleSaveForRevision}
-            className="group relative flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 hover:border-rose-300 dark:hover:border-rose-700 transition-all shadow-sm">
-            {savedFlash && <span className="absolute -top-2 right-2 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow animate-pulse">{t('arabicLessonDetail.savedForRevision')}</span>}
-            <svg className="w-9 h-9 sm:w-10 sm:h-10 text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 2a2 2 0 0 0-2 2v17a1 1 0 0 0 1.53.848L12 17.94l6.47 3.908A1 1 0 0 0 20 21V4a2 2 0 0 0-2-2H6z"/>
-            </svg>
-            <span className="text-rose-600 dark:text-rose-400 font-bold text-sm sm:text-base text-center leading-tight">{revisionIds.has(shuffled[cardIndex]?.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')}</span>
-          </button>
-          {/* I Know button */}
-          <button onClick={handleKnow}
-            className="group flex flex-col items-center justify-center gap-3 py-5 sm:py-6 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all shadow-sm">
-            <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" viewBox="0 0 511.981 511.981" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-              <path d="m495.502 236.263c0-13.943-5.405-26.767-15.219-36.109-9.477-9.021-22.134-13.988-35.641-13.988l-162.409.005c-16.464-17.908-21.958-44.092-13.27-65.004 13.031-31.362 12.298-56.688-2.45-84.684-11.503-21.836-40.53-39.068-60.886-36.162-12.265 1.752-20.815 10.203-23.461 23.186-.871 4.273-1.131 9.309-1.434 15.14-.838 16.181-1.987 38.342-16.159 65.492-8.273 15.85-11.13 32.729-13.651 47.623-4.637 27.396-7.396 43.662-34.698 46.645v-2.718c0-5.523-4.477-10-10-10h-79.745c-5.523 0-10 4.477-10 10v294.035c0 5.523 4.477 10 10 10h79.747c5.523 0 10-4.477 10-10v-2.805c18.363 1.452 36.906 6.572 56.363 11.959 23.27 6.443 47.331 13.105 71.701 13.105h112.143c30.679 0 55.501-16.171 66.4-43.259 6.207-15.427 6.479-31.339 1.319-43.197 7.605-5.464 13.936-13.05 18.544-22.471 8.322-17.01 9.151-36.271 2.793-51.103 10.897-8.542 17.625-20.821 20.692-32.648 3.592-13.852 2.572-27.342-2.22-37.645 18.45-7.413 31.541-25.096 31.541-45.397zm-50.079 29.099-50 1.087c-5.521.12-9.9 4.693-9.78 10.215.12 5.521 4.698 9.88 10.215 9.78l46.76-1.017c5.417 4.956 7.292 16.949 4.204 28.856-1.755 6.769-9.489 28.854-35.313 28.854-5.523 0-10 4.477-10 10s4.477 10 10 10c5.839 0 11.188-.757 16.062-2.124 3.48 9.364 2.561 22.216-2.839 33.252-2.771 5.665-8.338 14.068-18.253 18.42-.29.106-.577.227-.857.362-3.794 1.536-8.202 2.481-13.301 2.481-5.523 0-10 4.477-10 10s4.477 10 10 10c4.732 0 9.298-.551 13.651-1.624 2.543 6.26 2.738 16.342-1.692 27.353-3.717 9.238-15.819 30.724-47.845 30.724h-112.145c-21.652 0-43.37-6.014-66.363-12.38-20.081-5.56-40.752-11.273-61.701-12.737v-79.162c0-5.523-4.477-10-10-10s-10 4.477-10 10v92.021h-59.747v-274.035h59.747v92.014c0 5.523 4.477 10 10 10s10-4.477 10-10v-79.225c44.37-4.023 49.689-35.446 54.417-63.377 2.385-14.089 4.851-28.657 11.661-41.706 16.189-31.015 17.521-56.709 18.402-73.712.261-5.03.486-9.374 1.058-12.182 1.244-6.104 4.107-7.01 6.692-7.379 11.005-1.571 32.208 10.207 40.363 25.685 11.989 22.757 12.459 41.735 1.675 67.688-9.547 22.979-6.491 50.531 6.882 72.679h-12.329c-5.522 0-10 4.478-10 10s4.478 10 10 10l199.595-.006c8.349 0 16.109 3.009 21.85 8.474 5.81 5.53 9.009 13.209 9.009 21.623.001 15.684-13.492 28.737-30.078 29.098z"/>
-              <path d="m106.226 332.702c-5.523 0-10 4.48-10 10.003s4.477 10 10 10 10-4.477 10-10v-.007c0-5.523-4.477-9.996-10-9.996z"/>
-            </svg>
-            <span className="text-emerald-700 dark:text-emerald-400 font-bold text-base">{t('arabicLessonDetail.iKnow')}</span>
-          </button>
-        </div>
+        <ArabicFlashcard word={word} flipped={flipped} onFlip={() => setFlipped(f => !f)} onKnow={handleKnow} onReview={handleSaveForRevision}
+          reviewLabel={revisionIds.has(word.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')} />
       </div>
     );
   }
@@ -2436,7 +2424,7 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   // ── Complete ──────────────────────────────────────────────────────────────
   if (phase === 'complete') {
     return (
-      <div className="max-w-3xl mx-auto p-10 space-y-8">
+      <div className="max-w-3xl mx-auto p-4 sm:p-10 space-y-8">
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-12 text-center shadow-sm space-y-5">
           <div className="text-7xl">🎉</div>
           <h2 className="text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.challengeComplete')}</h2>

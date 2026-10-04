@@ -1,13 +1,12 @@
 // services/vocabHomeworkService.ts
 // -----------------------------------------------------------------------------
-// Arabic vocabulary — word strength and the homework basket.
+// Arabic vocabulary — word strength and homework assignments.
 //
 //   arabic_vocab_reviews   one row per answer the student gives on a single
 //                          word — a flashcard turned over, or a word thrown in
 //                          the card game. The last ten per word draw the
 //                          red/green strength bar.
-//   arabic_vocab_homework  the basket ('draft', one per student) → an assigned
-//                          homework with a link → completed with a score.
+//   arabic_vocab_homework  lesson, flashcard and word-card assignments + history.
 //
 // Both tables are anon-writable (migration 20260914_arabic_vocab_homework.sql)
 // because the student portal and the homework link have no auth session.
@@ -31,10 +30,7 @@ export async function recordVocabReview(
   studentId: string, word: Pick<VocabWord, 'id' | 'lessonId'>, correct: boolean,
 ): Promise<void> {
   if (!studentId || !word?.id) return;
-  const { error } = await supabase.from('arabic_vocab_reviews').insert({
-    student_id: studentId, word_id: word.id, lesson_id: word.lessonId ?? null, correct,
-  });
-  if (error) console.error('recordVocabReview:', error.message);
+  await recordVocabAnswer(studentId, word.id, correct, crypto.randomUUID()).catch(console.error);
 }
 
 /** Record one answer on one word the moment it is given — a card judged in
@@ -43,19 +39,37 @@ export async function recordVocabReview(
  *  The word may not belong to a lesson (a custom vocabulary word), hence no
  *  lesson id. Best-effort: a failed write never interrupts the practice. */
 export async function recordVocabAnswer(
-  studentId: string, wordId: string, correct: boolean,
+  studentId: string, wordId: string, correct: boolean, answerKey?: string,
 ): Promise<void> {
   if (!studentId || !wordId) return;
-  const { error } = await supabase.from('arabic_vocab_reviews').insert({
-    student_id: studentId, word_id: wordId, lesson_id: null, correct,
-  });
-  if (error) console.error('recordVocabAnswer:', error.message);
+  const key = answerKey ?? crypto.randomUUID();
+  const row = { student_id: studentId, word_id: wordId, lesson_id: null, correct, answer_key: key, created_at: new Date().toISOString() };
+  // Keep failed writes until a later answer or a reopened page can retry them.
+  try { const pending = JSON.parse(localStorage.getItem('arabicPendingVocabAnswers') ?? '{}'); pending[key] = row; localStorage.setItem('arabicPendingVocabAnswers', JSON.stringify(pending)); } catch { /* storage unavailable */ }
+  const { error } = await supabase.from('arabic_vocab_reviews').upsert(row, { onConflict: 'answer_key', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+  try { const pending = JSON.parse(localStorage.getItem('arabicPendingVocabAnswers') ?? '{}'); delete pending[key]; localStorage.setItem('arabicPendingVocabAnswers', JSON.stringify(pending)); } catch { /* optional */ }
+}
+
+/** Retry interrupted strength writes without producing duplicate marks. */
+export async function flushPendingVocabAnswers(): Promise<void> {
+  let rows: Array<{ answer_key: string }> = [];
+  try { rows = Object.values(JSON.parse(localStorage.getItem('arabicPendingVocabAnswers') ?? '{}')); } catch { return; }
+  if (!rows.length) return;
+  const { error } = await supabase.from('arabic_vocab_reviews').upsert(rows, { onConflict: 'answer_key', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+  try {
+    const pending = JSON.parse(localStorage.getItem('arabicPendingVocabAnswers') ?? '{}');
+    rows.forEach(row => delete pending[row.answer_key]);
+    localStorage.setItem('arabicPendingVocabAnswers', JSON.stringify(pending));
+  } catch { /* optional */ }
 }
 
 /** wordId → the student's answers, OLDEST first, at most STRENGTH_SLOTS each. */
 export type StrengthMap = Map<string, boolean[]>;
 
 export async function getVocabStrength(studentId: string): Promise<StrengthMap> {
+  await flushPendingVocabAnswers().catch(console.error);
   const out: StrengthMap = new Map();
   if (!studentId) return out;
   const PAGE = 1000;
@@ -90,7 +104,8 @@ export function withReview(map: StrengthMap, wordId: string, correct: boolean): 
 
 export interface HomeworkWord { id: string; arabic: string; english: string; transliteration?: string }
 export interface HomeworkResult { wordId: string; correct: boolean }
-export type HomeworkStatus = 'draft' | 'assigned' | 'completed';
+export type HomeworkStatus = 'draft' | 'assigned' | 'completed' | 'missed' | 'cancelled';
+export type HomeworkKind = 'orbit' | 'flashcards' | 'word_cards' | 'lesson';
 
 export interface VocabHomework {
   id: string;
@@ -98,6 +113,11 @@ export interface VocabHomework {
   studentId: string;
   studentName?: string;
   status: HomeworkStatus;
+  kind: HomeworkKind;
+  title: string;
+  lessonId: string | null;
+  gameId: string | null;
+  progress: { results?: HomeworkResult[]; [key: string]: unknown } | null;
   words: HomeworkWord[];
   distractors: string[];
   deadline: string | null;
@@ -110,6 +130,7 @@ export interface VocabHomework {
 }
 
 interface Row {
+  kind?: HomeworkKind; title?: string; lesson_id?: string; game_id?: string; progress?: VocabHomework["progress"];
   id: string; teacher_id: string; student_id: string; student_name: string | null;
   status: HomeworkStatus; words: HomeworkWord[] | null; distractors: string[] | null;
   deadline: string | null; results: HomeworkResult[] | null;
@@ -117,8 +138,10 @@ interface Row {
   created_at: string; assigned_at: string | null; completed_at: string | null;
 }
 
-const fromRow = (r: Row): VocabHomework => ({
+export const homeworkFromRow = (r: Row): VocabHomework => ({
   id: r.id, teacherId: r.teacher_id, studentId: r.student_id, studentName: r.student_name ?? undefined,
+  kind: r.kind ?? 'orbit', title: r.title ?? 'Vocabulary homework',
+  lessonId: r.lesson_id ?? null, gameId: r.game_id ?? null, progress: r.progress ?? null,
   status: r.status, words: r.words ?? [], distractors: r.distractors ?? [],
   deadline: r.deadline, results: r.results, correctCount: r.correct_count, totalCount: r.total_count,
   createdAt: r.created_at, assignedAt: r.assigned_at, completedAt: r.completed_at,
@@ -133,87 +156,23 @@ export const homeworkUrl = (id: string): string => `${window.location.origin}/vo
 export const isHomeworkExpired = (hw: Pick<VocabHomework, 'status' | 'deadline'>, now = Date.now()): boolean =>
   hw.status === 'assigned' && !!hw.deadline && new Date(hw.deadline).getTime() < now;
 
-/** Every homework row of this student (the draft basket included), newest first. */
+/** Every homework row of this student (legacy drafts included), newest first. */
 export async function listVocabHomework(studentId: string): Promise<VocabHomework[]> {
-  const { data, error } = await supabase
-    .from('arabic_vocab_homework')
-    .select('*')
-    .eq('student_id', studentId)
-    .order('created_at', { ascending: false });
-  if (error) { console.error('listVocabHomework:', error.message); return []; }
-  return (data as Row[]).map(fromRow);
+  const rows: VocabHomework[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase.from('arabic_vocab_homework').select('*')
+      .eq('student_id', studentId).order('created_at', { ascending: false }).order('id').range(offset, offset + 999);
+    if (error) throw new Error(error.message);
+    rows.push(...(data as Row[]).map(homeworkFromRow));
+    if (data.length < 1000) return rows;
+  }
 }
 
 export async function getVocabHomework(id: string): Promise<VocabHomework | null> {
   const { data, error } = await supabase
     .from('arabic_vocab_homework').select('*').eq('id', id).maybeSingle();
   if (error) { console.error('getVocabHomework:', error.message); return null; }
-  return data ? fromRow(data as Row) : null;
-}
-
-/** Save the basket's words, creating the draft row the first time. */
-export async function saveHomeworkBasket(input: {
-  draftId: string | null; teacherId: string; studentId: string; studentName: string; words: HomeworkWord[];
-}): Promise<VocabHomework | null> {
-  if (input.draftId) {
-    const { data, error } = await supabase
-      .from('arabic_vocab_homework')
-      .update({ words: input.words })
-      .eq('id', input.draftId)
-      .select('*').maybeSingle();
-    if (error) { console.error('saveHomeworkBasket:', error.message); return null; }
-    return data ? fromRow(data as Row) : null;
-  }
-  const { data, error } = await supabase
-    .from('arabic_vocab_homework')
-    .insert({
-      teacher_id: input.teacherId, student_id: input.studentId, student_name: input.studentName,
-      status: 'draft', words: input.words,
-    })
-    .select('*').single();
-  if (error) { console.error('saveHomeworkBasket:', error.message); return null; }
-  return fromRow(data as Row);
-}
-
-/**
- * Turn the basket into homework: stamp the deadline and the distractor pool,
- * then tell the student (their portal bell) with a button to the game.
- */
-export async function assignHomework(input: {
-  draft: VocabHomework;
-  deadline: string | null;
-  distractors: string[];
-  /** The Arabic portal's bell listens on the share token, not the DB id. */
-  studentNotifyId: string | null;
-}): Promise<VocabHomework | null> {
-  const { draft } = input;
-  const { data, error } = await supabase
-    .from('arabic_vocab_homework')
-    .update({
-      status: 'assigned', deadline: input.deadline, distractors: input.distractors,
-      assigned_at: new Date().toISOString(),
-    })
-    .eq('id', draft.id)
-    .select('*').single();
-  if (error) { console.error('assignHomework:', error.message); return null; }
-  const hw = fromRow(data as Row);
-
-  if (input.studentNotifyId) {
-    // No clock time in the text: it would be written in the TUTOR's timezone.
-    // The homework page shows the deadline in the student's own time.
-    const due = hw.deadline ? ' before the deadline' : '';
-    await createNotification({
-      teacherId: hw.teacherId,
-      studentId: input.studentNotifyId,
-      recipient: 'student',
-      bookingId: null,
-      type: 'vocab_homework_assigned',
-      title: 'New vocabulary homework',
-      body: `You have ${hw.words.length} word${hw.words.length === 1 ? '' : 's'} to practise${due}. Tap to start.`,
-      metadata: { homeworkId: hw.id, url: homeworkUrl(hw.id) },
-    });
-  }
-  return hw;
+  return data ? homeworkFromRow(data as Row) : null;
 }
 
 /** The student finished: store the score and tell the tutor. Only the first finish counts. */
@@ -230,7 +189,7 @@ export async function completeHomework(hw: VocabHomework, results: HomeworkResul
     .select('*').maybeSingle();
   if (error) { console.error('completeHomework:', error.message); return null; }
   if (!data) return null;
-  const done = fromRow(data as Row);
+  const done = homeworkFromRow(data as Row);
   await createNotification({
     teacherId: done.teacherId,
     studentId: done.studentId,
@@ -242,12 +201,6 @@ export async function completeHomework(hw: VocabHomework, results: HomeworkResul
     metadata: { homeworkId: done.id },
   });
   return done;
-}
-
-export async function deleteVocabHomework(id: string): Promise<boolean> {
-  const { error } = await supabase.from('arabic_vocab_homework').delete().eq('id', id);
-  if (error) { console.error('deleteVocabHomework:', error.message); return false; }
-  return true;
 }
 
 // ── Game helpers (pure) ─────────────────────────────────────────────────────

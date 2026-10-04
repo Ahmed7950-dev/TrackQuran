@@ -112,7 +112,17 @@ export async function completeLetterCardsGame(input: {
     wrong_letters: input.wrongLetters, ended_reason: input.endedReason,
     duration_ms: input.durationMs, completed_at: new Date().toISOString(),
   }).eq('id', input.id);
-  if (error) console.error('completeLetterCardsGame:', error.message);
+  if (error) throw new Error(error.message);
+  const { data: hw, error: hwError } = await supabase.from('arabic_vocab_homework').update({
+    status: 'completed', correct_count: input.score, completed_at: new Date().toISOString(),
+  }).eq('game_id', input.id).eq('status', 'assigned').select('*').maybeSingle();
+  if (hwError) throw new Error(hwError.message);
+  if (hw) {
+    await createNotification({ teacherId: hw.teacher_id, studentId: hw.student_id, recipient: 'tutor', bookingId: null,
+      type: 'vocab_homework_completed', title: 'Word cards homework done',
+      body: `${hw.student_name ?? 'Your student'} finished word cards with ${input.score} correct.`,
+      metadata: { homeworkId: hw.id } });
+  }
 }
 
 export async function listLetterCardsGames(studentId: string): Promise<LetterCardsGame[]> {
@@ -177,10 +187,16 @@ export async function listLetterCardsAttempts(gameIds: string[]): Promise<Record
   return out;
 }
 
+/** Arabic portals register notifications by share token; Quran portals use their id. */
+async function gameNotificationId(studentId: string): Promise<string> {
+  const { data } = await supabase.from('arabic_students').select('share_token').eq('id', studentId).maybeSingle();
+  return data?.share_token ?? studentId;
+}
+
 /** Tell the student a game is waiting, with the link that opens it. */
 export async function notifyLetterCardsInvite(game: LetterCardsGame): Promise<void> {
   await createNotification({
-    teacherId: game.teacherId, studentId: game.studentId, recipient: 'student', bookingId: null,
+    teacherId: game.teacherId, studentId: await gameNotificationId(game.studentId), recipient: 'student', bookingId: null,
     type: 'letter_cards_invite',
     title: game.kind === 'words' ? '🃏 Word cards' : '🃏 Letter cards',
     body: game.kind === 'words'
@@ -194,7 +210,7 @@ export async function notifyLetterCardsInvite(game: LetterCardsGame): Promise<vo
  *  the table checks it — with the wording and the link of a homework. */
 export async function notifyLetterCardsHomework(game: LetterCardsGame): Promise<void> {
   await createNotification({
-    teacherId: game.teacherId, studentId: game.studentId, recipient: 'student', bookingId: null,
+    teacherId: game.teacherId, studentId: await gameNotificationId(game.studentId), recipient: 'student', bookingId: null,
     type: 'letter_cards_invite',
     title: game.kind === 'words' ? '🃏 Word cards homework' : '🃏 Letter cards homework',
     body: `Play the ${game.kind === 'words' ? 'word' : 'letter'} cards against the computer — `

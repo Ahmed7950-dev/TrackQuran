@@ -54,23 +54,15 @@ export async function loadOpenHomework(
   const recitationIds = quranIds.flatMap(id =>
     ((quranById.get(id)?.quran_homework ?? []) as any[]).map(h => h.recitationId).filter(Boolean));
 
-  const [recitations, vocab, letterMatch, lessonHw, completions, reports] = await Promise.all([
+  const [recitations, vocab, letterMatch, reports] = await Promise.all([
     recitationIds.length
       ? db.from('quran_recitation_homework').select('id, status').in('id', recitationIds)
       : Promise.resolve({ data: [] as any[] }),
     arabicIds.length
-      ? db.from('arabic_vocab_homework').select('student_id, words').in('student_id', arabicIds).eq('status', 'assigned').gte('created_at', sinceIso)
+      ? db.from('arabic_vocab_homework').select('student_id, words, kind, title, deadline').in('student_id', arabicIds).eq('status', 'assigned').gte('created_at', sinceIso)
       : Promise.resolve({ data: [] as any[] }),
     studentIds.length
       ? db.from('letter_match_challenges').select('student_id').in('student_id', studentIds).neq('status', 'completed').gte('created_at', sinceIso)
-      : Promise.resolve({ data: [] as any[] }),
-    arabicIds.length
-      ? db.from('arabic_lesson_homework').select('lesson_id').in('lesson_id',
-          [...new Set(arabicIds.flatMap(id => arabicById.get(id)?.completed_lesson_ids ?? []))])
-      : Promise.resolve({ data: [] as any[] }),
-    arabicIds.length
-      ? db.from('arabic_homework_completions').select('student_id, lesson_id')
-          .in('student_id', [...arabicIds, ...arabicIds.map(id => arabicById.get(id)?.share_token).filter(Boolean)])
       : Promise.resolve({ data: [] as any[] }),
     quranIds.length
       ? db.from('shared_reports').select('id, student_id, created_at').in('student_id', quranIds).order('created_at', { ascending: false })
@@ -78,19 +70,8 @@ export async function loadOpenHomework(
   ]);
 
   const recitationStatus = new Map((recitations.data ?? []).map((r: any) => [r.id, r.status]));
-  const lessonsWithHw = new Set((lessonHw.data ?? []).map((r: any) => r.lesson_id));
-  const doneLessons = new Set((completions.data ?? []).map((r: any) => `${r.student_id}|${r.lesson_id}`));
   const reportOf = new Map<string, string>();
   for (const r of (reports.data ?? []) as any[]) if (!reportOf.has(r.student_id)) reportOf.set(r.student_id, r.id);
-
-  // Titles only for lessons we might mention.
-  const lastLessonIds = arabicIds
-    .map(id => [...(arabicById.get(id)?.completed_lesson_ids ?? [])].reverse().find((l: string) => lessonsWithHw.has(l)))
-    .filter(Boolean) as string[];
-  const { data: lessonRows } = lastLessonIds.length
-    ? await db.from('arabic_lessons').select('id, title').in('id', lastLessonIds)
-    : { data: [] as any[] };
-  const lessonTitle = new Map((lessonRows ?? []).map((l: any) => [l.id, l.title]));
 
   const homeworkFor = (studentId: string): OpenHomework => {
     const items: string[] = [];
@@ -113,13 +94,12 @@ export async function loadOpenHomework(
 
     const a = arabicById.get(studentId);
     if (a) {
-      // The homework from the most recently covered lesson, if not done.
-      const last = [...(a.completed_lesson_ids ?? [])].reverse().find((l: string) => lessonsWithHw.has(l));
-      if (last && !doneLessons.has(`${a.id}|${last}`) && !doneLessons.has(`${a.share_token}|${last}`)) {
-        items.push(`the homework for "${lessonTitle.get(last) ?? 'your last lesson'}"`);
-      }
+      // The Homework tab is authoritative: do not infer assignments from
+      // completed lessons, which would resurrect cancelled or missed work.
       for (const v of (vocab.data ?? []) as any[]) {
-        if (v.student_id === a.id) items.push(`your vocabulary homework (${(v.words ?? []).length} words)`);
+        if (v.student_id !== a.id || (v.deadline && Date.parse(v.deadline) < Date.now())) continue;
+        if (v.kind === 'lesson') items.push(`the homework for "${v.title ?? 'your lesson'}"`);
+        else items.push(`${v.kind === 'flashcards' ? 'your flashcards' : v.kind === 'word_cards' ? 'your word cards' : 'your vocabulary homework'} (${(v.words ?? []).length} words)`);
       }
     }
 

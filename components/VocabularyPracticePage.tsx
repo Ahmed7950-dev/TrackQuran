@@ -118,7 +118,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   const recordCard = (card: PracticeCard | undefined, correct: boolean) => {
     if (!card?.id) return;
     setStrength(prev => withReview(prev, card.id, correct));
-    void recordVocabAnswer(studentId, card.id, correct);
+    void recordVocabAnswer(studentId, card.id, correct).catch(console.error);
   };
 
   // ── practice ──────────────────────────────────────────────────────────────

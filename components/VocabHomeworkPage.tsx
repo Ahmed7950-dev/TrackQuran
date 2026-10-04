@@ -1,3 +1,4 @@
+import { saveHomeworkProgress } from '../services/arabicHomeworkService';
 // ─────────────────────────────────────────────────────────────────────────────
 // VocabHomeworkPage — /vocab-homework/:id, no sign-in needed.
 //
@@ -7,10 +8,11 @@
 // then the next word comes. At the end the score is saved (first finish only)
 // and the tutor is notified.
 // ─────────────────────────────────────────────────────────────────────────────
+import AssignedArabicHomework from './AssignedArabicHomework';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   HOMEWORK_SECONDS_PER_WORD, HomeworkResult, HomeworkWord, VocabHomework,
-  completeHomework, getVocabHomework, homeworkOptions, isHomeworkExpired,
+  completeHomework, getVocabHomework, homeworkOptions, isHomeworkExpired, recordVocabAnswer,
 } from '../services/vocabHomeworkService';
 
 type Stage = 'loading' | 'missing' | 'intro' | 'playing' | 'finished';
@@ -45,12 +47,13 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const progressQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     document.title = 'Vocabulary homework';
     getVocabHomework(homeworkId).then(h => {
       setHw(h);
-      setStage(h && h.status !== 'draft' && h.words.length ? 'intro' : 'missing');
+      setStage(h && h.status !== 'draft' && (h.words.length || h.kind === 'lesson') ? 'intro' : 'missing');
     });
   }, [homeworkId]);
 
@@ -63,10 +66,17 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
   const start = (asPractice: boolean) => {
     if (!hw) return;
     setPractice(asPractice);
-    setDeck(shuffle(hw.words));
-    setIdx(0);
-    setResults([]);
+    let saved = hw.progress as { deck?: HomeworkWord[]; results?: HomeworkResult[] } | null;
+    if (!asPractice) {
+      try { const local = JSON.parse(localStorage.getItem(`orbitHomework:${hw.id}`) ?? 'null'); if (local?.deck && (local.results?.length ?? 0) >= (saved?.results?.length ?? 0)) saved = local; } catch { /* remote fallback */ }
+    }
+    const canResume = !asPractice && saved?.deck?.length === hw.words.length && Array.isArray(saved.results);
+    const nextResults = canResume ? saved.results! : [];
+    setDeck(canResume ? saved.deck! : shuffle(hw.words));
+    setIdx(nextResults.length);
+    setResults(nextResults);
     setReveal(null);
+    if (nextResults.length === hw.words.length) { void finish(nextResults); return; }
     setStage('playing');
   };
 
@@ -84,6 +94,12 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
     setReveal(r);
     const nextResults = [...resultsRef.current, { wordId: word.id, correct }];
     setResults(nextResults);
+    if (hw && !practice) {
+      const progress = { deck, results: nextResults };
+      try { localStorage.setItem(`orbitHomework:${hw.id}`, JSON.stringify(progress)); } catch { /* server fallback */ }
+      void recordVocabAnswer(hw.studentId, word.id, correct, `${hw.id}:${idx}`).catch(console.error);
+      progressQueue.current = progressQueue.current.catch(() => {}).then(() => saveHomeworkProgress(hw.id, progress)).catch(console.error);
+    }
     window.setTimeout(() => {
       if (idx + 1 < deck.length) {
         setIdx(idx + 1);
@@ -102,7 +118,7 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
     setSaving(true);
     const done = await completeHomework(hw, final);
     setSaving(false);
-    if (done) setHw(done);
+    if (done) { setHw(done); try { localStorage.removeItem(`orbitHomework:${done.id}`); } catch {} }
     else {
       // Someone finished it in another tab first — show what was stored.
       const fresh = await getVocabHomework(hw.id);
@@ -194,6 +210,8 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
     </div>
   );
 
+  if (hw && hw.kind !== 'orbit') return <AssignedArabicHomework homework={hw} />;
+
   if (stage === 'loading') return shell(<p className="text-center text-violet-200">Loading your homework…</p>);
 
   if (stage === 'missing' || !hw) return shell(
@@ -251,6 +269,8 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
     </div>
   );
 
+  if (hw.status === 'cancelled' || hw.status === 'missed') return shell(<div className="text-center"><h1 className="text-2xl font-bold">{hw.status === 'cancelled' ? 'Cancelled' : 'Wasn’t done'}</h1><button onClick={goBack} className="mt-4 px-4 py-2 bg-violet-700 rounded-xl">Back</button></div>);
+
   if (stage === 'intro') {
     if (hw.status === 'completed') return shell(
       <div className="text-center space-y-5">
@@ -300,7 +320,7 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
         {wordTable}
         <button onClick={() => start(false)}
           className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-lg font-extrabold shadow-lg shadow-emerald-500/30">
-          Start ▶
+          {hw.progress ? 'Continue ▶' : 'Start ▶'}
         </button>
       </div>,
     );
@@ -317,10 +337,11 @@ const VocabHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) => 
         <p className="text-sm text-violet-200">
           {practice ? 'Practice round — this score was not sent.'
             : saving ? 'Sending your score to your teacher…'
-              : saveFailed ? 'Your score could not be sent — check your connection and play again.'
+              : saveFailed ? 'Your score could not be sent — check your connection and retry saving.'
                 : 'Your teacher has your score. ✓'}
         </p>
         {resultList(results)}
+        {saveFailed && <button onClick={() => { setSaveFailed(false); void finish(results); }} className="w-full py-3 bg-emerald-600 rounded-xl">Retry saving score</button>}
         <div className="flex gap-3">
           <button onClick={() => start(true)} className="flex-1 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 font-bold">🔁 Practise again</button>
           <button onClick={goBack} className="flex-1 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 font-bold">Done</button>

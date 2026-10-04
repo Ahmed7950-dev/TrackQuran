@@ -1,3 +1,5 @@
+import { assignCompletedLessonHomework, finishLessonHomework, notifyArabicHomework, homeworkStatus } from './arabicHomeworkService';
+import { listVocabHomework } from './vocabHomeworkService';
 // services/arabicService.ts
 // ---------------------------------------------------------------------------
 // Data layer for the Arabic-language-teaching feature.
@@ -635,6 +637,10 @@ export async function saveHomeworkSubmission(
   subAnswers: Record<string, Record<number, string>>,
   autoGrading: Record<string, { correct: boolean }> = {},
 ): Promise<void> {
+  const assignment = (await listVocabHomework(studentId)).find(h => h.kind === 'lesson' && h.lessonId === lessonId);
+  if (assignment && ['Cancelled', 'Wasn’t done'].includes(homeworkStatus(assignment))) {
+    throw new Error('This homework is no longer open. Please ask your teacher.');
+  }
   // Count existing attempts to derive next attempt number (avoids ordering by attempt_number column
   // which may not exist yet if the v2 migration hasn't been run).
   const { count } = await supabase
@@ -661,10 +667,12 @@ export async function saveHomeworkSubmission(
   if (error) {
     // Fallback: upsert without attempt_number for when the migration hasn't been run yet.
     const { attempt_number: _drop, ...rowWithout } = row;
-    await supabase
+    const { error: retryError } = await supabase
       .from('homework_submissions')
       .upsert(rowWithout, { onConflict: 'lesson_id,student_id' });
+    if (retryError) throw new Error(retryError.message);
   }
+  await finishLessonHomework(studentId, lessonId);
 }
 
 /** Returns all attempts for a student on a lesson, newest first */
@@ -707,10 +715,13 @@ export async function updateHomeworkGrading(
   submissionId: string,
   grading: Record<string, { correct: boolean; note?: string }>,
 ): Promise<void> {
-  await supabase
+  const { data, error } = await supabase
     .from('homework_submissions')
     .update({ grading, graded_at: new Date().toISOString() })
-    .eq('id', submissionId);
+    .eq('id', submissionId).select('student_id, lesson_id').single();
+  if (error) throw new Error(error.message);
+  const hw = (await listVocabHomework(data.student_id)).find(h => h.lessonId === data.lesson_id && h.kind === 'lesson');
+  if (hw) await notifyArabicHomework(hw, 'Arabic homework marked', `Your teacher has marked ${hw.title}. Open it to see your feedback.`);
 }
 
 // ── Vocabulary words ─────────────────────────────────────────────────────────
@@ -840,7 +851,8 @@ export async function setArabicLessonCompletion(
     .update({ completed_lesson_ids: [...ids] })
     .eq('id', studentId)
     .eq('teacher_id', teacherId);
-  if (updateError) console.error('setArabicLessonCompletion update:', updateError.message);
+  if (updateError) throw new Error(updateError.message);
+  if (done) await assignCompletedLessonHomework(teacherId, studentId, lessonId);
 }
 
 // ── Lesson progress & dated activity logs ────────────────────────────────────

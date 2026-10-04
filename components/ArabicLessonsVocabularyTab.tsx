@@ -8,7 +8,7 @@
 //
 // Rendered for BOTH sides: the tutor's student page and the student portal
 // (ArabicStudentDetailPage backs both). The tutor additionally gets the
-// homework basket; the student gets a card for homework waiting for them.
+// word selection and assignment choices; assigned work lives in Homework.
 //
 // Every flashcard answer is recorded ("I know" = correct, "Review later" =
 // wrong) and the last ten draw the red/green strength bar beside each word.
@@ -19,14 +19,14 @@ import { useI18n } from '../context/I18nProvider';
 import { getVocabWordsForLessons, saveVocabMistakes } from '../services/arabicService';
 import {
   getVocabStrength, recordVocabReview, withReview, StrengthMap,
-  listVocabHomework, VocabHomework, isHomeworkExpired, homeworkUrl,
+  toHomeworkWord,
 } from '../services/vocabHomeworkService';
 import StrengthBar from './VocabStrengthBar';
 import GameTile from './GameTile';
-import HomeworkBasket, { useHomeworkBasket } from './VocabHomeworkBasket';
-import {
-  LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
-} from '../services/letterCardsService';
+import ArabicHomeworkChoice from './ArabicHomeworkChoice';
+import ArabicFlashcard from './ArabicFlashcard';
+import { createArabicHomework } from '../services/arabicHomeworkService';
+import { supabase } from '../lib/supabase';
 import { LetterCardsSetup } from './LetterCardsGame';
 import WordFlightGame from './WordFlightGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
@@ -45,7 +45,7 @@ type Phase = 'idle' | 'active' | 'complete';
 interface Props {
   lessons: ArabicLesson[];       // already filtered to the student's dialect(s)
   student: ArabicStudent;
-  /** Tutor side: row clicks fill the homework basket. Student side: pending homework card. */
+  /** Tutor side: row clicks fill the word selection. Student side: pending homework card. */
   studentMode?: boolean;
   /** Start of the student's next lesson — the suggested homework deadline. */
   nextLessonAt?: Date | null;
@@ -76,44 +76,26 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     getVocabStrength(student.id).then(m => { if (live) setStrength(m); });
     return () => { live = false; };
   }, [student.id]);
+  useEffect(() => {
+    const refresh = () => { void getVocabStrength(student.id).then(setStrength); };
+    const channel = supabase.channel(`vocab-strength:${student.id}`).on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'arabic_vocab_reviews', filter: `student_id=eq.${student.id}` }, refresh).subscribe();
+    window.addEventListener('focus', refresh);
+    return () => { void supabase.removeChannel(channel); window.removeEventListener('focus', refresh); };
+  }, [student.id]);
   const recordAnswer = (w: VocabWord, correct: boolean) => {
     setStrength(prev => withReview(prev, w.id, correct));
     recordVocabReview(student.id, w, correct);
   };
 
-  // Homework basket (tutor) — the draft plus every homework already sent.
-  const basket = useHomeworkBasket(student, !studentMode);
-  const [basketOpen, setBasketOpen] = useState(false);
-  /** The card game, dealt from whatever the practice box is set to. */
+  const [wordSelection, setWordSelection] = useState<Set<string>>(new Set());
+  const toggleWord = (id: string) => setWordSelection(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+  const [choice, setChoice] = useState<'flashcards' | 'word_cards' | null>(null);
   const [cardsOpen, setCardsOpen] = useState(false);
-
-  // Homework waiting for the student (portal).
-  const [pendingHomework, setPendingHomework] = useState<VocabHomework[]>([]);
-  useEffect(() => {
-    if (!studentMode) return;
-    let live = true;
-    listVocabHomework(student.id).then(list => {
-      if (live) setPendingHomework(list.filter(h => h.status === 'assigned' && !isHomeworkExpired(h)));
-    });
-    return () => { live = false; };
-  }, [student.id, studentMode]);
-
-  // Card games set as homework — the student plays them against the computer,
-  // as often as they like.
-  const [cardGames, setCardGames] = useState<LetterCardsGame[]>([]);
-  const [cardAttempts, setCardAttempts] = useState<Record<string, LetterCardsAttempt[]>>({});
-  useEffect(() => {
-    if (!studentMode) return;
-    let live = true;
-    listLetterCardsHomework(student.id).then(async games => {
-      if (!live) return;
-      const mine = games.filter(g => g.kind === 'words');
-      setCardGames(mine);
-      const tries = await listLetterCardsAttempts(mine.map(g => g.id));
-      if (live) setCardAttempts(tries);
-    }).catch(() => {});
-    return () => { live = false; };
-  }, [student.id, studentMode]);
+  const [cardsAssignment, setCardsAssignment] = useState<{ deadline: string | null } | null>(null);
+  const [assignmentMessage, setAssignmentMessage] = useState('');
 
   // "Review later" group — a SEPARATE set from the per-lesson lists, because
   // this surface spans the whole course. Per student, in localStorage.
@@ -238,15 +220,15 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const lessonPool = useMemo(() => (
     selected.size ? words.filter(w => selected.has(w.lessonId)) : words
   ), [words, selected]);
-  /** The words the tutor has tapped into the basket — every game can run on
+  /** The words the tutor has selected — every game can run on
    *  those instead of on whole lessons. */
-  const basketPool = useMemo(() => words.filter(w => basket.ids.has(w.id)), [words, basket.ids]);
+  const selectedWords = useMemo(() => words.filter(w => wordSelection.has(w.id)), [words, wordSelection]);
   /** Tapping words in the table selects them, and from then on every game and
    *  the homework run on that selection — until the tutor asks for the whole
    *  lessons again, which is what this remembers. */
   const [wantLessons, setWantLessons] = useState(false);
-  const onBasket = basketPool.length > 0 && !wantLessons;
-  const practicePool = onBasket ? basketPool : lessonPool;
+  const onSelection = selectedWords.length > 0 && !wantLessons;
+  const practicePool = onSelection ? selectedWords : lessonPool;
   const savedWords = useMemo(() => words.filter(w => revisionIds.has(w.id)), [words, revisionIds]);
   /** A card needs both halves of the word. However many are selected all go
    *  on the pile: the hands hold five a side whatever its size. */
@@ -339,39 +321,9 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
-        {/* Flip card — English on the front, Arabic on the back */}
-        <div style={{ perspective: '1200px' }} onClick={() => setFlipped(f => !f)} className="cursor-pointer select-none">
-          <div style={{ transformStyle: 'preserve-3d', transition: 'transform 0.55s cubic-bezier(0.4,0.2,0.2,1)', transform: flipped ? 'rotateY(180deg)' : 'none', position: 'relative', minHeight: '200px' }}>
-            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-              className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 py-12 sm:py-16 px-6 sm:px-12 text-center shadow-sm space-y-4 absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-xs sm:text-sm font-semibold text-slate-400 uppercase tracking-widest">{t('arabicLessonDetail.doYouKnow')}</p>
-              <p className="text-3xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100">{word.english}</p>
-              <p className="text-xs text-slate-300 dark:text-slate-600 mt-2">tap to reveal</p>
-            </div>
-            <div style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-700 py-12 sm:py-16 px-6 sm:px-12 text-center shadow-sm space-y-3 absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-4xl sm:text-6xl font-extrabold text-slate-800 dark:text-slate-100" dir="rtl">{word.arabic}</p>
-              {word.transliteration && <p className="text-lg sm:text-xl text-amber-700 dark:text-amber-300 italic">{word.transliteration}</p>}
-              <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-1">= {word.english}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:gap-5 mt-4">
-          <button onClick={handleSaveForRevision}
-            className="relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800 rounded-2xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all shadow-sm">
-            {savedFlash && <span className="absolute -top-2 right-2 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow animate-pulse">{t('arabicLessonDetail.savedForRevision')}</span>}
-            <span className="text-2xl sm:text-3xl">🔖</span>
-            <span className="text-rose-600 dark:text-rose-400 font-bold text-xs sm:text-base text-center leading-tight">
-              {revisionIds.has(word.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')}
-            </span>
-          </button>
-          <button onClick={handleKnow}
-            className="flex flex-col items-center justify-center gap-2 py-4 sm:py-6 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all shadow-sm">
-            <span className="text-2xl sm:text-3xl">👍</span>
-            <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs sm:text-base">{t('arabicLessonDetail.iKnow')}</span>
-          </button>
-        </div>
+        <ArabicFlashcard word={word} flipped={flipped} onFlip={() => setFlipped(f => !f)}
+          onKnow={handleKnow} onReview={handleSaveForRevision}
+          reviewLabel={revisionIds.has(word.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')} />
       </div>
     );
   }
@@ -451,65 +403,22 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         )}
       </div>
 
-      {/* Homework waiting for the student */}
-      {studentMode && pendingHomework.map(hw => (
-        <a key={hw.id} href={homeworkUrl(hw.id)}
-          className="flex items-center gap-3 rounded-2xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 px-4 py-3 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
-          <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-2xl">🧺</span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold text-violet-800 dark:text-violet-200">
-              Vocabulary homework · {hw.words.length} word{hw.words.length === 1 ? '' : 's'}
-            </span>
-            <span className="block text-xs text-violet-600/80 dark:text-violet-300/70">
-              {hw.deadline
-                ? `Due ${new Date(hw.deadline).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                : 'No deadline'}
-            </span>
-          </span>
-          <span className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold">Start →</span>
-        </a>
-      ))}
-
-      {/* Card games waiting for the student */}
-      {studentMode && cardGames.map(g => {
-        const tries = cardAttempts[g.id] ?? [];
-        const best = tries.reduce((m, a) => Math.max(m, a.score), 0);
-        return (
-          <a key={g.id} href={`/letter-cards/${g.id}`}
-            className="flex items-center gap-3 rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
-            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-2xl">🃏</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-amber-800 dark:text-amber-200">
-                Word cards · {g.letters.length} word{g.letters.length === 1 ? '' : 's'}
-              </span>
-              <span className="block text-xs text-amber-700/80 dark:text-amber-300/70">
-                {tries.length
-                  ? `Best ${best}/${tries[0].total} in ${tries.length} ${tries.length === 1 ? 'try' : 'tries'} · play it again`
-                  : 'Match each Arabic word with its meaning — as often as you like'}
-              </span>
-            </span>
-            <span className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">
-              {tries.length ? 'Again →' : 'Play →'}
-            </span>
-          </a>
-        );
-      })}
-
+      {assignmentMessage && <p role="status" className="text-emerald-700 dark:text-emerald-300">{assignmentMessage}</p>}
       {/* Practice launcher — runs on the SELECTED lessons (or everything) */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4 sm:p-5 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Practise</span>
           <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
-            {onBasket
-              ? `the ${basketPool.length} word${basketPool.length === 1 ? '' : 's'} you selected`
+            {onSelection
+              ? `the ${selectedWords.length} word${selectedWords.length === 1 ? '' : 's'} you selected`
               : `${selected.size ? `${selected.size} lesson${selected.size === 1 ? '' : 's'} selected` : 'all lessons'} · ${practicePool.length} words`}
           </span>
-          {!studentMode && basketPool.length > 0 && (
+          {!studentMode && selectedWords.length > 0 && (
             <span className="inline-flex rounded-full bg-slate-100 dark:bg-gray-700 p-0.5">
-              {([[false, 'Lessons'], [true, `Selected (${basketPool.length})`]] as const).map(([v, label]) => (
+              {([[false, 'Lessons'], [true, `Selected (${selectedWords.length})`]] as const).map(([v, label]) => (
                 <button key={label} onClick={() => setWantLessons(!v)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
-                    onBasket === v ? 'bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
+                    onSelection === v ? 'bg-white dark:bg-gray-800 text-violet-700 dark:text-violet-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
                   {label}
                 </button>
               ))}
@@ -533,29 +442,29 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
 
         {!studentMode && (
           <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors ${
-            basketPool.length
+            selectedWords.length
               ? 'border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10'
               : 'border-dashed border-slate-200 dark:border-gray-700'}`}>
-            {basketPool.length === 0 ? (
+            {selectedWords.length === 0 ? (
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 Tap words in the table to select them — the games and the homework then use just those.
               </span>
             ) : (
               <>
                 <span className="text-sm font-bold text-violet-800 dark:text-violet-200">
-                  {basketPool.length} word{basketPool.length === 1 ? '' : 's'} selected
+                  {selectedWords.length} word{selectedWords.length === 1 ? '' : 's'} selected
                 </span>
                 <span className="text-xs text-violet-600/80 dark:text-violet-300/70">
-                  {onBasket
+                  {onSelection
                     ? '· every game below plays just these, and homework sends just these'
                     : '· the games are running on the lessons instead'}
                 </span>
                 <span className="flex-grow" />
-                <button onClick={() => setWantLessons(onBasket)}
+                <button onClick={() => setWantLessons(onSelection)}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/30">
-                  {onBasket ? 'Use the lessons' : 'Use my selection'}
+                  {onSelection ? 'Use the lessons' : 'Use my selection'}
                 </button>
-                <button onClick={basket.clear}
+                <button onClick={() => setWordSelection(new Set())}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30">
                   Clear selection
                 </button>
@@ -582,7 +491,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             name={t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
             hint="Flip · memorise · repeat"
             disabled={practicePool.length === 0}
-            onClick={() => startChallenge(practicePool)} />
+            onClick={() => studentMode ? startChallenge(practicePool) : setChoice('flashcards')} />
 
           <GameTile art="wordflight" tone="sky" icon="✈️"
             name="Word Flight Game" hint="Catch the falling words"
@@ -610,21 +519,9 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                 ? `Play the computer · ${cardWords.length} words`
                 : `Throw a card, match its pair · ${cardWords.length} words`}
             disabled={cardWords.length < 2}
-            onClick={() => setCardsOpen(true)} />
+            onClick={() => { if (studentMode) setCardsOpen(true); else setChoice('word_cards'); }} />
 
-          {!studentMode && (
-            <GameTile art="basket" tone="violet" icon="🧺" wide
-              name={basket.words.length ? 'Assign as homework' : 'Homework Basket'}
-              hint={basket.words.length
-                ? `Send the ${basket.words.length} word${basket.words.length === 1 ? '' : 's'} you selected`
-                : 'Tap words in the table to select them'}
-              badge={basket.words.length > 0 ? (
-                <span className="absolute top-2 end-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-violet-600 text-white text-[11px] font-bold flex items-center justify-center shadow-md">
-                  {basket.words.length}
-                </span>
-              ) : undefined}
-              onClick={() => setBasketOpen(true)} />
-          )}
+
         </div>
       </div>
 
@@ -654,7 +551,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                 <th className="text-right px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Arabic</th>
                 <th className="text-left px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Translit.</th>
                 <th className="text-left px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">English</th>
-                <th title="The last 10 flashcard answers, oldest → newest"
+                <th title="The last 10 flashcard or word-card answers, oldest → newest"
                   className="text-center px-1 sm:px-2 py-2.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Strength</th>
               </tr>
             </thead>
@@ -680,25 +577,25 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                       </td>
                     </tr>
                     {items.map(w => {
-                      const inBasket = basket.ids.has(w.id);
+                      const isSelectedWord = wordSelection.has(w.id);
                       return (
                       // Learnt words get a clearly GREEN row (plus a green left
                       // edge) so the eye can pick them out at a glance. On the
                       // tutor side a tap puts the word in (or takes it out of)
-                      // the homework basket.
+                      // the word selection.
                       <tr key={w.id}
-                        onClick={studentMode ? undefined : () => basket.toggle(w)}
-                        title={studentMode ? undefined : (inBasket ? 'In the homework basket — tap to remove' : 'Tap to add to the homework basket')}
+                        onClick={studentMode ? undefined : () => toggleWord(w.id)}
+                        title={studentMode ? undefined : (isSelectedWord ? 'Selected — tap to remove' : 'Tap to add to the word selection')}
                         className={`border-b border-slate-50 dark:border-gray-700/50 ${
-                        inBasket
+                        isSelectedWord
                           ? 'bg-violet-100/80 dark:bg-violet-900/30 border-l-[3px] border-l-violet-500'
                           : learnt
                             ? 'bg-emerald-100/80 dark:bg-emerald-900/30 border-l-[3px] border-l-emerald-400 dark:border-l-emerald-600'
                             : ''
                       } ${studentMode ? '' : 'cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20'}`}>
                         <td className="px-0.5 py-2 text-center align-top">
-                          {inBasket
-                            ? <span title="In the homework basket" className="text-xs">🧺</span>
+                          {!studentMode ? <input type="checkbox" aria-label={`Select ${w.english}`} checked={isSelectedWord}
+                            onClick={e => e.stopPropagation()} onChange={() => toggleWord(w.id)} className="rounded text-violet-600" />
                             : revisionIds.has(w.id) && <span title="Saved to review later" className="text-xs">🔖</span>}
                         </td>
                         <td className={`px-1.5 sm:px-4 py-2 text-right font-semibold text-base break-words align-top ${learnt ? 'text-emerald-900 dark:text-emerald-100' : 'text-slate-800 dark:text-slate-100'}`} dir="rtl">{w.arabic}</td>
@@ -724,22 +621,26 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           <div onClick={e => e.stopPropagation()}
             className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl">
             <LetterCardsSetup words={cardWords} student={{ id: student.id, name: student.name }}
+              assignment={cardsAssignment ?? undefined}
+              onAssigned={() => { setCardsOpen(false); setAssignmentMessage("Word cards assigned. Find them in the Homework tab."); }}
               selfPlay={studentMode ? { teacherId: student.teacherId } : undefined}
               onClose={() => setCardsOpen(false)} />
           </div>
         </div>
       )}
 
-      {basketOpen && !studentMode && (
-        <HomeworkBasket
-          basket={basket}
-          student={student}
-          courseWords={words}
-          savedWords={savedWords}
-          nextLessonAt={nextLessonAt}
-          onClose={() => setBasketOpen(false)}
-        />
-      )}
+      {choice && !studentMode && <ArabicHomeworkChoice title={choice === 'flashcards' ? 'Flashcards' : 'Word cards'} count={practicePool.length} nextLessonAt={nextLessonAt}
+        onClose={() => setChoice(null)}
+        onPlay={() => { if (choice === 'flashcards') startChallenge(practicePool); else { setCardsAssignment(null); setCardsOpen(true); } setChoice(null); }}
+        onAssign={async deadline => {
+          if (choice === 'word_cards') { setCardsAssignment({ deadline }); setCardsOpen(true); }
+          else {
+            await createArabicHomework({ teacherId: student.teacherId, studentId: student.id, studentName: student.name,
+              kind: 'flashcards', title: 'Flashcards', words: practicePool.map(toHomeworkWord), deadline });
+            setAssignmentMessage('Flashcards assigned. Find them in the Homework tab.');
+          }
+          setChoice(null);
+        }} />}
 
       {showWordFlight && (
         <WordFlightGame

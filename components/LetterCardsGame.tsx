@@ -33,7 +33,9 @@ import {
   markLetterCardsStarted, notifyLetterCardsHomework, notifyLetterCardsInvite,
   recordLetterCardsAttempt, SOUND_POINT, SOUND_THROW, WordCard, WordsScript, WordsSide,
 } from '../services/letterCardsService';
-import { recordVocabAnswer } from '../services/vocabHomeworkService';
+import { createArabicHomework, homeworkStatus, saveHomeworkProgress } from '../services/arabicHomeworkService';
+import { type VocabHomework, getVocabHomework } from '../services/vocabHomeworkService';
+import { recordVocabAnswer, flushPendingVocabAnswers } from '../services/vocabHomeworkService';
 import { BOARD, Box, DEFAULT_LAYOUT, Layout } from './letterCardsLayout';
 import {
   Card, Snap, deal, judge as judgeBoard, throwStudent, throwTutor,
@@ -376,7 +378,21 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   const chanRef = useRef<P2PGameChannel | null>(null);
   const startedAt = useRef(Date.now());
 
-  useEffect(() => { document.title = 'Letter cards'; getLetterCardsGame(gameId).then(setGame); }, [gameId]);
+  const [assignment, setAssignment] = useState<VocabHomework | null>(null);
+  const [gameError, setGameError] = useState('');
+  const assignmentRef = useRef<VocabHomework | null>(null);
+  const progressQueue = useRef<Promise<unknown>>(Promise.resolve());
+  useEffect(() => {
+    document.title = 'Letter cards';
+    void flushPendingVocabAnswers().catch(console.error);
+    void (async () => {
+      const { data, error } = await supabase.from('arabic_vocab_homework').select('id').eq('game_id', gameId).maybeSingle();
+      if (error) { setGameError('Could not check homework status. Please refresh.'); return; }
+      const hw = data ? await getVocabHomework(data.id) : null;
+      assignmentRef.current = hw; setAssignment(hw);
+      setGame(await getLetterCardsGame(gameId));
+    })().catch(() => setGameError('Could not load the game. Please refresh.'));
+  }, [gameId]);
 
   // The board already fills the window; real full screen only hides the
   // browser's own bars, and browsers hand it over on a gesture and not before,
@@ -421,7 +437,16 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     if (s) chanRef.current?.send({ type: 'broadcast', event: 'board', payload: s });
   }, []);
 
-  const commit = useCallback((s: Snap) => { snapRef.current = s; setSnap(s); broadcast(s); }, [broadcast]);
+  const commit = useCallback((s: Snap) => {
+    snapRef.current = s; setSnap(s); broadcast(s);
+    if (s.mode === 'solo') {
+      const progress = { board: s, startedAt: startedAt.current };
+      try { localStorage.setItem(`letterCardsProgress:${gameId}`, JSON.stringify(progress)); } catch { /* server fallback */ }
+      const hw = assignmentRef.current;
+      if (hw) progressQueue.current = progressQueue.current.catch(() => {}).then(() => saveHomeworkProgress(hw.id, progress))
+        .catch(() => setGameError('Progress is saved on this device, but could not sync. Keep this browser to resume.'));
+    }
+  }, [broadcast, gameId]);
 
   /** A words game writes every answer the moment it is judged, right or
    *  wrong, so a game left half-played still leaves a record of the words that
@@ -434,13 +459,13 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     if (!g || g.kind !== 'words' || !g.studentId) return;
     const asked = judged.thrownTutor, answered = judged.thrownStudent;
     if (!asked || !answered) return;
-    void recordVocabAnswer(g.studentId, asked.letter, asked.letter === answered.letter);
+    void recordVocabAnswer(g.studentId, asked.letter, asked.letter === answered.letter, `${g.id}:${startedAt.current}:${(judged.flash?.n ?? 0) + 1}`).catch(() => setGameError('Could not save this answer. Check your connection.'));
   }, []);
 
   /** Throwing a card. Judging only ever runs on the tutor's device. */
   const pick = useCallback((side: 'tutor' | 'student', index: number) => {
     const s = snapRef.current;
-    if (!s || s.ph !== 'playing' || s.turn !== side) return;
+    if (!s || s.ph !== 'playing' || s.turn !== side || (assignmentRef.current && homeworkStatus(assignmentRef.current) !== 'With student')) return;
     if (side === 'tutor') { commit(throwTutor(s, index)); return; }
     const thrown = throwStudent(s, index);
     if (thrown === s) return;
@@ -456,11 +481,21 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   // ── Alone against the computer ──
   useEffect(() => {
     if (!solo || !game) return;
-    const first = deal(game.letters, game.form ?? 'initial', game.lives, game.mode);
-    snapRef.current = first; setSnap(first);
-    startedAt.current = Date.now();
+    if (assignment && homeworkStatus(assignment) !== 'With student') return;
+    let saved = assignment?.progress as { board?: Snap; startedAt?: number } | null;
+    try {
+      const local = JSON.parse(localStorage.getItem(`letterCardsProgress:${game.id}`) ?? 'null');
+      if (local?.board && (!saved?.board || (local.board.flash?.n ?? 0) >= (saved.board.flash?.n ?? 0))) saved = local;
+    } catch { /* no saved game */ }
+    const valid = saved?.board && saved.board.mode === 'solo' && saved.board.total === game.letters.length;
+    startedAt.current = valid && saved.startedAt ? saved.startedAt : Date.now();
+    const first = valid ? saved.board! : deal(game.letters, game.form ?? 'initial', game.lives, game.mode);
+    // If the page closed between throwing and judging, finish that same answer.
+    if (first.thrownTutor && first.thrownStudent) {
+      gameRef.current = game; recordAnswer(first); commit(judgeBoard(first));
+    } else commit(first);
     void markLetterCardsStarted(game.id);
-  }, [solo, game]);
+  }, [solo, game, assignment, commit, recordAnswer]);
 
   /** The computer's turn: it takes a moment, then throws one of its cards.
    *  It keeps checking rather than firing once, so a throw that is skipped —
@@ -484,7 +519,7 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
   /** Neither side can move and the pile cannot help: that is the end of the
    *  game, not a pause. Finish it instead of leaving the board frozen. */
   useEffect(() => {
-    if (!solo || !snap || snap.ph !== 'playing' || snap.pile.length > 0) return;
+    if (!solo || !snap || snap.ph !== 'playing' || snap.pile.length > 0 || snap.thrownTutor || snap.thrownStudent) return;
     const stuck = snap.turn === 'tutor' ? !snap.tutorHand.length : !snap.studentHand.length;
     if (!stuck) return;
     commit({ ...snap, ph: 'over', ended: 'done' });
@@ -522,7 +557,8 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
     void completeLetterCardsGame({
       id: game.id, score: snap.score, mistakes: snap.mistakes, wrongLetters: snap.wrongLetters,
       endedReason, durationMs,
-    });
+    }).then(() => { try { localStorage.removeItem(`letterCardsProgress:${game.id}`); } catch { /* optional */ } })
+      .catch(() => { savedRef.current = false; setGameError('Could not save the result. Reopen this homework to retry; your game is saved.'); });
     // Homework is played again and again, so every run is kept on its own.
     if (solo) {
       void recordLetterCardsAttempt({
@@ -548,6 +584,16 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
         chanRef.current?.send({ type: 'broadcast', event: 'pick', payload: { side, index } });
       };
 
+  useEffect(() => {
+    if (!assignment?.id) return;
+    const timer = window.setInterval(() => { void getVocabHomework(assignment.id).then(fresh => {
+      if (fresh) { assignmentRef.current = fresh; if (homeworkStatus(fresh) !== 'With student') setAssignment(fresh); }
+    }); }, 15000);
+    return () => clearInterval(timer);
+  }, [assignment?.id]);
+
+  if (assignment && homeworkStatus(assignment) !== 'With student') return <Shell><div className="p-8 text-center text-white"><h1 className="text-2xl font-bold">{homeworkStatus(assignment)}</h1><p className="my-4">{assignment.title}</p><button onClick={leave} className="px-5 py-3 bg-teal-700 rounded-xl">Back to homework</button></div></Shell>;
+  if (gameError && game === undefined) return <Shell><p role="alert" className="text-white text-center p-8">{gameError}</p></Shell>;
   if (game === undefined) return <Shell><p className="text-center py-24 text-slate-500">Loading the game…</p></Shell>;
   if (!game) return (
     <Shell>
@@ -571,11 +617,12 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
       <img src={BOARD_BACKGROUND} alt="" aria-hidden="true" draggable={false}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ filter: 'blur(28px) brightness(.55)', transform: 'scale(1.12)' }} />
+      {gameError && <p role="alert" className="absolute top-0 left-0 right-0 z-50 p-2 bg-amber-100 text-amber-900 text-center text-sm">{gameError}</p>}
       <Board
         snap={snap} me={me} words={game.words} wordsSide={game.wordsSide} wordsScript={game.wordsScript}
         onPick={snap.ph === 'playing' ? onPick : undefined}
         onBack={leave}
-        onRematch={host ? rematch : undefined}
+        onRematch={host && !assignment ? rematch : undefined}
       />
     </div>
   );
@@ -604,8 +651,10 @@ export const LetterCardsSetup: React.FC<{
    *  no link to send. They choose which half they hold and how the word is
    *  written, and the board deals against the computer straight away. */
   selfPlay?: { teacherId: string };
+  assignment?: { deadline: string | null };
+  onAssigned?: () => void;
   onClose: () => void;
-}> = ({ letters = [], initialForm = 'isolated', words, student, selfPlay, onClose }) => {
+}> = ({ letters = [], initialForm = 'isolated', words, student, selfPlay, assignment, onAssigned, onClose }) => {
   const isWords = !!words?.length;
   /** The pile's keys: the letters themselves, or the ids of the words. */
   const keys = isWords ? words!.map(w => w.id) : letters;
@@ -621,13 +670,14 @@ export const LetterCardsSetup: React.FC<{
   const [mode, setMode] = useState<CardsMode>('multiplayer');
   /** Playing alone: one life for every ten words on the pile, never none. */
   const soloLives = Math.max(1, Math.round(keys.length / 10));
-  const playMode: CardsMode = selfPlay ? 'solo' : mode;
+  const playMode: CardsMode = selfPlay || assignment ? 'solo' : mode;
   const playLives = selfPlay ? soloLives : lives;
   const [game, setGame] = useState<Game | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
   const studentName = student.name;
+  const pendingGame = useRef<Game | null>(null);
 
   const create = async () => {
     setBusy(true); setErr('');
@@ -637,15 +687,23 @@ export const LetterCardsSetup: React.FC<{
       teacherId = data.user?.id;
     }
     if (!teacherId) { setBusy(false); setErr('Sign in again to start a game.'); return; }
-    const g = await createLetterCardsGame({
+    const g = pendingGame.current ?? await createLetterCardsGame({
       teacherId, studentId: student.id, studentName, letters: keys,
       form: isWords ? null : form, kind: isWords ? 'words' : 'letters',
       words: isWords ? words! : null, wordsSide,
       wordsScript: haveTranslit ? wordsScript : 'arabic', lives: playLives, mode: playMode,
     });
     if (!g) { setBusy(false); setErr('Could not start the game — check the connection.'); return; }
+    pendingGame.current = g;
     // The student goes straight to the board; there is nobody to send a link to.
     if (selfPlay) { window.location.href = `/letter-cards/${g.id}`; return; }
+    if (assignment || (isWords && mode === 'solo')) {
+      try {
+        await createArabicHomework({ teacherId, studentId: student.id, studentName, kind: 'word_cards', title: 'Word cards',
+          words: (words ?? []).map(w => ({ ...w, transliteration: w.translit })), deadline: assignment?.deadline ?? null, gameId: g.id });
+        setBusy(false); if (onAssigned) { onAssigned(); return; }
+      } catch (e) { setBusy(false); setErr(e instanceof Error ? e.message : 'Could not assign homework.'); return; }
+    }
     setBusy(false);
     setGame(g);
   };
@@ -716,7 +774,7 @@ export const LetterCardsSetup: React.FC<{
         )}
       </div>
 
-      <div className={selfPlay ? 'hidden' : ''}>
+      <div className={selfPlay || assignment ? 'hidden' : ''}>
         <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">How you play it</p>
         <div className="grid sm:grid-cols-2 gap-2">
           {([
@@ -806,7 +864,7 @@ export const LetterCardsSetup: React.FC<{
         <button onClick={onClose} className="flex-1 h-12 rounded-xl bg-slate-100 dark:bg-gray-700 font-bold">Cancel</button>
         <button onClick={create} disabled={busy || keys.length === 0}
           className="flex-1 h-12 rounded-xl bg-teal-700 text-white font-black disabled:opacity-40">
-          {busy ? 'Dealing…' : selfPlay ? 'Play' : 'Start'}
+          {busy ? 'Saving…' : assignment ? 'Assign homework' : selfPlay ? 'Play' : 'Start'}
         </button>
       </div>
     </div>
