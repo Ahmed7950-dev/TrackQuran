@@ -72,7 +72,7 @@ const StudentsTable: React.FC<{
   const [reminded, setReminded] = useState<Record<string, 'sending' | 'sent'>>({});
 
   const remind = async (studentId: string) => {
-    if (!onRemind || reminded[studentId]) return;
+    if (!onRemind || reminded[studentId] || (data.get(studentId)?.openHomework ?? 0) <= 0) return;
     setReminded(r => ({ ...r, [studentId]: 'sending' }));
     await onRemind(studentId);
     setReminded(r => ({ ...r, [studentId]: 'sent' }));
@@ -98,7 +98,7 @@ const StudentsTable: React.FC<{
         case 'nextLesson': return d?.nextLesson?.getTime() ?? LAST;
         case 'linked': return d?.linked ? 1 : 0;
         case 'homework': return d?.openHomework ?? 0;
-        case 'reminders': return d?.notifications ? 1 : 0;
+        case 'reminders': return d?.notifications && d.openHomework > 0 ? 1 : 0;
         case 'review': return d?.awaitingReview ? 1 : 0;
         case 'pagesRead': return d?.pagesRead ?? 0;
         case 'pagesMemorized': return d?.pagesMemorized ?? 0;
@@ -197,7 +197,9 @@ const StudentsTable: React.FC<{
                   )}
                 </td>
                 <td className={`${cell} text-center`}>
-                  {!d?.notifications ? (
+                  {(d?.openHomework ?? 0) <= 0 ? (
+                    <Mark on={false} label="No homework to remind about" />
+                  ) : !d?.notifications ? (
                     <Mark on={false} label="Reminders off — the phone is not registered" />
                   ) : (
                     <button
