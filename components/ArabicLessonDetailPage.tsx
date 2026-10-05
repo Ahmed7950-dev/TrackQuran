@@ -881,6 +881,35 @@ export const HomeworkTab: React.FC<{
     await reorderHomeworkItems(next.map(i => i.id));
   };
 
+  /** A copy of this item, dropped in right after it. For a picture task that
+   *  means the same picture with every line of writing, every colour and every
+   *  blank already on it — the slow part of building one — so a second task on
+   *  the same image is one tap instead of a re-upload and a rebuild.
+   *
+   *  Both items point at the SAME uploaded file. Nothing re-uploads it, and
+   *  deleting an item never deletes the file, so neither copy can break the
+   *  other. The copied overlay carries the original's text ids, which is fine:
+   *  they are only ever read within one item. */
+  const duplicateItem = async (item: HomeworkItem) => {
+    const copy = await createHomeworkItem({
+      lessonId,
+      itemType: item.itemType,
+      content: item.content,
+      imageUrl: item.imageUrl,
+      questionType: item.questionType,
+      options: item.options,
+      correctAnswer: item.correctAnswer,
+      marks: item.marks,
+    });
+    if (!copy) { window.alert('Could not duplicate this item.'); return; }
+    // It is created at the end of the list; move it next to its original.
+    const next = items.filter(i => i.id !== copy.id);
+    const at = next.findIndex(i => i.id === item.id);
+    next.splice(at + 1, 0, copy);
+    await reorderHomeworkItems(next.map(i => i.id));
+    reload();
+  };
+
   const removeItem = async (item: HomeworkItem) => {
     if (!window.confirm('Delete this item?')) return;
     await deleteHomeworkItem(item.id);
@@ -1958,6 +1987,11 @@ export const HomeworkTab: React.FC<{
                     <div className="flex gap-2">
                       {item.itemType === 'question' && (
                         <button onClick={() => setEditingQ(item)} className="text-xs font-semibold text-sky-600 hover:underline">Edit</button>
+                      )}
+                      {item.itemType === 'picture' && (
+                        <button onClick={() => duplicateItem(item)}
+                          title="Another copy of this picture, with all its writing and blanks"
+                          className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline">Duplicate</button>
                       )}
                       <button onClick={() => removeItem(item)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
                     </div>
