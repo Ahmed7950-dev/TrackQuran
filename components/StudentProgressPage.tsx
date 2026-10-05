@@ -1294,7 +1294,32 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // on the last logged verse. Kept across visits, an old scroll position — or
     // a spot the tutor's live letter-focus jumped them to — beat the last log
     // and the portal opened on what looked like a random surah.
+    //
+    // OPENING A STUDENT lands on THAT student's last log; coming back to the
+    // Quran tab in the same sitting lands where they were reading. The two look
+    // identical from here — both are a mount — so a marker tells them apart:
+    // sessionStorage remembers whose reader was open last. Same student = a tab
+    // return, so the saved view wins; a different student, or a new browser
+    // session, = a fresh open, so the last log wins and the old view is ignored.
+    // Without this the reader kept whatever surah the PREVIOUS student was left
+    // on, which is not even a page this student has ever been shown.
     const viewKey = `quranful:quranView:${prefsId}`;
+    const OPEN_KEY = 'quranful:quranOpenStudent';
+    /** Was the reader already showing this student in this browser session?
+     *  Settled ONCE per student, before the marker is rewritten, so the answer
+     *  survives the re-runs we do while waiting for the last log to load. */
+    const openStateRef = useRef<{ id: string; wasOpen: boolean } | null>(null);
+    const wasAlreadyOpen = (id: string): boolean => {
+        if (openStateRef.current?.id !== id) {
+            let wasOpen = false;
+            try { wasOpen = sessionStorage.getItem(OPEN_KEY) === id; } catch { /* private mode */ }
+            openStateRef.current = { id, wasOpen };
+        }
+        return openStateRef.current.wasOpen;
+    };
+    const openedStudentOnMount = useRef<string | null>((() => {
+        try { return sessionStorage.getItem(OPEN_KEY); } catch { return null; }
+    })()).current;
     const viewStore = (): Storage => (readOnly ? sessionStorage : localStorage);
     const readSavedView = (): { surah: number; verse: string } | null => {
         try {
@@ -1304,7 +1329,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             return (typeof v?.surah === 'number' && typeof v?.verse === 'string') ? v : null;
         } catch { return null; }
     };
-    const savedViewOnMount = useRef(readSavedView()).current;
+    const savedViewOnMount = useRef(openedStudentOnMount === prefsId ? readSavedView() : null).current;
     const [selectedSurahId, setSelectedSurahId] = useState<number>(savedViewOnMount?.surah || studentProgress?.surah || 1);
     // Our own notes for whichever surah is open.
     useEffect(() => {
@@ -1322,7 +1347,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [verseJumpSurah, setVerseJumpSurah] = useState<number | null>(null);
     const [scrollToVerseKey, setScrollToVerseKey] = useState<string | null>(
         savedViewOnMount?.verse ?? (studentProgress ? `${studentProgress.surah}:${studentProgress.ayah}` : null));
-    const didResumeRef = useRef(false); // resume to the last-log position only once, on first open
+    /** The student we have already resumed for — not a plain boolean, so that
+     *  switching students inside the same mount resumes again for the new one. */
+    const resumedForRef = useRef<string | null>(null);
+    useEffect(() => {
+        wasAlreadyOpen(prefsId);          // settle the answer before overwriting
+        try { sessionStorage.setItem(OPEN_KEY, prefsId); } catch { /* private mode */ }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [prefsId]);
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
     // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
@@ -1826,7 +1858,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         if (!jumpToVerseKey) return;
         const [surahNum] = jumpToVerseKey.split(':').map(Number);
         if (surahNum && !isNaN(surahNum)) {
-            didResumeRef.current = true;   // an explicit jump outranks resuming
+            resumedForRef.current = prefsId;   // an explicit jump outranks resuming
             setSelectedSurahId(surahNum);
             setScrollToVerseKey(jumpToVerseKey);
         }
@@ -2621,27 +2653,34 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         fetchTafsir();
     }, [selectedSurahId, showTranslation, guestInfoWanted, verses]);
 
-    // First open: resume to the last-log position once it's available. The initial
-    // useState may have been empty if the resume point loaded after this mounted.
-    // Guarded so it never yanks the user away after they start navigating/logging.
+    // Resume to the last-log position once it's available. The initial useState
+    // may have been empty if the resume point loaded after this mounted.
+    // Guarded so it never yanks the user away after they start navigating or
+    // logging — but the guard is per STUDENT, so picking a different student
+    // inside the same mount resumes again, for them.
     useEffect(() => {
-        if (didResumeRef.current) return;
+        if (resumedForRef.current === prefsId) return;
         // An explicit navigation (e.g. "Go to homework" via jumpToVerseKey) takes
         // precedence over resuming — don't clobber it.
-        if (jumpToVerseKey) { didResumeRef.current = true; return; }
-        // Where they actually left off wins over the last logged verse.
-        const saved = readSavedView();
+        if (jumpToVerseKey) { resumedForRef.current = prefsId; return; }
+        // Where they left off wins over the last logged verse ONLY when they are
+        // coming back to the Quran tab mid-sitting. Opening the student goes to
+        // the student's last log.
+        const saved = wasAlreadyOpen(prefsId) ? readSavedView() : null;
         if (saved) {
-            didResumeRef.current = true;
+            resumedForRef.current = prefsId;
             setSelectedSurahId(saved.surah);
             setScrollToVerseKey(saved.verse);
             return;
         }
+        // No log yet (a student who has never been logged): leave the reader
+        // where it is and try again if one arrives.
         if (!studentProgress) return;
-        didResumeRef.current = true;
+        resumedForRef.current = prefsId;
         setSelectedSurahId(studentProgress.surah);
         setScrollToVerseKey(`${studentProgress.surah}:${studentProgress.ayah}`);
-    }, [studentProgress, jumpToVerseKey]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [prefsId, studentProgress, jumpToVerseKey]);
 
     useEffect(() => {
         if (scrollToVerseKey && verses.length > 0) {
