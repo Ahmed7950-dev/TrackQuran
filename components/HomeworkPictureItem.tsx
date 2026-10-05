@@ -121,15 +121,17 @@ const Swatches: React.FC<{
   </span>
 );
 
-/** A box about as wide as the word it stands in for — measured in `em`, which
- *  is the text's own size, so it grows and shrinks with the picture instead of
- *  swallowing it. */
-const blankBox = (word: string, extra: React.CSSProperties = {}): React.CSSProperties => ({
+/** One word's box — used by the tutor's editor AND the student's copy, so a
+ *  line breaks in exactly the same place on both. Any difference at all here,
+ *  a padding or a margin or a stray space, reflows the student's line and
+ *  carries the writing away from where the tutor put it. */
+const WORD_BOX: React.CSSProperties = {
   display: 'inline-block',
-  width: `${Math.max(2.4, word.length * 0.58 + 0.9)}em`,
-  maxWidth: '40cqw',
-  ...extra,
-});
+  padding: '0 2px',
+  margin: '0 1px',
+  borderRadius: 4,
+  border: '1px solid transparent',
+};
 
 // ── The tutor's editor ──────────────────────────────────────────────────────
 
@@ -244,9 +246,10 @@ export const PictureEditor: React.FC<{
                     }}
                     title={t.blanks.includes(i) ? 'A blank — tap to put the word back' : 'Tap to make this a blank'}
                     style={{
-                      font: 'inherit', color: 'inherit', background: t.blanks.includes(i) ? 'rgba(13,148,136,0.22)' : 'transparent',
+                      ...WORD_BOX,
+                      font: 'inherit', color: 'inherit', cursor: 'pointer',
+                      background: t.blanks.includes(i) ? 'rgba(13,148,136,0.22)' : 'transparent',
                       border: t.blanks.includes(i) ? '1px dashed currentColor' : '1px solid transparent',
-                      borderRadius: 4, padding: '0 2px', margin: '0 1px', cursor: 'pointer',
                     }}>
                     {w}
                   </button>
@@ -428,21 +431,29 @@ export const PictureAnswer: React.FC<{
         <div key={t.id} dir="auto"
           style={{
             ...textBoxStyle(t),
-            position: 'absolute', left: `${t.x}%`, top: `${t.y}%`, lineHeight: 1.6,
+            // 1.5 here too: a different line height on the student's copy moved
+            // every line of a wrapped block down the picture.
+            position: 'absolute', left: `${t.x}%`, top: `${t.y}%`, lineHeight: 1.5,
           }}>
           {wordsOf(t.text).map((w, i) => {
-            if (!t.blanks.includes(i)) return <span key={i} style={{ margin: '0 1px' }}>{w} </span>;
+            if (!t.blanks.includes(i)) return <span key={i} style={WORD_BOX}>{w}</span>;
             const n = indexOf(t.id, i);
+            // The word is still here, just invisible: it holds the line open to
+            // exactly the width it had in the editor, and the box to type in is
+            // laid over it. That is why nothing shifts when the blanks appear.
             return (
-              <input key={i} value={answers[n] ?? ''} readOnly={readOnly}
-                onChange={e => onAnswer(n, e.target.value)}
-                aria-label={`Missing word ${n + 1}`} dir="auto"
-                style={{
-                  ...blankBox(w),
-                  font: 'inherit', color: '#0F172A', background: 'rgba(255,255,255,0.94)',
-                  border: '2px solid #0d9488', borderRadius: 6, padding: '0 4px', margin: '0 2px',
-                  textAlign: 'center',
-                }} />
+              <span key={i} style={{ ...WORD_BOX, position: 'relative' }}>
+                <span style={{ visibility: 'hidden' }} aria-hidden="true">{w}</span>
+                <input value={answers[n] ?? ''} readOnly={readOnly}
+                  onChange={e => onAnswer(n, e.target.value)}
+                  aria-label={`Missing word ${n + 1}`} dir="auto"
+                  style={{
+                    position: 'absolute', inset: 0, width: '100%', boxSizing: 'border-box',
+                    font: 'inherit', color: '#0F172A', background: 'rgba(255,255,255,0.94)',
+                    border: '2px solid #0d9488', borderRadius: 4, padding: '0 1px',
+                    textAlign: 'center', minWidth: 0,
+                  }} />
+              </span>
             );
           })}
         </div>
