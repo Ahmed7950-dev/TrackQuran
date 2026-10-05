@@ -227,6 +227,33 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
    *  the homework run on that selection — until the tutor asks for the whole
    *  lessons again, which is what this remembers. */
   const [wantLessons, setWantLessons] = useState(false);
+  /** The words worth drilling: never answered with a flashcard or a word card,
+   *  or answered WRONG on the last go. The strength list runs oldest → newest,
+   *  so the last entry is the most recent answer. Scoped to what the table is
+   *  actually showing — the search, and the picked lessons when any are
+   *  picked — so the count always matches rows the tutor can see. */
+  const needsPracticeWords = useMemo(() => {
+    const out: VocabWord[] = [];
+    for (const g of visibleGroups) {
+      if (selected.size && !selected.has(g.lesson.id)) continue;
+      for (const w of g.items) {
+        const answers = strength.get(w.id);
+        if (!answers?.length || answers[answers.length - 1] === false) out.push(w);
+      }
+    }
+    return out;
+  }, [visibleGroups, selected, strength]);
+  /** Adds them to the selection rather than replacing it, so it stacks with
+   *  words tapped by hand, and hands the games over to the selection. */
+  const addNeedsPractice = () => {
+    if (!needsPracticeWords.length) return;
+    setWordSelection(prev => {
+      const next = new Set(prev);
+      for (const w of needsPracticeWords) next.add(w.id);
+      return next;
+    });
+    setWantLessons(false);
+  };
   const onSelection = selectedWords.length > 0 && !wantLessons;
   const practicePool = onSelection ? selectedWords : lessonPool;
   const savedWords = useMemo(() => words.filter(w => revisionIds.has(w.id)), [words, revisionIds]);
@@ -445,6 +472,15 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             selectedWords.length
               ? 'border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10'
               : 'border-dashed border-slate-200 dark:border-gray-700'}`}>
+            <button
+              onClick={addNeedsPractice}
+              disabled={needsPracticeWords.length === 0}
+              title={needsPracticeWords.length
+                ? 'Adds every word listed that has never been practised, or that was answered wrong last time'
+                : 'Every word listed was answered correctly last time'}
+              className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-amber-50 dark:disabled:hover:bg-amber-900/30">
+              + Needs practice ({needsPracticeWords.length})
+            </button>
             {selectedWords.length === 0 ? (
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 Tap words in the table to select them — the games and the homework then use just those.
