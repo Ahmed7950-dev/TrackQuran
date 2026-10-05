@@ -118,12 +118,16 @@ interface Props {
   onHomeworkComplete?: (lessonId: string) => void;
   studentMode?: boolean;
   initialTab?: Tab;
+  /** Render in the flow of the page it was opened from, rather than fixed over
+   *  the whole screen. A caller that passes this shows NOTHING else while it is
+   *  up, so it reads as its own page with a back button, not a lid. */
+  asPage?: boolean;
 }
 
 const ArabicLessonDetailPage: React.FC<Props> = ({
   lesson: initialLesson, students, teacherId,
   preSelectedStudentId, onClose, onStudentUpdated, onHomeworkComplete,
-  studentMode = false, initialTab,
+  studentMode = false, initialTab, asPage = false,
 }) => {
   const { t } = useI18n();
   const { currentUser } = useAuth();
@@ -349,8 +353,10 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col"
-      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className={asPage
+      ? 'bg-white dark:bg-gray-900 flex flex-col min-h-[80vh] rounded-2xl overflow-hidden border border-slate-200 dark:border-gray-700'
+      : 'fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col'}
+      style={asPage ? undefined : { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 flex-shrink-0">
         <button onClick={onClose}
