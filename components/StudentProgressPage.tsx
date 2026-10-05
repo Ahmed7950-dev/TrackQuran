@@ -4416,7 +4416,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     };
 
     /** Every tool in the toolbar is this square — one size, one weight. */
-    const toolBtn = 'w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl border text-[13px] font-bold transition-colors duration-200 max-sm:order-3';
+    // The public reader keeps its whole toolbar on ONE line on a phone: the two
+    // modes stack into a vertical pill, the surah button shrinks to a number and
+    // a name and opens a window that also takes the ayah, and every tool follows
+    // it on the same row. Everywhere else the toolbar still breaks into two.
+    const oneRow = guest;
+    const toolBtn = `${oneRow ? 'w-7 sm:w-9' : 'w-9'} h-9 flex-shrink-0 flex items-center justify-center rounded-xl border text-[13px] font-bold transition-colors duration-200 max-sm:order-3`;
     /** A tool that is off: white square, hairline border. */
     const toolOff = 'bg-white dark:bg-gray-900/40 border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700';
     const testWordCount = Object.keys(wordMeanings).filter(k => k.startsWith(`${selectedSurahId}:`)).length;
@@ -4431,7 +4436,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 onClick={() => setAudioMenuOpen(o => !o)}
                                 title="Recitation settings"
                                 aria-label="Recitation settings"
-                                className="h-9 px-2.5 flex-shrink-0 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/40 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors leading-none max-sm:order-3"
+                                className={`h-9 ${oneRow ? 'px-1.5 sm:px-2.5' : 'px-2.5'} flex-shrink-0 rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/40 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors leading-none max-sm:order-3`}
                             >
                                 <Ico d={ICON.mic} size={16} />
                                 <span className={readOnlySpeed === 1 ? 'max-sm:hidden' : 'max-sm:text-[9px]'}>{readOnlySpeed}×</span>
@@ -4656,9 +4661,34 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         Wraps on narrow screens so the right-side controls stay reachable. */}
                     {/* Phones: row 1 = surah selector + verse number box; row 2 = one
                         joined bar of icons (recitation first) with search taking the rest. */}
-                    <div className="flex flex-wrap items-center gap-2 max-sm:gap-x-1.5 max-sm:gap-y-1.5 min-w-0">
+                    <div className={`flex flex-wrap items-center gap-2 min-w-0 ${oneRow ? 'max-sm:gap-x-[3px] max-sm:gap-y-1.5' : 'max-sm:gap-x-1.5 max-sm:gap-y-1.5'}`}>
                         {/* ── Left: the four modes, then that mode's own controls ── */}
-                        <div role="group" aria-label="Mode" dir="ltr" className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1">
+                        {/* Phones, public reader: listening over hifz, so the row stays one line. */}
+                        {oneRow && (
+                            <div role="group" aria-label="Mode" dir="ltr"
+                                className="sm:hidden flex flex-col items-stretch gap-0.5 p-0.5 rounded-xl bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1">
+                                <button
+                                    onClick={() => setPageMode('listening')}
+                                    aria-label="Listening mode" aria-pressed={pageMode === 'listening'}
+                                    title="Listening — choose the reciter and speed, tap a verse to hear it"
+                                    className={`w-9 h-[18px] flex items-center justify-center rounded-lg transition-colors ${pageMode === 'listening'
+                                        ? 'bg-teal-600 dark:bg-orange-600 text-white shadow'
+                                        : 'text-slate-500 dark:text-slate-400'}`}
+                                >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>
+                                </button>
+                                <button
+                                    onClick={() => setPageMode('hifz')}
+                                    aria-label="Hifz mode" aria-pressed={pageMode === 'hifz'}
+                                    title="Hifz — tap a verse to hide or reveal it"
+                                    style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
+                                    className={`w-9 h-[18px] flex items-center justify-center rounded-lg transition-colors italic font-bold text-[11px] leading-none ${pageMode === 'hifz'
+                                        ? 'bg-teal-600 dark:bg-orange-600 text-white shadow'
+                                        : 'text-slate-500 dark:text-slate-400'}`}
+                                >Hifz</button>
+                            </div>
+                        )}
+                        <div role="group" aria-label="Mode" dir="ltr" className={`flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60 flex-shrink-0 max-sm:order-1 ${oneRow ? 'max-sm:hidden' : ''}`}>
                             {([
                                 ['reading', 'Reading', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H3.5A1.5 1.5 0 0 1 2 16z" /><path d="M22 5.5A1.5 1.5 0 0 0 20.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h6a1.5 1.5 0 0 0 1.5-1.5z" /></svg>, 'w-9 max-sm:w-7'],
                                 ['listening', 'Listening', <svg key="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 14v-2a9 9 0 0 1 18 0v2" /><rect x="3" y="14" width="4" height="7" rx="1.5" /><rect x="17" y="14" width="4" height="7" rx="1.5" /></svg>, 'w-9 max-sm:w-7'],
@@ -4730,22 +4760,30 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 <span>Show all</span>
                             </button>
                         )}
-                        {/* ── Middle (phones): current surah button → vertical picker ── */}
+                        {/* ── Middle (phones): current surah button → the picker window.
+                            On the public reader it is the only way in: the picker takes
+                            the ayah too, so no separate number box rides the row. ── */}
                         <button
                             onClick={() => setSurahPickerOpen(true)}
-                            className="sm:hidden order-1 h-10 flex-1 min-w-0 flex items-center gap-2 px-2.5 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900/40 text-slate-800 dark:text-slate-100"
-                            aria-label="Choose surah"
+                            className={`sm:hidden flex-1 min-w-0 flex items-center rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900/40 text-slate-800 dark:text-slate-100 ${
+                                oneRow ? 'max-sm:order-2 h-9 gap-1 px-1.5' : 'order-1 h-10 gap-2 px-2.5'}`}
+                            aria-label={oneRow ? 'Choose the surah and ayah' : 'Choose surah'}
                         >
-                            <span className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${tadabburMode ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-teal-50 text-teal-700 dark:bg-gray-700 dark:text-orange-300'}`}>{selectedSurahId}</span>
-                            <span className="flex-1 min-w-0 truncate text-start text-[15px] font-bold tracking-tight">
+                            <span className={`flex-shrink-0 flex items-center justify-center rounded-lg font-bold ${oneRow ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-[11px]'} ${tadabburMode ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-teal-50 text-teal-700 dark:bg-gray-700 dark:text-orange-300'}`}>{selectedSurahId}</span>
+                            <span className={`flex-1 min-w-0 truncate text-start font-bold tracking-tight ${oneRow ? 'text-[13px]' : 'text-[15px]'}`}>
                                 {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
                             </span>
-                            <svg className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
-                            </svg>
+                            {/* Number and name only on the public reader's single row —
+                                every pixel the chevron took is a pixel of surah name. */}
+                            {!oneRow && (
+                                <svg className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+                                </svg>
+                            )}
                         </button>
 
                         {/* Phones: verse number → jump straight to it */}
+                        {!oneRow && (<>
                         <form
                             className="sm:hidden order-1 ms-1.5 flex-shrink-0"
                             onSubmit={e => {
@@ -4763,6 +4801,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             />
                         </form>
                         <div className="sm:hidden order-2 basis-full h-0" aria-hidden="true" />
+                        </>)}
 
                         {/* ── Middle (sm+): surah pills — first & last pinned, middle scrolls.
                             Too narrow to scroll (iPad upright)? The phone's selector instead. ── */}
@@ -4890,13 +4929,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                             title={t('liveSession.tajweedColors')}
                                             aria-label={t('liveSession.tajweedColors')}
                                             aria-pressed={showTajweed}
-                                            className="h-9 w-8 flex items-center justify-center"
+                                            className={`h-9 flex items-center justify-center ${oneRow ? 'w-6 sm:w-8' : 'w-8'}`}
                                         ><Ico d={ICON.palette} /></button>
                                         <button
                                             onClick={() => setShowTajweedMenu(true)}
                                             title={t('liveSession.tajweedInfo')}
                                             aria-label={t('liveSession.tajweedInfo')}
-                                            className={`me-1.5 w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${showTajweed ? 'border-emerald-400' : 'border-slate-400 dark:border-gray-500'}`}
+                                            className={`${oneRow ? 'me-1 sm:me-1.5' : 'me-1.5'} w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${showTajweed ? 'border-emerald-400' : 'border-slate-400 dark:border-gray-500'}`}
                                         >i</button>
                                     </div>
                                     {/* Teacher's note */}
@@ -5564,14 +5603,35 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         className="w-full sm:max-w-xl max-h-[78vh] bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100 dark:border-gray-700">
-                            <p className="font-black text-slate-800 dark:text-slate-100">Surahs</p>
+                        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                            <p className="font-black text-slate-800 dark:text-slate-100">Surah &amp; ayah</p>
                             <button
                                 onClick={() => setSurahPickerOpen(false)}
                                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 font-bold"
                                 aria-label="Close surah picker"
                             >✕</button>
                         </div>
+                        {/* Straight to a verse of the surah already open — the toolbar no
+                            longer carries its own number box, so it lives here. */}
+                        <form
+                            className="flex items-center gap-2 px-4 pb-3 border-b border-slate-100 dark:border-gray-700"
+                            onSubmit={e => {
+                                e.preventDefault();
+                                const input = e.currentTarget.elements.namedItem('ayah') as HTMLInputElement;
+                                if (jumpToVerseNumber(input.value)) { input.value = ''; setSurahPickerOpen(false); }
+                            }}
+                        >
+                            <label htmlFor="surah-pick-ayah" className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-600 dark:text-slate-300">
+                                Ayah in {surahStatuses.find(st => st.id === selectedSurahId)?.transliteratedName ?? ''}
+                            </label>
+                            <input
+                                id="surah-pick-ayah" name="ayah" type="number" inputMode="numeric" enterKeyHint="go"
+                                min={1} max={selectedSurahInfo?.numberOfAyahs}
+                                placeholder={selectedSurahInfo ? `1–${selectedSurahInfo.numberOfAyahs}` : ''}
+                                className="w-20 h-10 px-2 flex-shrink-0 rounded-xl text-center text-sm font-bold bg-white dark:bg-gray-900/40 dark:text-white border border-slate-300 dark:border-gray-600 focus:ring-2 focus:ring-teal-500 dark:focus:ring-orange-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <button type="submit" className="h-10 px-4 flex-shrink-0 rounded-xl bg-teal-600 dark:bg-orange-600 text-white text-sm font-bold">Go</button>
+                        </form>
                         <div className="flex-1 overflow-y-auto overscroll-contain px-3 pt-2 space-y-1" style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}>
                             {surahStatuses.map(({ id, name, transliteratedName, status, memStatus }) => (
                                 <button
