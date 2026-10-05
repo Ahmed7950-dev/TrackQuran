@@ -23,6 +23,7 @@ import {
   getHomeworkItems, createHomeworkItem, updateHomeworkItem,
   deleteHomeworkItem, reorderHomeworkItems, uploadHomeworkImage,
   saveHomeworkSubmission, getHomeworkSubmission, getHomeworkSubmissions, updateHomeworkGrading,
+  releaseHomeworkResult,
   HomeworkSubmission,
   getVocabWords, createVocabWord, deleteVocabWord,
   getVocabAttempts, saveVocabAttempts,
@@ -892,6 +893,20 @@ export const HomeworkTab: React.FC<{
     finally { setSubmitting(false); }
   };
 
+  /** Hand the marked homework back. One notification, with the score in it —
+   *  saving the marking itself tells the student nothing. */
+  const [sendingResult, setSendingResult] = useState(false);
+  const sendResult = async () => {
+    if (!submission) return;
+    setSendingResult(true);
+    try {
+      const sentAt = await releaseHomeworkResult(submission.id);
+      setSubmission({ ...submission, resultSentAt: sentAt });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not send the result.');
+    } finally { setSendingResult(false); }
+  };
+
   const saveGrading = async (newGrading: Record<string, { correct: boolean; note?: string }>) => {
     if (!submission) return;
     setGradeSaving(true);
@@ -1156,8 +1171,13 @@ export const HomeworkTab: React.FC<{
     const renderStudentItem = (item: HomeworkItem, qNum: number) => {
       const submitted = hwMode === 'submitted';
       const res = results[item.id];
+      const isPictureTask = item.itemType === 'picture' && !!item.imageUrl;
       return (
-        <div key={item.id} className={`bg-white dark:bg-gray-800 border rounded-2xl p-5 space-y-1 ${
+        <div key={item.id} className={`bg-white dark:bg-gray-800 border rounded-2xl space-y-1 ${
+          // A picture is the task, so it gets the card's full width on a phone:
+          // the writing on it is sized in cqw, so every pixel of width makes it
+          // bigger and more readable rather than just wider.
+          isPictureTask ? 'p-2 sm:p-5' : 'p-3 sm:p-5'} ${
           submitted && item.itemType === 'question'
             ? res === 'correct' ? 'border-emerald-300 dark:border-emerald-700'
             : res === 'wrong' ? 'border-red-300 dark:border-red-700'
@@ -1173,9 +1193,9 @@ export const HomeworkTab: React.FC<{
               {item.content}
             </p>
           )}
-          {item.itemType === 'picture' && item.imageUrl && (
+          {isPictureTask && item.imageUrl && (
             <>
-              <span className="block text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">
+              <span className="block px-1 text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">
                 Fill in the missing words
               </span>
               <PictureAnswer imageUrl={item.imageUrl} overlay={parseOverlay(item.content)}
@@ -1331,7 +1351,7 @@ export const HomeworkTab: React.FC<{
                                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-0.5">Your answer</span>
                                 {ansDisplay}
                               </div>
-                              {g?.note && (
+                              {g?.note && attempt.resultSentAt && (
                                 <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
                                   <span className="flex-shrink-0">💬</span>
                                   <span dir="auto">{g.note}</span>
@@ -1465,7 +1485,7 @@ export const HomeworkTab: React.FC<{
                       <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Your answer</span>
                       {answerDisplay}
                     </div>
-                    {g?.note && (
+                    {g?.note && attempt.resultSentAt && (
                       <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
                         <span className="flex-shrink-0">💬</span>
                         <span dir="auto">{g.note}</span>
@@ -1481,7 +1501,7 @@ export const HomeworkTab: React.FC<{
     };
 
     return (
-      <div className="max-w-3xl mx-auto p-8 space-y-5">
+      <div className="max-w-3xl mx-auto px-2 py-4 sm:p-8 space-y-5">
         {/* Submitted summary */}
         {submitted && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-6 text-center space-y-3">
@@ -1492,9 +1512,14 @@ export const HomeworkTab: React.FC<{
                 {hwScore.correct} / {hwScore.total} auto-graded correct
               </p>
             )}
-            {manualCount > 0 && (
+            {manualCount > 0 && !submission?.resultSentAt && (
               <p className="text-sky-600 dark:text-sky-400 text-sm font-medium">
                 ⏳ {manualCount} question{manualCount !== 1 ? 's' : ''} sent to your tutor for review
+              </p>
+            )}
+            {submission?.resultSentAt && (
+              <p className="text-emerald-700 dark:text-emerald-300 text-sm font-bold">
+                ✓ Your teacher has marked this and sent you the result
               </p>
             )}
             <button onClick={() => { setHwMode('preview'); setAnswers({}); setSubAnswers({}); setResults({}); }}
@@ -1724,6 +1749,21 @@ export const HomeworkTab: React.FC<{
               </span>
               {totalMarked > 0 && (
                 <p className="text-xs text-slate-400 mt-1">{totalCorrect}/{totalMarked} marked · {gradeSaving && <span className="text-amber-500 animate-pulse">saving…</span>}</p>
+              )}
+              {submission.resultSentAt ? (
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1.5">
+                  ✓ Result sent {new Date(submission.resultSentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  <button onClick={sendResult} disabled={sendingResult}
+                    className="ms-2 font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline">
+                    send again
+                  </button>
+                </p>
+              ) : (
+                <button onClick={sendResult} disabled={sendingResult || totalMarked === 0}
+                  title={totalMarked === 0 ? 'Mark at least one answer first' : 'The student is told once, with the score, and can then see your comments'}
+                  className="mt-2 h-9 px-3 rounded-lg bg-teal-700 hover:bg-teal-800 disabled:opacity-40 disabled:cursor-default text-white text-xs font-extrabold">
+                  {sendingResult ? 'Sending…' : 'Send result to student'}
+                </button>
               )}
             </div>
           ) : (

@@ -22,6 +22,8 @@ import {
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ArabicHomeworkTab from './ArabicHomeworkTab';
+import { listVocabHomework } from '../services/vocabHomeworkService';
+import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
 import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
 import ExamMarkingPage from './ExamMarkingPage';
@@ -450,6 +452,22 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
   const [activeSection, setActiveSection] = useState<'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'>('lessons');
+  /** Homework that is OPEN — handed over and neither done, cancelled nor past
+   *  its deadline. Every kind counts: a lesson's, a vocabulary set, word cards,
+   *  flashcards, one the tutor wrote on its own. It reloads whenever the page
+   *  is come back to, so marking or assigning elsewhere settles the badge. */
+  const [openHomework, setOpenHomework] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      void listVocabHomework(student.id).then(rows => {
+        if (live) setOpenHomework(rows.filter(h => homeworkStatus(h) === 'With student').length);
+      });
+    };
+    load();
+    window.addEventListener('focus', load);
+    return () => { live = false; window.removeEventListener('focus', load); };
+  }, [student.id, activeSection]);
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -611,7 +629,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   };
 
   /** One row of the rail's section list. */
-  const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode) => {
+  const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode, accent = false) => {
     const on = activeSection === key;
     return (
       <button key={key} onClick={() => setActiveSection(key)}
@@ -620,7 +638,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
              : 'font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
         <span className="flex-shrink-0 w-[18px] h-[18px]">{icon}</span>
         <span className="truncate">{label}</span>
-        {count && <span className="ms-auto text-xs font-semibold text-slate-400 dark:text-slate-500">{count}</span>}
+        {count && (
+          <span className={`ms-auto text-xs font-semibold ${accent
+            ? 'min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center bg-amber-500 text-white font-extrabold'
+            : 'text-slate-400 dark:text-slate-500'}`}>{count}</span>
+        )}
       </button>
     );
   };
@@ -733,8 +755,12 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             {TABS.map(tab => railLink(
               tab.key,
               tab.label.replace(/\s*\(\d+\)$/, ''),
-              tab.key === 'lessons' ? String(studentLessonCount) : tab.key === 'vocabulary' && vocabCount > 0 ? String(vocabCount) : null,
+              tab.key === 'lessons' ? String(studentLessonCount)
+                : tab.key === 'vocabulary' && vocabCount > 0 ? String(vocabCount)
+                : tab.key === 'homework' && openHomework > 0 ? String(openHomework)
+                : null,
               RAIL_ICON[tab.key],
+              tab.key === 'homework',
             ))}
           </nav>
 
@@ -902,8 +928,14 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             const on = activeSection === tab.key;
             return (
               <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-                className={`h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
+                className={`relative h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
                   on ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+                {tab.key === 'homework' && openHomework > 0 && (
+                  <span aria-label={`${openHomework} homework waiting`}
+                    className="absolute top-1.5 right-1/2 translate-x-[14px] min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                    {openHomework}
+                  </span>
+                )}
                 {RAIL_ICON[tab.key]}
                 <span className={`text-[10.5px] leading-none ${on ? 'font-extrabold' : 'font-semibold'}`}>{PHONE_LABEL[tab.key] ?? tab.mobileLabel}</span>
               </button>

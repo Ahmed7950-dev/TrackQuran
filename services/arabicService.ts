@@ -599,6 +599,8 @@ export interface HomeworkSubmission {
   grading: Record<string, { correct: boolean; note?: string }>;
   submittedAt: string;
   gradedAt?: string;
+  /** When the tutor SENT the marked result back. Undefined = still marking. */
+  resultSentAt?: string;
 }
 
 interface HWSubmissionRow {
@@ -612,6 +614,7 @@ interface HWSubmissionRow {
   grading: Record<string, { correct: boolean; note?: string }>;
   submitted_at: string;
   graded_at: string | null;
+  result_sent_at?: string | null;
 }
 
 function rowToSubmission(r: HWSubmissionRow): HomeworkSubmission {
@@ -626,6 +629,7 @@ function rowToSubmission(r: HWSubmissionRow): HomeworkSubmission {
     grading: r.grading ?? {},
     submittedAt: r.submitted_at,
     gradedAt: r.graded_at ?? undefined,
+    resultSentAt: r.result_sent_at ?? undefined,
   };
 }
 
@@ -711,17 +715,44 @@ export async function getHomeworkSubmission(
   return rowToSubmission(data as HWSubmissionRow);
 }
 
+/** Saves marking. This runs on EVERY change the tutor makes, so it tells the
+ *  student nothing — it used to fire a "homework marked" notification per tick
+ *  and per note. The student hears once, from releaseHomeworkResult below. */
 export async function updateHomeworkGrading(
   submissionId: string,
   grading: Record<string, { correct: boolean; note?: string }>,
 ): Promise<void> {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('homework_submissions')
     .update({ grading, graded_at: new Date().toISOString() })
-    .eq('id', submissionId).select('student_id, lesson_id').single();
+    .eq('id', submissionId);
   if (error) throw new Error(error.message);
-  const hw = (await listVocabHomework(data.student_id)).find(h => h.lessonId === data.lesson_id && h.kind === 'lesson');
-  if (hw) await notifyArabicHomework(hw, 'Arabic homework marked', `Your teacher has marked ${hw.title}. Open it to see your feedback.`);
+}
+
+/** The tutor sends the marked homework back. Stamps the moment — which is what
+ *  unlocks the marks and the comments on the student's side — and tells the
+ *  student once, with the score in the message. Returns the stamp. */
+export async function releaseHomeworkResult(submissionId: string): Promise<string> {
+  const sentAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('homework_submissions')
+    .update({ result_sent_at: sentAt })
+    .eq('id', submissionId)
+    .select('student_id, lesson_id, grading')
+    .single();
+  if (error) throw new Error(error.message);
+
+  const marks = Object.values((data.grading ?? {}) as Record<string, { correct: boolean }>);
+  const right = marks.filter(m => m.correct).length;
+  const score = marks.length ? `${right} out of ${marks.length} correct. ` : '';
+
+  const hw = (await listVocabHomework(data.student_id))
+    .find(h => h.lessonId === data.lesson_id && h.kind === 'lesson');
+  if (hw) {
+    await notifyArabicHomework(hw, 'Your homework is marked',
+      `${score}Open ${hw.title} to see your teacher's comments.`);
+  }
+  return sentAt;
 }
 
 // ── Vocabulary words ─────────────────────────────────────────────────────────
