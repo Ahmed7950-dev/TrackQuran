@@ -697,6 +697,7 @@ export const HomeworkTab: React.FC<{
   const [overIdx, setOverIdx] = useState<number | null>(null);
   // student
   const [hwMode, setHwMode]       = useState<'preview' | 'answering' | 'submitted'>('preview');
+  const [slide, setSlide]         = useState(0);
   const [answers, setAnswers]     = useState<Record<string, string>>({});
   const [subAnswers, setSubAnswers] = useState<Record<string, Record<number, string>>>({});
   const [results, setResults]     = useState<Record<string, 'correct' | 'wrong' | 'manual'>>({});
@@ -769,6 +770,70 @@ export const HomeworkTab: React.FC<{
   // A picture task is answered and marked like a question, so it counts as one
   // everywhere: the count on the cover, the submission, and the review.
   const practiceItems = items.filter(i => i.itemType === 'question' || i.itemType === 'picture');
+
+  /** The homework as SLIDES: each task — a question or a picture — together
+   *  with whatever headline, instruction, paragraph or image was written above
+   *  it, so one slide is one task and the words that set it up. A divider the
+   *  tutor placed is an explicit break. Never empty: an empty homework is still
+   *  one (blank) slide, so the navigation has something to stand on. */
+  const slides: HomeworkItem[][] = (() => {
+    const out: HomeworkItem[][] = [];
+    let cur: HomeworkItem[] = [];
+    const flush = () => { if (cur.length) { out.push(cur); cur = []; } };
+    for (const it of items) {
+      if (it.itemType === 'divider') { flush(); continue; }
+      cur.push(it);
+      if (it.itemType === 'question' || it.itemType === 'picture') flush();
+    }
+    flush();
+    return out.length ? out : [[]];
+  })();
+  const slideCount = slides.length;
+  const atSlide = Math.min(slide, slideCount - 1);
+  /** Question numbers are counted across the WHOLE homework, not per slide. */
+  const qNumberOf = (() => {
+    const m = new Map<string, number>();
+    let n = 0;
+    for (const it of items) if (it.itemType === 'question') m.set(it.id, ++n);
+    return m;
+  })();
+
+  const slideTopRef = useRef<HTMLDivElement>(null);
+  const goSlide = (to: (s: number) => number) => {
+    setSlide(s => Math.max(0, Math.min(to(s), slideCount - 1)));
+    slideTopRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+
+  // Arrow keys move between slides — but never while the student is typing an
+  // answer, where the arrows belong to the caret.
+  useEffect(() => {
+    if (!studentMode || slideCount < 2) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); goSlide(v => v + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); goSlide(v => v - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentMode, slideCount]);
+
+  // A swipe on a phone. Sideways and far enough that it cannot be a scroll.
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const from = touchRef.current;
+    touchRef.current = null;
+    if (!from) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - from.x, dy = t.clientY - from.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    goSlide(v => (dx < 0 ? v + 1 : v - 1));
+  };
 
   const submitHomework = async () => {
     if (submitting) return;
@@ -1287,7 +1352,6 @@ export const HomeworkTab: React.FC<{
     }
 
     // ── Answering / Submitted mode ────────────────────────────────────────────
-    let qNum = 0;
     const manualCount = practiceItems.filter(q => q.questionType === 'short_answer' || q.questionType === 'multi_answer').length;
     const pct = submitted && hwScore.total > 0 ? Math.round((hwScore.correct / hwScore.total) * 100) : 0;
 
@@ -1440,14 +1504,35 @@ export const HomeworkTab: React.FC<{
           </div>
         )}
 
-        {/* All items */}
-        {items.map(item => {
-          if (item.itemType === 'question') qNum++;
-          return renderStudentItem(item, qNum);
-        })}
+        {/* One slide at a time — swipe on a phone, the buttons, or the arrow keys */}
+        <div ref={slideTopRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="space-y-5">
+          {slides[atSlide].map(item => renderStudentItem(item, qNumberOf.get(item.id) ?? 0))}
+        </div>
 
-        {/* Submit button */}
-        {!submitted && (<>
+        {slideCount > 1 && (
+          <div className="flex items-center gap-3 pt-1">
+            <button type="button" onClick={() => goSlide(v => v - 1)} disabled={atSlide === 0}
+              aria-label="Previous slide"
+              className="h-11 px-4 flex-shrink-0 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-default">
+              ← Back
+            </button>
+            <span className="flex-grow flex items-center justify-center gap-1.5" aria-hidden="true">
+              {slides.map((_, i) => (
+                <span key={i} className={`h-1.5 rounded-full transition-all ${
+                  i === atSlide ? 'w-5 bg-amber-500' : 'w-1.5 bg-slate-300 dark:bg-gray-600'}`} />
+              ))}
+            </span>
+            <span className="sr-only" aria-live="polite">Slide {atSlide + 1} of {slideCount}</span>
+            <button type="button" onClick={() => goSlide(v => v + 1)} disabled={atSlide === slideCount - 1}
+              aria-label="Next slide"
+              className="h-11 px-4 flex-shrink-0 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-default">
+              Next →
+            </button>
+          </div>
+        )}
+
+        {/* Submit, once they have reached the end */}
+        {!submitted && atSlide === slideCount - 1 && (<>
           {homeworkError && <p role="alert" className="text-red-600">{homeworkError}</p>}
           <button disabled={submitting || !!assignmentClosed} onClick={submitHomework}
             className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors text-base shadow">
