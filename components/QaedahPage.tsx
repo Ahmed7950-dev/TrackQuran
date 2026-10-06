@@ -386,19 +386,30 @@ const QaedahPage: React.FC<{
         </div>
       ) : (
         <div className="space-y-2">
-          {topics.map((topic, idx) => (
+          {topics.map((topic, idx) => {
+            // Finished = the tutor pressed Mark done on the lesson's last slide,
+            // the same thing that turns a Tajweed lesson green.
+            const finished = pdfProgress.get(topic.id)?.status === 'done';
+            return (
             <button
               key={topic.id}
               onClick={() => selectTopic(topic)}
-              className="w-full text-left flex items-center gap-4 p-4 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-teal-400 dark:hover:border-teal-500 hover:-translate-y-0.5 transition-all duration-150 group"
+              className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 group ${
+                finished
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 hover:border-emerald-400 dark:hover:border-emerald-500'
+                  : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 hover:border-teal-400 dark:hover:border-teal-500'}`}
             >
               {/* Lesson number badge */}
-              <span className="w-9 h-9 flex-shrink-0 rounded-full bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-bold text-sm flex items-center justify-center group-hover:bg-teal-100 dark:group-hover:bg-teal-900/50 transition-colors">
+              <span className={`w-9 h-9 flex-shrink-0 rounded-full font-bold text-sm flex items-center justify-center transition-colors ${
+                finished
+                  ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 group-hover:bg-teal-100 dark:group-hover:bg-teal-900/50'}`}>
                 {idx + 1}
               </span>
               {/* Titles */}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate">
+                <p className={`font-semibold text-sm truncate ${
+                  finished ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-700 dark:text-slate-200'}`}>
                   {topic.titleEn}
                 </p>
                 {topic.titleAr && (
@@ -424,6 +435,15 @@ const QaedahPage: React.FC<{
                   );
                 })()}
               </div>
+              {/* Finished */}
+              {finished && (
+                <span className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                  Done
+                </span>
+              )}
               {/* Has a lesson PDF */}
               {pdfs[topic.id] && (
                 <span title="Has a lesson PDF" className="flex-shrink-0 text-teal-500 dark:text-teal-400">
@@ -437,7 +457,8 @@ const QaedahPage: React.FC<{
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
