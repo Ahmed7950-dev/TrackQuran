@@ -719,7 +719,10 @@ const TajweedLessonViewer: React.FC<Props> = ({
             :                                    'bg-slate-500 text-white'
           }`}>{statusBadge}</span>
         )}
-        {selectedStudentId && students.length > 0 && (
+        {/* A pre-selected student is a student: the Qaedah board passes
+            students={[]} because it has no picker, and gating on the LIST meant
+            its Mark progress button never appeared at all. */}
+        {selectedStudentId && (students.length > 0 || !!preSelectedStudentId) && (
           progressMode ? (
             !studentMode && (
               <button onClick={handleProgress} disabled={marking}
