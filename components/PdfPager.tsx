@@ -69,6 +69,12 @@ const PdfPager: React.FC<Props> = ({
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState('');
   const [thumbnails, setThumbnails] = useState<string[]>([]); // dataURLs, index = page-1
+  /** 1 = the page as it fits. Above that the page is re-rendered bigger and the
+   *  box scrolls, so zooming in gives real detail rather than a blown-up
+   *  bitmap — which matters when the thing being read is Arabic script. */
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   // ── Render the main canvas ──────────────────────────────────────────────────
   const renderPage = useCallback(async (n: number) => {
@@ -84,7 +90,8 @@ const PdfPager: React.FC<Props> = ({
       // scale to fit both dimensions; otherwise scale to width only.
       const useContain = fitModeRef.current === 'contain' || pageStrip;
       const availH   = useContain ? container.clientHeight - padding : Infinity;
-      const scale    = Math.max(0.2, Math.min(availW / unscaled.width, availH / unscaled.height));
+      const fit      = Math.max(0.2, Math.min(availW / unscaled.width, availH / unscaled.height));
+      const scale    = fit * zoomRef.current;
       const dpr      = Math.min(window.devicePixelRatio || 1, 2);
       const viewport = pdfPage.getViewport({ scale });
       const ctx      = canvas.getContext('2d');
@@ -163,10 +170,10 @@ const PdfPager: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
-  // ── Re-render main canvas on page / fitMode change ─────────────────────────
+  // ── Re-render main canvas on page / fitMode / zoom change ──────────────────
   useEffect(() => {
     if (!loading && docRef.current) renderPage(page);
-  }, [page, loading, fitMode, renderPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, loading, fitMode, zoom, renderPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Refit on container resize ──────────────────────────────────────────────
   useEffect(() => {
@@ -204,8 +211,90 @@ const PdfPager: React.FC<Props> = ({
     const clamped = Math.min(Math.max(1, n), numPages || 1);
     pageRef.current = clamped;
     setPage(clamped);
+    setZoom(1);                      // a new page starts fitted, not mid-zoom
     onPageChangeRef.current?.(clamped, numPages);
   };
+
+  // ── Pinch to zoom ──────────────────────────────────────────────────────────
+  // The viewport meta turns the browser's own pinch off (user-scalable=no), so
+  // two fingers on a PDF did nothing at all. They now zoom it.
+  //
+  // During the gesture the canvas is CSS-scaled, which is instant; when the
+  // fingers lift it is re-rendered by pdf.js at the new scale, which is sharp.
+  // Doing the real render on every frame would crawl.
+  const MIN_ZOOM = 1, MAX_ZOOM = 4;
+  const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+  const pinchFrom = useRef<{ dist: number; zoom: number } | null>(null);
+  const pinchLive = useRef<number | null>(null);
+  type Pt = { clientX: number; clientY: number };
+  const twoFingerDist = (a: Pt, b: Pt) =>
+    Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+  // ALL touch handling is attached by hand rather than through React's props.
+  // touchmove has to be non-passive to preventDefault, which React cannot ask
+  // for; and once half the gesture is native, splitting the rest across the two
+  // systems means a touchend arriving in each, in an order neither controls —
+  // which is how a finished pinch ends up also turning the page.
+  const gestureRef = useRef<{ scrollable: () => boolean; turn: (d: number) => void }>({
+    scrollable: () => false, turn: () => {},
+  });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchFrom.current = { dist: twoFingerDist(e.touches[0], e.touches[1]), zoom: zoomRef.current };
+        touchFrom.current = null;                    // two fingers: a pinch, not a swipe
+        return;
+      }
+      if (e.touches.length === 1) {
+        touchFrom.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    };
+
+    const onMove = (e: TouchEvent) => {
+      const from = pinchFrom.current;
+      if (!from || e.touches.length !== 2) return;
+      e.preventDefault();                    // this gesture is ours, not the scroller's
+      const next = clampZoom(from.zoom * (twoFingerDist(e.touches[0], e.touches[1]) / from.dist));
+      pinchLive.current = next;
+      const c = canvasRef.current;
+      if (c) c.style.transform = `scale(${next / (zoomRef.current || 1)})`;
+    };
+
+    const onEnd = (e: TouchEvent) => {
+      if (pinchFrom.current) {
+        if (e.touches.length > 0) return;             // a finger is still down
+        const next = pinchLive.current;
+        pinchFrom.current = null;
+        pinchLive.current = null;
+        const c = canvasRef.current;
+        if (c) c.style.transform = '';
+        if (next != null && Math.abs(next - zoomRef.current) > 0.01) setZoom(next);
+        return;
+      }
+      const from = touchFrom.current;
+      touchFrom.current = null;
+      const t = e.changedTouches[0];
+      // Zoomed in, a drag is panning the page, so it must not also turn it.
+      if (!from || !t || gestureRef.current.scrollable() || zoomRef.current > 1) return;
+      const dx = t.clientX - from.x, dy = t.clientY - from.y;
+      if (Math.abs(dy) >= 48 && Math.abs(dy) > Math.abs(dx)) gestureRef.current.turn(dy < 0 ? 1 : -1);
+      else if (Math.abs(dx) >= 48) gestureRef.current.turn(dx < 0 ? 1 : -1);
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove',  onMove,  { passive: false });
+    el.addEventListener('touchend',   onEnd,   { passive: true });
+    el.addEventListener('touchcancel', onEnd,  { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove',  onMove);
+      el.removeEventListener('touchend',   onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
 
   // ── Scroll and swipe turn the page ─────────────────────────────────────────
   // Only where the slide itself cannot scroll: when a page is taller than the
@@ -228,25 +317,23 @@ const PdfPager: React.FC<Props> = ({
     go(pageRef.current + delta);
   };
   const onWheel = (e: React.WheelEvent) => {
+    // Ctrl/⌘ + wheel is the zoom gesture everywhere else; honour it here too.
+    if (e.ctrlKey || e.metaKey) {
+      setZoom(z => clampZoom(z * (e.deltaY > 0 ? 0.9 : 1.1)));
+      return;
+    }
     if (scrollable() || Math.abs(e.deltaY) < 8) return;
     turn(e.deltaY > 0 ? 1 : -1);
   };
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchFrom.current = e.touches.length === 1
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
-      : null;                                        // two fingers: a pinch, not a swipe
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const from = touchFrom.current;
-    touchFrom.current = null;
-    const t = e.changedTouches[0];
-    if (!from || !t || scrollable()) return;
-    const dx = t.clientX - from.x, dy = t.clientY - from.y;
-    if (Math.abs(dy) >= 48 && Math.abs(dy) > Math.abs(dx)) turn(dy < 0 ? 1 : -1);
-    else if (Math.abs(dx) >= 48) turn(dx < 0 ? 1 : -1);
-  };
+  // The native listeners above call through this, so they always reach the
+  // current `turn` rather than the one captured when they were attached.
+  useEffect(() => { gestureRef.current = { scrollable, turn }; });
 
-  const isContain = fitMode === 'contain' && !pageStrip;
+  // Zoomed in, the page is deliberately bigger than its box, so the box has to
+  // scroll and the fit-to-box clamps have to come off — otherwise the canvas is
+  // squeezed straight back down to where it started.
+  const zoomed = zoom > 1;
+  const isContain = fitMode === 'contain' && !pageStrip && !zoomed;
 
   return (
     <div className={`relative flex flex-col h-full w-full bg-gray-700 ${className ?? ''}`}>
@@ -270,10 +357,11 @@ const PdfPager: React.FC<Props> = ({
           {/* Main slide — fills available space, canvas scales to contain */}
           <div
             ref={containerRef}
-            onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-            className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-3"
+            onWheel={onWheel}
+            className={`flex-1 min-h-0 flex justify-center p-3 ${
+              zoomed ? 'overflow-auto items-start' : 'overflow-hidden items-center'}`}
           >
-            {!error && <canvas ref={canvasRef} className="shadow-lg bg-white max-w-full max-h-full" />}
+            {!error && <canvas ref={canvasRef} className={`shadow-lg bg-white ${zoomed ? '' : 'max-w-full max-h-full'}`} />}
           </div>
 
           {/* Thumbnail grid — fills remaining space */}
@@ -330,7 +418,7 @@ const PdfPager: React.FC<Props> = ({
         /* ── Standard layout: scrollable (width) or contained (contain) ──────── */
         <div
           ref={containerRef}
-          onWheel={onWheel} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+          onWheel={onWheel}
           className={`flex-1 min-h-0 flex justify-center p-3 ${
             isContain ? 'overflow-hidden items-center' : 'overflow-auto items-start'
           }`}
@@ -345,19 +433,34 @@ const PdfPager: React.FC<Props> = ({
            and back to a compact bar from sm up. The home-bar inset belongs to
            whichever full-screen panel holds this, not here, or the two stack
            up into a band of dead space. */
-        <div className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-2 bg-gray-900 border-t border-gray-700 select-none">
+        /* Five controls on a 375px bar: the page words drop out below sm so
+           nothing wraps onto a second line. */
+        <div className="flex-shrink-0 flex items-center justify-center gap-1.5 sm:gap-3 px-2 sm:px-3 py-2 bg-gray-900 border-t border-gray-700 select-none">
           <button
             onClick={() => go(page - 1)} disabled={page <= 1} aria-label="Previous page"
-            className="h-11 sm:h-8 px-5 sm:px-3 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-11 sm:h-8 w-11 sm:w-auto sm:px-3 flex items-center justify-center rounded-lg bg-white text-gray-800 text-sm font-semibold whitespace-nowrap hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            ‹ Prev
+            ‹<span className="hidden sm:inline">&nbsp;Prev</span>
           </button>
-          <span className="text-sm font-semibold text-white tabular-nums">{page} / {numPages}</span>
+          <span className="text-sm font-semibold text-white tabular-nums whitespace-nowrap">{page} / {numPages}</span>
+          <span className="w-px h-5 bg-gray-700" aria-hidden="true" />
+          <button onClick={() => setZoom(z => clampZoom(z - 0.5))} disabled={zoom <= MIN_ZOOM}
+            aria-label="Zoom out"
+            className="h-11 sm:h-8 w-9 sm:w-8 flex-shrink-0 rounded-lg bg-white/15 text-white text-base font-bold hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed">−</button>
+          <button onClick={() => setZoom(1)} disabled={zoom === 1}
+            title="Fit the page" aria-label="Fit the page"
+            className="h-11 sm:h-8 px-1.5 sm:px-2 flex-shrink-0 rounded-lg text-white text-xs font-bold tabular-nums whitespace-nowrap hover:bg-white/15 disabled:opacity-60 disabled:cursor-default">
+            {Math.round(zoom * 100)}%
+          </button>
+          <button onClick={() => setZoom(z => clampZoom(z + 0.5))} disabled={zoom >= MAX_ZOOM}
+            aria-label="Zoom in"
+            className="h-11 sm:h-8 w-9 sm:w-8 flex-shrink-0 rounded-lg bg-white/15 text-white text-base font-bold hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed">+</button>
+          <span className="w-px h-5 bg-gray-700" aria-hidden="true" />
           <button
             onClick={() => go(page + 1)} disabled={page >= numPages} aria-label="Next page"
-            className="h-11 sm:h-8 px-5 sm:px-3 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-11 sm:h-8 w-11 sm:w-auto sm:px-3 flex items-center justify-center rounded-lg bg-white text-gray-800 text-sm font-semibold whitespace-nowrap hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Next ›
+            <span className="hidden sm:inline">Next&nbsp;</span>›
           </button>
         </div>
       )}
