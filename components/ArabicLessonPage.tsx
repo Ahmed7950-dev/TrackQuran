@@ -253,7 +253,10 @@ const LevelPlanModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col" onClick={onClose}>
+    /* Same reason as the lesson viewer: without the top inset this bar, and
+       its way out, hide behind the iPhone status bar in a home-screen app. */
+    <div className="fixed inset-0 z-50 bg-black flex flex-col" onClick={onClose}
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/70 backdrop-blur-sm flex-shrink-0" onClick={e => e.stopPropagation()}>

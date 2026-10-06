@@ -641,13 +641,26 @@ const TajweedLessonViewer: React.FC<Props> = ({
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={embedded ? 'flex flex-col h-full bg-gray-900' : 'fixed inset-0 z-50 bg-gray-900 flex flex-col'}>
+    /* The safe-area padding is not decoration. The app declares
+       apple-mobile-web-app-status-bar-style=black-translucent, so a web view
+       opened from the iOS home screen runs UNDER the status bar: a `fixed
+       inset-0` panel with no inset puts its top bar — and the way out — behind
+       the clock, where it cannot be seen or tapped. A standalone app has no
+       browser chrome to fall back on, so that is a locked room.
+       Embedded, the page around this one owns the insets. */
+    <div className={embedded ? 'flex flex-col h-full bg-gray-900' : 'fixed inset-0 z-50 bg-gray-900 flex flex-col'}
+      style={embedded ? undefined : {
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}>
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0 flex-wrap">
         {!embedded && (
-          <button onClick={onClose} title="Close (Esc)" className="p-1.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} title="Back (Esc)" aria-label="Back"
+            className="h-9 ps-2 pe-3 flex items-center gap-1 rounded-lg text-gray-200 hover:bg-gray-700 hover:text-white flex-shrink-0 text-sm font-bold">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            Back
           </button>
         )}
         <h2 className="font-bold text-white text-sm truncate flex-1 min-w-0">{lesson.title}</h2>
