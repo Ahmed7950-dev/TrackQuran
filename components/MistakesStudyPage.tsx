@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { Student } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Mistake, Student } from '../types';
 import MistakeRing, { computeRingData, MISTAKE_AREAS, TAJWEED_AREAS, PERMANENT_MISTAKES } from './MistakeRing';
 import MistakeMap from './MistakeSessionGrid';
+import { isLetterMistakeKey } from '../constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mistakes Study — a read-only analysis of everything the tutor has logged for
@@ -25,8 +26,33 @@ const Bar: React.FC<{ value: number; max: number; color: string }> = ({ value, m
   </div>
 );
 
+const DAY = 24 * 60 * 60 * 1000;
+
 const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
-  const data = useMemo(() => computeRingData(student.mistakes || {}), [student.mistakes]);
+  // What a student was getting wrong a year ago says little about today, so the
+  // page opens on the last month and the whole history is a tap away.
+  const [range, setRange] = useState<'month' | 'all'>('month');
+
+  const scoped = useMemo((): Record<string, Mistake> => {
+    const all = student.mistakes || {};
+    if (range === 'all') return all;
+    const cutoff = Date.now() - 30 * DAY;
+    const out: Record<string, Mistake> = {};
+    for (const [k, m] of Object.entries(all)) {
+      // The permanent-habit flags are not a dated mistake — they are a standing
+      // note about the student — so they stand in both views.
+      if (!isLetterMistakeKey(k)) { out[k] = m; continue; }
+      const at = Date.parse(m.date ?? '');
+      if (!isNaN(at) && at >= cutoff) out[k] = m;
+    }
+    return out;
+  }, [student.mistakes, range]);
+
+  /** The session map reads the whole student, so it gets the scoped copy. */
+  const scopedStudent = useMemo(() => ({ ...student, mistakes: scoped }), [student, scoped]);
+  const allTimeTotal = useMemo(() => Object.keys(student.mistakes || {}).filter(isLetterMistakeKey).length, [student.mistakes]);
+
+  const data = useMemo(() => computeRingData(scoped), [scoped]);
   const maxCount = Math.max(1, ...Object.values(data.counts), ...data.customAll.map(([, c]) => c));
   const areaTotals = MISTAKE_AREAS.map(a => ({
     area: a,
@@ -50,12 +76,30 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mistakes Study</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100">Mistakes Study</h2>
+              <div role="group" aria-label="How far back to look"
+                className="flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-gray-700/60">
+                {([['month', 'Last 30 days'], ['all', 'All time']] as const).map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => setRange(key)} aria-pressed={range === key}
+                    className={`h-7 px-3 rounded-full text-[11px] font-bold transition-colors ${range === key
+                      ? 'bg-white dark:bg-gray-800 text-teal-700 dark:text-teal-300 shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {student.name} · {data.total} reading · {data.tajweedTotal} tajweed
               {worst && worst.total > 0 && <> · biggest challenge: <span className="font-bold" style={{ color: worst.area.color }}>{worst.area.subs[0]}{worst.area.subs.length > 1 ? ` / ${worst.area.subs[1]}` : ''}</span></>}
               {worstTajweed && worstTajweed.count > 0 && <> · weakest rule: <span className="font-bold" style={{ color: worstTajweed.area.color }}>{worstTajweed.label}</span></>}
             </p>
+            {range === 'month' && allTimeTotal > data.total + data.tajweedTotal && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                Showing the last 30 days · {allTimeTotal} logged in all
+              </p>
+            )}
           </div>
           {/* Permanent habits */}
           <div className="flex flex-wrap gap-1.5">
@@ -76,8 +120,14 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
       {nothingLogged ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-10 text-center shadow-sm">
           <p className="text-4xl mb-2">🌱</p>
-          <p className="text-slate-600 dark:text-slate-300 font-semibold">No mistakes logged yet.</p>
-          <p className="text-sm text-slate-400 mt-1">Log mistakes during live reading and this page fills up with the full picture.</p>
+          <p className="text-slate-600 dark:text-slate-300 font-semibold">
+            {range === 'month' && allTimeTotal > 0 ? 'Nothing logged in the last 30 days.' : 'No mistakes logged yet.'}
+          </p>
+          <p className="text-sm text-slate-400 mt-1">
+            {range === 'month' && allTimeTotal > 0
+              ? <>There are {allTimeTotal} older ones — switch to <button type="button" onClick={() => setRange('all')} className="font-bold text-teal-600 dark:text-teal-400 underline">All time</button> to see them.</>
+              : 'Log mistakes during live reading and this page fills up with the full picture.'}
+          </p>
         </div>
       ) : (
         <>
@@ -94,7 +144,7 @@ const MistakesStudyPage: React.FC<{ student: Student }> = ({ student }) => {
           </div>
 
           {/* Which mistake happened in which session — reading | tajweed */}
-          <MistakeMap student={student} />
+          <MistakeMap student={scopedStudent} />
 
           {/* Per-area breakdowns */}
           <div className="grid sm:grid-cols-2 gap-4">

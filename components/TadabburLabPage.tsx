@@ -229,6 +229,40 @@ const TadabburLabPage: React.FC<{
     }));
   }, [visible, notes, filter, search]);
 
+  /** The whole picture, never narrowed by the search or the filters: a
+   *  statistic that moved when you typed in a box would be a lie. */
+  const stats = useMemo(() => {
+    const touched = new Set<string>();
+    for (const w of words) touched.add(`${w.surah}:${w.ayah}`);
+    for (const [k, text] of Object.entries(notes)) if (text.trim()) touched.add(k);
+    const surahs = new Set([...touched].map(k => Number(k.split(':')[0])));
+    const total = QURAN_METADATA.reduce((n, m) => n + m.numberOfAyahs, 0);
+    return {
+      verses: touched.size,
+      totalVerses: total,
+      pct: total ? (touched.size / total) * 100 : 0,
+      surahs: surahs.size,
+      reflections: Object.values(notes).filter(t => t.trim()).length,
+    };
+  }, [words, notes]);
+
+  /** Which surah cards are open. Everything starts shut: the point of the page
+   *  is to see the whole Quran at a glance before going into any of it. */
+  const [openSurahs, setOpenSurahs] = useState<Set<number>>(new Set());
+  const toggleSurah = (n: number) => setOpenSurahs(prev => {
+    const next = new Set(prev);
+    next.has(n) ? next.delete(n) : next.add(n);
+    return next;
+  });
+  /** A segment opens its surah if shut, then walks you to that verse. */
+  const goToVerse = (surah: number, key: string) => {
+    setOpenSurahs(prev => (prev.has(surah) ? prev : new Set(prev).add(surah)));
+    window.setTimeout(() => {
+      document.getElementById(`tdb-${key.replace(':', '-')}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
   const weakCount = useMemo(() => words.filter(w => isWeak(strength.get(w.key))).length, [words, strength]);
   const freshCount = useMemo(() => words.filter(w => !(strength.get(w.key)?.length)).length, [words, strength]);
   const knownPct = useMemo(() => {
@@ -394,7 +428,8 @@ const TadabburLabPage: React.FC<{
     const pieces = text ? splitVerseWords(text) : [];
     const wordAt = new Map(v.words.map(w => [w.wordIndex, w]));
     return (
-      <article key={v.key} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 space-y-4">
+      <article key={v.key} id={`tdb-${v.key.replace(':', '-')}`}
+        className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 space-y-4 scroll-mt-24">
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onOpenVerse?.(v.key)}
@@ -630,6 +665,27 @@ const TadabburLabPage: React.FC<{
         </div>
       </div>
 
+      {/* How much of the Quran this student has actually been through — the one number
+          the surah cards below add up to. Never narrowed by the filters. */}
+      <div className="p-5 sm:p-6 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl space-y-3">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
+          <span className="text-3xl font-black text-violet-700 dark:text-violet-300 tabular-nums">
+            {stats.pct < 1 && stats.verses > 0 ? stats.pct.toFixed(1) : Math.round(stats.pct)}%
+          </span>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">of the Quran</span>
+          <span className="flex-grow" />
+          <span className="text-[13px] text-slate-500 dark:text-slate-400 tabular-nums">
+            {stats.verses.toLocaleString()} of {stats.totalVerses.toLocaleString()} verses
+            {' · '}{stats.surahs} of 114 surahs
+            {stats.reflections > 0 && ` · ${stats.reflections} reflection${stats.reflections === 1 ? '' : 's'}`}
+          </span>
+        </div>
+        <div className="h-2.5 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+          <div className="h-full rounded-full bg-violet-600 transition-[width] duration-500"
+            style={{ width: `${Math.max(stats.verses > 0 ? 0.6 : 0, Math.min(100, stats.pct))}%` }} />
+        </div>
+      </div>
+
       {err && <p className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm font-semibold">{err}</p>}
 
       {/* homework decks */}
@@ -716,29 +772,78 @@ const TadabburLabPage: React.FC<{
         </div>
       ) : !grouped.length ? (
         <p className="p-10 text-center text-slate-500 dark:text-slate-400">Nothing matches that.</p>
-      ) : grouped.map(g => (
-        <section key={g.surah} className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3 px-1 pt-2">
-            <span className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-black flex items-center justify-center">{g.surah}</span>
+      ) : grouped.map(g => {
+        const open  = openSurahs.has(g.surah);
+        const total = QURAN_METADATA.find(m => m.number === g.surah)?.numberOfAyahs ?? g.verses.length;
+        const done  = new Map(g.verses.map(v => [v.ayah, v]));
+        // A single verse of Al-Baqarah is 0.3%, and "0%" next to work that was
+        // plainly done reads as a bug. Show that it has started instead.
+        const raw   = total ? (done.size / total) * 100 : 0;
+        const pct   = raw > 0 && raw < 1 ? '<1' : String(Math.round(raw));
+        return (
+        <section key={g.surah} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+          {/* The whole head is the switch: tap anywhere on it to open or shut */}
+          <button type="button" onClick={() => toggleSurah(g.surah)} aria-expanded={open}
+            className="w-full text-start px-4 sm:px-5 py-3.5 flex flex-wrap items-center gap-3 hover:bg-slate-50 dark:hover:bg-gray-700/40 transition-colors">
+            <span className="w-9 h-9 flex-shrink-0 rounded-xl bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-black flex items-center justify-center">{g.surah}</span>
             <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100">{surahName(g.surah)}</span>
             <span className="font-quranic text-lg text-slate-600 dark:text-slate-300">{surahArabic(g.surah)}</span>
-            <span className="text-[13px] text-slate-500 dark:text-slate-400">
-              {g.verses.length} verse{g.verses.length === 1 ? '' : 's'}
-              {g.count > 0 && ` · ${g.count} word${g.count === 1 ? '' : 's'}`}
-              {g.notes > 0 && ` · ${g.notes} reflection${g.notes === 1 ? '' : 's'}`}
-            </span>
             <span className="flex-grow" />
-            {g.count > 0 && (
-              <button onClick={() => pickMany(g.verses.flatMap(v => v.words))}
-                className="h-8 px-3 rounded-lg border border-slate-200 dark:border-gray-600 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
-                Pick all {g.count}
-              </button>
-            )}
+            <span className="text-[13px] font-bold text-violet-700 dark:text-violet-300 tabular-nums">
+              {done.size} / {total} <span className="text-slate-400 dark:text-slate-500 font-semibold">· {pct}%</span>
+            </span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+              className={`flex-shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {/* Every verse of the surah, one fixed segment each — purple for the
+              ones with work on them. Hover tells you which verse; a tap opens
+              the surah and walks you down to it. */}
+          <div dir="ltr" className="px-4 sm:px-5 pb-3.5 flex flex-wrap gap-1">
+            {Array.from({ length: total }, (_, i) => i + 1).map(ayah => {
+              const v = done.get(ayah);
+              return (
+                <button key={ayah} type="button"
+                  onClick={() => v && goToVerse(g.surah, v.key)}
+                  disabled={!v}
+                  title={v
+                    ? `Verse ${ayah}${v.words.length ? ` · ${v.words.length} word${v.words.length === 1 ? '' : 's'}` : ''}${v.note ? ' · reflection' : ''}`
+                    : `Verse ${ayah} · nothing yet`}
+                  aria-label={`Verse ${ayah}`}
+                  className={`w-8 h-7 flex-shrink-0 rounded-lg text-[11px] font-semibold tabular-nums transition-colors ${v
+                    ? 'bg-violet-600 text-white hover:bg-violet-700 cursor-pointer'
+                    : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-default'}`}>
+                  {ayah}
+                </button>
+              );
+            })}
           </div>
 
-          {g.verses.map(verseBlock)}
+          {open && (
+            <div className="border-t border-slate-100 dark:border-gray-700 p-3 sm:p-4 space-y-3 bg-slate-50/60 dark:bg-gray-900/30">
+              <div className="flex flex-wrap items-center gap-3 px-1">
+                <span className="text-[13px] text-slate-500 dark:text-slate-400">
+                  {g.verses.length} verse{g.verses.length === 1 ? '' : 's'}
+                  {g.count > 0 && ` · ${g.count} word${g.count === 1 ? '' : 's'}`}
+                  {g.notes > 0 && ` · ${g.notes} reflection${g.notes === 1 ? '' : 's'}`}
+                </span>
+                <span className="flex-grow" />
+                {g.count > 0 && (
+                  <button onClick={() => pickMany(g.verses.flatMap(v => v.words))}
+                    className="h-8 px-3 rounded-lg border border-slate-200 dark:border-gray-600 text-blue-700 dark:text-blue-300 text-xs font-extrabold">
+                    Pick all {g.count}
+                  </button>
+                )}
+              </div>
+              {g.verses.map(verseBlock)}
+            </div>
+          )}
         </section>
-      ))}
+        );
+      })}
 
       <p className="px-2 pt-2 text-xs text-slate-500 dark:text-slate-400">
         Every word plays from the Quran.com word-by-word recitation — that exact word, in that exact verse.
