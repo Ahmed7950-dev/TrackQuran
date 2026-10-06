@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
 import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { saveOrShareFile } from '../services/fileSaver';
 
 
 /** Returns the timestamp of the most recent mistake logged for a given verse. */
@@ -377,13 +378,14 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 throw new Error('No image export library available');
             }
 
-            // Create a temporary link to download
-            const link = document.createElement('a');
-            link.download = `${student.name.replace(/ /g, '_')}_mistakes_report.png`;
-            link.href = imageDataUrl;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Same route as the PDF: a home-screen app ignores `download`, so
+            // the picture goes through the share sheet when there is one.
+            const pngBlob = await (await fetch(imageDataUrl)).blob();
+            await saveOrShareFile(
+                pngBlob,
+                `${student.name.replace(/ /g, '_')}_mistakes_report.png`,
+                `${student.name} — mistakes`,
+            );
 
             // Return the image data URL
             return imageDataUrl;
@@ -556,7 +558,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
             const fileName = `${studentName}_${dateStr}.pdf`;
             
             // Save PDF
-            pdf.save(fileName);
+            await saveOrShareFile(pdf.output('blob') as Blob, fileName, `${student.name} — mistakes`);
         } catch (error) {
             console.error("Error generating PDF:", error);
             alert(`An error occurred while generating the PDF: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);

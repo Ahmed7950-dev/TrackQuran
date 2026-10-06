@@ -32,6 +32,7 @@ import { netEarning } from '../utils/timezones';
 import BookingModal from './BookingModal';
 import AvailabilitySender, { BookedBlock } from './AvailabilitySender';
 import { supabase } from '../lib/supabase';
+import { saveOrShareFile } from '../services/fileSaver';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
@@ -777,7 +778,8 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
           jsPDF:       { unit: 'mm', format: 'a3', orientation: 'landscape' },
         })
         .from(calendarGridRef.current)
-        .save();
+        .outputPdf('blob')
+        .then((blob: Blob) => saveOrShareFile(blob, filename, 'Calendar'));
     } catch (err) {
       console.error('PDF export failed:', err);
     } finally {

@@ -8,6 +8,7 @@ import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataServic
 import { getStudentRankAndProgress } from '../services/rankingService';
 import ProgressChart from './ProgressChart';
 import { useI18n } from '../context/I18nProvider';
+import { saveOrShareFile } from '../services/fileSaver';
 
 // This will be available on the window object from the CDN script
 declare const html2pdf: any;
@@ -191,7 +192,10 @@ const ExportReportModal: React.FC<ExportReportModalProps> = ({ isOpen, onClose, 
     };
 
     try {
-        await html2pdf().from(element).set(opt).save();
+        // outputPdf('blob') instead of save(): the blob can go to the share
+        // sheet, which is the only route that works in a home-screen app.
+        const blob: Blob = await html2pdf().from(element).set(opt).outputPdf('blob');
+        await saveOrShareFile(blob, opt.filename, `${student.name} — progress report`);
     } catch (error) {
         console.error("Error during PDF generation:", error);
         alert("Sorry, an error occurred while generating the PDF.");

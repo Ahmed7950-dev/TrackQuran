@@ -5,6 +5,7 @@ import { CURRENCY_SYMBOL, Currency } from './StudentBillingFields';
 import { getStudentRankAndProgress, getOverallRankAndProgress } from '../services/rankingService';
 import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { QURAN_METADATA } from '../constants';
+import { saveOrShareFile } from '../services/fileSaver';
 
 // CDN globals from index.html (html2pdf.bundle also exposes jsPDF as window.jspdf).
 declare const html2pdf: any;
@@ -244,7 +245,7 @@ const BillPage: React.FC<BillPageProps> = ({
       const jsPDFCtor = (window as any).jspdf?.jsPDF;
       const pdf = new jsPDFCtor({ unit: 'px', format: [canvas.width, canvas.height], orientation: 'portrait', hotfixes: ['px_scaling'] });
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, canvas.width, canvas.height);
-      pdf.save(filename);
+      await saveOrShareFile(pdf.output('blob') as Blob, filename, 'Invoice');
     } catch (err) {
       console.error('Bill PDF failed:', err);
       alert(t('bill.pdfError'));

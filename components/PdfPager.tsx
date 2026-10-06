@@ -341,17 +341,20 @@ const PdfPager: React.FC<Props> = ({
 
       {/* Prev / Next nav bar */}
       {!error && numPages > 0 && (
-        <div className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-2 bg-gray-900 border-t border-gray-700 select-none">
+        /* 44px tall on a phone — a thumb cannot reliably hit a 30px button —
+           and back to a compact bar from sm up. */
+        <div className="flex-shrink-0 flex items-center justify-center gap-3 px-3 py-2 bg-gray-900 border-t border-gray-700 select-none"
+          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
           <button
-            onClick={() => go(page - 1)} disabled={page <= 1}
-            className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => go(page - 1)} disabled={page <= 1} aria-label="Previous page"
+            className="h-11 sm:h-8 px-5 sm:px-3 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ‹ Prev
           </button>
           <span className="text-sm font-semibold text-white tabular-nums">{page} / {numPages}</span>
           <button
-            onClick={() => go(page + 1)} disabled={page >= numPages}
-            className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => go(page + 1)} disabled={page >= numPages} aria-label="Next page"
+            className="h-11 sm:h-8 px-5 sm:px-3 rounded-lg bg-white text-gray-800 text-sm font-semibold hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Next ›
           </button>
