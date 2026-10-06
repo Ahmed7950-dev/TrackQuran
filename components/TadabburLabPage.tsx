@@ -799,25 +799,35 @@ const TadabburLabPage: React.FC<{
             </svg>
           </button>
 
-          {/* Every verse of the surah, one fixed segment each — purple for the
-              ones with work on them. Hover tells you which verse; a tap opens
-              the surah and walks you down to it. */}
-          <div dir="ltr" className="px-4 sm:px-5 pb-3.5 flex flex-wrap gap-1">
+          {/* Every verse of the surah as one small segment, EVERY segment the
+              same fixed 10x16 whatever the surah: a strip that stretched to fill
+              gave Al-Fatihah 20px blocks and Al-Baqarah 4px slivers, and the eye
+              could not compare one surah with another.
+
+              Fixed size means the line count has to give. Most surahs fit on one
+              line and the rest on two; only the longest few run past that, which
+              is simple arithmetic — 286 segments at a size worth clicking cannot
+              sit in two lines on any screen.
+
+              The segments carry no number, so the verse and what is on it come
+              from hovering. Not `disabled`, deliberately: a disabled button
+              stops firing mouse events in some browsers and takes its tooltip
+              with it, and hovering an empty verse to see which one it is still
+              has to work. */}
+          <div dir="ltr" className="px-4 sm:px-5 pb-3.5 flex flex-wrap gap-[2px]">
             {Array.from({ length: total }, (_, i) => i + 1).map(ayah => {
               const v = done.get(ayah);
               return (
                 <button key={ayah} type="button"
-                  onClick={() => v && goToVerse(g.surah, v.key)}
-                  disabled={!v}
+                  onClick={() => { if (v) goToVerse(g.surah, v.key); }}
+                  aria-disabled={!v}
                   title={v
                     ? `Verse ${ayah}${v.words.length ? ` · ${v.words.length} word${v.words.length === 1 ? '' : 's'}` : ''}${v.note ? ' · reflection' : ''}`
                     : `Verse ${ayah} · nothing yet`}
                   aria-label={`Verse ${ayah}`}
-                  className={`w-8 h-7 flex-shrink-0 rounded-lg text-[11px] font-semibold tabular-nums transition-colors ${v
-                    ? 'bg-violet-600 text-white hover:bg-violet-700 cursor-pointer'
-                    : 'bg-slate-100 dark:bg-gray-700 text-slate-400 dark:text-slate-500 cursor-default'}`}>
-                  {ayah}
-                </button>
+                  className={`w-2.5 h-4 flex-shrink-0 rounded-[2px] transition-colors ${v
+                    ? 'bg-violet-600 hover:bg-violet-500 cursor-pointer'
+                    : 'bg-slate-200 dark:bg-gray-700 cursor-default'}`} />
               );
             })}
           </div>
