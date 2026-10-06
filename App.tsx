@@ -1648,7 +1648,17 @@ const App: React.FC = () => {
   /** Open a submitted recitation homework for review: the student's Quran page
    *  at the first verse, with the recordings panel on top. */
   const openRecitationReview = (rec: RecitationHomework) => {
+    // Wherever this is clicked from, it has to LAND on that student's page.
+    //
+    // subjectMode gates the whole app: `arabic` returns the Arabic section
+    // before any of this is rendered, so opening a recitation review from the
+    // Arabic side used to clear the Arabic student and leave you standing on
+    // the Arabic dashboard. And a different Quran student left selected sits
+    // underneath, so Back dropped you onto them instead of the dashboard.
+    handleSelectSubject('quran');
     setSelectedArabicStudentId(null);
+    setSelectedStudentId(null);
+    setCurrentStudentView('details');
     setSessionStudentId(rec.studentId);
     setActiveTab('main');
     setQuranHomeworkJump(prev => ({ key: `${rec.startSurah}:${rec.startAyah}`, n: (prev?.n ?? 0) + 1 }));
