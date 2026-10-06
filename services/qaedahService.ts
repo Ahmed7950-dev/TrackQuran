@@ -240,6 +240,41 @@ export async function logQaedahAttempt(
   if (error) console.error('logQaedahAttempt:', error.message);
 }
 
+/** Every topic's word ids, in lesson order — enough to draw one segment per
+ *  word on every row of the list from a single query rather than one per row. */
+export async function getQaedahWordIdsByTopic(): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase
+    .from('qaedah_words')
+    .select('id, topic_id, order_index')
+    .order('order_index', { ascending: true });
+  if (error) { console.error('getQaedahWordIdsByTopic:', error.message); return new Map(); }
+  const out = new Map<string, string[]>();
+  for (const r of (data ?? []) as Array<{ id: string; topic_id: string }>) {
+    const list = out.get(r.topic_id);
+    if (list) list.push(r.id); else out.set(r.topic_id, [r.id]);
+  }
+  return out;
+}
+
+/** The words this student has got RIGHT at least once, per topic. A word only
+ *  counts as practised once it has been answered correctly — an attempt that
+ *  was wrong is the opposite of knowing it. */
+export async function getQaedahPractisedByTopic(studentId: string): Promise<Map<string, Set<string>>> {
+  if (!studentId) return new Map();
+  const { data, error } = await supabase
+    .from('qaedah_attempts')
+    .select('topic_id, word_id')
+    .eq('student_id', studentId)
+    .eq('correct', true);
+  if (error) { console.error('getQaedahPractisedByTopic:', error.message); return new Map(); }
+  const out = new Map<string, Set<string>>();
+  for (const r of (data ?? []) as Array<{ topic_id: string; word_id: string }>) {
+    const set = out.get(r.topic_id);
+    if (set) set.add(r.word_id); else out.set(r.topic_id, new Set([r.word_id]));
+  }
+  return out;
+}
+
 /** Attempts for one lesson, oldest first — the order the squares are drawn in. */
 export async function listQaedahAttempts(
   studentId: string,

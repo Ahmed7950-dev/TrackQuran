@@ -97,6 +97,9 @@ const TajweedLessonViewer: React.FC<Props> = ({
   progressMode = false, studentMode = false, getProgress, onMarkProgress, onMarkLessonDone, onLogRevision,
 }) => {
   const phone = usePhoneLayout();
+  /** Always the current requestClose: the Escape handler below is installed
+   *  before requestClose exists, and must not capture a stale copy. */
+  const requestCloseRef = useRef<() => void>(() => {});
   const _fetchIds = fetchCompletedIds ?? getCompletedLessonIds;
   const _mark     = onMarkCompleted   ?? markLessonCompleted;
   const _unmark   = onUnmarkCompleted ?? unmarkLessonCompleted;
@@ -558,7 +561,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (newPos || editingTextId || tableModal) return;
-      if (e.key === 'Escape') { if (selectedId) { setSelectedId(null); return; } if (!embedded) onClose(); }
+      if (e.key === 'Escape') { if (selectedId) { setSelectedId(null); return; } if (!embedded) requestCloseRef.current(); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !['INPUT','TEXTAREA'].includes((document.activeElement as HTMLElement)?.tagName ?? '')) deleteSelected();
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); }
     };
@@ -591,6 +594,20 @@ const TajweedLessonViewer: React.FC<Props> = ({
     });
     return () => { cancelled = true; };
   }, [progressMode, getProgress, selectedStudentId, lesson.id]);
+
+  /** The slide moved away from what is saved, and nothing has been recorded.
+   *  A lesson is only worth resuming if somebody said where they got to, and
+   *  the whole feature is lost silently if you can walk out without saying. */
+  const savedSlide = progress?.lastSlide ?? 1;
+  const unsavedProgress = progressMode && !!selectedStudentId
+    && totalSlides > 0 && currentSlide !== savedSlide;
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  /** Everything that closes this board goes through here. */
+  const requestClose = () => {
+    if (unsavedProgress) { setLeaveAsk(true); return; }
+    onClose();
+  };
+  useEffect(() => { requestCloseRef.current = requestClose; });
 
   const isLastSlide  = totalSlides > 0 && currentSlide >= totalSlides;
   const alreadyDone  = progress?.status === 'done';
@@ -648,7 +665,9 @@ const TajweedLessonViewer: React.FC<Props> = ({
        the clock, where it cannot be seen or tapped. A standalone app has no
        browser chrome to fall back on, so that is a locked room.
        Embedded, the page around this one owns the insets. */
-    <div className={embedded ? 'flex flex-col h-full bg-gray-900' : 'fixed inset-0 z-50 bg-gray-900 flex flex-col'}
+    /* `relative` so the leave-confirmation anchors to this board in BOTH modes:
+       embedded there is no fixed ancestor to fall back on. */
+    <div className={embedded ? 'relative flex flex-col h-full bg-gray-900' : 'fixed inset-0 z-50 bg-gray-900 flex flex-col'}
       style={embedded ? undefined : {
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',
@@ -657,7 +676,7 @@ const TajweedLessonViewer: React.FC<Props> = ({
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0 flex-wrap">
         {!embedded && (
-          <button onClick={onClose} title="Back (Esc)" aria-label="Back"
+          <button onClick={requestClose} title="Back (Esc)" aria-label="Back"
             className="h-9 ps-2 pe-3 flex items-center gap-1 rounded-lg text-gray-200 hover:bg-gray-700 hover:text-white flex-shrink-0 text-sm font-bold">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Back
@@ -719,6 +738,41 @@ const TajweedLessonViewer: React.FC<Props> = ({
           )
         )}
       </div>
+
+      {/* ── Leaving without saying where you got to ── */}
+      {leaveAsk && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center p-5 bg-black/60"
+          role="dialog" aria-modal="true" aria-label="Leave without marking progress?">
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-4 shadow-2xl">
+            <div>
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">Leave without marking progress?</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                You are on slide {currentSlide} of {totalSlides}
+                {savedSlide > 1 ? `, and ${savedSlide} is what is saved.` : ', and nothing is saved yet.'}
+                {' '}Mark it and the lesson opens here next time.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => { setLeaveAsk(false); await handleProgress(); onClose(); }}
+                disabled={marking}
+                className="h-11 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-extrabold disabled:opacity-50">
+                {marking ? 'Saving…' : `${progressBtnLabel} and leave`}
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setLeaveAsk(false)}
+                  className="flex-1 h-11 rounded-xl border border-slate-300 dark:border-gray-600 text-slate-700 dark:text-slate-200 text-sm font-bold">
+                  Stay here
+                </button>
+                <button onClick={() => { setLeaveAsk(false); onClose(); }}
+                  className="flex-1 h-11 rounded-xl text-red-600 dark:text-red-400 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/20">
+                  Leave anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Body ── */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">

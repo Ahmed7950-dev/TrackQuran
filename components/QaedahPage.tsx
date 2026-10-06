@@ -13,6 +13,13 @@ import {
 } from '../services/qaedahService';
 import { loadQaedahPdfs, QaedahPdfIndex } from '../services/qaedahPdfService';
 import TajweedLessonViewer from './TajweedLessonViewer';
+import type { ActivityLog } from '../types';
+import LessonProgressBar from './LessonProgressBar';
+import {
+  getPdfLessonProgress, markPdfLessonProgress, markPdfLessonDone,
+  logPdfLessonRevision, progressFraction, type PdfLessonProgress,
+} from '../services/pdfLessonProgressService';
+import { getQaedahWordIdsByTopic, getQaedahPractisedByTopic } from '../services/qaedahService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -51,8 +58,11 @@ const QaedahPage: React.FC<{
   isStudentView?: boolean;
   /** Whose practice this is. Without it nothing is recorded — the page still works. */
   studentId?: string;
+  /** Marking progress on a lesson is a logbook entry, which is what puts it on
+   *  the calendar — the tutor's and the student's link both read that array. */
+  onLogActivity?: (studentId: string, a: ActivityLog) => void;
   studentName?: string;
-}> = ({ isStudentView = false, studentId, studentName }) => {
+}> = ({ isStudentView = false, studentId, studentName, onLogActivity }) => {
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [topics,       setTopics]       = useState<QaedahTopic[]>([]);
@@ -73,6 +83,19 @@ const QaedahPage: React.FC<{
   const [showCrane,   setShowCrane]   = useState(false);
   // topicId → lesson PDF (uploaded by an admin), and whether the board is open.
   const [pdfs,        setPdfs]       = useState<QaedahPdfIndex>({});
+  /** How far through each lesson's PDF, and which of its words are known —
+   *  both drawn on the row in the list so nothing has to be opened to see it. */
+  const [pdfProgress, setPdfProgress] = useState<Map<string, PdfLessonProgress>>(new Map());
+  const [wordIds,     setWordIds]     = useState<Map<string, string[]>>(new Map());
+  const [practised,   setPractised]   = useState<Map<string, Set<string>>>(new Map());
+  useEffect(() => {
+    void getQaedahWordIdsByTopic().then(setWordIds);
+  }, []);
+  useEffect(() => {
+    if (!studentId) { setPdfProgress(new Map()); setPractised(new Map()); return; }
+    void getPdfLessonProgress(studentId, 'qaedah').then(setPdfProgress);
+    void getQaedahPractisedByTopic(studentId).then(setPractised);
+  }, [studentId, view]);
   const [boardOpen,   setBoardOpen]  = useState(false);
   const [craneRoomId, setCraneRoomId] = useState<string | null>(null); // set ⇒ live session (tutor spectates)
 
@@ -383,6 +406,23 @@ const QaedahPage: React.FC<{
                     {topic.titleAr}
                   </p>
                 )}
+                {studentId && (() => {
+                  const prog  = pdfProgress.get(topic.id);
+                  const ids   = wordIds.get(topic.id) ?? [];
+                  const known = practised.get(topic.id);
+                  if (!prog && ids.length === 0) return null;
+                  return (
+                    <LessonProgressBar
+                      fraction={progressFraction(prog)}
+                      done={prog?.status === 'done'}
+                      revisions={prog?.revisionCount ?? 0}
+                      label={!prog ? 'not started'
+                        : prog.status === 'done' ? 'finished'
+                        : `slide ${prog.lastSlide}${prog.totalSlides ? ` of ${prog.totalSlides}` : ''}`}
+                      words={ids.length ? ids.map(id => !!known?.has(id)) : undefined}
+                    />
+                  );
+                })()}
               </div>
               {/* Has a lesson PDF */}
               {pdfs[topic.id] && (
@@ -839,6 +879,52 @@ const QaedahPage: React.FC<{
           }}
           students={[]}
           tutorId=""
+          /* Slide tracking, the same as the Arabic and Tajweed lessons. It only
+             switches on for a known student: without one there is nobody to
+             remember the place for. */
+          progressMode={!!studentId}
+          preSelectedStudentId={studentId}
+          getProgress={async (sid, lid) => {
+            const p = (await getPdfLessonProgress(sid, 'qaedah')).get(lid);
+            return p ? { status: p.status, lastSlide: p.lastSlide, revisionCount: p.revisionCount } : null;
+          }}
+          onMarkProgress={async (sid, lid, slide, total) => {
+            await markPdfLessonProgress(sid, lid, 'qaedah', slide, total);
+            setPdfProgress(m => new Map(m).set(lid, {
+              lessonId: lid, status: 'in_progress', lastSlide: slide, totalSlides: total,
+              revisionCount: m.get(lid)?.revisionCount ?? 0, updatedAt: new Date().toISOString(),
+            }));
+            onLogActivity?.(sid, {
+              kind: 'qaedah', title: `Qaedah lesson — ${selectedTopic.titleEn}`,
+              detail: `slide ${slide}${total ? ` of ${total}` : ''}`, sourceId: lid,
+            });
+          }}
+          onMarkLessonDone={async (sid, lid, total) => {
+            await markPdfLessonDone(sid, lid, 'qaedah', total);
+            setPdfProgress(m => new Map(m).set(lid, {
+              lessonId: lid, status: 'done', lastSlide: total || 1, totalSlides: total,
+              revisionCount: m.get(lid)?.revisionCount ?? 0, updatedAt: new Date().toISOString(),
+            }));
+            onLogActivity?.(sid, {
+              kind: 'qaedah', title: `Qaedah lesson — ${selectedTopic.titleEn}`,
+              detail: 'finished', sourceId: lid,
+            });
+          }}
+          onLogRevision={async (sid, lid) => {
+            await logPdfLessonRevision(sid, lid, 'qaedah');
+            setPdfProgress(m => {
+              const prev = m.get(lid);
+              return new Map(m).set(lid, {
+                lessonId: lid, status: 'done', lastSlide: prev?.lastSlide ?? 1,
+                totalSlides: prev?.totalSlides, revisionCount: (prev?.revisionCount ?? 0) + 1,
+                updatedAt: new Date().toISOString(),
+              });
+            });
+            onLogActivity?.(sid, {
+              kind: 'qaedah', title: `Qaedah lesson — ${selectedTopic.titleEn}`,
+              detail: 'revised', sourceId: lid,
+            });
+          }}
           onClose={() => setBoardOpen(false)}
         />
       )}

@@ -2297,6 +2297,7 @@ const App: React.FC = () => {
             <QaedahPage
               studentId={(sessionStudent ?? selectedStudent)?.id}
               studentName={(sessionStudent ?? selectedStudent)?.name}
+              onLogActivity={handleLogActivity}
             />
           </GameInviteContext.Provider>
         ) : activeTab === 'aboutUs' ? (

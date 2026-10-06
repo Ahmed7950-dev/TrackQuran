@@ -66,4 +66,5 @@ export const ACTIVITY_STYLE: Record<ActivityLog['kind'], { icon: string; badgeCl
   'letters-tajweed': { icon: '🖍️', badgeCls: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/50 dark:text-fuchsia-300' },
   'game':            { icon: '🎮', badgeCls: 'bg-lime-100 text-lime-700 dark:bg-lime-900/50 dark:text-lime-300' },
   'tajweed-exercise':{ icon: '🎯', badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
+  'qaedah':          { icon: '📖', badgeCls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
 };

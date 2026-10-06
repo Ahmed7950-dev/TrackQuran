@@ -14,6 +14,11 @@ import CreateLessonModal from './CreateLessonModal';
 import TajweedLessonViewer from './TajweedLessonViewer';
 import TajweedExercisePage from './TajweedExercisePage';
 import { useI18n } from '../context/I18nProvider';
+import {
+  getPdfLessonProgress, markPdfLessonProgress, markPdfLessonDone,
+  logPdfLessonRevision, progressFraction, type PdfLessonProgress,
+} from '../services/pdfLessonProgressService';
+import LessonProgressBar from './LessonProgressBar';
 
 interface Props {
   students: Student[];
@@ -39,6 +44,8 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
   const [editing,       setEditing]       = useState<TajweedLesson | null>(null);
   const [viewing,       setViewing]       = useState<TajweedLesson | null>(null);
   const [completedIds,  setCompletedIds]  = useState<Set<string>>(new Set());
+  /** How far through each lesson this student is — drives the bar on the row. */
+  const [progressMap,   setProgressMap]   = useState<Map<string, PdfLessonProgress>>(new Map());
   // The exercises section takes over the page while it is open.
   const [exercising,    setExercising]    = useState(false);
 
@@ -57,6 +64,11 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
   useEffect(() => {
     if (!preSelectedStudentId) return;
     getCompletedLessonIds(preSelectedStudentId).then(setCompletedIds).catch(console.warn);
+  }, [preSelectedStudentId]);
+
+  useEffect(() => {
+    if (!preSelectedStudentId) { setProgressMap(new Map()); return; }
+    getPdfLessonProgress(preSelectedStudentId, 'tajweed').then(setProgressMap).catch(console.warn);
   }, [preSelectedStudentId]);
 
   const handleDelete = async (l: TajweedLesson) => {
@@ -173,6 +185,7 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-gray-700">
           {lessons.map((lesson, idx) => (
             <LessonRow
+              progress={progressMap.get(lesson.id)}
               key={lesson.id}
               lesson={lesson}
               index={idx}
@@ -220,6 +233,55 @@ const TajweedPage: React.FC<Props> = ({ students, preSelectedStudentId, onLogAct
           students={students}
           tutorId={tutorId}
           preSelectedStudentId={preSelectedStudentId}
+          /* The same slide tracking the Arabic lessons have: where we stopped,
+             resumed on the next opening, and a logbook entry each time — which
+             is what puts it on the calendar, here and on the student's link. */
+          progressMode
+          getProgress={async (sid, lid) => {
+            const p = (await getPdfLessonProgress(sid, 'tajweed')).get(lid);
+            return p ? { status: p.status, lastSlide: p.lastSlide, revisionCount: p.revisionCount } : null;
+          }}
+          onMarkProgress={async (sid, lid, slide, total) => {
+            await markPdfLessonProgress(sid, lid, 'tajweed', slide, total);
+            setProgressMap(m => new Map(m).set(lid, {
+              lessonId: lid, status: 'in_progress', lastSlide: slide,
+              totalSlides: total, revisionCount: m.get(lid)?.revisionCount ?? 0,
+              updatedAt: new Date().toISOString(),
+            }));
+            onLogActivity?.(sid, {
+              kind: 'tajweed', title: `Tajweed lesson — ${viewing.title}`,
+              detail: `slide ${slide}${total ? ` of ${total}` : ''}`, sourceId: lid,
+            });
+          }}
+          onMarkLessonDone={async (sid, lid, total) => {
+            await markPdfLessonDone(sid, lid, 'tajweed', total);
+            await markLessonCompleted(sid, lid, tutorId);
+            setCompletedIds(p => new Set([...p, lid]));
+            setProgressMap(m => new Map(m).set(lid, {
+              lessonId: lid, status: 'done', lastSlide: total || 1,
+              totalSlides: total, revisionCount: m.get(lid)?.revisionCount ?? 0,
+              updatedAt: new Date().toISOString(),
+            }));
+            onLogActivity?.(sid, {
+              kind: 'tajweed', title: `Tajweed lesson — ${viewing.title}`,
+              detail: 'finished', sourceId: lid,
+            });
+          }}
+          onLogRevision={async (sid, lid) => {
+            await logPdfLessonRevision(sid, lid, 'tajweed');
+            setProgressMap(m => {
+              const prev = m.get(lid);
+              return new Map(m).set(lid, {
+                lessonId: lid, status: 'done', lastSlide: prev?.lastSlide ?? 1,
+                totalSlides: prev?.totalSlides, revisionCount: (prev?.revisionCount ?? 0) + 1,
+                updatedAt: new Date().toISOString(),
+              });
+            });
+            onLogActivity?.(sid, {
+              kind: 'tajweed', title: `Tajweed lesson — ${viewing.title}`,
+              detail: 'revised', sourceId: lid,
+            });
+          }}
           onMarkCompleted={async (studentId, lessonId, tId) => {
             const ok = await markLessonCompleted(studentId, lessonId, tId);
             // Marking a lesson done is a logbook event for that student.
@@ -254,6 +316,7 @@ interface RowProps {
   isAdmin: boolean;
   isDragOver: boolean;
   isCompleted?: boolean;
+  progress?: PdfLessonProgress;
   onView: () => void;
   onEdit: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
@@ -264,7 +327,7 @@ interface RowProps {
 }
 
 const LessonRow: React.FC<RowProps> = ({
-  lesson, index, isAdmin, isDragOver, isCompleted = false,
+  lesson, index, isAdmin, isDragOver, isCompleted = false, progress,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) => (
@@ -314,6 +377,16 @@ const LessonRow: React.FC<RowProps> = ({
       <p className={`font-semibold truncate ${isCompleted ? 'text-emerald-800 dark:text-emerald-200' : 'text-slate-800 dark:text-slate-100'}`}>{lesson.title}</p>
       {lesson.description && (
         <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{lesson.description}</p>
+      )}
+      {progress && (
+        <LessonProgressBar
+          fraction={progressFraction(progress)}
+          done={progress.status === 'done'}
+          revisions={progress.revisionCount}
+          label={progress.status === 'done'
+            ? 'finished'
+            : `slide ${progress.lastSlide}${progress.totalSlides ? ` of ${progress.totalSlides}` : ''}`}
+        />
       )}
     </div>
 
