@@ -140,8 +140,30 @@ export const setStudentApprovalStatus = async (
   if (error) console.error('setStudentApprovalStatus:', error.message);
 };
 
-export const saveStudent = async (teacherId: string, student: Student): Promise<void> => {
+/**
+ * Save the student row.
+ *
+ * It does NOT write the mistakes map unless you say so. A row save carries a
+ * snapshot of every mark with it, and almost nothing that saves a student is
+ * about marks — logging a recitation, assigning homework, reassigning verses,
+ * taking attendance. Each of those used to write back whatever marks that tab
+ * happened to be holding, so marking mistakes on a phone and then pressing a
+ * button on the same screen, or having the student open on a second device,
+ * quietly reverted them. Marks are merged server side instead
+ * (mergeStudentMistakes), and only the handful of callers whose actual job is
+ * to change them pass `withMistakes`.
+ *
+ * Leaving the column out is safe both ways: it is NOT NULL DEFAULT '{}', so a
+ * new row still gets an empty map, and an upsert that does not name a column
+ * leaves the stored value alone.
+ */
+export const saveStudent = async (
+  teacherId: string,
+  student: Student,
+  opts: { withMistakes?: boolean } = {},
+): Promise<void> => {
   const row = studentToRow(teacherId, student);
+  if (!opts.withMistakes) delete (row as Record<string, unknown>).mistakes;
   const { error } = await supabase
     .from('students')
     .upsert(row, { onConflict: 'id' });

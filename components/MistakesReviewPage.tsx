@@ -653,7 +653,8 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         // 4. Persist yellow mistakes to Supabase
         const tid = teacherId ?? (currentUser?.role === 'teacher' ? currentUser.id : null);
         if (tid) {
-            saveStudent(tid, updatedStudent).catch(e => console.error('handleRemoveVerse saveStudent:', e));
+            // Removing a verse's marks IS a change to the mistakes map.
+            saveStudent(tid, updatedStudent, { withMistakes: true }).catch(e => console.error('handleRemoveVerse saveStudent:', e));
         }
 
         // 5. Notify parent so the live session page reflects the change immediately

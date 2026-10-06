@@ -1114,7 +1114,7 @@ const App: React.FC = () => {
     };
     setStudents(prev => [...prev, newStudent]);
     if (currentUser?.role === 'teacher') {
-      saveStudent(currentUser.id, newStudent); // async, fire & forget
+      saveStudent(currentUser.id, newStudent, { withMistakes: true }); // async, fire & forget
     }
     setIsAddStudentModalOpen(false);
   };
@@ -1220,11 +1220,18 @@ const App: React.FC = () => {
   /** `rowSave: false`: the caller has already written what changed, by itself
    *  and without carrying a copy of the rest of the row (see persistMistakes).
    *  Everything else — the local state, the portal sync — still happens. */
-  const handleUpdateStudent = (updatedStudent: Student, opts?: { rowSave?: boolean }) => {
+  const handleUpdateStudent = (
+    updatedStudent: Student,
+    opts?: { rowSave?: boolean; withMistakes?: boolean },
+  ) => {
     const before = students.find(s => s.id === updatedStudent.id)?.subscriptionRenewalDate;
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
     if (currentUser?.role === 'teacher') {
-      if (opts?.rowSave !== false) saveStudent(currentUser.id, updatedStudent); // async, fire & forget
+      // withMistakes only where changing the marks IS the point: every other
+      // save would otherwise write this tab's snapshot over newer marks.
+      if (opts?.rowSave !== false) {
+        saveStudent(currentUser.id, updatedStudent, { withMistakes: opts?.withMistakes }); // async, fire & forget
+      }
       // One subscription per family — see propagateRenewalDate.
       if (updatedStudent.subscriptionRenewalDate !== before) {
         void propagateRenewalDate(updatedStudent.id, updatedStudent.subscriptionRenewalDate);
@@ -1322,7 +1329,7 @@ const App: React.FC = () => {
     const mistakes = { ...(student.mistakes || {}) };
     if (flags.length) mistakes[PERM_MISTAKE_FLAGS_KEY] = { level: 0, date: new Date().toISOString(), errorText: flags.join('|') };
     else delete mistakes[PERM_MISTAKE_FLAGS_KEY];
-    handleUpdateStudent({ ...student, mistakes });
+    handleUpdateStudent({ ...student, mistakes }, { withMistakes: true });
   };
 
   // Merge mode: fold custom mistake notes into a fixed ring label (rewrites
@@ -1336,7 +1343,7 @@ const App: React.FC = () => {
       if (t && from.has(t) && m.errorType !== 'tajweed') return [k, { ...m, errorText: toLabel }];
       return [k, m];
     }));
-    handleUpdateStudent({ ...student, mistakes });
+    handleUpdateStudent({ ...student, mistakes }, { withMistakes: true });
   };
 
   /**
@@ -1398,7 +1405,7 @@ const App: React.FC = () => {
     }
 
     const updatedStudent = { ...student, mistakes: newStudentMistakes };
-    handleUpdateStudent(updatedStudent);
+    handleUpdateStudent(updatedStudent, { withMistakes: true });
   };
   
   const handleClearMistake = (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number) => {
