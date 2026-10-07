@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { getSharedReport, SharedReportData, recordVersePlay, getReportPlays, getStudentTimezonePublic } from '../services/dataService';
+import { getSharedReport, SharedReportData, recordVersePlay, getReportPlays, getStudentTimezonePublic, appendStudentActivity } from '../services/dataService';
 import type { QuranHomework } from '../types';
 import { supabase } from '../lib/supabase';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
@@ -8,7 +8,7 @@ import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import ContactUsPage from './ContactUsPage';
-import type { Student, AttendanceRecord, Mistake } from '../types';
+import type { Student, AttendanceRecord, Mistake, ActivityLog } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
 import { getTeacherAvailability, AvailabilitySlot } from '../services/availabilityService';
@@ -156,6 +156,14 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   const [quranJump, setQuranJump] = useState<{ key: string; n: number } | null>(null);
   const jumpToVerse = useCallback((key: string) => {
     setQuranJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
+  }, []);
+  /** The student writing a reflection marks the day on the logbook. This page
+   *  is anonymous, so it goes through the append-only function rather than a
+   *  row save. The portal's own calendar reads the report snapshot, so the
+   *  entry shows here once the tutor's app next syncs it; the tutor sees it at
+   *  once, which is where the day is read from. */
+  const logStudentActivity = useCallback((studentId: string, activity: ActivityLog) => {
+    void appendStudentActivity(studentId, activity);
   }, []);
   // Whether the floating note panel is visible
   const [noteVisible, setNoteVisible] = useState(false);
@@ -931,6 +939,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     cursorLetterKey={cursorLetterKey}
                     toolbarStickyTop={headerHeight}
                     notesStudentId={report.student_id}
+                    onLogActivity={logStudentActivity}
                     student={quranFakeStudent}
                     students={[quranFakeStudent]}
                     studentProgress={sp ? { surah: sp.recitationAchievements?.[sp.recitationAchievements.length - 1]?.endSurah ?? 1, ayah: sp.recitationAchievements?.[sp.recitationAchievements.length - 1]?.endAyah ?? 1 } : { surah: 1, ayah: 1 }}

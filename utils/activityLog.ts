@@ -67,4 +67,6 @@ export const ACTIVITY_STYLE: Record<ActivityLog['kind'], { icon: string; badgeCl
   'game':            { icon: '🎮', badgeCls: 'bg-lime-100 text-lime-700 dark:bg-lime-900/50 dark:text-lime-300' },
   'tajweed-exercise':{ icon: '🎯', badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' },
   'qaedah':          { icon: '📖', badgeCls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
+  'tadabbur':        { icon: '🌿', badgeCls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
+  'letter-cards':    { icon: '🃏', badgeCls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300' },
 };

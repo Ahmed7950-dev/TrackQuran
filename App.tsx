@@ -11,7 +11,7 @@ import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive
 import { withActivityLog } from './utils/activityLog';
 import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
-import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports } from './services/dataService';
+import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports , appendStudentActivity} from './services/dataService';
 import { computeReportRanks } from './services/rankingService';
 import { getStudentCompletions } from './services/tajweedService';
 import { supabase } from './lib/supabase';
@@ -1213,7 +1213,9 @@ const App: React.FC = () => {
       }
       const next = withActivityLog(stu, activity);
       if (next === stu) return prev;                 // already logged today
-      if (currentUser?.role === 'teacher') void saveStudent(currentUser.id, next);
+      // Appended server side rather than saved with the row: a whole-row save
+      // carries an old copy of the logbook and can drop another window's entry.
+      void appendStudentActivity(stu.id, activity);
       const targetId = stu.id;
       return prev.map(x => (x.id === targetId ? next : x));
     });
@@ -2453,6 +2455,7 @@ const App: React.FC = () => {
           <StudentProgressPage
             student={sessionStudent}
             students={students}
+            onLogActivity={handleLogActivity}
             jumpToVerseKey={quranHomeworkJump?.key ?? null}
             jumpNonce={quranHomeworkJump?.n ?? 0}
             notesStudentId={sessionStudent.id}

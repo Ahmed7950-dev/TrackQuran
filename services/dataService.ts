@@ -1,4 +1,4 @@
-import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework, Mistake } from '../types';
+import { Student, AttendanceStatus, RecitationAchievement, MemorizationAchievement, AttendanceRecord, QuranVerse, Progress, User, SupportTicket, SupportMessage, QuranHomework, Mistake, ActivityLog } from '../types';
 export type { QuranHomework };
 import { QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import { pageVerseList } from './quranPageData';
@@ -197,6 +197,50 @@ export const mergeStudentMistakes = async (
     throw new Error(error.message);
   }
   return (data ?? {}) as Record<string, Mistake>;
+};
+
+/**
+ * Append one entry to a student's logbook WITHOUT rewriting the row.
+ *
+ * Same reasoning as mergeStudentMistakes: the logbook lives in an array on the
+ * student row, so a whole-row save carries an old copy of it and can drop
+ * entries another window has just written.
+ *
+ * It is also the only path the student side has. A student writing a tadabbur
+ * reflection on their portal link is anonymous — it cannot save a student row,
+ * but it may call this, which can do nothing except append a known kind of
+ * activity, once per day.
+ *
+ * Returns true when an entry was written, false when the same thing was already
+ * logged today. Never throws: a missing logbook line must not take down the
+ * save the student actually asked for.
+ */
+export const appendStudentActivity = async (
+  studentId: string,
+  activity: ActivityLog,
+  when: Date = new Date(),
+): Promise<boolean> => {
+  // Noon-stamped like every other log the app writes, so a timezone shift
+  // cannot slide the entry into the wrong day.
+  const day = new Date(when);
+  day.setHours(12, 0, 0, 0);
+  const { data, error } = await supabase.rpc('log_student_activity', {
+    p_student_id: studentId,
+    p_kind: activity.kind,
+    p_title: activity.title,
+    p_detail: activity.detail ?? null,
+    p_source_id: activity.sourceId ?? null,
+    p_when: day.toISOString(),
+  });
+  if (error) {
+    // An id that is not on the Quran roster is expected, not broken: a game or
+    // a lesson can be set from the Arabic side, whose students are a different
+    // table with no logbook. Say so quietly; anything else is a real fault.
+    if (/no student/i.test(error.message)) console.debug('appendStudentActivity: not a Quran student —', studentId);
+    else console.error('appendStudentActivity:', error.message, '| id:', studentId);
+    return false;
+  }
+  return data === true;
 };
 
 export const deleteStudent = async (studentId: string): Promise<void> => {

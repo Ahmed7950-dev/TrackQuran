@@ -23,6 +23,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
+import { appendStudentActivity } from '../services/dataService';
 import { createGameChannel, P2PGameChannel } from '../services/p2pGameChannel';
 import { MatchForm } from '../services/letterMatchService';
 import { shapeOf, FORM_LABEL } from './LetterMatchChallenge';
@@ -566,6 +567,17 @@ export const LetterCardsPage: React.FC<{ gameId: string }> = ({ gameId }) => {
         mistakes: snap.mistakes, wrongLetters: snap.wrongLetters, endedReason, durationMs,
       });
     }
+    // The logbook, so the day shows as attended on the main calendar. No
+    // sourceId: a day on which the cards were played is one line, however many
+    // games it took. Only the Quran roster has a logbook, so a game set from
+    // the Arabic side simply does not find a student — see appendStudentActivity.
+    const words = !!game.words?.length;
+    void appendStudentActivity(game.studentId, {
+      kind: 'letter-cards',
+      title: `Revised ${words ? 'words' : 'letters'} through ${words ? 'word' : 'letter'} cards`,
+      detail: `${snap.score} of ${snap.total}`
+        + (snap.mistakes ? ` · ${snap.mistakes} mistake${snap.mistakes === 1 ? '' : 's'}` : ' · no mistakes'),
+    });
   }, [host, solo, game, snap]);
 
   /** Deal the whole thing again — the tutor's call, or the student's own on

@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import lottie from 'lottie-web';
 import StudentProfileIcon from './StudentProfileIcon';
 import { QURAN_METADATA } from '../constants';
-import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake } from '../types';
+import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake, ActivityLog } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
@@ -95,6 +95,12 @@ interface StudentProgressPageProps {
    * In live (tutor) mode notes are shown read-only as context.
    */
   notesStudentId?: string;
+  /**
+   * Logbook. Tadabbur work on a verse — a word meaning written over a word, a
+   * reflection, a tutor's note — marks the day attended on the main calendar,
+   * the same way a finished Qaedah lesson does.
+   */
+  onLogActivity?: (studentId: string, activity: ActivityLog) => void;
   /**
    * Called (on the tutor side) each time the tutor presses N to signal a
    * mistake. The parent can use this to broadcast the event to the student.
@@ -867,7 +873,7 @@ const ICON = {
     search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1613,6 +1619,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         };
     }, [notesStudentId, refreshTadabbur]);
 
+    /** One logbook line per verse per day, whoever did the writing and whatever
+     *  kind of writing it was — the day is what the calendar cares about. */
+    const logTadabbur = useCallback((surah: number, ayah: number, detail: string) => {
+        if (!notesStudentId) return;
+        const name = QURAN_METADATA.find(x => x.number === surah)?.transliteratedName ?? `surah ${surah}`;
+        onLogActivity?.(notesStudentId, {
+            kind: 'tadabbur',
+            title: `Tadabbur — verse ${ayah} in ${name}`,
+            detail,
+            sourceId: `${surah}:${ayah}`,
+        });
+    }, [notesStudentId, onLogActivity]);
+
     // ── Tadabbur: save / delete a note then update local state ────────────────
     const handleSaveNote = useCallback(async (surahNum: number, ayahNum: number, text: string) => {
         if (!notesStudentId) return;
@@ -1620,6 +1639,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setSavingNoteKey(key);
         try {
             await saveVerseNote(notesStudentId, surahNum, ayahNum, text);
+            // Clearing a note is not work, so only writing one counts.
+            if (text.trim()) logTadabbur(surahNum, ayahNum, 'reflection written');
             setVerseNotes(prev => {
                 const trimmed = text.trim();
                 if (trimmed) return { ...prev, [key]: trimmed };
@@ -1634,7 +1655,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         } finally {
             setSavingNoteKey(null);
         }
-    }, [notesStudentId]);
+    }, [notesStudentId, logTadabbur]);
 
     // ── Tadabbur: word meanings, tutor notes, blue progress ──────────────────
     useEffect(() => {
@@ -1677,13 +1698,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         const key = `${surah}:${ayah}:${wordIndex}`;
         const wordText = normalizeMeaningWord(word);
         await saveWordMeaning(notesStudentId, surah, ayah, wordIndex, wordText, meaning);
+        if (meaning.trim()) logTadabbur(surah, ayah, 'word meanings');
         setWordMeanings(prev => {
             const next = { ...prev };
             if (meaning.trim()) next[key] = { meaning: meaning.trim(), wordText };
             else delete next[key];
             return next;
         });
-    }, [notesStudentId]);
+    }, [notesStudentId, logTadabbur]);
 
     const handleSaveTutorNote = useCallback(async (surah: number, ayah: number, text: string) => {
         if (!notesStudentId) return;
@@ -1692,6 +1714,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setTutorNoteSaving(p => ({ ...p, [key]: 'saving' }));
         try {
             await saveTutorVerseNote(notesStudentId, surah, ayah, text);
+            if (text.trim()) logTadabbur(surah, ayah, "tutor's note");
             setTutorVerseNotes(prev => {
                 const next = { ...prev };
                 if (text.trim()) next[key] = text.trim(); else delete next[key];
@@ -1702,7 +1725,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             console.error('[Tadabbur] tutor note save failed:', err);
             setTutorNoteSaving(p => ({ ...p, [key]: 'error' }));
         }
-    }, [notesStudentId, tutorVerseNotes]);
+    }, [notesStudentId, tutorVerseNotes, logTadabbur]);
 
     /** "s:a" of every verse with a word meaning, a tutor note or a student reflection. */
     const tadabburVerses = useMemo(() => {
