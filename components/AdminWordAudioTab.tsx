@@ -45,12 +45,38 @@ const AdminWordAudioTab: React.FC = () => {
     });
   }, []);
 
+
+  // A take that has just been recorded or uploaded, kept as a local object URL.
+  //
+  // Two reasons, both of which otherwise cost a page reload. The page learns
+  // that a word HAS audio from the folder listing, and Storage's list() does
+  // not reliably show a file the instant its upload returns — so the row stayed
+  // empty until the page was loaded again. And the CDN may still be holding the
+  // previous take, so the surest thing to play back is the bytes we just sent.
+  const freshRef = useRef<Map<string, string>>(new Map());
+
+  const keepFresh = useCallback((word: string, blob: Blob) => {
+    const old = freshRef.current.get(word);
+    if (old) URL.revokeObjectURL(old);
+    freshRef.current.set(word, URL.createObjectURL(blob));
+    setWithAudio(prev => (prev.has(word) ? prev : new Set(prev).add(word)));
+  }, []);
+
+  const dropFresh = useCallback((word: string) => {
+    const old = freshRef.current.get(word);
+    if (old) URL.revokeObjectURL(old);
+    freshRef.current.delete(word);
+  }, []);
+
   const refreshWords = useCallback(async (tid: string) => {
     if (!tid) { setWords([]); setWithAudio(new Set()); return; }
     setWordsLoading(true);
     const w = await listQaedahWords(tid);
     setWords(w);
-    setWithAudio(await listWordsWithAudio(w.map(x => x.word)));
+    const has = await listWordsWithAudio(w.map(x => x.word));
+    // Anything recorded in this session counts, even if the listing is behind.
+    for (const word of freshRef.current.keys()) if (w.some(x => x.word === word)) has.add(word);
+    setWithAudio(has);
     setWordsLoading(false);
   }, []);
 
@@ -61,6 +87,7 @@ const AdminWordAudioTab: React.FC = () => {
     mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach(t => t.stop());
     audioRef.current?.pause();
+    freshRef.current.forEach(url => URL.revokeObjectURL(url));
   }, []);
 
   // ── Record ─────────────────────────────────────────────────────────────────
@@ -86,7 +113,7 @@ const AdminWordAudioTab: React.FC = () => {
           setBusyWord(word);
           const url = await uploadWordAudio(word, blob);
           if (!url) setError(`Failed to save audio for ${word}`);
-          await refreshWords(topicId);
+          else keepFresh(word, blob);
           setBusyWord(null);
         }
       };
@@ -120,14 +147,16 @@ const AdminWordAudioTab: React.FC = () => {
     setBusyWord(word);
     const url = await uploadWordAudio(word, file);
     if (!url) setError(`Failed to upload audio for ${word}`);
-    await refreshWords(topicId);
+    else keepFresh(word, file);
     setBusyWord(null);
   };
 
   // ── Preview / delete ─────────────────────────────────────────────────────────
   const playPreview = (word: string) => {
     audioRef.current?.pause();
-    const audio = new Audio(`${wordAudioUrl(word)}?t=${Date.now()}`);
+    // The local take when there is one; otherwise the stored file, cache-busted.
+    const fresh = freshRef.current.get(word);
+    const audio = new Audio(fresh ?? `${wordAudioUrl(word)}?t=${Date.now()}`);
     audioRef.current = audio;
     setPlayingWord(word);
     audio.onended = () => setPlayingWord(null);
@@ -140,7 +169,10 @@ const AdminWordAudioTab: React.FC = () => {
     setBusyWord(word);
     const ok = await deleteWordAudio(word);
     if (!ok) setError(`Failed to delete audio for ${word}`);
-    await refreshWords(topicId);
+    else {
+      dropFresh(word);
+      setWithAudio(prev => { const next = new Set(prev); next.delete(word); return next; });
+    }
     setBusyWord(null);
   };
 

@@ -32,9 +32,34 @@ const AdminLetterAudioTab: React.FC = () => {
   const fileInputLetter = useRef<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // A take that has just been recorded or uploaded, kept as a local object URL.
+  //
+  // Two reasons, both of which otherwise cost a page reload. The page learns
+  // that a letter HAS audio from the folder listing, and Storage's list() does
+  // not reliably show a file the instant its upload returns — so the tile stayed
+  // empty until the page was loaded again. And the CDN may still be holding the
+  // previous take, so the surest thing to play back is the bytes we just sent.
+  const freshRef = useRef<Map<string, string>>(new Map());
+
+  const keepFresh = useCallback((letter: string, blob: Blob) => {
+    const old = freshRef.current.get(letter);
+    if (old) URL.revokeObjectURL(old);
+    freshRef.current.set(letter, URL.createObjectURL(blob));
+    setWithAudio(prev => (prev.has(letter) ? prev : new Set(prev).add(letter)));
+  }, []);
+
+  const dropFresh = useCallback((letter: string) => {
+    const old = freshRef.current.get(letter);
+    if (old) URL.revokeObjectURL(old);
+    freshRef.current.delete(letter);
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
-    setWithAudio(await listLettersWithAudio());
+    const has = await listLettersWithAudio();
+    // Anything recorded in this session counts, even if the listing is behind.
+    freshRef.current.forEach((_url, letter) => has.add(letter));
+    setWithAudio(has);
     setLoading(false);
   }, []);
 
@@ -45,6 +70,7 @@ const AdminLetterAudioTab: React.FC = () => {
     mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach(t => t.stop());
     audioRef.current?.pause();
+    freshRef.current.forEach(url => URL.revokeObjectURL(url));
   }, []);
 
   // ── Record ─────────────────────────────────────────────────────────────────
@@ -70,7 +96,7 @@ const AdminLetterAudioTab: React.FC = () => {
           setBusyLetter(letter);
           const url = await uploadLetterAudio(letter, blob);
           if (!url) setError(`Failed to save audio for ${letter}`);
-          await refresh();
+          else keepFresh(letter, blob);
           setBusyLetter(null);
         }
       };
@@ -104,14 +130,16 @@ const AdminLetterAudioTab: React.FC = () => {
     setBusyLetter(letter);
     const url = await uploadLetterAudio(letter, file);
     if (!url) setError(`Failed to upload audio for ${letter}`);
-    await refresh();
+    else keepFresh(letter, file);
     setBusyLetter(null);
   };
 
   // ── Preview / delete ───────────────────────────────────────────────────────
   const playPreview = (letter: string) => {
     audioRef.current?.pause();
-    const audio = new Audio(`${letterAudioUrl(letter)}?t=${Date.now()}`);
+    // The local take when there is one; otherwise the stored file, cache-busted.
+    const fresh = freshRef.current.get(letter);
+    const audio = new Audio(fresh ?? `${letterAudioUrl(letter)}?t=${Date.now()}`);
     audioRef.current = audio;
     setPlayingLetter(letter);
     audio.onended = () => setPlayingLetter(null);
@@ -124,7 +152,10 @@ const AdminLetterAudioTab: React.FC = () => {
     setBusyLetter(letter);
     const ok = await deleteLetterAudio(letter);
     if (!ok) setError(`Failed to delete audio for ${letter}`);
-    await refresh();
+    else {
+      dropFresh(letter);
+      setWithAudio(prev => { const next = new Set(prev); next.delete(letter); return next; });
+    }
     setBusyLetter(null);
   };
 
