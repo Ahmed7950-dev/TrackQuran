@@ -292,11 +292,26 @@ const Booth: React.FC<BoothProps> = ({
   const pct = duration && duration > 0 ? Math.min(100, (now / duration) * 100) : 0;
   const resumePct = duration && duration > 0 ? Math.min(100, (resumeAt / duration) * 100) : 0;
 
+  const isList = item.kind === 'playlist';
+  /** For a playlist the button is about the video on screen, not the reel. */
+  const thisDone = isList ? watched.includes(index) : finished;
+
   const markFinished = () => {
-    const all = item.kind === 'playlist' && total > 0
-      ? Array.from({ length: total }, (_, i) => i) : watched;
-    setFinished(true); setWatched(all);
-    persistRef.current({ finished: true, watchedIndexes: all });
+    if (!isList) {
+      setFinished(true);
+      persistRef.current({ finished: true });
+      return;
+    }
+    // Only the video that is open. Marking one used to mark the whole list,
+    // which threw away the very thing the ticks are for. The reel turns green
+    // by itself once every video in it has been watched — here, or by playing
+    // one to the end, which the ENDED handler records the same way.
+    if (watched.includes(index)) return;
+    const seen = [...watched, index].sort((a, b) => a - b);
+    const all = total > 0 && seen.length >= total;
+    setWatched(seen);
+    if (all) setFinished(true);
+    persistRef.current({ watchedIndexes: seen, finished: all });
   };
 
   const startAgain = async () => {
@@ -386,10 +401,14 @@ const Booth: React.FC<BoothProps> = ({
                   style={{ background: C.raised, border: `1px solid ${C.edge}`, color: C.body }}>
                   <Icon d={REDO} size={16} stroke={2} /> Start again
                 </button>
-                <button type="button" onClick={markFinished} disabled={finished}
+                <button type="button" onClick={markFinished} disabled={thisDone}
+                  title={isList ? 'Marks only the video playing now' : undefined}
                   className="flex items-center gap-2 h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-60"
-                  style={{ background: finished ? C.greenBg : 'var(--m-good-fill)', border: finished ? `1px solid ${C.greenLine}` : 0, color: finished ? C.green : 'var(--m-good-on)' }}>
-                  <Icon d={CHECK} size={16} stroke={2.6} /> {finished ? 'Finished' : 'Mark finished'}
+                  style={{ background: thisDone ? C.greenBg : 'var(--m-good-fill)', border: thisDone ? `1px solid ${C.greenLine}` : 0, color: thisDone ? C.green : 'var(--m-good-on)' }}>
+                  <Icon d={CHECK} size={16} stroke={2.6} />
+                  {isList
+                    ? (thisDone ? `Video ${index + 1} done` : `Mark video ${index + 1} done`)
+                    : (finished ? 'Finished' : 'Mark finished')}
                 </button>
               </div>
             </div>
@@ -413,7 +432,7 @@ const Booth: React.FC<BoothProps> = ({
                   <div className="flex items-baseline gap-2 mt-2">
                     <span style={{ fontFamily: MONO, fontSize: 25, lineHeight: 1, color: C.green }}>{watched.length}</span>
                     <span className="text-[13px]" style={{ color: C.muted }}>
-                      of {total || '?'} finished with {studentName}
+                      of {total || '?'} watched with {studentName}
                     </span>
                   </div>
                   <div className="mt-3"><Ticks total={total} done={watched} current={index} /></div>
