@@ -7,6 +7,7 @@ import { tanweenOnSeatAlif } from '../utils/quranicMarks';
 import Logo from './Logo';
 import StudentDetailPage from './StudentDetailPage';
 import AboutUsPage from './AboutUsPage';
+import ContactUsPage from './ContactUsPage';
 import type { Student, AttendanceRecord, Mistake } from '../types';
 import CalendarPage from './CalendarPage';
 import { getStoredToken } from '../services/googleCalendarService';
@@ -117,7 +118,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     window.scrollTo(0, tabScrollRef.current[activeTab] ?? 0);
   }, [activeTab]);
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
-  const [portalTab, setPortalTab] = useState<'content' | 'about'>('content');
+  const [portalTab, setPortalTab] = useState<'content' | 'about' | 'contact'>('content');
   const [isFontMenuOpen, setIsFontMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);      // phone 🌐 dropdown
   const [navMenuOpen, setNavMenuOpen] = useState(false);        // phone ☰ dropdown
@@ -490,12 +491,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
             >
               {t('header.aboutUs')}
             </button>
-            <a href="#" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400 transition-colors">
+            <button
+              onClick={() => setPortalTab(p => p === 'contact' ? 'content' : 'contact')}
+              className={`text-sm font-medium transition-colors ${portalTab === 'contact' ? 'text-teal-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-400'}`}
+            >
               {t('header.contactUs')}
-            </a>
-            <a href="#" className="text-sm font-medium text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors px-3 py-1 rounded-full">
+            </button>
+            <span aria-disabled="true" title="Coming soon"
+              className="text-sm font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-gray-700 px-3 py-1 rounded-full cursor-default select-none">
               {t('header.supportUs')}
-            </a>
+            </span>
           </nav>
 
           <div className="flex-1 md:hidden" />
@@ -631,12 +636,16 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                   >
                     {t('header.aboutUs')}
                   </button>
-                  <a href="#" onClick={() => setNavMenuOpen(false)} className="px-3 py-2 rounded-lg text-xs font-semibold text-start text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+                  <button
+                    onClick={() => { setPortalTab(p => p === 'contact' ? 'content' : 'contact'); setNavMenuOpen(false); }}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold text-start transition-colors ${portalTab === 'contact' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'}`}
+                  >
                     {t('header.contactUs')}
-                  </a>
-                  <a href="#" onClick={() => setNavMenuOpen(false)} className="px-3 py-2 rounded-lg text-xs font-semibold text-start text-teal-700 dark:text-orange-400 hover:bg-teal-50 dark:hover:bg-gray-700 transition-colors">
+                  </button>
+                  <span aria-disabled="true" title="Coming soon"
+                    className="px-3 py-2 rounded-lg text-xs font-semibold text-start text-slate-400 dark:text-slate-500 cursor-default select-none">
                     {t('header.supportUs')}
-                  </a>
+                  </span>
                 </div>
               </>
             )}
@@ -767,7 +776,9 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
       </header>
 
       <main dir="ltr" className={`flex-grow py-6 ${activeTab === 'quran' ? 'w-full px-2 sm:px-3' : activeTab === 'qaedah' || activeTab === 'alphabetTrainer' ? 'w-full px-2 sm:px-4' : 'container mx-auto px-3 sm:px-6 lg:px-8'}`}>
-        {portalTab === 'about' ? (
+        {portalTab === 'contact' ? (
+          <ContactUsPage />
+        ) : portalTab === 'about' ? (
           <AboutUsPage />
         ) : (
           <>

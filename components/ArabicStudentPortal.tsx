@@ -17,6 +17,7 @@ import LessonJoinPopup from './LessonJoinPopup';
 import NotificationCenter from './NotificationCenter';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
+import ContactUsPage from './ContactUsPage';
 import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
 import Footer from './Footer';
@@ -51,7 +52,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
   const [sessions, setSessions] = useState<LessonSession[]>([]);
   const [unifiedLessons, setUnifiedLessons] = useState<UnifiedLesson[]>([]);
   const [now, setNow] = useState(() => new Date());
-  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary'>('lessons');
+  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary' | 'contact'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
   const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
     const saved = localStorage.getItem('theme');
@@ -174,12 +175,17 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
                 {label}
               </button>
             ))}
-            <a href="#" className="h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
+            <button onClick={() => setPortalTab(p => p === 'contact' ? 'lessons' : 'contact')}
+              className={`h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center transition-colors ${
+                portalTab === 'contact'
+                  ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
               {t('arabicPortal.contactUs')}
-            </a>
-            <a href="#" className="h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors">
+            </button>
+            <span aria-disabled="true" title="Coming soon"
+              className="h-10 px-3 xl:px-4 rounded-xl text-sm font-bold whitespace-nowrap flex items-center text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-gray-700 cursor-default select-none">
               {t('arabicPortal.supportUs')}
-            </a>
+            </span>
           </nav>
 
           <span className="hidden sm:flex flex-shrink-0 items-center text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2.5 py-1 rounded-full"
@@ -251,16 +257,19 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
                 <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
-            <a href="#"
-              className="flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
+            <button onClick={() => setPortalTab(p => p === 'contact' ? 'lessons' : 'contact')}
+              className={`flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center transition-colors ${
+                portalTab === 'contact'
+                  ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
               <span className="sm:hidden">Contact</span>
               <span className="hidden sm:inline">{t('arabicPortal.contactUs')}</span>
-            </a>
-            <a href="#"
-              className="flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center text-white bg-teal-600 dark:bg-orange-600 hover:bg-teal-700 dark:hover:bg-orange-700 transition-colors">
+            </button>
+            <span aria-disabled="true" title="Coming soon"
+              className="flex-1 min-w-0 truncate px-1 sm:px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-center text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-gray-700 cursor-default select-none">
               <span className="sm:hidden">Support</span>
               <span className="hidden sm:inline">{t('arabicPortal.supportUs')}</span>
-            </a>
+            </span>
           </div>
         </nav>
       </header>
@@ -328,7 +337,9 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           );
         })()}
 
-        {portalTab === 'about' ? (
+        {portalTab === 'contact' ? (
+          <ContactUsPage />
+        ) : portalTab === 'about' ? (
           <AboutUsPage />
         ) : portalTab === 'vocabulary' ? (
           <VocabularyPracticePage studentId={student.id} studentName={student.name}
