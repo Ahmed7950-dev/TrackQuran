@@ -765,12 +765,15 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             // header strip colour
             let headerCls = 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400';
             let borderCls = 'border-slate-200 dark:border-gray-600';
+            // The att-* markers let a theme keep the three states apart. In the
+            // amber theme "attended" becomes gold, which lands right next to
+            // orange-400 — so rescheduled is darkened there to stay distinct.
             if (status === AttendanceStatus.Absent) {
-                headerCls = 'bg-red-400 text-white'; borderCls = 'border-red-300 dark:border-red-700';
+                headerCls = 'att-absent bg-red-400 text-white'; borderCls = 'border-red-300 dark:border-red-700';
             } else if (status === AttendanceStatus.Rescheduled) {
-                headerCls = 'bg-orange-400 text-white'; borderCls = 'border-orange-300 dark:border-orange-600';
+                headerCls = 'att-resched bg-orange-400 text-white'; borderCls = 'border-orange-300 dark:border-orange-600';
             } else if (status === AttendanceStatus.Present || hasProgress) {
-                headerCls = 'bg-emerald-400 text-white'; borderCls = 'border-emerald-300 dark:border-emerald-700';
+                headerCls = 'att-present bg-emerald-400 text-white'; borderCls = 'border-emerald-300 dark:border-emerald-700';
             }
 
             const acts = calActivityMap.get(ds) ?? [];

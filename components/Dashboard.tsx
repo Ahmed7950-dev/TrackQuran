@@ -394,14 +394,17 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
             {/* Body: avatar (left third) + info (right two-thirds) */}
             <div className="flex items-stretch">
                 {/* Left third — big avatar */}
-                <div className={`w-1/3 flex items-center justify-center p-3 ${isInactive
+                {/* `student-avatar-well`: a gradient can't be restated by the
+                    amber theme's per-utility rules, so it gets a flat fill
+                    there (see index.html, amber block). */}
+                <div className={`student-avatar-well w-1/3 flex items-center justify-center p-3 ${isInactive
                     ? 'bg-slate-50 dark:bg-gray-800/50'
                     : 'bg-gradient-to-br from-teal-50 to-orange-50 dark:from-gray-800 dark:to-slate-800/60'
                 }`}>
                     {student.profileIcon ? (
                         <StudentProfileIcon src={student.profileIcon} size={112} mode="hover" play={cardHover} className="w-full max-w-[112px] aspect-square h-auto" />
                     ) : (
-                        <div className="w-full max-w-[96px] aspect-square rounded-full bg-teal-500/90 dark:bg-teal-600 flex items-center justify-center text-white text-3xl font-extrabold">
+                        <div className="student-avatar-initial w-full max-w-[96px] aspect-square rounded-full bg-teal-500/90 dark:bg-teal-600 flex items-center justify-center text-white text-3xl font-extrabold">
                             {student.name.charAt(0).toUpperCase()}
                         </div>
                     )}
@@ -518,7 +521,7 @@ const GroupHeader: React.FC<{ label: string; count: number }> = ({ label, count 
     <h2 className="flex-1 min-w-0 text-[15px] sm:text-base font-black text-white tracking-tight truncate">
       {label}
     </h2>
-    <span className="flex-shrink-0 min-w-[26px] px-2 py-0.5 bg-white/25 text-white text-xs font-black text-center tabular-nums">
+    <span className="flex-shrink-0 min-w-[26px] px-2 py-0.5 bg-black/25 text-white text-xs font-black text-center tabular-nums">
       {count}
     </span>
   </div>

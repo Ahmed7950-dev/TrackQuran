@@ -57,9 +57,54 @@ const whitenStrokes = (node: unknown): unknown => {
   return node;
 };
 
+/**
+ * The amber theme's gold, as lottie wants it (0..1).
+ *
+ * These drawings are a black line plus one teal accent — 274 of the strokes
+ * across public/avatars are rgb(51,204,204) — so in a theme with no mint in it
+ * the teal is the one thing that looks imported from somewhere else. White line,
+ * gold accent.
+ */
+const GOLD = [0.91, 0.64, 0.24];
+
+/** Teal-ish: clearly more green and blue than red, and not dark. */
+const isMint = (k: unknown): boolean =>
+  Array.isArray(k) && k.length >= 3
+  && k.slice(0, 3).every(v => typeof v === 'number')
+  && (k[1] as number) > 0.45 && (k[2] as number) > 0.45
+  && (k[0] as number) < (k[1] as number) - 0.25;
+
+const goldenValue = (holder: Record<string, unknown>): void => {
+  if (!holder || !isMint(holder.k)) return;
+  const k = holder.k as number[];
+  holder.k = k.length > 3 ? [...GOLD, k[3]] : [...GOLD];
+};
+
+/** Deep copy with every teal stroke, fill and colour control turned gold. */
+const goldenMint = (node: unknown): unknown => {
+  if (Array.isArray(node)) return node.map(goldenMint);
+  if (node && typeof node === 'object') {
+    const src = node as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(src)) out[key] = goldenMint(value);
+    if ((src.ty === 'st' || src.ty === 'gs' || src.ty === 'fl') && src.c && typeof src.c === 'object') {
+      goldenValue(out.c as Record<string, unknown>);
+    }
+    if (src.ty === 2 && src.v && typeof src.v === 'object') {
+      goldenValue(out.v as Record<string, unknown>);
+    }
+    return out;
+  }
+  return node;
+};
+
 /** Is the app in dark mode right now? */
 const darkNow = () =>
   typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+
+/** …and is that dark mode the amber one? */
+const amberNow = () =>
+  typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'amber';
 
 const LottieIcon: React.FC<{
   src: string;
@@ -82,10 +127,15 @@ const LottieIcon: React.FC<{
   // Re-render the animation when the theme changes — the colours are baked into
   // the data lottie-web is given, so a class flip has to rebuild it.
   const [dark, setDark] = useState(() => adaptDarkStrokes && darkNow());
+  const [amber, setAmber] = useState(() => adaptDarkStrokes && amberNow());
   useEffect(() => {
     if (!adaptDarkStrokes) return;
-    const obs = new MutationObserver(() => setDark(darkNow()));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    const read = () => { setDark(darkNow()); setAmber(amberNow()); };
+    read();
+    // `data-theme` as well as `class`: amber is carried on the attribute, and
+    // watching only the class left the avatars teal when the theme changed.
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
     return () => obs.disconnect();
   }, [adaptDarkStrokes]);
 
@@ -98,7 +148,8 @@ const LottieIcon: React.FC<{
         if (cancelled || !ref.current) return;
         const anim = lottie.loadAnimation({
           container: ref.current,
-          animationData: dark ? whitenStrokes(data) : data,
+          animationData: amber ? goldenMint(whitenStrokes(data))
+            : dark ? whitenStrokes(data) : data,
           renderer: 'svg',
           loop,
           autoplay: play === undefined ? autoplay : false,
@@ -109,7 +160,7 @@ const LottieIcon: React.FC<{
       })
       .catch(() => {});
     return () => { cancelled = true; animRef.current?.destroy(); animRef.current = null; };
-  }, [src, loop, autoplay, dark]);
+  }, [src, loop, autoplay, dark, amber]);
 
   useEffect(() => {
     const a = animRef.current;
