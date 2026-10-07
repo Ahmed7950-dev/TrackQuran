@@ -12,27 +12,18 @@ import { StudentUser } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import SharedReportPage from './SharedReportPage';
 import ArabicStudentPortal from './ArabicStudentPortal';
+import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
+import ThemeIcon from './ThemeIcon';
 
-type AppTheme = 'light' | 'dark' | 'reading';
 const LANGS = ['en', 'ar', 'tr'] as const;
 
 const StudentApp: React.FC<{ user: StudentUser; onLogout: () => void }> = ({ user, onLogout }) => {
   const { t, language, setLanguage } = useI18n();
 
   // ── Theme (mirrors the student portals & registration wizard) ──
-  const [theme, setTheme] = useState<AppTheme>(() => {
-    const s = localStorage.getItem('theme');
-    if (s === 'light' || s === 'dark' || s === 'reading') return s;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('dark'); root.removeAttribute('data-theme');
-    if (theme === 'dark') root.classList.add('dark');
-    else if (theme === 'reading') root.setAttribute('data-theme', 'reading');
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-  const cycleTheme = () => setTheme(p => p === 'light' ? 'dark' : p === 'dark' ? 'reading' : 'light');
+  const [theme, setTheme] = useState<AppTheme>(readTheme);
+  useEffect(() => { applyTheme(theme); }, [theme]);
+  const cycleTheme = () => setTheme(nextTheme);
 
   // A subject only renders its portal once the tutor confirmed it AND its
   // portal source (shared report / share token) exists.
@@ -84,7 +75,7 @@ const StudentApp: React.FC<{ user: StudentUser; onLogout: () => void }> = ({ use
               ))}
             </div>
             <button onClick={cycleTheme} aria-label="Theme" className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700">
-              {theme === 'dark' ? '🌙' : theme === 'reading' ? '📖' : '☀️'}
+              <ThemeIcon theme={theme} className="w-4 h-4" />
             </button>
           </div>
         </div>

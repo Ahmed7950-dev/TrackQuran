@@ -27,6 +27,8 @@ import AdminWordAudioTab from './AdminWordAudioTab';
 import AdminExamsTab from './AdminExamsTab';
 import AdminQuranLabTab from './AdminQuranLabTab';
 import { useI18n } from '../context/I18nProvider';
+import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
+import ThemeIcon from './ThemeIcon';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -137,23 +139,9 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
   const { language, setLanguage } = useI18n();
 
   // Theme
-  const [theme, setTheme] = useState<'light' | 'dark' | 'reading'>(() => {
-    const s = localStorage.getItem('theme');
-    if (s === 'light' || s === 'dark' || s === 'reading') return s as 'light' | 'dark' | 'reading';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('dark');
-    root.removeAttribute('data-theme');
-    if (theme === 'dark') root.classList.add('dark');
-    else if (theme === 'reading') root.setAttribute('data-theme', 'reading');
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const cycleTheme = () => setTheme(t => t === 'light' ? 'dark' : t === 'dark' ? 'reading' : 'light');
-  const themeIcon = theme === 'light' ? '☀️' : theme === 'dark' ? '🌙' : '📖';
+  const [theme, setTheme] = useState<AppTheme>(readTheme);
+  useEffect(() => { applyTheme(theme); }, [theme]);
+  const cycleTheme = () => setTheme(nextTheme);
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabId>('teachers');
@@ -408,7 +396,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
               aria-label={`Theme: ${theme}`}
               className="w-10 h-10 rounded-xl border border-slate-200 dark:border-gray-700 text-base text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700 flex items-center justify-center transition-colors flex-shrink-0"
             >
-              {themeIcon}
+              <ThemeIcon theme={theme} className="w-4 h-4" />
             </button>
 
             {/* Logout — sidebar carries it on large screens */}

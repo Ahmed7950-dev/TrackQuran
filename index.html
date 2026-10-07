@@ -28,22 +28,19 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400;1,9..40,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600;1,700&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300&family=Karla:wght@400;500;700&family=Archivo:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
     <script>
-      // On page load or when changing themes, best to add inline in `head` to avoid FOUC
+      // Inline in `head` so the page never flashes the wrong theme. Mirrors
+      // applyTheme() in utils/theme.ts — change both together.
+      // `amber` is the dark theme with its own overrides on top, so it carries
+      // BOTH the class and the attribute.
       const savedTheme = localStorage.getItem('theme');
-      if (savedTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-        document.documentElement.removeAttribute('data-theme');
-      } else if (savedTheme === 'reading') {
-        document.documentElement.setAttribute('data-theme', 'reading');
-        document.documentElement.classList.remove('dark');
-      } else {
-        // Default to light, but check system preference if no saved theme
-        if (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-        document.documentElement.removeAttribute('data-theme');
+      const root = document.documentElement;
+      root.classList.remove('dark');
+      root.removeAttribute('data-theme');
+      if (savedTheme === 'dark' || savedTheme === 'amber') root.classList.add('dark');
+      if (savedTheme === 'reading') root.setAttribute('data-theme', 'reading');
+      if (savedTheme === 'amber') root.setAttribute('data-theme', 'amber');
+      if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.classList.add('dark');
       }
       // Set language and direction
       const lang = localStorage.getItem('language') || 'en';
@@ -139,6 +136,37 @@
         background-color: #ddd4c4 !important;
       }
 
+      /* ── Amber: the dark theme with the blue taken out ────────────────────
+         It keeps the `dark` class, so every `dark:` class in the app still
+         fires and only the greys and the accent are restated here. Tailwind's
+         grey scale is blue-tinted (#111827, #1F2937 …), which is the navy cast
+         the dark theme has; these are the neutral equivalents.
+      ── ────────────────────────────────────────────────────────────────── */
+      html.dark[data-theme="amber"] body { background-color: #0D0E10; }
+      html.dark[data-theme="amber"] .bg-gray-900 { background-color: #0D0E10 !important; }
+      html.dark[data-theme="amber"] .bg-gray-800 { background-color: #16181A !important; }
+      html.dark[data-theme="amber"] .bg-gray-700 { background-color: #1D2023 !important; }
+      html.dark[data-theme="amber"] .bg-gray-600 { background-color: #2A2D31 !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-800:hover { background-color: #1A1C1F !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-700:hover { background-color: #22262A !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-600:hover { background-color: #2E3236 !important; }
+      html.dark[data-theme="amber"] .border-gray-700 { border-color: #2A2D31 !important; }
+      html.dark[data-theme="amber"] .border-gray-600 { border-color: #343840 !important; }
+      html.dark[data-theme="amber"] .text-slate-100 { color: #F2F4F6 !important; }
+      html.dark[data-theme="amber"] .text-slate-200 { color: #E7EAED !important; }
+      html.dark[data-theme="amber"] .text-slate-300 { color: #C9CDD2 !important; }
+      html.dark[data-theme="amber"] .text-slate-400 { color: #9BA1A8 !important; }
+      html.dark[data-theme="amber"] .text-slate-500 { color: #929AA1 !important; }
+      /* The accent warms from the dark theme's red-orange to the booth's gold,
+         which is the "orange" half of black-and-orange. */
+      html.dark[data-theme="amber"] .text-orange-400,
+      html.dark[data-theme="amber"] .text-orange-500 { color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .border-orange-500 { border-color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .bg-orange-600 { background-color: #C77B14 !important; }
+      html.dark[data-theme="amber"] input,
+      html.dark[data-theme="amber"] textarea,
+      html.dark[data-theme="amber"] select { background-color: #1A1C1F; color: #F2F4F6; }
+
       /* ── The Media tab's palette ──────────────────────────────────────────
          The booth paints from these rather than from Tailwind colours, so it
          follows the site's three modes instead of being dark for ever.
@@ -181,7 +209,41 @@
         --m-bad-line: #E8B4B4;
         --m-bad-ink:  #8C2F2F;
       }
+      /* Plain dark: the booth wears the site's own night rather than its own.
+         Straight off Tailwind's grey scale and the dark theme's orange, so the
+         tab does not look like a different product inside the same window. */
       .dark .media-booth {
+        --m-ground: #111827;
+        --m-panel:  #1F2937;
+        --m-card:   #1F2937;
+        --m-raised: #374151;
+        --m-line:   #374151;
+        --m-edge:   #4B5563;
+        --m-ink:    #F1F5F9;
+        --m-body:   #CBD5E1;
+        --m-muted:  #A6B2C2;
+        --m-dim:    #AAB6C6;
+        --m-accent: #F97316;
+        --m-on-accent: #1A1206;
+        --m-chip:   #3A2410;
+        --m-good:   #4ADE80;
+        --m-good-fill: #15803D;
+        --m-good-on:   #ECFDF5;
+        --m-good-line: #2F6B47;
+        --m-good-bg:   #14301F;
+        --m-track:  #3F4A5A;
+        --m-well:   #0B1220;
+        --m-well-fg:#F1F5F9;
+        --m-screen: #000000;
+        --m-thumb-dim: 0.46;
+        --m-warn-bg:   #2A2010;
+        --m-warn-line: #553F1A;
+        --m-warn-ink:  #FCD9A0;
+        --m-bad-bg:   #2E1A1A;
+        --m-bad-line: #6B2E2E;
+        --m-bad-ink:  #F5C2C2;
+      }
+      html.dark[data-theme="amber"] .media-booth {
         --m-ground: #121315;
         --m-thumb-dim: 0.46;
         --m-panel:  #16181A;

@@ -8,15 +8,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import StudentProgressPage from './StudentProgressPage';
 import { QURANIC_FONTS } from '../constants';
 import { Student } from '../types';
+import { AppTheme, applyTheme, readTheme, nextTheme, THEME_LABEL } from '../utils/theme';
+import ThemeIcon from './ThemeIcon';
 
-type Theme = 'light' | 'reading' | 'dark';
-
-const storedTheme = (): Theme => {
-  try {
-    const t = localStorage.getItem('theme');
-    return t === 'dark' || t === 'reading' ? t : 'light';
-  } catch { return 'light'; }
-};
 
 const storedFont = (): string => {
   try {
@@ -45,20 +39,13 @@ const noop: any = () => {};
 const headerBtn = 'w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900/40 text-slate-600 dark:text-slate-300';
 
 const PublicQuranPage: React.FC = () => {
-  const [theme, setTheme] = useState<Theme>(storedTheme);
+  const [theme, setTheme] = useState<AppTheme>(readTheme);
   const [quranicFont, setQuranicFont] = useState<string>(storedFont);
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(56);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('dark');
-    root.removeAttribute('data-theme');
-    if (theme === 'dark') root.classList.add('dark');
-    else if (theme === 'reading') root.setAttribute('data-theme', 'reading');
-    try { localStorage.setItem('theme', theme); } catch { /* private mode */ }
-  }, [theme]);
+  useEffect(() => { applyTheme(theme); }, [theme]);
 
   // The reader reads the chosen font off this custom property.
   useEffect(() => {
@@ -140,13 +127,9 @@ const PublicQuranPage: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setTheme(t => (t === 'light' ? 'reading' : t === 'reading' ? 'dark' : 'light'))}
-            aria-label="Change the theme" title={`Theme: ${theme}`} className={headerBtn}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              {theme === 'dark'
-                ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>
-                : <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />}
-            </svg>
+            onClick={() => setTheme(nextTheme)}
+            aria-label="Change the theme" title={`Theme: ${THEME_LABEL[theme]}`} className={headerBtn}>
+            <ThemeIcon theme={theme} className="w-[17px] h-[17px]" />
           </button>
 
           <a href="/"
