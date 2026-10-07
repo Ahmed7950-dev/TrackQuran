@@ -6,7 +6,7 @@ import {
   deleteWordAudio,
 } from '../services/wordAudioService';
 import { listQaedahTopics, listQaedahWords, QaedahTopic, QaedahWord } from '../services/qaedahService';
-import MicrophonePicker, { useMicrophones, micConstraint } from './MicrophonePicker';
+import MicrophonePicker, { useMicrophones, openMic } from './MicrophonePicker';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin panel tab: manage pronunciation audio for each Qaedah word.
@@ -67,7 +67,9 @@ const AdminWordAudioTab: React.FC = () => {
   const startRecording = async (word: string) => {
     setError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint(mic.micId) });
+      const opened = await openMic(mic.micId);
+      mic.noteUsed(opened);
+      const stream = opened.stream;
       streamRef.current = stream;
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';

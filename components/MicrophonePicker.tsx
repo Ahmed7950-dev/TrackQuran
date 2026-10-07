@@ -30,18 +30,46 @@ export interface Microphones {
   named: boolean;
   /** Ask for the microphone just to learn the names, then let it go. */
   reveal: () => Promise<void>;
+  /** What the last take was actually recorded with — the only honest answer. */
+  active: { label: string; fellBack: boolean } | null;
+  noteUsed: (opened: OpenedMic) => void;
   error: string;
 }
 
+/** What the browser says it actually opened. */
+const labelOf = (s: MediaStream): string => s.getAudioTracks()[0]?.label ?? '';
+
+export interface OpenedMic { stream: MediaStream; label: string; fellBack: boolean }
+
 /**
- * The audio constraint to hand to getUserMedia.
+ * Open the chosen microphone.
  *
- * `ideal`, never `exact`: a saved id whose device has since been unplugged
- * makes `exact` throw, and the tutor would see "microphone access denied" for
- * what is really a missing headset. `ideal` quietly falls back to the default.
+ * `exact`, and this matters: `ideal` is only a HINT, and browsers ignore it for
+ * deviceId — ask with `ideal` and you are handed the default while the picker
+ * cheerfully shows the headset you chose. That was a real bug here.
+ *
+ * `exact` throws when the device is gone, which is why the fallback is written
+ * out rather than leant on: an unplugged headset must not surface as
+ * "microphone access denied", which sends you hunting for a permission problem
+ * that does not exist.
  */
-export const micConstraint = (micId: string): MediaStreamConstraints['audio'] =>
-  micId ? { deviceId: { ideal: micId } } : true;
+export async function openMic(micId: string): Promise<OpenedMic> {
+  if (micId) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: micId } },
+      });
+      return { stream, label: labelOf(stream), fellBack: false };
+    } catch (e) {
+      const name = (e as DOMException)?.name;
+      // Gone or busy — fall through to the default. A denial is NOT that, and
+      // must keep bubbling so the caller still says "access denied".
+      if (name !== 'OverconstrainedError' && name !== 'NotFoundError' && name !== 'NotReadableError') throw e;
+    }
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return { stream, label: labelOf(stream), fellBack: !!micId };
+}
 
 export function useMicrophones(): Microphones {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
@@ -49,6 +77,10 @@ export function useMicrophones(): Microphones {
     try { return localStorage.getItem(STORE_KEY) ?? ''; } catch { return ''; }
   });
   const [error, setError] = useState('');
+  const [active, setActive] = useState<{ label: string; fellBack: boolean } | null>(null);
+  const noteUsed = useCallback((opened: OpenedMic) => {
+    setActive({ label: opened.label, fellBack: opened.fellBack });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -89,7 +121,7 @@ export function useMicrophones(): Microphones {
   }, [mics, micId, setMicId]);
 
   const named = mics.some(m => !!m.label);
-  return { mics, micId, setMicId, named, reveal, error };
+  return { mics, micId, setMicId, named, reveal, active, noteUsed, error };
 }
 
 const MicrophonePicker: React.FC<{ mic: Microphones; className?: string }> = ({ mic, className }) => (
@@ -127,6 +159,16 @@ const MicrophonePicker: React.FC<{ mic: Microphones; className?: string }> = ({ 
     )}
 
     {mic.error && <span className="text-xs font-semibold text-red-600 dark:text-red-400">{mic.error}</span>}
+
+    {mic.active && (
+      <span className={`text-xs font-semibold ${mic.active.fellBack
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-emerald-700 dark:text-emerald-400'}`}>
+        {mic.active.fellBack
+          ? `That microphone was unavailable — recorded with ${mic.active.label || 'the default'}`
+          : `Recorded with ${mic.active.label || 'the chosen microphone'}`}
+      </span>
+    )}
   </div>
 );
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import MicrophonePicker, { useMicrophones, micConstraint } from './MicrophonePicker';
+import MicrophonePicker, { useMicrophones, openMic } from './MicrophonePicker';
 import {
   ARABIC_LETTERS,
   letterAudioUrl,
@@ -51,7 +51,9 @@ const AdminLetterAudioTab: React.FC = () => {
   const startRecording = async (letter: string) => {
     setError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint(mic.micId) });
+      const opened = await openMic(mic.micId);
+      mic.noteUsed(opened);
+      const stream = opened.stream;
       streamRef.current = stream;
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
