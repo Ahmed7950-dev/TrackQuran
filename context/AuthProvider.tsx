@@ -19,15 +19,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Fetch the role column from the profiles table.
 // Kept separate so the role is always read from the DB (not stale metadata).
-const fetchRole = async (userId: string): Promise<'teacher' | 'admin' | 'student'> => {
+const fetchAccount = async (userId: string): Promise<{
+  role: 'teacher' | 'admin' | 'student'; approved: boolean;
+}> => {
   const { data } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, approved')
     .eq('id', userId)
     .single();
-  if (data?.role === 'admin') return 'admin';
-  if (data?.role === 'student') return 'student';
-  return 'teacher';
+  const role = data?.role === 'admin' ? 'admin' : data?.role === 'student' ? 'student' : 'teacher';
+  // No row yet means the sign-in that creates it is still in flight; treat that
+  // as not-yet-approved rather than letting a stranger through on a race.
+  return { role, approved: role === 'admin' ? true : data?.approved === true };
 };
 
 // Build a StudentUser from a Supabase session by resolving their enrolled subjects.
@@ -45,7 +48,7 @@ const buildStudentUser = async (session: Session): Promise<StudentUser | null> =
 };
 
 // Build a TeacherUser from a Supabase session + a resolved role.
-const buildTeacherUser = (session: Session, role: 'teacher' | 'admin'): TeacherUser => {
+const buildTeacherUser = (session: Session, role: 'teacher' | 'admin', approved: boolean): TeacherUser => {
   const meta = session.user.user_metadata ?? {};
   const name =
     meta.name ||
@@ -58,6 +61,7 @@ const buildTeacherUser = (session: Session, role: 'teacher' | 'admin'): TeacherU
     name,
     provider: session.user.app_metadata?.provider === 'google' ? 'google' : 'email',
     role,
+    approved,
   };
 };
 
@@ -83,7 +87,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Resolve role first. A self-registered student's profile is role='student';
       // render their portal instead of a teacher workspace (and never create a
       // teacher profile for them).
-      const role = await fetchRole(session.user.id);
+      const { role, approved } = await fetchAccount(session.user.id);
       if (role === 'student') {
         const studentUser = await buildStudentUser(session);
         if (!cancelled) setCurrentUser(studentUser);
@@ -102,7 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           session.user.email?.split('@')[0] || 'Teacher';
         await dataService.createTeacherProfile(session.user.id, name);
       }
-      if (!cancelled) setCurrentUser(buildTeacherUser(session, role));
+      if (!cancelled) setCurrentUser(buildTeacherUser(session, role, approved));
     };
 
     const markDone = () => {
@@ -118,7 +122,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           resolveUser(session, false).then(markDone).catch(() => {
             // Role fetch failed but the session is valid — fall back to teacher
             // so an existing tutor isn't locked out by a transient DB error.
-            if (!cancelled) setCurrentUser(buildTeacherUser(session, 'teacher'));
+            // The role lookup failed, not the session. Let an existing tutor in
+            // rather than locking them out of their own students over a blip.
+            if (!cancelled) setCurrentUser(buildTeacherUser(session, 'teacher', true));
             markDone();
           });
         } else {

@@ -27,6 +27,7 @@ import MistakesReviewPage from './components/MistakesReviewPage';
 import AlphabetTrainerPage from './components/AlphabetTrainerPage';
 import QaedahPage from './components/QaedahPage';
 import AdminPanel from './components/AdminPanel';
+import PendingApprovalPage from './components/PendingApprovalPage';
 import ContactSupportModal from './components/ContactSupportModal';
 import AboutUsPage from './components/AboutUsPage';
 import LandingPage from './components/LandingPage';
@@ -1743,6 +1744,12 @@ const App: React.FC = () => {
   // Student home — a self-registered, signed-in student (profiles.role=student).
   if (currentUser.role === 'student') {
     return <StudentApp user={currentUser} onLogout={logout} />;
+  }
+
+  // A teacher who has signed up but not been approved sees nothing but a notice.
+  // Signing up is open on purpose; what is gated is being able to USE the app.
+  if (currentUser.role === 'teacher' && !currentUser.approved) {
+    return <PendingApprovalPage name={currentUser.name} email={currentUser.email} onLogout={logout} />;
   }
 
   // Admin View — isolated panel, no student management

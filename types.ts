@@ -169,6 +169,9 @@ export interface User {
 // New types for role-based authentication
 export interface TeacherUser extends User {
   role: 'teacher' | 'admin';
+  /** A teacher may use the app only once an admin approves them. Signing up is
+   *  open; the account simply does nothing until then. Admins are always true. */
+  approved: boolean;
 }
 
 /** One subject a self-registered student is enrolled in. */

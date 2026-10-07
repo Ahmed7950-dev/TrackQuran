@@ -10,6 +10,7 @@ import {
   getAllTeachers, TeacherProfile,
   getStudents,
   deleteTeacherAccount,
+  setTeacherApproved,
   getAllTickets,
   getTicketMessages,
   sendSupportMessage,
@@ -234,6 +235,18 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
     if (expandedId === id) setExpandedId(null);
     setConfirmDeleteId(null);
     setDeletingId(null);
+  };
+
+  /** Let a teacher in, or take it back. Only an admin sees this. */
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const handleApprove = async (id: string, approved: boolean) => {
+    setApprovingId(id);
+    try {
+      await setTeacherApproved(id, approved);
+      setTeachers(prev => prev.map(t => (t.id === id ? { ...t, approved } : t)));
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not change the approval.');
+    } finally { setApprovingId(null); }
   };
 
   const handleSendReply = async () => {
@@ -503,6 +516,9 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                               {teacher.role === 'admin' && (
                                 <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-bold rounded">Admin</span>
                               )}
+                              {teacher.role !== 'admin' && !teacher.approved && (
+                                <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold rounded">Waiting</span>
+                              )}
                               {isMe && <span className="text-xs text-slate-400">(you)</span>}
                             </span>
                             <span className="block md:hidden text-xs text-slate-400 mt-0.5">
@@ -535,8 +551,22 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                           {new Date(teacher.created_at).toLocaleDateString()}
                         </span>
 
-                        {/* Delete */}
+                        {/* Approve / Delete */}
                         <div className="flex md:justify-end items-center gap-2 flex-shrink-0">
+                          {!isMe && teacher.role !== 'admin' && !confirming && (
+                            <button
+                              onClick={() => handleApprove(teacher.id, !teacher.approved)}
+                              disabled={approvingId === teacher.id}
+                              title={teacher.approved
+                                ? 'Take away access — they keep their login but cannot use the app'
+                                : 'Let this teacher into the app'}
+                              className={`px-3 h-8 text-xs font-extrabold rounded-lg disabled:opacity-50 transition-colors ${
+                                teacher.approved
+                                  ? 'border border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                              {approvingId === teacher.id ? '…' : teacher.approved ? 'Revoke' : 'Approve'}
+                            </button>
+                          )}
                           {!isMe && (
                             confirming ? (
                               <>

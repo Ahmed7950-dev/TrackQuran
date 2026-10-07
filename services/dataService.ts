@@ -808,22 +808,43 @@ export interface TeacherProfile {
   name: string;
   role: string;
   created_at: string;
+  approved: boolean;
 }
 
 export const getAllTeachers = async (): Promise<TeacherProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, role, created_at')
+    .select('id, name, role, created_at, approved')
     .order('created_at', { ascending: true });
   if (error) { console.error('getAllTeachers:', error.message); return []; }
-  return data ?? [];
+  return (data ?? []) as TeacherProfile[];
 };
 
+/** Let a teacher in, or put them back out. */
+export const setTeacherApproved = async (teacherId: string, approved: boolean): Promise<void> => {
+  const { error } = await supabase.from('profiles').update({ approved }).eq('id', teacherId);
+  if (error) throw new Error(error.message);
+};
+
+/**
+ * Remove a teacher and everything of theirs.
+ *
+ * This deletes the app's record of them. It does NOT delete their login —
+ * that lives in Supabase's auth table, which the browser cannot touch, and
+ * signing in again would recreate the profile row. To remove someone for good,
+ * delete the user in the Supabase dashboard under Authentication → Users.
+ */
 export const deleteTeacherAccount = async (teacherId: string): Promise<void> => {
-  // Cascade-delete everything owned by this teacher
+  // Quran side
   await supabase.from('students').delete().eq('teacher_id', teacherId);
   await supabase.from('shared_reports').delete().eq('teacher_id', teacherId);
   await supabase.from('support_tickets').delete().eq('teacher_id', teacherId);
+  // Arabic side — this was missed, so an Arabic student outlived the teacher
+  // who owned them and sat in the table with nobody able to see or remove them.
+  await supabase.from('arabic_students').delete().eq('teacher_id', teacherId);
+  // NOT arabic_lessons: those are the shared curriculum every teacher works
+  // from, whoever happened to upload them. Removing a teacher must not take
+  // the course with them.
   await supabase.from('profiles').delete().eq('id', teacherId);
 };
 
