@@ -141,28 +141,76 @@
          fires and only the greys and the accent are restated here. Tailwind's
          grey scale is blue-tinted (#111827, #1F2937 …), which is the navy cast
          the dark theme has; these are the neutral equivalents.
+
+         Two things about the shape of this, both learned the hard way:
+
+         1. In Tailwind `dark:bg-gray-800` is its own class, written
+            `.dark\:bg-gray-800:is(.dark *)` — it is NOT the class `bg-gray-800`.
+            Restyling only the plain utility moved nothing on the page, because
+            almost nothing carries it.
+         2. The two groups below must stay in THIS order. An element typically
+            carries both (`text-slate-600 dark:text-slate-300`), and Tailwind
+            relies on the dark: rule being more specific to win. Here they are
+            equally specific, so source order decides — and the dark: one has
+            to be last, or every such element takes its LIGHT colour.
       ── ────────────────────────────────────────────────────────────────── */
       html.dark[data-theme="amber"] body { background-color: #0D0E10; }
+
+      /* the plain utilities, for anything that carries them unprefixed */
       html.dark[data-theme="amber"] .bg-gray-900 { background-color: #0D0E10 !important; }
       html.dark[data-theme="amber"] .bg-gray-800 { background-color: #16181A !important; }
       html.dark[data-theme="amber"] .bg-gray-700 { background-color: #1D2023 !important; }
       html.dark[data-theme="amber"] .bg-gray-600 { background-color: #2A2D31 !important; }
-      html.dark[data-theme="amber"] .hover\:bg-gray-800:hover { background-color: #1A1C1F !important; }
-      html.dark[data-theme="amber"] .hover\:bg-gray-700:hover { background-color: #22262A !important; }
-      html.dark[data-theme="amber"] .hover\:bg-gray-600:hover { background-color: #2E3236 !important; }
+      html.dark[data-theme="amber"] .bg-slate-800 { background-color: #16181A !important; }
+      html.dark[data-theme="amber"] .bg-slate-900 { background-color: #0D0E10 !important; }
       html.dark[data-theme="amber"] .border-gray-700 { border-color: #2A2D31 !important; }
       html.dark[data-theme="amber"] .border-gray-600 { border-color: #343840 !important; }
+      html.dark[data-theme="amber"] .border-gray-500 { border-color: #3F444C !important; }
       html.dark[data-theme="amber"] .text-slate-100 { color: #F2F4F6 !important; }
       html.dark[data-theme="amber"] .text-slate-200 { color: #E7EAED !important; }
       html.dark[data-theme="amber"] .text-slate-300 { color: #C9CDD2 !important; }
       html.dark[data-theme="amber"] .text-slate-400 { color: #9BA1A8 !important; }
       html.dark[data-theme="amber"] .text-slate-500 { color: #929AA1 !important; }
-      /* The accent warms from the dark theme's red-orange to the booth's gold,
-         which is the "orange" half of black-and-orange. */
-      html.dark[data-theme="amber"] .text-orange-400,
+      html.dark[data-theme="amber"] .text-slate-600 { color: #51565C !important; }
+      html.dark[data-theme="amber"] .text-gray-600 { color: #51565C !important; }
+      html.dark[data-theme="amber"] .text-orange-400 { color: #E8A33D !important; }
       html.dark[data-theme="amber"] .text-orange-500 { color: #E8A33D !important; }
       html.dark[data-theme="amber"] .border-orange-500 { border-color: #E8A33D !important; }
-      html.dark[data-theme="amber"] .bg-orange-600 { background-color: #C77B14 !important; }
+      html.dark[data-theme="amber"] .bg-orange-600 { background-color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-800:hover { background-color: #1A1C1F !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-700:hover { background-color: #22262A !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-600:hover { background-color: #2E3236 !important; }
+      html.dark[data-theme="amber"] .hover\:bg-gray-500:hover { background-color: #3A3F45 !important; }
+
+      /* the dark: variants — LAST, so they beat the light utility above */
+      html.dark[data-theme="amber"] .dark\:bg-gray-900 { background-color: #0D0E10 !important; }
+      html.dark[data-theme="amber"] .dark\:bg-gray-800 { background-color: #16181A !important; }
+      html.dark[data-theme="amber"] .dark\:bg-gray-700 { background-color: #1D2023 !important; }
+      html.dark[data-theme="amber"] .dark\:bg-gray-600 { background-color: #2A2D31 !important; }
+      html.dark[data-theme="amber"] .dark\:bg-slate-800 { background-color: #16181A !important; }
+      html.dark[data-theme="amber"] .dark\:bg-slate-900 { background-color: #0D0E10 !important; }
+      html.dark[data-theme="amber"] .dark\:border-gray-700 { border-color: #2A2D31 !important; }
+      html.dark[data-theme="amber"] .dark\:border-gray-600 { border-color: #343840 !important; }
+      html.dark[data-theme="amber"] .dark\:border-gray-500 { border-color: #3F444C !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-100 { color: #F2F4F6 !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-200 { color: #E7EAED !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-300 { color: #C9CDD2 !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-400 { color: #9BA1A8 !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-500 { color: #929AA1 !important; }
+      html.dark[data-theme="amber"] .dark\:text-slate-600 { color: #51565C !important; }
+      html.dark[data-theme="amber"] .dark\:text-gray-600 { color: #51565C !important; }
+      html.dark[data-theme="amber"] .dark\:text-orange-400 { color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .dark\:text-orange-500 { color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .dark\:border-orange-500 { border-color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .dark\:bg-orange-600 { background-color: #E8A33D !important; }
+      html.dark[data-theme="amber"] .dark\:hover\:bg-gray-800:hover { background-color: #1A1C1F !important; }
+      html.dark[data-theme="amber"] .dark\:hover\:bg-gray-700:hover { background-color: #22262A !important; }
+      html.dark[data-theme="amber"] .dark\:hover\:bg-gray-600:hover { background-color: #2E3236 !important; }
+      html.dark[data-theme="amber"] .dark\:hover\:bg-gray-500:hover { background-color: #3A3F45 !important; }
+
+      html.dark[data-theme="amber"] .bg-orange-600.text-white,
+      html.dark[data-theme="amber"] .dark\:bg-orange-600.text-white { color: #1A1206 !important; }
+
       html.dark[data-theme="amber"] input,
       html.dark[data-theme="amber"] textarea,
       html.dark[data-theme="amber"] select { background-color: #1A1C1F; color: #F2F4F6; }
