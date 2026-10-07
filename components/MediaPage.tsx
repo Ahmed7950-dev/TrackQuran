@@ -24,7 +24,7 @@ import {
   listCategories, createCategory, deleteCategory,
   listMedia, addMedia, updateMedia, deleteMedia,
   loadProgress, saveProgress, clearProgress,
-  parseYouTubeLink, videoThumb, timecode, watchedFraction,
+  parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, timecode, watchedFraction,
 } from '../services/mediaService';
 
 /* ── The booth's palette ──────────────────────────────────────────────
@@ -646,6 +646,24 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     setMarks(prev => new Map(prev).set(p.itemId, p));
   }, []);
 
+  // Playlists put on the shelf before stills were stored have none. Fetch each
+  // one once, quietly, and keep it — a reel added today already arrives with
+  // its picture, so this runs for the old ones and then never again.
+  useEffect(() => {
+    const missing = items.filter(it => it.kind === 'playlist' && !it.thumbUrl);
+    if (!missing.length) return;
+    let dead = false;
+    void (async () => {
+      for (const it of missing) {
+        const url = await fetchPlaylistThumb(it.youtubeId);
+        if (dead || !url) continue;
+        setItems(prev => prev.map(x => (x.id === it.id ? { ...x, thumbUrl: url } : x)));
+        void updateMedia(it.id, { thumbUrl: url });
+      }
+    })();
+    return () => { dead = true; };
+  }, [items]);
+
   const hueOf = useCallback((id: string | null): string => {
     if (!id) return C.dim;
     const i = cats.findIndex(c => c.id === id);
@@ -915,8 +933,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   className="flex flex-wrap items-stretch w-full text-left rounded-[14px] overflow-hidden"
                   style={{ background: C.card, border: `1px solid ${C.edge}` }}>
                   <span className="relative flex-[1_1_300px] min-w-0 flex items-center justify-center" style={{ background: C.well, minHeight: 170 }}>
-                    {resume.item.kind === 'video' && (
-                      <img src={videoThumb(resume.item.youtubeId)} alt=""
+                    {thumbFor(resume.item) && (
+                      <img src={thumbFor(resume.item)!} alt=""
                         className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />
                     )}
                     <span className="relative flex items-center justify-center" style={{ width: 62, height: 62, borderRadius: '50%', background: C.amber, color: C.onAmber }}>
@@ -1016,8 +1034,9 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                         aria-label={`Play ${it.title}`}
                         className="relative flex-shrink-0 flex items-center justify-center disabled:opacity-60"
                         style={{ width: 130, height: 74, borderRadius: 9, background: C.well, border: `1px solid ${C.line}`, overflow: 'hidden' }}>
-                        {it.kind === 'video' && (
-                          <img src={videoThumb(it.youtubeId)} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />
+                        {thumbFor(it) && (
+                          <img src={thumbFor(it)!} alt=""
+                            className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />
                         )}
                         <span className="relative" style={{ color: C.ink }}><Icon d={PLAY} size={19} fill /></span>
                       </button>

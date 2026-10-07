@@ -32,6 +32,9 @@ export interface MediaItem {
   url: string;
   /** How many videos a playlist holds — unknown until it has been opened once. */
   itemCount: number | null;
+  /** A playlist's still: its first video's, fetched once from oEmbed. Null on a
+   *  single video, which builds its own from the id. */
+  thumbUrl: string | null;
   createdAt: string;
 }
 
@@ -87,10 +90,33 @@ export function parseYouTubeLink(raw: string): ParsedLink | null {
   return { kind: 'video', youtubeId: id, url: `https://www.youtube.com/watch?v=${id}` };
 }
 
-/** The still YouTube serves for a video. Playlists have none of their own, so
- *  the shelf falls back to a drawn placeholder for those. */
+/** The still YouTube serves for a video. */
 export const videoThumb = (youtubeId: string): string =>
   `https://i.ytimg.com/vi/${youtubeId}/mqdefault.jpg`;
+
+/**
+ * A playlist's still — its first video's.
+ *
+ * There is no `i.ytimg.com` path for a playlist, and listing one needs an API
+ * key this app does not have. oEmbed answers for a playlist URL though, with
+ * CORS open and no key, so one fetch gets the thumbnail. Returns null rather
+ * than throwing: a missing picture must never stop the shelf drawing.
+ */
+export async function fetchPlaylistThumb(playlistId: string): Promise<string | null> {
+  try {
+    const target = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(target)}&format=json`);
+    if (!res.ok) return null;
+    const data = await res.json() as { thumbnail_url?: string };
+    return typeof data.thumbnail_url === 'string' ? data.thumbnail_url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The still to draw for a reel, or null when there is nothing to draw yet. */
+export const thumbFor = (item: MediaItem): string | null =>
+  item.kind === 'video' ? videoThumb(item.youtubeId) : item.thumbUrl;
 
 /** Seconds → "7:04" / "1:12:30". */
 export function timecode(total: number | null | undefined): string {
@@ -141,14 +167,16 @@ export async function deleteCategory(id: string): Promise<boolean> {
 
 type ItemRow = {
   id: string; category_id: string | null; title: string; kind: MediaKind;
-  youtube_id: string; url: string; item_count: number | null; created_at: string;
+  youtube_id: string; url: string; item_count: number | null;
+  thumb_url: string | null; created_at: string;
 };
 const toItem = (r: ItemRow): MediaItem => ({
   id: r.id, categoryId: r.category_id, title: r.title, kind: r.kind,
-  youtubeId: r.youtube_id, url: r.url, itemCount: r.item_count, createdAt: r.created_at,
+  youtubeId: r.youtube_id, url: r.url, itemCount: r.item_count,
+  thumbUrl: r.thumb_url ?? null, createdAt: r.created_at,
 });
 
-const ITEM_COLS = 'id, category_id, title, kind, youtube_id, url, item_count, created_at';
+const ITEM_COLS = 'id, category_id, title, kind, youtube_id, url, item_count, thumb_url, created_at';
 
 export async function listMedia(): Promise<MediaItem[]> {
   const { data, error } = await supabase.from('media_items')
@@ -162,6 +190,8 @@ export async function listMedia(): Promise<MediaItem[]> {
 export async function addMedia(input: {
   teacherId: string; title: string; link: ParsedLink; categoryId: string | null;
 }): Promise<{ item: MediaItem } | { error: string }> {
+  const thumbUrl = input.link.kind === 'playlist'
+    ? await fetchPlaylistThumb(input.link.youtubeId) : null;
   const { data, error } = await supabase.from('media_items').insert({
     teacher_id: input.teacherId,
     category_id: input.categoryId,
@@ -169,6 +199,7 @@ export async function addMedia(input: {
     kind: input.link.kind,
     youtube_id: input.link.youtubeId,
     url: input.link.url,
+    thumb_url: thumbUrl,
   }).select(ITEM_COLS).single();
 
   if (error) {
@@ -180,12 +211,14 @@ export async function addMedia(input: {
 }
 
 export async function updateMedia(
-  id: string, patch: { title?: string; categoryId?: string | null; itemCount?: number },
+  id: string,
+  patch: { title?: string; categoryId?: string | null; itemCount?: number; thumbUrl?: string | null },
 ): Promise<boolean> {
   const row: Record<string, unknown> = {};
   if (patch.title !== undefined) row.title = patch.title.trim();
   if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
   if (patch.itemCount !== undefined) row.item_count = patch.itemCount;
+  if (patch.thumbUrl !== undefined) row.thumb_url = patch.thumbUrl;
   if (!Object.keys(row).length) return true;
   const { error } = await supabase.from('media_items').update(row).eq('id', id);
   if (error) { console.error('updateMedia:', error.message); return false; }

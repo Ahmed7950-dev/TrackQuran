@@ -60,6 +60,10 @@ export function readTheme(): AppTheme {
   return 'light';
 }
 
+/** Both dark and amber are nights. Anything choosing a light-or-dark asset —
+ *  the white logo, a dark-mode palette — asks this, not `=== 'dark'`. */
+export const isDarkTheme = (t: AppTheme): boolean => t === 'dark' || t === 'amber';
+
 export function nextTheme(current: AppTheme): AppTheme {
   const i = THEME_ORDER.indexOf(current);
   return THEME_ORDER[(i + 1) % THEME_ORDER.length];

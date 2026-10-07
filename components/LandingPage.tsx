@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '../context/I18nProvider';
-import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
+import { AppTheme, applyTheme, readTheme, nextTheme, isDarkTheme } from '../utils/theme';
 import SharedThemeIcon from './ThemeIcon';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
     setThemeState(nextTheme);
   };
 
-  const isDark = theme === 'dark' || theme === 'amber';
+  const isDark = isDarkTheme(theme);
 
   // ── Colour helpers for dark mode ──────────────────────────────────────────
   const bg    = isDark ? '#0d1f17'   : C.cream;

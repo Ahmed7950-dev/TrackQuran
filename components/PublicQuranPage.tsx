@@ -8,7 +8,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import StudentProgressPage from './StudentProgressPage';
 import { QURANIC_FONTS } from '../constants';
 import { Student } from '../types';
-import { AppTheme, applyTheme, readTheme, nextTheme, THEME_LABEL } from '../utils/theme';
+import { AppTheme, applyTheme, readTheme, nextTheme, THEME_LABEL, isDarkTheme } from '../utils/theme';
 import ThemeIcon from './ThemeIcon';
 
 
@@ -76,7 +76,7 @@ const PublicQuranPage: React.FC = () => {
     return () => ro.disconnect();
   }, []);
 
-  const isDark = theme === 'dark';
+  const isDark = isDarkTheme(theme);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900">

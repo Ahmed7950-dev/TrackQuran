@@ -122,27 +122,33 @@ def main():
         suffix = ' > :not([hidden]) ~ :not([hidden])' if kind == 'divide' else ''
         if kind == 'placeholder':
             suffix = '::placeholder'
-        rules.append((f'{state_prefix}{base}{pseudo}{suffix}', f'{prop}: {value}'))
+        # The guard that keeps the plain-utility rule off an element that also
+        # carries a dark: counterpart. Without it, `text-slate-900
+        # dark:text-white` takes the BLACK: our !important rule on the light
+        # utility beats Tailwind's dark: rule, and `dark:text-white` is not a
+        # class we restate, so nothing puts it back.
+        guard = f'dark:{state + ":" if state else ""}{kind}-'
+        rules.append((state_prefix, base, pseudo, suffix, f'{prop}: {value}', guard))
 
     A = 'html.dark[data-theme="amber"]'
     out = []
-    out.append('      /* the plain utilities, for anything carrying them unprefixed */')
-    for sel, decl in rules:
-        if '\\:' in sel.split('-')[0]:
-            pass
-        out.append(f'      {A} .{sel} {{ {decl} !important; }}')
+    out.append('      /* the plain utilities — only where there is no dark: counterpart */')
+    for state_prefix, base, pseudo, suffix, decl, guard in rules:
+        # The :not() belongs on the class itself — after the full (escaped)
+        # class name, before any pseudo-class or descendant part.
+        out.append(f'      {A} .{state_prefix}{base}:not([class*="{guard}"]){pseudo}{suffix} {{ {decl} !important; }}')
     out.append('')
     out.append('      /* white on a gold fill is about 3:1; dark ink on it is about 9:1 */')
     for state, kind, family, shade, alpha in sorted(found):
-        if kind != 'bg' or family not in MINT_FAMILIES or int(shade) > 600 or int(shade) < 300:
+        if state or kind != 'bg' or family not in MINT_FAMILIES or int(shade) > 600 or int(shade) < 300:
             continue
         base = f'bg-{family}-{shade}' + (f'\\/{alpha}' if alpha else '')
         out.append(f'      {A} .{base}.text-white,')
         out.append(f'      {A} .dark\\:{base}.text-white {{ color: #1A1206 !important; }}')
     out.append('')
     out.append('      /* the dark: variants — LAST, so they beat the light utility above */')
-    for sel, decl in rules:
-        out.append(f'      {A} .dark\\:{sel} {{ {decl} !important; }}')
+    for state_prefix, base, pseudo, suffix, decl, _guard in rules:
+        out.append(f'      {A} .dark\\:{state_prefix}{base}{pseudo}{suffix} {{ {decl} !important; }}')
     return '\n'.join(out), len(rules)
 
 if __name__ == '__main__':
