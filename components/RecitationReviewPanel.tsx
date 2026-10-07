@@ -35,6 +35,10 @@ const RecitationReviewPanel: React.FC<{
 }> = ({ rec, mistakes, onJumpToVerse, onReviewed, onReassign, onClose }) => {
   const verses = versesOf(rec);
   const [playing, setPlaying] = useState<string | null>(null);
+  /** The verse last opened from this bar. `playing` clears itself the moment a
+   *  recording ends, which left nothing to show where you had got to in a long
+   *  list; this stays until another verse is picked. */
+  const [lastOpened, setLastOpened] = useState<string | null>(null);
   const [chain, setChain] = useState(false);
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState<'passed' | 'reassign' | null>(null);
@@ -361,10 +365,16 @@ const RecitationReviewPanel: React.FC<{
                 return (
                   <React.Fragment key={key}>
                     {newSurah && <span className="w-px h-8 bg-slate-200 dark:bg-gray-600 flex-shrink-0" />}
-                    <button onClick={() => (r && !isHifz ? play(key) : onJumpToVerse(key))}
+                    <button onClick={() => { setLastOpened(key); return r && !isHifz ? play(key) : onJumpToVerse(key); }}
                       aria-label={`${name} verse ${v}${isHifz ? '' : r ? `, recording ${Math.round(r.ms / 1000)} seconds` : ', not recorded'}${wrong ? `, ${wrong} mistake${wrong === 1 ? '' : 's'} logged` : ''}`}
-                      aria-current={isPlaying ? 'true' : undefined}
+                      aria-current={isPlaying || lastOpened === key ? 'true' : undefined}
+                      /* The outline marks the verse you are on and survives the
+                         recording ending. It is an outline, not a border or a
+                         ring, so it sits outside the tile without nudging the
+                         row along, and it is violet because teal and red are
+                         already saying "playing" and "has mistakes". */
                       className={`relative flex items-center gap-2 h-12 sm:h-[52px] px-2.5 sm:px-3.5 rounded-xl flex-shrink-0 transition-colors ${
+                        lastOpened === key ? 'outline outline-2 outline-offset-2 outline-violet-500' : ''} ${
                         isPlaying ? (wrong ? 'bg-red-600 border-2 border-red-600 text-white shadow-lg shadow-red-600/25' : 'bg-teal-700 border-2 border-teal-700 text-white shadow-lg shadow-teal-700/25')
                         : wrong ? 'border-2 border-red-500 bg-red-50 dark:bg-red-900/30 hover:bg-red-100'
                         : r || isHifz ? 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-teal-400'
