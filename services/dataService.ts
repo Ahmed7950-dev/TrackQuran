@@ -641,14 +641,20 @@ export const getStudentReportId = async (teacherId: string, studentId: string): 
   return data?.id ?? null;
 };
 
+/**
+ * The student's portal, opened from a share link with no account.
+ *
+ * It goes through a function rather than reading the table, because the table
+ * is owner-only: row-level security never sees WHICH id the client asked for,
+ * so "anyone may read one row" would have had to be written as "anyone may read
+ * every row" — which is what it was. The function takes the id as an argument,
+ * returns that one row, and nothing else.
+ */
 export const getSharedReport = async (id: string): Promise<{ student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null> => {
-  const { data, error } = await supabase
-    .from('shared_reports')
-    .select('student_name, student_id, report_data, teacher_id')
-    .eq('id', id)
-    .single();
+  const { data, error } = await supabase.rpc('get_shared_report', { p_id: id });
   if (error) { console.error('getSharedReport:', error.message); return null; }
-  return data;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row ?? null) as { student_name: string; student_id: string; report_data: SharedReportData; teacher_id: string } | null;
 };
 
 /** Patch only the homeworkVerses field of an existing shared report. */
