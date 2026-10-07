@@ -1,30 +1,44 @@
 // components/ContactUsPage.tsx
 // ---------------------------------------------------------------------------
-// How to reach us. One address, said plainly, with the things worth saying in
-// a first message so a reply can actually be useful.
+// How to reach us.
+//
+// Same editorial language as About: hairline rules, numbers, no emoji. The
+// address is the centrepiece — set large on the dark band, because it is what
+// the page is FOR, not a line of body text with a button underneath.
 // ---------------------------------------------------------------------------
 import React, { useState } from 'react';
 
 const EMAIL = 'ahmedalhajyousef95@gmail.com';
 
-const REASONS: Array<{ icon: string; title: string; body: string }> = [
+const SERIF = "'Newsreader', Georgia, serif";
+const SANS  = "'Karla', system-ui, sans-serif";
+
+const T = {
+  rule:   'border-[#D9D2C4] dark:border-gray-700',
+  ink:    'text-[#10211C] dark:text-slate-50',
+  body:   'text-[#3A4A44] dark:text-slate-300',
+  muted:  'text-[#6B7A74] dark:text-slate-400',
+  accent: 'text-[#1F6F5C] dark:text-teal-400',
+};
+
+const TOPICS: Array<{ n: string; title: string; body: string }> = [
   {
-    icon: '🎓',
+    n: '01',
     title: 'Lessons for a student',
-    body: 'Qur\'an recitation, Tajweed, memorisation or Arabic. Tell us the age, the level and the days that suit you.',
+    body: 'Qur\'an recitation, Tajweed, memorisation or Arabic. Tell us the age, the level, and the days that suit you.',
   },
   {
-    icon: '🧑‍🏫',
+    n: '02',
     title: 'Teaching on the platform',
-    body: 'If you teach the Qur\'an or Arabic and would like an account, write and say a little about your experience.',
+    body: 'If you teach the Qur\'an or Arabic and would like an account, say a little about your experience.',
   },
   {
-    icon: '🛠️',
+    n: '03',
     title: 'Something is not working',
     body: 'Tell us what you were doing and what happened. A screenshot helps more than anything else.',
   },
   {
-    icon: '💡',
+    n: '04',
     title: 'An idea',
     body: 'Much of what is here began as a request from a teacher or a parent. Suggestions are read.',
   },
@@ -41,61 +55,105 @@ const ContactUsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[60vh] flex flex-col items-center py-10 px-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden w-full max-w-3xl">
-        <div className="h-2 bg-gradient-to-r from-teal-500 via-teal-400 to-emerald-400" />
+    <div style={{ fontFamily: SANS }}
+      className="rounded-2xl overflow-hidden bg-[#F7F4ED] dark:bg-[#0E1A17] border border-[#E4DED2] dark:border-gray-700 shadow-sm">
 
-        <div className="p-6 sm:p-10">
-          <header className="text-center space-y-3">
-            <h1 className="text-2xl sm:text-3xl font-black text-teal-700 dark:text-teal-400">
-              Contact us
-            </h1>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mx-auto">
-              Questions about lessons, teaching on the platform, or anything that is not
-              working as it should — write to us and we will reply.
-            </p>
-          </header>
+      {/* Masthead */}
+      <div className="max-w-[1120px] mx-auto px-5 sm:px-10">
+        <div className="flex flex-wrap items-baseline gap-4 pt-7">
+          <span className={`text-[11px] font-bold uppercase tracking-[0.22em] ${T.accent}`}>Lisan &amp; Quran</span>
+          <span className="flex-grow" />
+          <span className={`text-[11px] uppercase tracking-[0.12em] ${T.muted}`}>Contact</span>
+        </div>
+        <div className={`h-px mt-4 border-t ${T.rule}`} />
+      </div>
 
-          {/* The address */}
-          <div className="mt-8 rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-900/20 p-5 sm:p-6 text-center space-y-4">
-            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-teal-700/70 dark:text-teal-300/70">
-              Email
-            </p>
-            <a href={`mailto:${EMAIL}`}
-              className="block text-base sm:text-xl font-extrabold text-teal-800 dark:text-teal-200 underline decoration-teal-400/50 underline-offset-4 break-all hover:decoration-teal-500">
-              {EMAIL}
-            </a>
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+      {/* Opening */}
+      <div className="max-w-[1120px] mx-auto px-5 sm:px-10">
+        <div className="pt-12 sm:pt-16 pb-12">
+          <h1 style={{ fontFamily: SERIF }}
+            className={`m-0 font-light text-[clamp(34px,6vw,64px)] leading-[1.08] tracking-[-0.02em] ${T.ink}`}>
+            Write to us.
+          </h1>
+          <p className={`mt-6 max-w-[32em] text-[17px] sm:text-[19px] leading-[1.62] ${T.body}`}>
+            About lessons, about teaching here, or about something that is not working
+            as it should. Every message is read, and answered.
+          </p>
+        </div>
+      </div>
+
+      {/* The address, as the centrepiece */}
+      <div className="bg-[#10211C] dark:bg-black/40 text-[#F3EFE4]">
+        <div className="max-w-[1120px] mx-auto px-5 sm:px-10">
+          <div className="flex flex-wrap items-center gap-8 py-12 sm:py-16">
+
+            <div className="flex-[999_1_420px] min-w-0">
+              <p className="m-0 mb-3.5 text-[11px] uppercase tracking-[0.2em] text-[#8FA79E]">Email</p>
               <a href={`mailto:${EMAIL}`}
-                className="h-11 px-5 inline-flex items-center rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-extrabold">
+                style={{ fontFamily: SERIF }}
+                className="inline-block font-normal text-[clamp(21px,3.4vw,38px)] leading-[1.2] tracking-[-0.01em] text-[#F3EFE4] no-underline border-b border-[#3E5850] pb-1.5 break-words hover:border-[#8FA79E] transition-colors">
+                {EMAIL}
+              </a>
+              <p className="mt-5 text-[14.5px] leading-[1.6] text-[#9FB4AC]">
+                Messages are usually answered within a couple of days.
+              </p>
+            </div>
+
+            <div className="flex-[1_1_220px] min-w-0 flex flex-col gap-3">
+              <a href={`mailto:${EMAIL}`}
+                className="h-[52px] px-6 rounded-sm bg-[#F3EFE4] text-[#10211C] text-[15px] font-bold flex items-center justify-center hover:bg-white transition-colors">
                 Write an email
               </a>
               <button type="button" onClick={copy}
-                className="h-11 px-5 inline-flex items-center rounded-xl border border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-200 text-sm font-bold hover:bg-teal-100/60 dark:hover:bg-teal-900/40">
+                style={{ fontFamily: SANS }}
+                className="h-[52px] px-6 rounded-sm bg-transparent border border-[#3E5850] text-[#D7E2DD] text-[15px] font-bold hover:bg-white/5 transition-colors">
                 {copied ? '✓ Copied' : 'Copy address'}
               </button>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Messages are usually answered within a couple of days.
-            </p>
-          </div>
 
-          {/* What to write about */}
-          <div className="grid sm:grid-cols-2 gap-4 mt-8">
-            {REASONS.map(r => (
-              <div key={r.title}
-                className="rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50/60 dark:bg-gray-900/30 p-4">
-                <div className="text-2xl mb-2" aria-hidden="true">{r.icon}</div>
-                <h2 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">{r.title}</h2>
-                <p className="text-[13px] text-slate-600 dark:text-slate-400 leading-relaxed">{r.body}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* What people write about */}
+      <div className="max-w-[1120px] mx-auto px-5 sm:px-10 pb-14">
+        <div className="pt-14 pb-2">
+          <h2 style={{ fontFamily: SERIF }}
+            className={`m-0 font-normal text-[25px] sm:text-[28px] leading-[1.25] ${T.ink}`}>
+            What people usually write about
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap gap-x-8 lg:gap-x-12">
+          {TOPICS.map(topic => (
+            <section key={topic.n}
+              className={`flex-[1_1_400px] min-w-0 py-8 border-t ${T.rule}`}>
+              <div className="flex gap-5 items-baseline">
+                <span style={{ fontFamily: SERIF }}
+                  className={`text-[15px] tracking-[0.08em] flex-shrink-0 ${T.accent}`}>{topic.n}</span>
+                <div className="min-w-0">
+                  <h3 className={`m-0 mb-2 text-[16px] font-bold ${T.ink}`}>{topic.title}</h3>
+                  <p className={`m-0 text-[15.5px] leading-[1.68] ${T.body}`}>{topic.body}</p>
+                </div>
               </div>
-            ))}
-          </div>
+            </section>
+          ))}
+        </div>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400 text-center mt-8 leading-relaxed">
-            If you are writing about a student already learning here, please mention their
-            name so we can find their record.
-          </p>
+        <div className={`h-px border-t ${T.rule}`} />
+        <p style={{ fontFamily: SERIF }}
+          className={`mt-7 max-w-[46em] italic text-[17px] sm:text-[18px] leading-[1.6] ${T.muted}`}>
+          If you are writing about a student already learning here, please mention their
+          name so we can find their record.
+        </p>
+      </div>
+
+      {/* Foot */}
+      <div className="max-w-[1120px] mx-auto px-5 sm:px-10">
+        <div className={`flex flex-wrap items-center gap-4 py-8 border-t ${T.rule}`}>
+          <span className={`text-[13.5px] ${T.muted}`}>
+            © {new Date().getFullYear()} Lisan &amp; Quran. All rights reserved.
+          </span>
         </div>
       </div>
     </div>
