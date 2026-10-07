@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import MicrophonePicker, { useMicrophones, micConstraint } from './MicrophonePicker';
 import {
   ARABIC_LETTERS,
   letterAudioUrl,
@@ -24,6 +25,7 @@ const AdminLetterAudioTab: React.FC = () => {
   const [playingLetter, setPlayingLetter] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  const mic = useMicrophones();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -49,7 +51,7 @@ const AdminLetterAudioTab: React.FC = () => {
   const startRecording = async (letter: string) => {
     setError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraint(mic.micId) });
       streamRef.current = stream;
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
         : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
@@ -146,6 +148,11 @@ const AdminLetterAudioTab: React.FC = () => {
   return (
     <div>
       <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChosen} />
+
+      {/* Which microphone every take on this page is recorded with. */}
+      <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-3 mb-3">
+        <MicrophonePicker mic={mic} />
+      </div>
 
       {/* Header: progress + filters */}
       <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-4 mb-4 flex items-center gap-4 flex-wrap">
