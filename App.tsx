@@ -2311,7 +2311,9 @@ const App: React.FC = () => {
           </div>
         );
       })()}
-      <main className={`flex-grow ${sessionStudent && activeTab === 'main' ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
+      {/* Media takes the whole width, like an open Quran session: it is a page
+          to watch on, not a card to read. */}
+      <main className={`flex-grow ${(sessionStudent && activeTab === 'main') || activeTab === 'media' ? 'p-0' : 'container mx-auto p-4 sm:p-6 lg:p-8'}`}>
         {activeTab === 'accountSettings' ? (
           <AccountSettingsPage
             teacherId={currentUser.id}

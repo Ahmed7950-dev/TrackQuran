@@ -138,6 +138,119 @@
       [data-theme="reading"] .bg-gray-600 {
         background-color: #ddd4c4 !important;
       }
+
+      /* ── The Media tab's palette ──────────────────────────────────────────
+         The booth paints from these rather than from Tailwind colours, so it
+         follows the site's three modes instead of being dark for ever.
+
+         The accent and the "watched" green go DARKER on a light ground rather
+         than keeping their night values: #E8A33D as text on cream is about
+         2:1, which is unreadable. Hue stays, lightness moves.
+
+         `--m-screen` is the one thing that does not change: a video frame is
+         black in every mode, because it is a screen.
+      ── ────────────────────────────────────────────────────────────────── */
+      .media-booth {
+        --m-ground: #F1F4F7;
+        --m-thumb-dim: 0.88;
+        --m-panel:  #FFFFFF;
+        --m-card:   #FFFFFF;
+        --m-raised: #F6F8FA;
+        --m-line:   #E2E8EE;
+        --m-edge:   #CBD4DD;
+        --m-ink:    #14181C;
+        --m-body:   #3A444E;
+        --m-muted:  #5B6773;
+        --m-dim:    #606B77;
+        --m-accent: #94570A;
+        --m-on-accent: #FFFFFF;
+        --m-chip:   #FAF0DD;
+        --m-good:   #1E7F4C;
+        --m-good-fill: #1A7245;
+        --m-good-on:   #FFFFFF;
+        --m-good-line: #9FD3B6;
+        --m-good-bg:   #E8F5EE;
+        --m-track:  #DCE3E9;
+        --m-well:   #E6EBF0;
+        --m-well-fg:#3A444E;
+        --m-screen: #000000;
+        --m-warn-bg:   #FDF3E2;
+        --m-warn-line: #E3C68A;
+        --m-warn-ink:  #6B4A12;
+        --m-bad-bg:   #FDECEC;
+        --m-bad-line: #E8B4B4;
+        --m-bad-ink:  #8C2F2F;
+      }
+      .dark .media-booth {
+        --m-ground: #121315;
+        --m-thumb-dim: 0.46;
+        --m-panel:  #16181A;
+        --m-card:   #1A1C1F;
+        --m-raised: #1D2023;
+        --m-line:   #2A2D31;
+        --m-edge:   #343840;
+        --m-ink:    #F2F4F6;
+        --m-body:   #C9CDD2;
+        --m-muted:  #9BA1A8;
+        --m-dim:    #888E95;
+        --m-accent: #E8A33D;
+        --m-on-accent: #1A1206;
+        --m-chip:   #2B2419;
+        --m-good:   #5BC888;
+        --m-good-fill: #2A6A45;
+        --m-good-on:   #EAF7EF;
+        --m-good-line: #2E6B46;
+        --m-good-bg:   #16281D;
+        --m-track:  #33373D;
+        --m-well:   #0E1012;
+        --m-well-fg:#F2F4F6;
+        --m-screen: #000000;
+        --m-warn-bg:   #231F17;
+        --m-warn-line: #4A3C24;
+        --m-warn-ink:  #E7CFA4;
+        --m-bad-bg:   #2A1A1A;
+        --m-bad-line: #6B2E2E;
+        --m-bad-ink:  #F0C2C2;
+      }
+      [data-theme="reading"] .media-booth {
+        --m-ground: #faf8f3;
+        --m-thumb-dim: 0.84;
+        --m-panel:  #f5f1e8;
+        --m-card:   #f5f1e8;
+        --m-raised: #ede7d9;
+        --m-line:   #e8e0d3;
+        --m-edge:   #d4c9b8;
+        --m-ink:    #3d3528;
+        --m-body:   #5a5142;
+        --m-muted:  #6b6050;
+        --m-dim:    #6b6150;
+        --m-accent: #87500E;
+        --m-on-accent: #fefcf8;
+        --m-chip:   #f0e6d2;
+        --m-good:   #2A6B44;
+        --m-good-fill: #2A6B44;
+        --m-good-on:   #fefcf8;
+        --m-good-line: #B3CFBE;
+        --m-good-bg:   #E9F1EB;
+        --m-track:  #e0d8c9;
+        --m-well:   #ede7d9;
+        --m-well-fg:#5a5142;
+        --m-screen: #000000;
+        --m-warn-bg:   #f5ecda;
+        --m-warn-line: #d9c49a;
+        --m-warn-ink:  #6b5220;
+        --m-bad-bg:   #f6e6e2;
+        --m-bad-line: #d9b0a8;
+        --m-bad-ink:  #8a3a2c;
+      }
+      /* Reading mode rewrites Tailwind's greys with !important, which would
+         repaint the booth's own inputs and panels. They opt out. */
+      [data-theme="reading"] .media-booth input,
+      [data-theme="reading"] .media-booth textarea,
+      [data-theme="reading"] .media-booth select {
+        background-color: var(--m-card) !important;
+        color: var(--m-ink) !important;
+      }
        html[lang="ar"] body {
         font-family: 'Hafs', 'Cairo', sans-serif;
       }

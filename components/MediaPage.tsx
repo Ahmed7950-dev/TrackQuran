@@ -27,30 +27,39 @@ import {
   parseYouTubeLink, videoThumb, timecode, watchedFraction,
 } from '../services/mediaService';
 
-/* ── The booth's palette ─────────────────────────────────────────────── */
+/* ── The booth's palette ──────────────────────────────────────────────
+ * Custom properties, not fixed hexes: the three sets live in index.html
+ * under `.media-booth`, `.dark .media-booth` and
+ * `[data-theme="reading"] .media-booth`, so the tab follows the site's
+ * light, reading and dark modes like everything else.
+ * ──────────────────────────────────────────────────────────────────── */
 const C = {
-  ground: '#121315',
-  stage:  '#0D0E10',
-  panel:  '#16181A',
-  card:   '#1A1C1F',
-  raised: '#1D2023',
-  line:   '#2A2D31',
-  edge:   '#343840',
-  ink:    '#F2F4F6',
-  body:   '#C9CDD2',
-  muted:  '#9BA1A8',
-  dim:    '#80868D',
-  amber:  '#E8A33D',
-  onAmber:'#1A1206',
-  green:  '#5BC888',
-  greenLine: '#2E6B46',
-  greenBg:'#16281D',
+  ground: 'var(--m-ground)',
+  panel:  'var(--m-panel)',
+  card:   'var(--m-card)',
+  raised: 'var(--m-raised)',
+  line:   'var(--m-line)',
+  edge:   'var(--m-edge)',
+  ink:    'var(--m-ink)',
+  body:   'var(--m-body)',
+  muted:  'var(--m-muted)',
+  dim:    'var(--m-dim)',
+  amber:  'var(--m-accent)',
+  onAmber:'var(--m-on-accent)',
+  chip:   'var(--m-chip)',
+  green:  'var(--m-good)',
+  greenLine: 'var(--m-good-line)',
+  greenBg:'var(--m-good-bg)',
+  track:  'var(--m-track)',
+  well:   'var(--m-well)',
+  wellFg: 'var(--m-well-fg)',
+  screen: 'var(--m-screen)',
 };
 const MONO = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 const SANS = "'Archivo', system-ui, -apple-system, sans-serif";
 
 /** The dot beside a category. Hue only ever decorates — never the only signal. */
-const HUES = ['#E8A33D', '#6FA8DC', '#C6A5E0', '#8FC98F', '#E08C8C', '#7FC9C4'];
+const HUES = ['#D9861C', '#3C7FBF', '#8A5BB5', '#3F9160', '#C25A5A', '#2F9A94'];
 
 /* ── The YouTube IFrame Player API ───────────────────────────────────── */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -104,7 +113,7 @@ const Ticks: React.FC<{ total: number; done: number[]; current?: number; all?: b
           <span key={i} title={`Video ${i + 1}${seen ? ' — watched' : ''}`}
             style={{
               width: 20, height: 7, borderRadius: 2,
-              background: seen ? C.green : i === current ? C.amber : '#33373D',
+              background: seen ? C.green : i === current ? C.amber : C.track,
             }} />
         );
       })}
@@ -301,10 +310,10 @@ const Booth: React.FC<BoothProps> = ({
   };
 
   return (
-    <div style={{ background: C.stage, fontFamily: SANS, color: C.ink, minHeight: '100%' }}>
+    <div className="media-booth w-full" style={{ background: C.ground, fontFamily: SANS, color: C.ink, minHeight: '100vh' }}>
       {/* back bar */}
       <div style={{ background: C.ground, borderBottom: `1px solid ${C.line}` }}>
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-3 flex flex-wrap items-center gap-3">
+        <div className="w-full px-4 sm:px-7 lg:px-10 py-3 flex flex-wrap items-center gap-3">
           <button type="button" onClick={() => { persistRef.current(); onClose(); }}
             className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-[9px] text-sm font-semibold"
             style={{ background: C.raised, border: `1px solid ${C.edge}`, color: C.body }}>
@@ -318,12 +327,16 @@ const Booth: React.FC<BoothProps> = ({
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-6">
+      <div className="w-full px-4 sm:px-7 lg:px-10 py-6">
         <div className="flex flex-wrap gap-7">
 
           {/* ── stage ──────────────────────────────────────────────── */}
           <div className="flex-[999_1_520px] min-w-0">
-            <div className="rounded-[14px] overflow-hidden" style={{ background: '#000', border: `1px solid ${C.line}` }}>
+            {/* Full width, but never taller than the window: a 16:9 screen let
+                loose on a wide monitor pushes the scrubber and the Mark
+                finished button below the fold, which is where the work is. */}
+            <div className="rounded-[14px] overflow-hidden mx-auto"
+              style={{ background: C.screen, border: `1px solid ${C.line}`, maxWidth: 'calc((100vh - 330px) * 16 / 9)' }}>
               <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
                 <div className="absolute inset-0">
                   {/* The API replaces this node with its iframe. */}
@@ -331,7 +344,7 @@ const Booth: React.FC<BoothProps> = ({
                 </div>
                 {!ready && !failed && (
                   <p className="absolute inset-0 flex items-center justify-center m-0"
-                    style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.1em', color: '#6E747A' }}>
+                    style={{ fontFamily: MONO, fontSize: 12, letterSpacing: '0.1em', color: C.dim }}>
                     {resumeAt > 0 ? `RESUMING AT ${timecode(resumeAt)}` : 'LOADING'}
                   </p>
                 )}
@@ -340,13 +353,14 @@ const Booth: React.FC<BoothProps> = ({
 
             {failed && (
               <p role="alert" className="mt-3 mb-0 px-4 py-3 rounded-[10px] text-sm"
-                style={{ background: '#2A1A1A', border: '1px solid #6B2E2E', color: '#F0C2C2' }}>{failed}</p>
+                style={{ background: 'var(--m-bad-bg)', border: '1px solid var(--m-bad-line)', color: 'var(--m-bad-ink)' }}>{failed}</p>
             )}
 
             {/* ── the scrubber, with last session's mark still on it ── */}
-            <div className="mt-4 px-5 py-5 rounded-[13px]" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+            <div className="mt-4 mx-auto px-5 py-5 rounded-[13px]"
+              style={{ background: C.panel, border: `1px solid ${C.line}`, maxWidth: 'calc((100vh - 330px) * 16 / 9)' }}>
               <div className="relative" style={{ height: 34 }}>
-                <div className="absolute left-0 right-0" style={{ top: 14, height: 6, borderRadius: 3, background: '#2C3034' }} />
+                <div className="absolute left-0 right-0" style={{ top: 14, height: 6, borderRadius: 3, background: C.track }} />
                 <div className="absolute left-0" style={{ top: 14, height: 6, width: `${pct}%`, borderRadius: 3, background: finished ? C.green : C.amber }} />
                 {resumeAt > 0 && (
                   <div className="absolute" title={`Where you stopped last time — ${timecode(resumeAt)}`}
@@ -357,11 +371,11 @@ const Booth: React.FC<BoothProps> = ({
 
               <div className="flex flex-wrap items-center gap-3 mt-1.5">
                 <p className="m-0" style={{ fontFamily: MONO, fontSize: 14, color: C.ink }}>
-                  {timecode(now)} <span style={{ color: '#6E747A' }}>/ {timecode(duration)}</span>
+                  {timecode(now)} <span style={{ color: C.dim }}>/ {timecode(duration)}</span>
                 </p>
                 {resumeAt > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md"
-                    style={{ background: '#22262A', fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.07em', color: C.muted }}>
+                    style={{ background: C.raised, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.07em', color: C.muted }}>
                     <span style={{ display: 'inline-block', width: 2, height: 11, background: C.ink }} />
                     LAST STOP {timecode(resumeAt)}
                   </span>
@@ -374,13 +388,13 @@ const Booth: React.FC<BoothProps> = ({
                 </button>
                 <button type="button" onClick={markFinished} disabled={finished}
                   className="flex items-center gap-2 h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-60"
-                  style={{ background: finished ? C.greenBg : '#2A6A45', border: finished ? `1px solid ${C.greenLine}` : 0, color: finished ? C.green : '#EAF7EF' }}>
+                  style={{ background: finished ? C.greenBg : 'var(--m-good-fill)', border: finished ? `1px solid ${C.greenLine}` : 0, color: finished ? C.green : 'var(--m-good-on)' }}>
                   <Icon d={CHECK} size={16} stroke={2.6} /> {finished ? 'Finished' : 'Mark finished'}
                 </button>
               </div>
             </div>
 
-            <div className="mt-5">
+            <div className="mt-5 mx-auto" style={{ maxWidth: 'calc((100vh - 330px) * 16 / 9)' }}>
               <h1 className="m-0 font-semibold" style={{ fontSize: 26, lineHeight: 1.22, letterSpacing: '-0.02em', color: C.ink }}>{item.title}</h1>
               <p className="mt-2 mb-0 text-sm" style={{ color: C.muted }}>
                 {item.kind === 'playlist'
@@ -413,16 +427,16 @@ const Booth: React.FC<BoothProps> = ({
                       <button key={i} type="button"
                         onClick={() => { try { playerRef.current?.playVideoAt?.(i); setIndex(i); } catch { /* not ready */ } }}
                         className="flex items-start gap-3 w-full px-5 py-3 text-left"
-                        style={{ minHeight: 56, borderLeft: `3px solid ${on ? C.amber : 'transparent'}`, background: on ? '#1E2124' : 'transparent' }}>
+                        style={{ minHeight: 56, borderLeft: `3px solid ${on ? C.amber : 'transparent'}`, background: on ? C.raised : 'transparent' }}>
                         <span className="flex-shrink-0 flex items-center justify-center"
-                          style={{ width: 25, height: 25, borderRadius: 6, fontFamily: MONO, fontSize: 11.5, background: on ? C.amber : '#24282C', color: on ? C.onAmber : C.dim }}>
+                          style={{ width: 25, height: 25, borderRadius: 6, fontFamily: MONO, fontSize: 11.5, background: on ? C.amber : C.track, color: on ? C.onAmber : C.dim }}>
                           {i + 1}
                         </span>
                         <span className="flex-grow min-w-0">
-                          <span className="block text-sm font-medium" style={{ color: on ? C.ink : seen ? '#A9AFB5' : C.body }}>
+                          <span className="block text-sm font-medium" style={{ color: on ? C.ink : seen ? C.muted : C.body }}>
                             Video {i + 1}
                           </span>
-                          <span className="block mt-1" style={{ fontFamily: MONO, fontSize: 11, color: '#747A80' }}>
+                          <span className="block mt-1" style={{ fontFamily: MONO, fontSize: 11, color: C.dim }}>
                             {on ? `PLAYING · ${timecode(now)}` : seen ? 'WATCHED' : '—'}
                           </span>
                         </span>
@@ -432,7 +446,7 @@ const Booth: React.FC<BoothProps> = ({
                   })}
                 </div>
               </div>
-              <p className="mt-4 mx-0.5 mb-0 text-[12.5px] leading-relaxed" style={{ color: '#747A80' }}>
+              <p className="mt-4 mx-0.5 mb-0 text-[12.5px] leading-relaxed" style={{ color: C.dim }}>
                 Leaving the page keeps the place. Open this reel for another student
                 and you get <span style={{ color: C.muted }}>their</span> mark, not this one.
               </p>
@@ -503,26 +517,26 @@ const AddLink: React.FC<{
 
           {link && (
             <div className="flex items-center gap-3.5 mt-3.5 px-4 py-3 rounded-[11px]"
-              style={{ background: '#1B1F1C', border: `1px solid ${C.greenLine}` }}>
-              <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 30, height: 30, borderRadius: 8, background: '#22402D', color: C.green }}>
+              style={{ background: C.greenBg, border: `1px solid ${C.greenLine}` }}>
+              <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 30, height: 30, borderRadius: 8, background: C.greenBg, color: C.green }}>
                 <Icon d={CHECK} size={16} stroke={2.4} />
               </span>
-              <p className="m-0 text-[13.5px] leading-relaxed" style={{ color: '#BEE3CC' }}>
+              <p className="m-0 text-[13.5px] leading-relaxed" style={{ color: C.green }}>
                 {link.kind === 'playlist'
-                  ? <>A <strong style={{ color: '#DCF2E4' }}>playlist</strong>. One title covers the whole list.</>
-                  : <>A single <strong style={{ color: '#DCF2E4' }}>video</strong>.</>}
+                  ? <>A <strong style={{ color: C.green }}>playlist</strong>. One title covers the whole list.</>
+                  : <>A single <strong style={{ color: C.green }}>video</strong>.</>}
               </p>
             </div>
           )}
           {!link && looksLikeTry && (
-            <p className="mt-3 mb-0 text-[13px]" style={{ color: '#E0A0A0' }}>That is not a YouTube video or playlist link.</p>
+            <p className="mt-3 mb-0 text-[13px]" style={{ color: 'var(--m-bad-ink)' }}>That is not a YouTube video or playlist link.</p>
           )}
 
           <div className="mt-6">
             <label htmlFor="media-title" className="block mb-2" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>TITLE ON THE SHELF</label>
             <input id="media-title" type="text" value={title} onChange={e => setTitle(e.target.value)}
               placeholder="What you will call it" style={{ ...field, fontSize: 15, fontWeight: 500 }} />
-            <p className="mt-2 mx-0.5 mb-0 text-[12.5px]" style={{ color: '#747A80' }}>
+            <p className="mt-2 mx-0.5 mb-0 text-[12.5px]" style={{ color: C.dim }}>
               Your words, not YouTube&rsquo;s — this is what the search box looks through.
             </p>
           </div>
@@ -532,7 +546,7 @@ const AddLink: React.FC<{
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setCat(null)}
                 className="inline-flex items-center h-11 px-4 rounded-[9px] text-[13.5px]"
-                style={{ background: cat === null ? '#282C30' : C.card, border: `1px solid ${cat === null ? C.edge : C.line}`, color: cat === null ? C.ink : C.body, fontWeight: cat === null ? 600 : 500 }}>
+                style={{ background: cat === null ? C.raised : C.card, border: `1px solid ${cat === null ? C.edge : C.line}`, color: cat === null ? C.ink : C.body, fontWeight: cat === null ? 600 : 500 }}>
                 None
               </button>
               {categories.map((c, i) => {
@@ -541,7 +555,7 @@ const AddLink: React.FC<{
                 return (
                   <button key={c.id} type="button" onClick={() => setCat(c.id)}
                     className="inline-flex items-center gap-2 h-11 px-4 rounded-[9px] text-[13.5px]"
-                    style={{ background: on ? '#282C30' : C.card, border: `1px solid ${on ? hue : C.line}`, color: on ? C.ink : C.body, fontWeight: on ? 600 : 500 }}>
+                    style={{ background: on ? C.raised : C.card, border: `1px solid ${on ? hue : C.line}`, color: on ? C.ink : C.body, fontWeight: on ? 600 : 500 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: hue }} />
                     {c.name}
                   </button>
@@ -571,10 +585,10 @@ const AddLink: React.FC<{
             </div>
           </div>
 
-          {error && <p role="alert" className="mt-5 mb-0 text-[13.5px]" style={{ color: '#E0A0A0' }}>{error}</p>}
+          {error && <p role="alert" className="mt-5 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>{error}</p>}
         </div>
 
-        <div className="flex items-center gap-2.5 px-5 sm:px-6 py-4" style={{ borderTop: `1px solid ${C.line}`, background: '#141618' }}>
+        <div className="flex items-center gap-2.5 px-5 sm:px-6 py-4" style={{ borderTop: `1px solid ${C.line}`, background: C.panel }}>
           <span className="flex-grow" />
           <button type="button" onClick={onCancel} className="h-11 px-4 rounded-[9px] text-sm font-semibold"
             style={{ background: 'transparent', border: `1px solid ${C.edge}`, color: C.body }}>Cancel</button>
@@ -741,18 +755,18 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
 
   const chipStyle = (on: boolean): React.CSSProperties => ({
     height: 38, padding: '0 15px', borderRadius: 7, border: 0, fontSize: 13,
-    fontWeight: on ? 600 : 500, background: on ? '#31353A' : 'transparent', color: on ? C.ink : C.muted,
+    fontWeight: on ? 600 : 500, background: on ? C.track : 'transparent', color: on ? C.ink : C.muted,
   });
 
   return (
-    <div style={{ background: C.ground, color: C.ink, fontFamily: SANS, minHeight: '100%' }}>
+    <div className="media-booth w-full" style={{ background: C.ground, color: C.ink, fontFamily: SANS, minHeight: '100vh' }}>
 
       {/* ── booth header ─────────────────────────────────────────────── */}
       <div style={{ background: C.panel, borderBottom: `1px solid ${C.line}` }}>
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-5 flex flex-wrap items-center gap-4">
+        <div className="w-full px-4 sm:px-7 lg:px-10 py-5 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <span className="flex items-center justify-center flex-shrink-0"
-              style={{ width: 38, height: 38, borderRadius: 10, background: '#222528', border: `1px solid ${C.edge}`, color: C.amber }}>
+              style={{ width: 38, height: 38, borderRadius: 10, background: C.raised, border: `1px solid ${C.edge}`, color: C.amber }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="2" y="7" width="14" height="10" rx="2.5" />
                 <path d="M16 11.2l5.2-2.6v6.8L16 12.8z" />
@@ -769,7 +783,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
           <span className="flex-grow" />
 
           {who && (
-            <div className="flex items-center gap-2.5 pl-4 pr-2" style={{ height: 46, borderRadius: 10, background: '#1E2124', border: `1px solid ${C.edge}` }}>
+            <div className="flex items-center gap-2.5 pl-4 pr-2" style={{ height: 46, borderRadius: 10, background: C.raised, border: `1px solid ${C.edge}` }}>
               <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.1em', color: C.muted }}>MARKS FOR</span>
               <span className="flex items-center gap-2 text-[14.5px] font-semibold">
                 <span className="flex items-center justify-center" style={{ width: 26, height: 26, borderRadius: '50%', background: C.amber, color: C.onAmber, fontSize: 11.5, fontWeight: 700 }}>
@@ -788,10 +802,10 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-7">
+      <div className="w-full px-4 sm:px-7 lg:px-10 py-7">
         {!who && (
           <p className="mt-0 mb-6 px-4 py-3 rounded-[10px] text-[13.5px]"
-            style={{ background: '#231F17', border: `1px solid #4A3C24`, color: '#E7CFA4' }}>
+            style={{ background: 'var(--m-warn-bg)', border: '1px solid var(--m-warn-line)', color: 'var(--m-warn-ink)' }}>
             No student is open, so the shelf shows no marks. Open a student first to
             watch with them and keep their place.
           </p>
@@ -800,7 +814,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
         <div className="flex flex-wrap gap-8 lg:gap-10">
 
           {/* ══ channels rail ═══════════════════════════════════════════ */}
-          <nav aria-label="Categories" className="flex-[1_1_200px] min-w-0 max-lg:order-2">
+          <nav aria-label="Categories" className="flex-[1_1_210px] lg:max-w-[260px] min-w-0 max-lg:order-2">
             <p className="m-0 mb-3" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>CATEGORIES</p>
             <div className="flex flex-col gap-[3px]">
               {[{ id: 'all', name: 'Everything', hue: C.dim, n: items.length } as const,
@@ -811,7 +825,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   // row button would be invalid markup and Tab would skip it.
                   return (
                     <div key={c.id} className="flex items-center gap-0.5 pr-1"
-                      style={{ borderRadius: 9, background: on ? '#22262A' : 'transparent' }}>
+                      style={{ borderRadius: 9, background: on ? C.raised : 'transparent' }}>
                       <button type="button" onClick={() => setChannel(c.id)}
                         className="flex items-center gap-3 flex-grow min-w-0 px-3.5 text-sm"
                         style={{ height: 44, border: 0, borderRadius: 9, background: 'transparent', fontWeight: on ? 600 : 500, color: on ? C.ink : C.body }}>
@@ -877,7 +891,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                     const state = p?.finished ? 'done' : p && (p.positionSeconds > 5 || p.watchedIndexes.length) ? 'part' : 'none';
                     return (
                       <span key={it.id} title={`${it.title} — ${state === 'done' ? 'finished' : state === 'part' ? 'part-watched' : 'not started'}`}
-                        style={{ width: 9, height: 15, borderRadius: 2, background: state === 'done' ? C.green : state === 'part' ? C.amber : '#31353A' }}
+                        style={{ width: 9, height: 15, borderRadius: 2, background: state === 'done' ? C.green : state === 'part' ? C.amber : C.track }}
                         aria-hidden={i > 0 ? 'true' : undefined} />
                     );
                   })}
@@ -899,24 +913,24 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                 </h2>
                 <button type="button" onClick={() => setOpen(resume.item)}
                   className="flex flex-wrap items-stretch w-full text-left rounded-[14px] overflow-hidden"
-                  style={{ background: '#1C1F22', border: `1px solid ${C.edge}` }}>
-                  <span className="relative flex-[1_1_300px] min-w-0 flex items-center justify-center" style={{ background: '#0D0E10', minHeight: 170 }}>
+                  style={{ background: C.card, border: `1px solid ${C.edge}` }}>
+                  <span className="relative flex-[1_1_300px] min-w-0 flex items-center justify-center" style={{ background: C.well, minHeight: 170 }}>
                     {resume.item.kind === 'video' && (
                       <img src={videoThumb(resume.item.youtubeId)} alt=""
-                        className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.42 }} />
+                        className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />
                     )}
                     <span className="relative flex items-center justify-center" style={{ width: 62, height: 62, borderRadius: '50%', background: C.amber, color: C.onAmber }}>
                       <Icon d={PLAY} size={24} fill />
                     </span>
                     <span className="absolute left-5 bottom-3.5 px-2 py-1 rounded"
-                      style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: '0.06em', color: C.body, background: 'rgba(10,11,12,0.82)' }}>
+                      style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: '0.06em', color: '#E7EAED', background: 'rgba(10,11,12,0.82)' }}>
                       PAUSED {timecode(resume.p.positionSeconds)}
                     </span>
                   </span>
                   <span className="flex-[1_1_280px] min-w-0 flex flex-col justify-center gap-3" style={{ padding: '22px 24px' }}>
                     <span>
                       <span className="inline-block px-2.5 py-0.5 rounded"
-                        style={{ background: '#2B2419', color: C.amber, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em' }}>
+                        style={{ background: C.chip, color: C.amber, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em' }}>
                         {(cats.find(c => c.id === resume.item.categoryId)?.name ?? 'NO CATEGORY').toUpperCase()}
                       </span>
                       <span className="block mt-2.5 font-semibold" style={{ fontSize: 21, lineHeight: 1.26, letterSpacing: '-0.015em' }}>{resume.item.title}</span>
@@ -927,7 +941,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                       </span>
                     </span>
                     <span className="block">
-                      <span className="block relative overflow-hidden" style={{ height: 5, borderRadius: 3, background: '#33373D' }}>
+                      <span className="block relative overflow-hidden" style={{ height: 5, borderRadius: 3, background: C.track }}>
                         <span className="absolute left-0 top-0 bottom-0" style={{ width: `${watchedFraction(resume.item, resume.p) * 100}%`, background: C.amber }} />
                       </span>
                       <span className="flex justify-between mt-2" style={{ fontFamily: MONO, fontSize: 12, color: C.muted }}>
@@ -982,7 +996,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   const done = !!p?.finished;
                   const frac = watchedFraction(it, p);
                   const started = !!p && (p.positionSeconds > 5 || p.watchedIndexes.length > 0);
-                  const edge = done ? C.green : started ? C.amber : '#31353A';
+                  const edge = done ? C.green : started ? C.amber : C.track;
                   const total = it.itemCount ?? 0;
 
                   const stamp = it.kind === 'playlist'
@@ -1001,9 +1015,9 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                       <button type="button" onClick={() => setOpen(it)} disabled={!studentId}
                         aria-label={`Play ${it.title}`}
                         className="relative flex-shrink-0 flex items-center justify-center disabled:opacity-60"
-                        style={{ width: 130, height: 74, borderRadius: 9, background: '#0E1012', border: `1px solid ${C.line}`, overflow: 'hidden' }}>
+                        style={{ width: 130, height: 74, borderRadius: 9, background: C.well, border: `1px solid ${C.line}`, overflow: 'hidden' }}>
                         {it.kind === 'video' && (
-                          <img src={videoThumb(it.youtubeId)} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.5 }} />
+                          <img src={videoThumb(it.youtubeId)} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />
                         )}
                         <span className="relative" style={{ color: C.ink }}><Icon d={PLAY} size={19} fill /></span>
                       </button>
@@ -1038,7 +1052,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                             {it.kind === 'playlist' && total > 0
                               ? <Ticks total={total} done={p?.watchedIndexes ?? []} current={started ? p?.playlistIndex : undefined} all={done} />
                               : (
-                                <div className="relative overflow-hidden" style={{ height: 4, borderRadius: 2, background: '#33373D' }}>
+                                <div className="relative overflow-hidden" style={{ height: 4, borderRadius: 2, background: C.track }}>
                                   <span className="absolute left-0 top-0 bottom-0" style={{ width: `${frac * 100}%`, background: done ? C.green : C.amber }} />
                                 </div>
                               )}
