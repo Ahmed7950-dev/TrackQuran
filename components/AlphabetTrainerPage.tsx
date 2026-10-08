@@ -29,7 +29,7 @@ const LottieAnim: React.FC<{ src: string; width: number; height: number; style?:
   return <div ref={ref} style={{ width, height, overflow: 'hidden', ...style }} />;
 };
 
-const LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
+const LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي','ء'];
 
 const CHILD_CARD_COLORS = [
   { bg: '#fff0f5', border: '#f8bbd0', char: '#c2185b' },
@@ -70,7 +70,7 @@ type LetterForm = 'isolated' | 'initial' | 'medial' | 'final';
 
 // These letters do NOT connect to the following letter, so they only have
 // 2 distinct visual shapes: isolated ≡ initial, and final ≡ medial.
-const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ', 'ء']);
 
 /**
  * Wraps a base Arabic letter with Unicode ZWJ / ZWNJ to force the correct
@@ -79,6 +79,8 @@ const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
  *  ZWNJ = U+200C  → forces non-joining (used for isolated)
  */
 function getLetterInForm(letter: string, form: LetterForm): string {
+  // Hamzah joins on NEITHER side: one shape, not four.
+  if (letter === 'ء') return letter;
   switch (form) {
     case 'initial': return `${letter}‍`;
     case 'medial':  return `‍${letter}‍`;

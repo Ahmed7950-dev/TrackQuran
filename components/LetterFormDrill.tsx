@@ -22,7 +22,7 @@ type Form = 'isolated' | 'initial' | 'medial' | 'final';
 const FORMS: Form[] = ['isolated', 'initial', 'medial', 'final'];
 const FORM_NAME: Record<Form, string> = { isolated: 'Isolated', initial: 'Beginning', medial: 'Middle', final: 'End' };
 /** These never connect to the LEFT, so they have only two real shapes. */
-const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ', 'ء']);
 
 export const ITEM_MS = 3000;          // three seconds per letter
 export const MAX_REPEATS = 20;
@@ -32,6 +32,8 @@ export interface DrillItem { letter: string; form: Form; vowel: string }
 /** ZWJ/ZWNJ forces the positional glyph; the vowel rides on the letter itself. */
 export const renderItem = (it: DrillItem): string => {
   const core = it.letter + it.vowel;
+  // Hamzah joins on NEITHER side: one shape, not four.
+  if (it.letter === 'ء') return core;
   switch (it.form) {
     case 'initial': return `${core}‍`;
     case 'medial':  return `‍${core}‍`;

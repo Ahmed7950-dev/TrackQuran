@@ -51,7 +51,7 @@ const TILE_COLOURS = [
 ];
 /** The outer ring holds the first six; the inner ring starts after them. */
 const RING_OFFSET = 6;
-export const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+export const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ', 'ء']);
 export const FORM_LABEL: Record<MatchForm, { en: string; ar: string }> = {
   initial: { en: 'Beginning', ar: 'أَوَّل' },
   medial:  { en: 'Middle',    ar: 'وَسَط' },
@@ -63,7 +63,9 @@ const LETTER_FONT = "'Hafs', 'Amiri', serif";
  *  they have no joined-on-the-left shape, so beginning = isolated, middle = end. */
 export const shapeOf = (letter: string, form: MatchForm | 'isolated'): string => {
   let f = form;
-  if (NON_CONNECTORS.has(letter)) { if (f === 'initial') f = 'isolated'; if (f === 'medial') f = 'final'; }
+  // Hamzah joins on NEITHER side: one shape, not four.
+  if (letter === 'ء') f = 'isolated';
+  else if (NON_CONNECTORS.has(letter)) { if (f === 'initial') f = 'isolated'; if (f === 'medial') f = 'final'; }
   switch (f) {
     case 'initial': return `${letter}‍`;
     case 'medial':  return `‍${letter}‍`;

@@ -51,10 +51,22 @@ const FOLDERS: Record<LetterAudioSet, string> = {
   damma: 'letter-audio-damma',
 };
 
+/** The alphabet, with hamzah last — the order the Qaedah books use. */
 export const ARABIC_LETTERS = [
   'ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص',
-  'ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي',
+  'ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي','ء',
 ];
+
+/**
+ * Alif is a stretching letter: it carries no short vowel, so it has no
+ * fatha, kasrah or dammah recording to make and no card to show. It belongs
+ * to the bare-letter set only.
+ */
+export const ALIF = 'ا';
+
+/** Which letters a set covers. */
+export const lettersForSet = (set: LetterAudioSet): string[] =>
+  set === 'plain' ? ARABIC_LETTERS : ARABIC_LETTERS.filter(l => l !== ALIF);
 
 const fileNameFor = (letter: string): string =>
   `u${(letter.codePointAt(0) ?? 0).toString(16).padStart(4, '0')}.audio`;
@@ -76,12 +88,12 @@ export async function listLettersWithAudio(set: LetterAudioSet = 'plain'): Promi
   const { data, error } = await supabase.storage.from(BUCKET).list(FOLDERS[set], { limit: 100 });
   if (!error && data) {
     const names = new Set(data.map(f => f.name));
-    return new Set(ARABIC_LETTERS.filter(l => names.has(fileNameFor(l))));
+    return new Set(lettersForSet(set).filter(l => names.has(fileNameFor(l))));
   }
   // Listing can be blocked by storage RLS for some roles — probe the public
   // URLs instead (28 lightweight HEAD requests, admin-panel only).
   const found = await Promise.all(
-    ARABIC_LETTERS.map(async l => {
+    lettersForSet(set).map(async l => {
       try {
         const res = await fetch(letterAudioUrl(l, set), { method: 'HEAD' });
         return res.ok ? l : null;

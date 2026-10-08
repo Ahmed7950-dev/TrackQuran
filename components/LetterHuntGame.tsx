@@ -22,13 +22,15 @@ const GRID = 100;                    // 10 × 10
 const WRONG_LOCKOUT_MS = 1200;       // a wrong tap costs you a moment
 const ROUND_GAP_MS = 1400;           // reveal pause between rounds
 
-const ALL_LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
+const ALL_LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي','ء'];
 type Form = 'isolated' | 'initial' | 'medial' | 'final';
 const FORMS: Form[] = ['isolated', 'initial', 'medial', 'final'];
-const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ']);
+const NON_CONNECTORS = new Set(['ا', 'و', 'ر', 'ز', 'د', 'ذ', 'ء']);
 
 /** Same ZWJ/ZWNJ trick the alphabet trainer uses to force a positional glyph. */
 export const letterInForm = (letter: string, form: Form): string => {
+  // Hamzah joins on NEITHER side: one shape, not four.
+  if (letter === 'ء') return letter;
   switch (form) {
     case 'initial': return `${letter}‍`;
     case 'medial':  return `‍${letter}‍`;

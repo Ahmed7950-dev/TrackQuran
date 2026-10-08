@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MicrophonePicker, { useMicrophones, openMic } from './MicrophonePicker';
 import {
-  ARABIC_LETTERS,
   letterAudioUrl,
   listLettersWithAudio,
   uploadLetterAudio,
   deleteLetterAudio,
   letterWithMark,
+  lettersForSet,
   LETTER_AUDIO_SETS,
   SET_LABEL,
   type LetterAudioSet,
@@ -168,10 +168,13 @@ const AdminLetterAudioTab: React.FC = () => {
     setBusyLetter(null);
   };
 
-  const missingCount = ARABIC_LETTERS.length - withAudio.size;
+  // Alif has no short-vowel form, so the three vowel sets are one letter
+  // shorter than the bare-letter set. Everything on the page counts from here.
+  const setLetters   = lettersForSet(set);
+  const missingCount = setLetters.length - withAudio.size;
   const done         = withAudio.size;
-  const pct          = Math.round((done / ARABIC_LETTERS.length) * 100);
-  const shown        = ARABIC_LETTERS.filter(l =>
+  const pct          = Math.round((done / setLetters.length) * 100);
+  const shown        = setLetters.filter(l =>
     filter === 'all' ? true : filter === 'recorded' ? withAudio.has(l) : !withAudio.has(l)
   );
 
@@ -232,7 +235,7 @@ const AdminLetterAudioTab: React.FC = () => {
             Arabic letter audio — {SET_LABEL[set].toLowerCase()}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {loading ? 'Checking…' : `${done} of ${ARABIC_LETTERS.length} letters recorded`}
+            {loading ? 'Checking…' : `${done} of ${setLetters.length} letters recorded`}
             {set === 'plain'
               ? ' · used by the Letter Flight game; the rest fall back to the browser voice.'
               : ' · used by the listening challenge in the Qaedah lesson for this vowel.'}
@@ -246,11 +249,17 @@ const AdminLetterAudioTab: React.FC = () => {
         </div>
         <div className="flex-1" />
         <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 flex-shrink-0">
-          {chip('all', `All ${ARABIC_LETTERS.length}`)}
+          {chip('all', `All ${setLetters.length}`)}
           {chip('recorded', `Recorded ${done}`)}
           {chip('missing', `Missing ${missingCount}`)}
         </div>
       </div>
+
+      {set !== 'plain' && (
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Alif is not here: it is a stretching letter and takes no short vowel.
+        </p>
+      )}
 
       {error && (
         <div className="mb-4 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-sm font-semibold">

@@ -16,7 +16,7 @@
 // student thinks is broken.
 // ---------------------------------------------------------------------------
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ARABIC_LETTERS, letterAudioUrl, speakLetter } from '../services/letterAudioService';
+import { lettersForSet, letterAudioUrl, speakLetter } from '../services/letterAudioService';
 import {
   FORM_LABEL, VOWEL_LABEL, glyphFor, letterSoundsUrl,
   createLetterSounds, markLetterSoundsOpened, markLetterSoundsFinished,
@@ -135,12 +135,12 @@ export const LetterSoundsSetup: React.FC<{
           <div className="mt-6 p-[18px] rounded-[14px]" style={{ background: '#10251F', border: `1px solid #1E3832` }}>
             <p className="m-0 mb-3.5 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>First few</p>
             <div className="flex flex-wrap items-center gap-[18px]">
-              {ARABIC_LETTERS.slice(0, 5).map(l => (
+              {lettersForSet(vowel).slice(0, 5).map(l => (
                 <span key={l} lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 44, lineHeight: 1, color: C.cream }}>
                   {glyphFor(l, form, vowel)}
                 </span>
               ))}
-              <span className="text-sm font-bold" style={{ color: '#7E968E' }}>… {ARABIC_LETTERS.length} letters</span>
+              <span className="text-sm font-bold" style={{ color: '#7E968E' }}>… {lettersForSet(vowel).length} letters</span>
             </div>
           </div>
 
@@ -225,7 +225,9 @@ const LetterSoundsChallenge: React.FC<{
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reachedEnd = useRef(false);
 
-  const letter = ARABIC_LETTERS[i];
+  // Alif takes no short vowel, so it is not in this run at all.
+  const letters = lettersForSet(vowel);
+  const letter = letters[i];
 
   /** Play this letter. Falls back to the browser voice when there is no file,
    *  so a set that is only half recorded is still usable. */
@@ -242,7 +244,7 @@ const LetterSoundsChallenge: React.FC<{
   // Every letter speaks as it arrives — that is the whole exercise.
   useEffect(() => {
     if (!started) return;
-    play(ARABIC_LETTERS[i]);
+    play(letters[i]);
   }, [started, i, play]);
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
@@ -252,7 +254,7 @@ const LetterSoundsChallenge: React.FC<{
   // Reaching the last letter is "done" — there is nothing to score.
   useEffect(() => {
     if (!started || reachedEnd.current) return;
-    if (i < ARABIC_LETTERS.length - 1) return;
+    if (i < letters.length - 1) return;
     reachedEnd.current = true;
     if (challenge) void markLetterSoundsFinished(challenge);
   }, [started, i, challenge]);
@@ -261,9 +263,9 @@ const LetterSoundsChallenge: React.FC<{
   useEffect(() => {
     if (!started) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setI(n => Math.min(ARABIC_LETTERS.length - 1, n + 1));
+      if (e.key === 'ArrowRight') setI(n => Math.min(letters.length - 1, n + 1));
       else if (e.key === 'ArrowLeft') setI(n => Math.max(0, n - 1));
-      else if (e.key === ' ') { e.preventDefault(); play(ARABIC_LETTERS[i]); }
+      else if (e.key === ' ') { e.preventDefault(); play(letters[i]); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -287,7 +289,7 @@ const LetterSoundsChallenge: React.FC<{
         <div>
           <h1 className="m-0 text-[22px] sm:text-[26px] font-extrabold" style={{ letterSpacing: '-0.015em' }}>{topicTitle}</h1>
           <p className="m-0 mt-2 text-[15px]" style={{ color: C.muted }}>
-            {ARABIC_LETTERS.length} letters · {FORM_LABEL[form].toLowerCase()} · just listen
+            {letters.length} letters · {FORM_LABEL[form].toLowerCase()} · just listen
           </p>
         </div>
         <button type="button" onClick={() => setStarted(true)}
@@ -304,7 +306,7 @@ const LetterSoundsChallenge: React.FC<{
   }
 
   const atStart = i === 0;
-  const atEnd = i === ARABIC_LETTERS.length - 1;
+  const atEnd = i === letters.length - 1;
 
   return shell(<>
     {/* quiet top bar */}
@@ -332,7 +334,7 @@ const LetterSoundsChallenge: React.FC<{
           {FORM_LABEL[form]}
         </span>
         <span className="text-[13.5px] font-bold tabular-nums" style={{ color: C.muted }}>
-          {i + 1} of {ARABIC_LETTERS.length}
+          {i + 1} of {letters.length}
         </span>
         <button type="button" onClick={onExit} aria-label="Leave"
           className="inline-flex items-center justify-center w-11 h-11 rounded-[11px]"
@@ -381,7 +383,7 @@ const LetterSoundsChallenge: React.FC<{
           </svg>
           Back
         </button>
-        <button type="button" onClick={() => setI(n => Math.min(ARABIC_LETTERS.length - 1, n + 1))} disabled={atEnd}
+        <button type="button" onClick={() => setI(n => Math.min(letters.length - 1, n + 1))} disabled={atEnd}
           aria-label="Next letter"
           className="inline-flex items-center justify-center gap-2.5 h-16 flex-1 min-w-0 px-5 rounded-[18px] text-base font-extrabold disabled:opacity-40"
           style={{ background: C.raised, border: 0, color: C.cream }}>
@@ -393,7 +395,7 @@ const LetterSoundsChallenge: React.FC<{
       </div>
 
       <div className="flex flex-wrap justify-center gap-1 mt-5">
-        {ARABIC_LETTERS.map((l, n) => (
+        {letters.map((l, n) => (
           <span key={l} title={`Letter ${n + 1}`}
             style={{ width: 16, height: 6, borderRadius: 3, background: n === i ? C.gold : n < i ? '#3C6459' : '#22403A' }} />
         ))}

@@ -57,6 +57,9 @@ const ZWJ = '‍';
 /** Letters that never join to the left, so they have no initial or medial shape. */
 const NON_CONNECTORS = new Set(['ا', 'د', 'ذ', 'ر', 'ز', 'و']);
 
+/** Hamzah joins on NEITHER side — it has one shape, not four. */
+const NON_JOINERS = new Set(['ء']);
+
 /**
  * One letter, drawn in a position and carrying its vowel.
  *
@@ -65,7 +68,8 @@ const NON_CONNECTORS = new Set(['ا', 'د', 'ذ', 'ر', 'ز', 'و']);
  */
 export function glyphFor(letter: string, form: LetterForm, vowel: Vowel): string {
   let f = form;
-  if (NON_CONNECTORS.has(letter)) {
+  if (NON_JOINERS.has(letter)) f = 'isolated';
+  else if (NON_CONNECTORS.has(letter)) {
     if (f === 'initial') f = 'isolated';
     if (f === 'medial') f = 'final';
   }
