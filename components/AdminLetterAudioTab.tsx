@@ -6,6 +6,10 @@ import {
   listLettersWithAudio,
   uploadLetterAudio,
   deleteLetterAudio,
+  letterWithMark,
+  LETTER_AUDIO_SETS,
+  SET_LABEL,
+  type LetterAudioSet,
 } from '../services/letterAudioService';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,6 +21,9 @@ import {
 type Filter = 'all' | 'recorded' | 'missing';
 
 const AdminLetterAudioTab: React.FC = () => {
+  // Which of the four sets is being recorded. Each has its own folder, so the
+  // whole page — counts, filters, the letters themselves — follows it.
+  const [set, setSet] = useState<LetterAudioSet>('plain');
   const [withAudio, setWithAudio] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('all');
   const [loading, setLoading] = useState(true);
@@ -42,26 +49,28 @@ const AdminLetterAudioTab: React.FC = () => {
   const freshRef = useRef<Map<string, string>>(new Map());
 
   const keepFresh = useCallback((letter: string, blob: Blob) => {
-    const old = freshRef.current.get(letter);
+    const key = `${set}:${letter}`;
+    const old = freshRef.current.get(key);
     if (old) URL.revokeObjectURL(old);
-    freshRef.current.set(letter, URL.createObjectURL(blob));
+    freshRef.current.set(key, URL.createObjectURL(blob));
     setWithAudio(prev => (prev.has(letter) ? prev : new Set(prev).add(letter)));
-  }, []);
+  }, [set]);
 
   const dropFresh = useCallback((letter: string) => {
-    const old = freshRef.current.get(letter);
+    const key = `${set}:${letter}`;
+    const old = freshRef.current.get(key);
     if (old) URL.revokeObjectURL(old);
-    freshRef.current.delete(letter);
-  }, []);
+    freshRef.current.delete(key);
+  }, [set]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const has = await listLettersWithAudio();
+    const has = await listLettersWithAudio(set);
     // Anything recorded in this session counts, even if the listing is behind.
-    freshRef.current.forEach((_url, letter) => has.add(letter));
+    freshRef.current.forEach((_url, key) => { if (key.startsWith(`${set}:`)) has.add(key.slice(set.length + 1)); });
     setWithAudio(has);
     setLoading(false);
-  }, []);
+  }, [set]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -94,7 +103,7 @@ const AdminLetterAudioTab: React.FC = () => {
         const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
         if (blob.size > 0) {
           setBusyLetter(letter);
-          const url = await uploadLetterAudio(letter, blob);
+          const url = await uploadLetterAudio(letter, blob, set);
           if (!url) setError(`Failed to save audio for ${letter}`);
           else keepFresh(letter, blob);
           setBusyLetter(null);
@@ -128,7 +137,7 @@ const AdminLetterAudioTab: React.FC = () => {
     if (!file.type.startsWith('audio/')) { setError('Please choose an audio file.'); return; }
     setError('');
     setBusyLetter(letter);
-    const url = await uploadLetterAudio(letter, file);
+    const url = await uploadLetterAudio(letter, file, set);
     if (!url) setError(`Failed to upload audio for ${letter}`);
     else keepFresh(letter, file);
     setBusyLetter(null);
@@ -138,8 +147,8 @@ const AdminLetterAudioTab: React.FC = () => {
   const playPreview = (letter: string) => {
     audioRef.current?.pause();
     // The local take when there is one; otherwise the stored file, cache-busted.
-    const fresh = freshRef.current.get(letter);
-    const audio = new Audio(fresh ?? `${letterAudioUrl(letter)}?t=${Date.now()}`);
+    const fresh = freshRef.current.get(`${set}:${letter}`);
+    const audio = new Audio(fresh ?? `${letterAudioUrl(letter, set)}?t=${Date.now()}`);
     audioRef.current = audio;
     setPlayingLetter(letter);
     audio.onended = () => setPlayingLetter(null);
@@ -148,9 +157,9 @@ const AdminLetterAudioTab: React.FC = () => {
   };
 
   const removeAudio = async (letter: string) => {
-    if (!window.confirm(`Delete the audio for "${letter}"?`)) return;
+    if (!window.confirm(`Delete the ${SET_LABEL[set].toLowerCase()} audio for "${letter}"?`)) return;
     setBusyLetter(letter);
-    const ok = await deleteLetterAudio(letter);
+    const ok = await deleteLetterAudio(letter, set);
     if (!ok) setError(`Failed to delete audio for ${letter}`);
     else {
       dropFresh(letter);
@@ -182,6 +191,35 @@ const AdminLetterAudioTab: React.FC = () => {
     <div>
       <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={onFileChosen} />
 
+      {/* ── The four sets ── Each is its own folder of recordings; the letter
+          below carries that set's vowel so you can see what you are saying. */}
+      <div className="flex flex-wrap gap-1.5 p-1.5 mb-3 rounded-2xl bg-slate-100 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 w-fit max-w-full">
+        {LETTER_AUDIO_SETS.map(id => {
+          const on = set === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setSet(id)}
+              aria-pressed={on}
+              className={`flex items-center gap-2.5 h-14 px-4 rounded-xl transition-colors ${
+                on ? 'bg-white dark:bg-gray-800 shadow-sm border border-slate-200 dark:border-gray-700'
+                   : 'border border-transparent hover:bg-white/60 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <span
+                style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '1.65rem', lineHeight: 1 }}
+                className={on ? 'text-teal-700 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}
+              >
+                {letterWithMark('ب', id)}
+              </span>
+              <span className={`text-sm font-extrabold whitespace-nowrap ${
+                on ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}
+              >{SET_LABEL[id]}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Which microphone every take on this page is recorded with. */}
       <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-3 mb-3">
         <MicrophonePicker mic={mic} />
@@ -190,9 +228,14 @@ const AdminLetterAudioTab: React.FC = () => {
       {/* Header: progress + filters */}
       <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-5 py-4 mb-4 flex items-center gap-4 flex-wrap">
         <div className="min-w-0">
-          <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">Arabic letter audio</h3>
+          <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+            Arabic letter audio — {SET_LABEL[set].toLowerCase()}
+          </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {loading ? 'Checking…' : `${done} of ${ARABIC_LETTERS.length} letters recorded`} · used by the Letter Flight game; the rest fall back to the browser voice.
+            {loading ? 'Checking…' : `${done} of ${ARABIC_LETTERS.length} letters recorded`}
+            {set === 'plain'
+              ? ' · used by the Letter Flight game; the rest fall back to the browser voice.'
+              : ' · used by the listening challenge in the Qaedah lesson for this vowel.'}
           </p>
         </div>
         <div className="h-2 w-40 sm:w-56 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden flex-shrink-0">
@@ -233,7 +276,7 @@ const AdminLetterAudioTab: React.FC = () => {
                 style={{ fontFamily: "'Hafs', 'Amiri', serif", fontSize: '2.4rem', lineHeight: 1 }}
                 className={recording ? 'text-red-600 dark:text-red-300' : has ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-gray-500'}
               >
-                {letter}
+                {letterWithMark(letter, set)}
               </span>
 
               <span className={`flex items-center gap-1.5 text-[11px] font-extrabold ${

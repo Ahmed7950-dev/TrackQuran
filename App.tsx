@@ -51,6 +51,7 @@ import StudentRoute from './components/StudentRoute';
 import PublicQuranPage from './components/PublicQuranPage';
 import { LetterCardsPage } from './components/LetterCardsGame';
 import MediaPage from './components/MediaPage';
+import LetterSoundsPage from './components/LetterSoundsPage';
 import { ensureSubscriptionRenewalReminder } from './services/notificationService';
 import { renewalReminderOccurrence } from './utils/renewal';
 import { getFamilyGroupsByStudent, familyRenewalUpdates, type FamilyGroup } from './services/familyGroupService';
@@ -406,6 +407,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (familyLinkId) return <FamilyLinkPage linkId={familyLinkId} />;
+
+  // ── Letter sounds link — no auth required ─────────────────────────────────
+  const letterSoundsId = (() => {
+    const m = window.location.pathname.match(/^\/letter-sounds\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (letterSoundsId) return <LetterSoundsPage id={letterSoundsId} />;
 
   // ── Letter Flight online 2P — no auth required ────────────────────────────
   const letterFlightRoomId = (() => {
@@ -2291,6 +2299,7 @@ const App: React.FC = () => {
             <QaedahPage
               studentId={(sessionStudent ?? selectedStudent)?.id}
               studentName={(sessionStudent ?? selectedStudent)?.name}
+              teacherId={currentUser?.id}
               onLogActivity={handleLogActivity}
             />
           </GameInviteContext.Provider>

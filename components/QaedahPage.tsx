@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
 import CraneBuilderGame from './CraneBuilderGame';
+import LetterSoundsChallenge, { LetterSoundsSetup } from './LetterSoundsChallenge';
+import { vowelForTopic, VOWEL_LABEL, FORM_LABEL, glyphFor, type LetterForm } from '../services/letterSoundsService';
 import {
   QaedahTopic,
   QaedahWord,
@@ -62,7 +64,9 @@ const QaedahPage: React.FC<{
    *  the calendar — the tutor's and the student's link both read that array. */
   onLogActivity?: (studentId: string, a: ActivityLog) => void;
   studentName?: string;
-}> = ({ isStudentView = false, studentId, studentName, onLogActivity }) => {
+  /** Needed only to make a letter-sounds link; the page works without it. */
+  teacherId?: string;
+}> = ({ isStudentView = false, studentId, studentName, onLogActivity, teacherId }) => {
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [topics,       setTopics]       = useState<QaedahTopic[]>([]);
@@ -81,6 +85,12 @@ const QaedahPage: React.FC<{
   // word id → this student's history for the open lesson, oldest first.
   const [attempts,    setAttempts]    = useState<Map<string, QaedahAttempt[]>>(new Map());
   const [showCrane,   setShowCrane]   = useState(false);
+  // The listening challenge: the setup sheet, then the thing itself.
+  const [soundsSetup, setSoundsSetup] = useState(false);
+  const [soundsForm,  setSoundsForm]  = useState<LetterForm | null>(null);
+  /** Null on a lesson that teaches no vowel, or one with no recordings yet. */
+  const soundsVowel = selectedTopic
+    ? vowelForTopic(selectedTopic.titleEn, selectedTopic.titleAr) : null;
   // topicId → lesson PDF (uploaded by an admin), and whether the board is open.
   const [pdfs,        setPdfs]       = useState<QaedahPdfIndex>({});
   /** How far through each lesson's PDF, and which of its words are known —
@@ -505,6 +515,33 @@ const QaedahPage: React.FC<{
           <svg className="w-4 h-4 text-slate-400 group-hover:text-teal-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
+        </button>
+      )}
+
+      {/* ── Listen to the letters ── Only on a lesson that teaches a vowel we
+          have recordings for. Shown to the tutor and, through the portal's
+          own QaedahPage, to the student. */}
+      {selectedTopic && soundsVowel && (
+        <button
+          onClick={() => setSoundsSetup(true)}
+          className="w-full mb-5 flex items-center gap-3 p-4 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/20 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-md transition-all text-left group"
+        >
+          <span className="flex-shrink-0 w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-amber-100 dark:border-amber-900 flex items-center justify-center">
+            <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 9.5v5h3.2L12 18.5v-13L7.2 9.5H4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 9.2a4 4 0 0 1 0 5.6" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.8 6.4a8 8 0 0 1 0 11.2" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[11px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">Listen</span>
+            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+              Hear every letter with {VOWEL_LABEL[soundsVowel].toLowerCase()}
+            </span>
+          </span>
+          <span lang="ar" dir="rtl" className="flex-shrink-0 text-2xl text-amber-600 dark:text-amber-400" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>
+            {glyphFor('ب', 'isolated', soundsVowel)}
+          </span>
         </button>
       )}
 
@@ -957,6 +994,43 @@ const QaedahPage: React.FC<{
           roomId={craneRoomId ?? undefined}
           role={craneRoomId ? 'spectator' : 'host'}
           onExit={() => { setShowCrane(false); setCraneRoomId(null); }}
+        />
+      )}
+
+      {/* ── Listen to the letters ── */}
+      {soundsSetup && selectedTopic && soundsVowel && (
+        <LetterSoundsSetup
+          vowel={soundsVowel}
+          topicId={selectedTopic.id}
+          topicTitle={selectedTopic.titleEn}
+          teacherId={teacherId}
+          studentId={studentId}
+          studentName={studentName}
+          studentMode={isStudentView}
+          onStart={form => { setSoundsForm(form); setSoundsSetup(false); }}
+          onClose={() => setSoundsSetup(false)}
+        />
+      )}
+
+      {soundsForm && selectedTopic && soundsVowel && (
+        <LetterSoundsChallenge
+          vowel={soundsVowel}
+          form={soundsForm}
+          topicTitle={selectedTopic.titleEn}
+          onExit={() => {
+            // Done together in the lesson: the day is marked and the cell says
+            // what was heard. The student's own run goes through the link page,
+            // which notifies instead.
+            if (!isStudentView && studentId) {
+              onLogActivity?.(studentId, {
+                kind: 'qaedah',
+                title: `Letter sounds — ${selectedTopic.titleEn}`,
+                detail: `${FORM_LABEL[soundsForm].toLowerCase()} · listened`,
+                sourceId: `sounds-${selectedTopic.id}-${soundsForm}`,
+              });
+            }
+            setSoundsForm(null);
+          }}
         />
       )}
     </div>

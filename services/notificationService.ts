@@ -32,6 +32,7 @@ export type NotificationType =
   | 'vocab_homework_assigned'
   | 'vocab_homework_completed'
   | 'letter_match_completed'
+  | 'letter_sounds_completed'
   | 'letter_cards_invite'
   | 'quran_recitation_assigned'
   | 'quran_recitation_submitted'

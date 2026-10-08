@@ -13,7 +13,43 @@
 import { supabase } from '../lib/supabase';
 
 const BUCKET = 'tajweed-assets';
-const FOLDER = 'letter-audio';
+
+/**
+ * Four sets of recordings: the letter on its own, and the letter carrying each
+ * of the three short vowels.
+ *
+ * The POSITION a letter is drawn in never changes its sound — بـ at the start
+ * and ـبـ in the middle are both "ba" — so one recording per letter per vowel
+ * serves all four shapes. Four sets, not sixteen.
+ *
+ * 'plain' keeps the original folder so every recording already made, and the
+ * games that play them, carry on untouched.
+ */
+export type LetterAudioSet = 'plain' | 'fatha' | 'kasra' | 'damma';
+
+export const LETTER_AUDIO_SETS: LetterAudioSet[] = ['plain', 'fatha', 'kasra', 'damma'];
+
+/** The Arabic mark each set puts on the letter. '' for the bare letter. */
+export const SET_MARK: Record<LetterAudioSet, string> = {
+  plain: '',
+  fatha: '\u064E',
+  kasra: '\u0650',
+  damma: '\u064F',
+};
+
+export const SET_LABEL: Record<LetterAudioSet, string> = {
+  plain: 'Letter alone',
+  fatha: 'With fatha',
+  kasra: 'With kasrah',
+  damma: 'With dammah',
+};
+
+const FOLDERS: Record<LetterAudioSet, string> = {
+  plain: 'letter-audio',
+  fatha: 'letter-audio-fatha',
+  kasra: 'letter-audio-kasra',
+  damma: 'letter-audio-damma',
+};
 
 export const ARABIC_LETTERS = [
   'ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص',
@@ -23,16 +59,21 @@ export const ARABIC_LETTERS = [
 const fileNameFor = (letter: string): string =>
   `u${(letter.codePointAt(0) ?? 0).toString(16).padStart(4, '0')}.audio`;
 
-const pathFor = (letter: string): string => `${FOLDER}/${fileNameFor(letter)}`;
+const pathFor = (letter: string, set: LetterAudioSet = 'plain'): string =>
+  `${FOLDERS[set]}/${fileNameFor(letter)}`;
+
+/** The letter as it should be SHOWN for a set — with its vowel mark. */
+export const letterWithMark = (letter: string, set: LetterAudioSet): string =>
+  letter + SET_MARK[set];
 
 /** Public URL for a letter's audio. The file may or may not exist — callers
  *  should handle playback errors (the game falls back to speech synthesis). */
-export const letterAudioUrl = (letter: string): string =>
-  supabase.storage.from(BUCKET).getPublicUrl(pathFor(letter)).data.publicUrl;
+export const letterAudioUrl = (letter: string, set: LetterAudioSet = 'plain'): string =>
+  supabase.storage.from(BUCKET).getPublicUrl(pathFor(letter, set)).data.publicUrl;
 
 /** Returns the set of letters that currently have an uploaded audio file. */
-export async function listLettersWithAudio(): Promise<Set<string>> {
-  const { data, error } = await supabase.storage.from(BUCKET).list(FOLDER, { limit: 100 });
+export async function listLettersWithAudio(set: LetterAudioSet = 'plain'): Promise<Set<string>> {
+  const { data, error } = await supabase.storage.from(BUCKET).list(FOLDERS[set], { limit: 100 });
   if (!error && data) {
     const names = new Set(data.map(f => f.name));
     return new Set(ARABIC_LETTERS.filter(l => names.has(fileNameFor(l))));
@@ -42,7 +83,7 @@ export async function listLettersWithAudio(): Promise<Set<string>> {
   const found = await Promise.all(
     ARABIC_LETTERS.map(async l => {
       try {
-        const res = await fetch(letterAudioUrl(l), { method: 'HEAD' });
+        const res = await fetch(letterAudioUrl(l, set), { method: 'HEAD' });
         return res.ok ? l : null;
       } catch { return null; }
     }),
@@ -51,18 +92,18 @@ export async function listLettersWithAudio(): Promise<Set<string>> {
 }
 
 /** Upload (or replace) the audio for a letter. Returns the public URL or null. */
-export async function uploadLetterAudio(letter: string, blob: Blob): Promise<string | null> {
-  const { error } = await supabase.storage.from(BUCKET).upload(pathFor(letter), blob, {
+export async function uploadLetterAudio(letter: string, blob: Blob, set: LetterAudioSet = 'plain'): Promise<string | null> {
+  const { error } = await supabase.storage.from(BUCKET).upload(pathFor(letter, set), blob, {
     cacheControl: '60',
     upsert: true,
     contentType: blob.type || 'audio/webm',
   });
   if (error) { console.error('uploadLetterAudio:', error.message); return null; }
-  return letterAudioUrl(letter);
+  return letterAudioUrl(letter, set);
 }
 
-export async function deleteLetterAudio(letter: string): Promise<boolean> {
-  const { error } = await supabase.storage.from(BUCKET).remove([pathFor(letter)]);
+export async function deleteLetterAudio(letter: string, set: LetterAudioSet = 'plain'): Promise<boolean> {
+  const { error } = await supabase.storage.from(BUCKET).remove([pathFor(letter, set)]);
   if (error) { console.error('deleteLetterAudio:', error.message); return false; }
   return true;
 }

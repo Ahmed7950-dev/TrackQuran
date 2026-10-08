@@ -57,6 +57,7 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'vocab_homework_assigned':      return { emoji: '🧺', color: 'text-violet-500' };
     case 'vocab_homework_completed':     return { emoji: '🧺', color: 'text-emerald-500' };
     case 'letter_match_completed':       return { emoji: '🔗', color: 'text-sky-500' };
+    case 'letter_sounds_completed':      return { emoji: '🔊', color: 'text-amber-500' };
     case 'quran_recitation_assigned':
     case 'quran_recitation_submitted':
     case 'quran_recitation_reviewed':    return { emoji: '🎙', color: 'text-teal-500' };
