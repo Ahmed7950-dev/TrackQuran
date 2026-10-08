@@ -22,7 +22,7 @@ import {
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ArabicHomeworkTab from './ArabicHomeworkTab';
-import { listVocabHomework } from '../services/vocabHomeworkService';
+import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
 import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
@@ -250,6 +250,8 @@ const ExamsTab: React.FC<{
 interface ArabicLessonCalendarProps {
   logs: ArabicLessonLog[];
   lessons: ArabicLesson[];
+  /** Days the student turned flashcards over, by `Date.toDateString()`. */
+  vocabDays: Map<string, VocabRevisionDay>;
   calendarDate: Date;
   onMonthChange: (d: Date) => void;
 }
@@ -260,7 +262,11 @@ const KIND_BADGE: Record<ArabicLessonLog['kind'], { cls: string; label: string }
   revision: { cls: 'bg-violet-100 text-violet-700',  label: 'Revision' },
 };
 
-const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, calendarDate, onMonthChange }) => {
+/** Vocabulary is not a lesson log — it is counted from the answers — so it
+ *  carries its own badge rather than a KIND_BADGE entry. */
+const VOCAB_BADGE = { cls: 'bg-sky-100 text-sky-700', label: 'Words' };
+
+const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, vocabDays, calendarDate, onMonthChange }) => {
   const lessonMap = useMemo(() => new Map(lessons.map(l => [l.id, l])), [lessons]);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
@@ -288,9 +294,11 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
   for (let day = 1; day <= daysInMonth; day++) {
     const ds      = new Date(year, month, day).toDateString();
     const entries = dayMap.get(ds) ?? [];
+    const vocab   = vocabDays.get(ds);
     const isToday = ds === new Date().toDateString();
-    const active  = entries.length > 0;
+    const active  = entries.length > 0 || !!vocab;
     const isOpen  = expandedDay === ds;
+    const chipCount = entries.length + (vocab ? 1 : 0);
 
     const headerCls = active
       ? 'bg-emerald-500 text-white'
@@ -309,23 +317,26 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
       >
         <div className={`${headerCls} px-1.5 py-1 text-center flex-shrink-0 flex items-center justify-center gap-1`}>
           <span className="text-xs font-bold leading-none">{day}</span>
-          {active && <span className="text-[9px] font-bold opacity-80">{entries.length > 1 ? `×${entries.length}` : ''}</span>}
+          {active && <span className="text-[9px] font-bold opacity-80">{chipCount > 1 ? `×${chipCount}` : ''}</span>}
         </div>
-        {entries.length > 0 && (
-          <div className="flex flex-col gap-0.5 p-1 overflow-hidden">
-            {entries.slice(0, 2).map((log, i) => {
-              const badge = KIND_BADGE[log.kind] ?? KIND_BADGE.progress;
-              return (
+        {active && (() => {
+          const chips = [
+            ...entries.map(log => KIND_BADGE[log.kind] ?? KIND_BADGE.progress),
+            ...(vocab ? [VOCAB_BADGE] : []),
+          ];
+          return (
+            <div className="flex flex-col gap-0.5 p-1 overflow-hidden">
+              {chips.slice(0, 2).map((badge, i) => (
                 <span key={i} className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded leading-tight truncate ${badge.cls}`}>
                   {badge.label}
                 </span>
-              );
-            })}
-            {entries.length > 2 && (
-              <span className="text-[8px] text-slate-400 dark:text-slate-500 px-1">+{entries.length - 2} more</span>
-            )}
-          </div>
-        )}
+              ))}
+              {chips.length > 2 && (
+                <span className="text-[8px] text-slate-400 dark:text-slate-500 px-1">+{chips.length - 2} more</span>
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -365,6 +376,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
       {/* Expanded day detail panel */}
       {expandedDay && (() => {
         const entries = dayMap.get(expandedDay) ?? [];
+        const vocab   = vocabDays.get(expandedDay);
         const dateLabel = new Date(expandedDay).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         return (
           <div className="border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 space-y-3">
@@ -390,6 +402,19 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
                   </div>
                 );
               })}
+              {vocab && (
+                <div className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-slate-100 dark:border-gray-700">
+                  <span className={`flex-shrink-0 px-2 py-1 rounded-full text-[10px] font-bold ${VOCAB_BADGE.cls}`}>{VOCAB_BADGE.label}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                      Revised {vocab.words} {vocab.words === 1 ? 'word' : 'words'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {vocab.known} known · {vocab.words - vocab.known} to review again
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -397,7 +422,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
 
       {/* Badge legend */}
       <div className="flex flex-wrap gap-2 justify-center pt-1">
-        {Object.entries(KIND_BADGE).map(([kind, { cls, label }]) => (
+        {Object.entries({ ...KIND_BADGE, vocab: VOCAB_BADGE }).map(([kind, { cls, label }]) => (
           <span key={kind} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>
             {label}
           </span>
@@ -468,6 +493,19 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     window.addEventListener('focus', load);
     return () => { live = false; window.removeEventListener('focus', load); };
   }, [student.id, activeSection]);
+
+  // Days the student turned flashcards over. Reloaded on focus like the
+  // homework count, so finishing a deck and coming back shows the day marked
+  // without a reload.
+  const [vocabDays, setVocabDays] = useState<Map<string, VocabRevisionDay>>(new Map());
+  useEffect(() => {
+    let live = true;
+    const load = () => { void getVocabRevisionDays(student.id).then(m => { if (live) setVocabDays(m); }); };
+    load();
+    window.addEventListener('focus', load);
+    return () => { live = false; window.removeEventListener('focus', load); };
+  }, [student.id]);
+
   const [examUnlocks, setExamUnlocks] = useState<ArabicExamUnlock[]>([]);
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
@@ -783,6 +821,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         <ArabicLessonCalendar
           logs={lessonLogs}
           lessons={dialectLessons}
+          vocabDays={vocabDays}
           calendarDate={calendarDate}
           onMonthChange={setCalendarDate}
         />

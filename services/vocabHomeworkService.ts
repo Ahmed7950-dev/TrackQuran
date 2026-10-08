@@ -68,6 +68,64 @@ export async function flushPendingVocabAnswers(): Promise<void> {
 /** wordId → the student's answers, OLDEST first, at most STRENGTH_SLOTS each. */
 export type StrengthMap = Map<string, boolean[]>;
 
+/** One day on which the student revised vocabulary. */
+export interface VocabRevisionDay {
+  /** How many DISTINCT words were turned over that day. */
+  words: number;
+  /** How many of those they knew on their last answer of the day. */
+  known: number;
+}
+
+/**
+ * The days this student revised vocabulary, keyed by `Date.toDateString()`.
+ *
+ * Derived from the answers themselves rather than written as a separate log
+ * when a deck is played: the answers are already one row per card with a
+ * timestamp, so counting them is exact, costs no extra write per card, and
+ * lights up the revision this student did before any of this existed.
+ *
+ * Counted by DISTINCT word, so turning the same card over twice in a session
+ * is one word revised, not two. "Known" takes the LAST answer on a word that
+ * day — getting it on the second try is knowing it.
+ *
+ * Every way of answering a word lands in this table — the lesson flashcards,
+ * the Vocabulary tab, the student's assigned homework (through the
+ * answer_arabic_flashcard function) and the word-cards game — so all of them
+ * mark the day without each needing its own hook.
+ */
+export async function getVocabRevisionDays(studentId: string): Promise<Map<string, VocabRevisionDay>> {
+  const out = new Map<string, VocabRevisionDay>();
+  if (!studentId) return out;
+
+  // day -> word -> last answer that day
+  const byDay = new Map<string, Map<string, boolean>>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('arabic_vocab_reviews')
+      .select('word_id, correct, created_at')
+      .eq('student_id', studentId)
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) { console.error('getVocabRevisionDays:', error.message); break; }
+    const rows = (data ?? []) as Array<{ word_id: string; correct: boolean; created_at: string }>;
+    for (const r of rows) {
+      const day = new Date(r.created_at).toDateString();
+      const words = byDay.get(day) ?? new Map<string, boolean>();
+      words.set(r.word_id, r.correct);     // ascending, so the last one wins
+      byDay.set(day, words);
+    }
+    if (rows.length < PAGE) break;
+  }
+
+  for (const [day, words] of byDay) {
+    let known = 0;
+    for (const correct of words.values()) if (correct) known += 1;
+    out.set(day, { words: words.size, known });
+  }
+  return out;
+}
+
 export async function getVocabStrength(studentId: string): Promise<StrengthMap> {
   await flushPendingVocabAnswers().catch(console.error);
   const out: StrengthMap = new Map();
