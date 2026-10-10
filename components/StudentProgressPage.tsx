@@ -134,6 +134,34 @@ interface StudentProgressPageProps {
   cursorLetterKey?: string | null;
 }
 
+/**
+ * A one-shot flag: the next student the reader resumes for goes to their LAST
+ * LOG, not to wherever the page was last scrolled.
+ *
+ * Opening a student is an explicit act and must always land on their last log.
+ * Flipping to another tab and back is not — the reader unmounts and remounts,
+ * which looks identical from inside it, so the caller has to say which it was.
+ * Call this wherever a student's Quran session is opened; never on a tab change.
+ *
+ * A flag that is CONSUMED, rather than a marker naming whoever was open last:
+ * the marker had to be rewritten by the reader on every mount to stay true, so
+ * clearing it for a student whose reader was already mounted lost it for good.
+ */
+const QURAN_FRESH_KEY = 'quranful:quranOpenedFresh';
+
+export const markQuranOpenedFresh = (): void => {
+  try { sessionStorage.setItem(QURAN_FRESH_KEY, '1'); } catch { /* private mode */ }
+};
+
+/** True once per open; reading it spends it. */
+const takeQuranFreshOpen = (): boolean => {
+  try {
+    if (sessionStorage.getItem(QURAN_FRESH_KEY) !== '1') return false;
+    sessionStorage.removeItem(QURAN_FRESH_KEY);
+    return true;
+  } catch { return false; }
+};
+
 const getAge = (dob: string) => {
     const birthDate = new Date(dob);
     const today = new Date();
@@ -1310,23 +1338,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Without this the reader kept whatever surah the PREVIOUS student was left
     // on, which is not even a page this student has ever been shown.
     const viewKey = `quranful:quranView:${prefsId}`;
-    const OPEN_KEY = 'quranful:quranOpenStudent';
-    /** Was the reader already showing this student in this browser session?
-     *  Settled ONCE per student, before the marker is rewritten, so the answer
-     *  survives the re-runs we do while waiting for the last log to load. */
-    const openStateRef = useRef<{ id: string; wasOpen: boolean } | null>(null);
-    const wasAlreadyOpen = (id: string): boolean => {
-        if (openStateRef.current?.id !== id) {
-            let wasOpen = false;
-            try { wasOpen = sessionStorage.getItem(OPEN_KEY) === id; } catch { /* private mode */ }
-            openStateRef.current = { id, wasOpen };
-        }
-        return openStateRef.current.wasOpen;
+    /** Was this student OPENED, as opposed to the reader remounting because the
+     *  tutor came back to the Quran tab? Settled once per student — the flag is
+     *  spent on the first read, and the answer has to survive the re-runs we do
+     *  while waiting for the last log to load. */
+    const freshForRef = useRef<Record<string, boolean>>({});
+    const isFreshOpen = (id: string): boolean => {
+        if (!(id in freshForRef.current)) freshForRef.current[id] = takeQuranFreshOpen();
+        return freshForRef.current[id];
     };
-    const openedStudentOnMount = useRef<string | null>((() => {
-        try { return sessionStorage.getItem(OPEN_KEY); } catch { return null; }
-    })()).current;
-    const viewStore = (): Storage => (readOnly ? sessionStorage : localStorage);
+    /** The reading spot lives for the browser SESSION only. A new session is a
+     *  new sitting, and a new sitting starts at the last log. */
+    const viewStore = (): Storage => sessionStorage;
     const readSavedView = (): { surah: number; verse: string } | null => {
         try {
             const raw = viewStore().getItem(viewKey);
@@ -1335,7 +1358,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             return (typeof v?.surah === 'number' && typeof v?.verse === 'string') ? v : null;
         } catch { return null; }
     };
-    const savedViewOnMount = useRef(openedStudentOnMount === prefsId ? readSavedView() : null).current;
+    const savedViewOnMount = useRef(isFreshOpen(prefsId) ? null : readSavedView()).current;
     const [selectedSurahId, setSelectedSurahId] = useState<number>(savedViewOnMount?.surah || studentProgress?.surah || 1);
     // Our own notes for whichever surah is open.
     useEffect(() => {
@@ -1356,11 +1379,6 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     /** The student we have already resumed for — not a plain boolean, so that
      *  switching students inside the same mount resumes again for the new one. */
     const resumedForRef = useRef<string | null>(null);
-    useEffect(() => {
-        wasAlreadyOpen(prefsId);          // settle the answer before overwriting
-        try { sessionStorage.setItem(OPEN_KEY, prefsId); } catch { /* private mode */ }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [prefsId]);
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
     // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
     // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
@@ -2689,7 +2707,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         // Where they left off wins over the last logged verse ONLY when they are
         // coming back to the Quran tab mid-sitting. Opening the student goes to
         // the student's last log.
-        const saved = wasAlreadyOpen(prefsId) ? readSavedView() : null;
+        const saved = isFreshOpen(prefsId) ? null : readSavedView();
         if (saved) {
             resumedForRef.current = prefsId;
             setSelectedSurahId(saved.surah);

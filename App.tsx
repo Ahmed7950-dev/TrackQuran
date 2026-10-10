@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework, Mistake } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
-import StudentProgressPage from './components/StudentProgressPage';
+import StudentProgressPage, { markQuranOpenedFresh } from './components/StudentProgressPage';
 import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
 import MissedLessonPrompt from './components/MissedLessonPrompt';
@@ -1634,6 +1634,7 @@ const App: React.FC = () => {
     setSelectedArabicStudentId(null);
     setSelectedStudentId(null);
     setCurrentStudentView('details');
+    markQuranOpenedFresh();   // an explicit open lands on the student's last log
     setSessionStudentId(rec.studentId);
     setActiveTab('main');
     setQuranHomeworkJump(prev => ({ key: `${rec.startSurah}:${rec.startAyah}`, n: (prev?.n ?? 0) + 1 }));
@@ -2220,6 +2221,7 @@ const App: React.FC = () => {
                         if (!sid) return;
                         setCurrentStudentView('details');
                         setActiveTab('main');
+                        markQuranOpenedFresh();
                         setSessionStudentId(sid);
                       }}
                       className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1.5 mx-1 rounded-none text-sm font-bold transition-all whitespace-nowrap ${
@@ -2332,6 +2334,7 @@ const App: React.FC = () => {
               const sid = (sessionStudent ?? selectedStudent)!.id;
               setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
               setActiveTab('main');
+              markQuranOpenedFresh();
               setSessionStudentId(sid);
             }}
           />
@@ -2360,7 +2363,7 @@ const App: React.FC = () => {
           // Open the Quran view at this homework's verses. The nonce makes a
           // repeat tap navigate again without any timer.
           const goToHomework = (hw: QuranHomework) => {
-            if (!sessionStudent) setSessionStudentId(hw_student.id);
+            if (!sessionStudent) { markQuranOpenedFresh(); setSessionStudentId(hw_student.id); }
             setActiveTab('main');
             setQuranHomeworkJump(prev => ({ key: `${hw.startSurah}:${hw.startAyah}`, n: (prev?.n ?? 0) + 1 }));
           };
