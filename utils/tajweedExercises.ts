@@ -28,6 +28,18 @@ const HIGH_MEEM = 'ۢ', LOW_MEEM = 'ۭ';
 const SILENT0 = '۟', SILENT2 = '۠';
 const VOWELS = ['َ', 'ُ', 'ِ'];
 
+/**
+ * The seven isti'lā' letters — always heavy, whatever their vowel.
+ * The mnemonic is خُصَّ ضَغْطٍ قِظْ.
+ *
+ * Deliberately only these seven: rā' and the lām of lafẓ al-jalālah are heavy
+ * or light depending on their vowel and what precedes them, so a drill built
+ * on them would be marking answers it cannot be sure of. Every letter here is
+ * heavy with no condition attached.
+ */
+export const ISTIALA_LETTERS = ['خ', 'ص', 'ض', 'ط', 'ظ', 'غ', 'ق'];
+export const ISTIALA_LETTERS_LABEL = 'خ ص ض ط ظ غ ق';
+
 /** Nūn sākinah + these six throat letters is izhār halqi. */
 export const IZHAR_LETTERS = ['ء', 'أ', 'إ', 'ؤ', 'ئ', 'آ', 'ه', 'ع', 'ح', 'غ', 'خ'];
 /** What the tutor sees for that rule — the six, written plainly. */
@@ -35,7 +47,8 @@ export const IZHAR_LETTERS_LABEL = 'أ ه ع ح غ خ';
 
 export type TajweedExerciseRuleId =
   | 'ghunnah' | 'qalqalah' | 'izhar' | 'idghamGhunnah' | 'idghamNoGhunnah'
-  | 'iqlab' | 'ikhfa' | 'ikhfaShafawi' | 'idghamShafawi' | 'izharShafawi';
+  | 'iqlab' | 'ikhfa' | 'ikhfaShafawi' | 'idghamShafawi' | 'izharShafawi'
+  | 'tafkheem';
 
 export interface TajweedExerciseRule {
   id: TajweedExerciseRuleId;
@@ -60,6 +73,7 @@ export const TAJWEED_EXERCISE_RULES: readonly TajweedExerciseRule[] = [
   { id: 'ikhfaShafawi',    engine: 'ikhafa_shafawi',    letters: 'ب',              color: '#D500B7', colorDark: '#FF63E4' },
   { id: 'idghamShafawi',   engine: 'idgham_shafawi',    letters: 'م',              color: '#58B800', colorDark: '#7EDC2A' },
   { id: 'izharShafawi',                                 letters: 'ما عدا ب م',     color: '#6B7280', colorDark: '#D1D5DB' },
+  { id: 'tafkheem',                                     letters: ISTIALA_LETTERS_LABEL, color: '#3F3BBF', colorDark: '#9A97F0' },
 ] as const;
 
 export const TAJWEED_EXERCISE_RULE_IDS: readonly TajweedExerciseRuleId[] =
@@ -153,8 +167,52 @@ export function findIzharShafawi(verse: string): number[] {
   return [...out];
 }
 
+/**
+ * Word indices where a heavy letter and a light letter sit side by side —
+ * tafkhīm meeting tarqīq inside one word, as in أَخَذْنَا, where the hamzah is
+ * light and the khā' right after it is heavy.
+ *
+ * The pair has to be ADJACENT with nothing between them, which is what makes
+ * the drill worth doing: the mouth has to change shape between two touching
+ * letters. قَالَ is therefore not a match — the alif sits between the qāf and
+ * the lām, so there is no switch to make on consecutive letters.
+ *
+ * A bare alif, wāw or yā' is a madd seat, not a letter with a weight of its
+ * own: it takes the weight of what it follows. So it is neither side of a pair,
+ * and it does not let one form across it either.
+ */
+export function findTafkheemContrast(verse: string): number[] {
+  const flat = unitsOf(verse);
+  const out = new Set<number>();
+
+  const heavy = (u: Unit) => ISTIALA_LETTERS.includes(u.base);
+  /** A madd seat: ا ى و ي carrying nothing of its own. */
+  const isMaddSeat = (u: Unit) =>
+    ['ا', 'ى', 'و', 'ي'].includes(u.base)
+    && !VOWELS.some(v => marksOf(u).includes(v))
+    && !marksOf(u).includes(SUKUN) && !marksOf(u).includes(SUKUN_Q)
+    && !marksOf(u).includes(SHADDA) && !hasTanween(u);
+  /** Can this unit be one half of the pair? */
+  const weighs = (u: Unit) =>
+    isArabicLetterUnit(u.base) && !isSilent(u) && !isMaddSeat(u);
+
+  for (let i = 0; i + 1 < flat.length; i++) {
+    const a = flat[i];
+    let j = i + 1;
+    // Waqf signs are written between letters but are not spoken.
+    while (j < flat.length && isWaqf(flat[j])) j++;
+    if (j >= flat.length) break;
+    const b = flat[j];
+    if (a.wi !== b.wi) continue;                 // inside ONE word
+    if (!weighs(a) || !weighs(b)) continue;
+    if (heavy(a) === heavy(b)) continue;         // both heavy, or both light
+    out.add(a.wi);
+  }
+  return [...out];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Which of the ten rules a verse carries
+// Which of the rules a verse carries
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** rule → the indices of the words that carry it, in `splitVerseWords` order. */
@@ -177,6 +235,8 @@ export function findRulesInVerse(verse: string): Map<TajweedExerciseRuleId, numb
   if (izhar.length) found.set('izhar', izhar);
   const izharShafawi = findIzharShafawi(verse);
   if (izharShafawi.length) found.set('izharShafawi', izharShafawi);
+  const tafkheem = findTafkheemContrast(verse);
+  if (tafkheem.length) found.set('tafkheem', tafkheem);
   return found;
 }
 
