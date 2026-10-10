@@ -92,7 +92,9 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const toggleWord = (id: string) => setWordSelection(prev => {
     const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
-  const [choice, setChoice] = useState<'flashcards' | 'word_cards' | null>(null);
+  /** The tile whose "play or assign" sheet is open. `saved` runs on the words
+   *  the student bookmarked rather than the lesson/selection pool. */
+  const [choice, setChoice] = useState<{ kind: 'flashcards' | 'word_cards'; saved?: boolean } | null>(null);
   const [cardsOpen, setCardsOpen] = useState(false);
   const [cardsAssignment, setCardsAssignment] = useState<{ deadline: string | null } | null>(null);
   const [assignmentMessage, setAssignmentMessage] = useState('');
@@ -527,7 +529,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             name={t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
             hint="Flip · memorise · repeat"
             disabled={practicePool.length === 0}
-            onClick={() => studentMode ? startChallenge(practicePool) : setChoice('flashcards')} />
+            onClick={() => studentMode ? startChallenge(practicePool) : setChoice({ kind: 'flashcards' })} />
 
           <GameTile art="wordflight" tone="sky" icon="✈️"
             name="Word Flight Game" hint="Catch the falling words"
@@ -544,7 +546,9 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             <GameTile art="saved" tone="rose" icon="🔖"
               name={t('arabicLessonDetail.reviseSaved', { count: savedWords.length })}
               hint={t('arabicLessonDetail.reviseSavedDesc')}
-              onClick={() => startChallenge(savedWords, true)} />
+              onClick={() => studentMode
+                ? startChallenge(savedWords, true)
+                : setChoice({ kind: 'flashcards', saved: true })} />
           )}
 
           <GameTile art="wordcards" tone="orange" icon="🃏"
@@ -555,7 +559,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
                 ? `Play the computer · ${cardWords.length} words`
                 : `Throw a card, match its pair · ${cardWords.length} words`}
             disabled={cardWords.length < 2}
-            onClick={() => { if (studentMode) setCardsOpen(true); else setChoice('word_cards'); }} />
+            onClick={() => { if (studentMode) setCardsOpen(true); else setChoice({ kind: 'word_cards' }); }} />
 
 
         </div>
@@ -665,18 +669,31 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         </div>
       )}
 
-      {choice && !studentMode && <ArabicHomeworkChoice title={choice === 'flashcards' ? 'Flashcards' : 'Word cards'} count={practicePool.length} nextLessonAt={nextLessonAt}
-        onClose={() => setChoice(null)}
-        onPlay={() => { if (choice === 'flashcards') startChallenge(practicePool); else { setCardsAssignment(null); setCardsOpen(true); } setChoice(null); }}
-        onAssign={async deadline => {
-          if (choice === 'word_cards') { setCardsAssignment({ deadline }); setCardsOpen(true); }
-          else {
-            await createArabicHomework({ teacherId: student.teacherId, studentId: student.id, studentName: student.name,
-              kind: 'flashcards', title: 'Flashcards', words: practicePool.map(toHomeworkWord), deadline });
-            setAssignmentMessage('Flashcards assigned. Find them in the Homework tab.');
-          }
-          setChoice(null);
-        }} />}
+      {choice && !studentMode && (() => {
+        // Saved words are their own pool; everything else runs on the
+        // lesson/selection pool the tiles above already describe.
+        const pool  = choice.saved ? savedWords : practicePool;
+        const title = choice.kind === 'word_cards' ? 'Word cards'
+          : choice.saved ? 'Saved words' : 'Flashcards';
+        return (
+          <ArabicHomeworkChoice title={title} count={pool.length} nextLessonAt={nextLessonAt}
+            onClose={() => setChoice(null)}
+            onPlay={() => {
+              if (choice.kind === 'flashcards') startChallenge(pool, choice.saved);
+              else { setCardsAssignment(null); setCardsOpen(true); }
+              setChoice(null);
+            }}
+            onAssign={async deadline => {
+              if (choice.kind === 'word_cards') { setCardsAssignment({ deadline }); setCardsOpen(true); }
+              else {
+                await createArabicHomework({ teacherId: student.teacherId, studentId: student.id, studentName: student.name,
+                  kind: 'flashcards', title, words: pool.map(toHomeworkWord), deadline });
+                setAssignmentMessage(`${title} assigned. Find them in the Homework tab.`);
+              }
+              setChoice(null);
+            }} />
+        );
+      })()}
 
       {showWordFlight && (
         <WordFlightGame
