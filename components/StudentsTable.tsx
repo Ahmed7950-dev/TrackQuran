@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from 'react';
 import { Student } from '../types';
 import StudentProfileIcon from './StudentProfileIcon';
+import { nextRenewalDate } from '../utils/renewal';
 
 export interface RosterRowData {
   /** The student's next lesson, from the calendar. */
@@ -30,7 +31,7 @@ export interface RosterRowData {
 }
 
 type SortKey =
-  | 'name' | 'nextLesson' | 'linked' | 'homework' | 'reminders' | 'review'
+  | 'name' | 'nextLesson' | 'renewal' | 'linked' | 'homework' | 'reminders' | 'review'
   | 'pagesRead' | 'pagesMemorized' | 'quality' | 'mistakes' | 'fluency' | 'rank';
 
 const dayLabel = (d: Date): string => {
@@ -42,6 +43,24 @@ const dayLabel = (d: Date): string => {
   if (days === 1) return `Tomorrow ${time}`;
   if (days < 7) return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
   return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${time}`;
+};
+
+/**
+ * The student's next subscription renewal, rolled forward from the date the
+ * tutor set — `null` when they have none. Only Preply students carry one.
+ */
+const renewalOf = (s: Student): Date | null => {
+  const iso = s.subscriptionRenewalDate ? nextRenewalDate(s.subscriptionRenewalDate) : null;
+  if (!iso) return null;
+  const d = new Date(iso + 'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+};
+
+/** Whole days from today to a local-midnight date. */
+const daysAway = (d: Date): number => {
+  const n = new Date();
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  return Math.round((midnight(d) - midnight(n)) / 86_400_000);
 };
 
 /** A tick or a dash — the answer every yes/no column gives. */
@@ -87,7 +106,7 @@ const StudentsTable: React.FC<{
   const clickHeader = (key: SortKey) => setSort(cur =>
     cur.key === key
       ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: key === 'name' || key === 'nextLesson' || key === 'rank' || key === 'mistakes' ? 'asc' : 'desc' });
+      : { key, dir: key === 'name' || key === 'nextLesson' || key === 'renewal' || key === 'rank' || key === 'mistakes' ? 'asc' : 'desc' });
 
   const rows = useMemo(() => {
     const LAST = Number.MAX_SAFE_INTEGER;
@@ -96,6 +115,8 @@ const StudentsTable: React.FC<{
       switch (sort.key) {
         case 'name': return s.name.toLocaleLowerCase();
         case 'nextLesson': return d?.nextLesson?.getTime() ?? LAST;
+        // No subscription sorts last either way, not as "due first".
+        case 'renewal': return renewalOf(s)?.getTime() ?? (sort.dir === 'asc' ? LAST : -1);
         case 'linked': return d?.linked ? 1 : 0;
         case 'homework': return d?.openHomework ?? 0;
         case 'reminders': return d?.notifications && d.openHomework > 0 ? 1 : 0;
@@ -143,6 +164,7 @@ const StudentsTable: React.FC<{
           <tr>
             <Header id="name" label="Student" align="start" />
             <Header id="nextLesson" label="Next lesson" align="start" />
+            <Header id="renewal" label="Renews" title="Next subscription renewal — every 28 days" align="start" />
             <Header id="linked" label="Linked" title="Linked to a calendar lesson" />
             <Header id="homework" label="Homework" title="Homework still not done" />
             <Header id="reminders" label="Remind" title="Ring their phone: check your homework" />
@@ -162,6 +184,16 @@ const StudentsTable: React.FC<{
             const next = d?.nextLesson;
             const soon = !!next && next.getTime() - Date.now() < 24 * 3_600_000;
             const archived = !!archivedIds?.has(s.id);
+            const renewal = renewalOf(s);
+            const away = renewal ? daysAway(renewal) : null;
+            // A week out is when it is worth noticing; the reminder itself
+            // fires the day before.
+            const renewalSoon = away !== null && away <= 7;
+            const renewalLabel = !renewal ? ''
+              : away === 0 ? 'Today'
+                : away === 1 ? 'Tomorrow'
+                  : away !== null && away <= 7 ? `In ${away} days`
+                    : renewal.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
             const num = 'text-sm font-semibold text-slate-700 dark:text-slate-200';
             const dim = 'text-sm text-slate-400 dark:text-slate-500';
             return (
@@ -181,6 +213,18 @@ const StudentsTable: React.FC<{
                     </span>
                   ) : (
                     <span className={dim}>Not booked</span>
+                  )}
+                </td>
+                <td className={cell}>
+                  {renewal ? (
+                    <span title={`Renews ${renewal.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                      className={`text-sm font-semibold ${renewalSoon
+                        ? 'text-violet-700 dark:text-violet-300'
+                        : 'text-slate-600 dark:text-slate-300'}`}>
+                      {renewalLabel}
+                    </span>
+                  ) : (
+                    <span className={dim}>—</span>
                   )}
                 </td>
                 <td className={`${cell} text-center`}>
