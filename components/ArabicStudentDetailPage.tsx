@@ -22,6 +22,7 @@ import {
 import ArabicAddStudentModal from './ArabicAddStudentModal';
 import ArabicLessonPage from './ArabicLessonPage';
 import ArabicHomeworkTab from './ArabicHomeworkTab';
+import ArabicGrammarTab from './ArabicGrammarTab';
 import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
@@ -476,7 +477,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       opened by tapping their name. (It replaced the ⋯ menu and the Profile tab.) */
   const [sheetOpen, setSheetOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'>('lessons');
+  const [activeSection, setActiveSection] = useState<'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'>('lessons');
   /** Homework that is OPEN — handed over and neither done, cancelled nor past
    *  its deadline. Every kind counts: a lesson's, a vocabulary set, word cards,
    *  flashcards, one the tutor wrote on its own. It reloads whenever the page
@@ -618,8 +619,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     calendar:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
   };
 
-  const TABS: Array<{ key: 'lessons' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
+    { key: 'grammar', label: 'Grammar', mobileLabel: 'Grammar' },
     { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
     { key: 'homework', label: 'Homework', mobileLabel: 'Homework' },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
@@ -841,6 +843,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       )}
 
       {/* ── Lessons Vocabulary section (tutor + student portal) ── */}
+      {activeSection === 'grammar' && <ArabicGrammarTab lessons={dialectLessons} />}
+
       {activeSection === 'vocabulary' && (
         <ArabicLessonsVocabularyTab
           lessons={dialectLessons}
