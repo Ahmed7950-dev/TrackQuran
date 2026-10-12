@@ -6,7 +6,7 @@
 // are written by the tutor — this file never restates them. What it holds is the
 // practice: exercises keyed by the lesson's order index.
 //
-// Two rules the exercises are written to, both from the brief:
+// Three rules the exercises are written to, all from the brief:
 //
 //   1. The answer is never in the question. No "ana ___ (I am a student)", where
 //      the English hands over the word; no multiple choice where three options
@@ -15,37 +15,34 @@
 //   2. They test the rule, not recall of a sentence. Most are transformations
 //      ("make it feminine", "now say it about her") or corrections, because a
 //      student can parrot a sentence without being able to change it.
+//   3. Nothing on the question card says WHICH rule is being tested. Naming it
+//      ("haad / haadi") narrows the answer before the student has thought, so
+//      `point` is kept for the tutor's marking sheet and shown nowhere else.
 //
-// Free-text answers are matched after normalising, so hyphens, spacing and case
-// never decide a mark; genuine spelling variants (ee/i, 7/h, 5/kh, q/2) are
-// listed per item instead of guessed at.
+// Nothing here marks an answer. `model` and `why` exist so the TUTOR can mark
+// and explain; the app never decides right from wrong on its own.
 // -----------------------------------------------------------------------------
 
 export type GrammarExercise = {
-  /** The rule being tested, in a few words — shown on the card. */
+  /** The rule being tested. For the TUTOR's marking sheet — never on the card. */
   point: string;
-  /** Why the answer is the answer. Shown after answering, right or wrong. */
+  /** How to explain it when marking. Tutor only. */
   why: string;
+  /**
+   * Words in the question that the lesson has not taught yet, as
+   * "word = meaning". Shown in brackets in their own colour, because a student
+   * who does not know the word cannot show whether they know the RULE — which
+   * is the only thing being tested. A word the lesson itself teaches is never
+   * glossed, and neither is a name.
+   *
+   * Inside a prompt the same thing is written inline as [word = meaning].
+   */
+  gloss?: string[];
 } & (
   | { kind: 'choose'; prompt: string; options: string[]; answer: number }
-  | { kind: 'write'; prompt: string; accept: string[] }
+  /** `model`: acceptable answers, the first being the one to show. Tutor only. */
+  | { kind: 'write'; prompt: string; model: string[] }
 );
-
-/**
- * How an answer is compared. Hyphens and spaces are how a learner shows the
- * seams in a word (beet-ha, beet ha, beetha) — none of them is a mistake, so
- * none of them decides a mark.
- */
-export const normaliseAnswer = (s: string): string =>
-  s.toLowerCase()
-    .replace(/[ــ]/g, '')
-    .replace(/[-_'’`.,!?؟\s]+/g, '')
-    .trim();
-
-export const answerIsRight = (given: string, accept: string[]): boolean => {
-  const g = normaliseAnswer(given);
-  return g.length > 0 && accept.some(a => normaliseAnswer(a) === g);
-};
 
 /** Lesson order index → its exercises. Levantine level 1. */
 export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
@@ -62,7 +59,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'No verb "to be"',
       prompt: 'Three words become two in Arabic. Write "I am Ahmad".',
-      accept: ['ana a7mad', 'ana ahmad', 'ana a7med', 'ana ahmed'],
+      model: ['ana a7mad', 'ana ahmad', 'ana a7med', 'ana ahmed'],
       why: 'ana a7mad — "am" is not translated at all.',
     },
     {
@@ -80,7 +77,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Attached pronouns',
       prompt: 'A man asks your name. Write his question (two words).',
-      accept: ['shoo ismak', 'shu ismak', 'sho ismak', 'shoo esmak', 'shu esmak', 'shoo ismk'],
+      model: ['shoo ismak', 'shu ismak', 'sho ismak', 'shoo esmak', 'shu esmak', 'shoo ismk'],
       why: 'shoo ism-ak? — the ‑ak is pointed at the man you are speaking to.',
     },
     {
@@ -102,7 +99,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'haad / haadi',
       prompt: 'You point at a woman and say "this is my mother". Write it.',
-      accept: ['haadi immee', 'haadi immi', 'haadi emmee', 'hadi immee', 'hadi immi', 'haady immee', 'haadi ommee', 'hadi ommi'],
+      model: ['haadi immee', 'haadi immi', 'haadi emmee', 'hadi immee', 'hadi immi', 'haady immee', 'haadi ommee', 'hadi ommi'],
       why: 'haadi (feminine) because the person pointed at is female — not haad.',
     },
     {
@@ -115,12 +112,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'The extra و with أخ / أب',
       prompt: 'Same trick as "his brother", but with أب. Write "her father".',
-      accept: ['abooha', 'abuha', 'abooha', 'abooh-ha', 'abuuha'],
+      model: ['abooha', 'abuha', 'abooha', 'abooh-ha', 'abuuha'],
       why: 'ab → aboo‑ + ha = aboo-ha. The و appears as soon as a suffix is added.',
     },
     {
       kind: 'choose', point: 'Formal vs everyday words',
       prompt: 'You are writing your mother\'s name on an official form. Which word fits?',
+      gloss: ['ukht = sister', 'bint = daughter, girl'],
       options: ['waalidah', 'imm', 'ukht', 'bint'],
       answer: 0,
       why: 'waalidah is the formal word; imm is what you say at home. The other two are "sister" and "daughter".',
@@ -128,6 +126,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'choose', point: 'Everything has a gender',
       prompt: 'Which of these would take haadi rather than haad?',
+      gloss: ['sayyarah = car', 'beet = house', 'kitaab = book', 'qalam = pen'],
       options: ['sayyarah', 'beet', 'kitaab', 'qalam'],
       answer: 0,
       why: 'sayyarah ends in ة, so it is feminine and takes haadi. The other three are masculine.',
@@ -146,13 +145,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Possessive suffixes',
       prompt: 'beet means house. Write "her house".',
-      accept: ['beetha', 'baitha', 'bytha', 'beet-ha'],
+      model: ['beetha', 'baitha', 'bytha', 'beet-ha'],
       why: 'beet-ha. The noun does not change; the owner is the ending.',
     },
     {
       kind: 'write', point: 'Possessive suffixes',
       prompt: 'Now the same noun, but speaking TO a woman about her own house.',
-      accept: ['beetik', 'baitik', 'beet-ik'],
+      model: ['beetik', 'baitik', 'beet-ik'],
       why: 'beet-ik — "your house" to a woman. beet-ha would be "her house", about someone not present.',
     },
     {
@@ -175,8 +174,8 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
   4: [
     {
       kind: 'write', point: 'Adjectives take gender',
-      prompt: 'A man is 7elu. Write the same about a woman (two words, starting hiyya).',
-      accept: ['hiyya 7elwe', 'hiyya 7elweh', 'hiyya 7elwah', 'hiya 7elwe', 'hiyya helwe', 'hiya helwe', 'hiyya 7elwa'],
+      prompt: 'A man is 7elu [7elu = good-looking, nice]. Write the same about a woman — two words, starting hiyya.',
+      model: ['hiyya 7elwe', 'hiyya 7elweh', 'hiyya 7elwah', 'hiya 7elwe', 'hiyya helwe', 'hiya helwe', 'hiyya 7elwa'],
       why: 'hiyya 7elwe — the adjective moves to its feminine form, and still no "is".',
     },
     {
@@ -201,12 +200,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Adjectives take gender',
       prompt: 'Write "she is not beautiful" — three words.',
-      accept: ['hiyya mish 7elwe', 'hiya mish 7elwe', 'hiyya mish 7elweh', 'hiyya mish 7elwah', 'hiyya mish helwe', 'hiya mish helwe'],
+      model: ['hiyya mish 7elwe', 'hiya mish 7elwe', 'hiyya mish 7elweh', 'hiyya mish 7elwah', 'hiyya mish helwe', 'hiya mish helwe'],
       why: 'mish goes BEFORE the word it negates, and the adjective stays feminine.',
     },
     {
       kind: 'choose', point: 'Adjectives take gender',
       prompt: 'Which pair do NOT agree?',
+      gloss: ['bint = girl', 'walad = boy', 'kabeer = big'],
       options: ['bint kabeer', 'walad kabeer', 'bint kabeerah', 'sayyarah kabeerah'],
       answer: 0,
       why: 'bint is feminine, so the adjective has to be kabeerah. The other three already agree.',
@@ -225,13 +225,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'ة becomes ‑at before a suffix',
       prompt: 'madrasah means school. Write "my school".',
-      accept: ['madrastee', 'madrasti', 'madrast-ee', 'madrasatee', 'madrasati'],
+      model: ['madrastee', 'madrasti', 'madrast-ee', 'madrasatee', 'madrasati'],
       why: 'madrast-ee. The ة hardens to t as soon as anything is attached.',
     },
     {
       kind: 'write', point: 'Definite with ال',
       prompt: 'sayyarah is a car. Write "the car".',
-      accept: ['essayyarah', 'es-sayyarah', 'elsayyarah', 'el-sayyarah', 'assayyara', 'es-sayyara', 'essayyara'],
+      model: ['essayyarah', 'es-sayyarah', 'elsayyarah', 'el-sayyarah', 'assayyara', 'es-sayyara', 'essayyara'],
       why: 'es-sayyarah. ال is written the same every time even though the l here is pronounced as the s.',
     },
     {
@@ -274,18 +274,19 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Adjective follows the noun',
       prompt: 'Write "a beautiful car" — two words, no ال.',
-      accept: ['sayyarah 7elwe', 'sayyara 7elwe', 'sayyarah 7elweh', 'sayyarah 7elwah', 'sayyarah helwe', 'sayyara helwe'],
+      model: ['sayyarah 7elwe', 'sayyara 7elwe', 'sayyarah 7elweh', 'sayyarah 7elwah', 'sayyarah helwe', 'sayyara helwe'],
       why: 'sayyarah 7elwe — noun first, and the adjective takes the feminine form to match.',
     },
     {
       kind: 'write', point: 'Agreement in definiteness',
       prompt: 'Now make that same phrase definite: "the beautiful car".',
-      accept: ['essayyarah el7elwe', 'es-sayyarah el-7elwe', 'elsayyarah el7elwe', 'essayyara el7elwe', 'es-sayyara el-7elwe', 'essayyarah elhelwe'],
+      model: ['essayyarah el7elwe', 'es-sayyarah el-7elwe', 'elsayyarah el7elwe', 'essayyara el7elwe', 'es-sayyara el-7elwe', 'essayyarah elhelwe'],
       why: 'BOTH words take ال. Putting it on only one of them changes the meaning into a sentence.',
     },
     {
       kind: 'choose', point: 'Agreement in gender',
       prompt: 'Which is wrong?',
+      gloss: ['bint = girl', 'walad = boy', 'kabeer = big'],
       options: ['el-bint el-kabeer', 'el-walad el-kabeer', 'el-bint el-kabeerah', 'bint kabeerah'],
       answer: 0,
       why: 'bint is feminine, so the adjective must be el-kabeerah. Definiteness agrees here, but gender does not.',
@@ -297,7 +298,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'kaan + ending',
       prompt: 'Write "she was sick" — two words.',
-      accept: ['kaanat mareedah', 'kaanit mareedah', 'kaanat mareeda', 'kaanit mareeda', 'kanat mareedah'],
+      model: ['kaanat mareedah', 'kaanit mareedah', 'kaanat mareeda', 'kaanit mareeda', 'kanat mareedah'],
       why: 'kaanat is the "she" form, and the adjective is feminine too.',
     },
     {
@@ -310,7 +311,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'mish goes before',
       prompt: 'Write "he is not sick" — three words.',
-      accept: ['howwa mish mareed', 'howa mish mareed', 'huwwa mish mareed'],
+      model: ['howwa mish mareed', 'howa mish mareed', 'huwwa mish mareed'],
       why: 'mish sits in front of what it negates, and there is still no "is".',
     },
     {
@@ -323,7 +324,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'kaan + ending',
       prompt: 'Speaking TO a woman: "you were a student". Three words.',
-      accept: ['inti konti taalibah', 'enti konti taalibah', 'inti kunti taalibah', 'inti konti taliba', 'inti konti taalibeh'],
+      model: ['inti konti taalibah', 'enti konti taalibah', 'inti kunti taalibah', 'inti konti taliba', 'inti konti taalibeh'],
       why: 'konti for "you (f)", and the noun is feminine to match her.',
     },
   ],
@@ -333,7 +334,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Compound numbers join with wi',
       prompt: 'Write 27 in words.',
-      accept: ['sab3ah wi 3ishreen', 'sab3a wi 3ishreen', 'sab3ah w 3ishreen', 'sab3ah wa 3ishreen', 'sab3a w 3ishreen'],
+      model: ['sab3ah wi 3ishreen', 'sab3a wi 3ishreen', 'sab3ah w 3ishreen', 'sab3ah wa 3ishreen', 'sab3a w 3ishreen'],
       why: 'The ones come first, then wi, then the tens — the opposite order to English.',
     },
     {
@@ -358,7 +359,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Compound numbers join with wi',
       prompt: 'Write 41 in words.',
-      accept: ['waa7ad wi arb3een', 'waa7ed wi arb3een', 'wa7ad wi arb3een', 'waa7ad wi arba3een', 'waa7ed wi arba3een', 'wa7ed wi arb3een'],
+      model: ['waa7ad wi arb3een', 'waa7ed wi arb3een', 'wa7ad wi arb3een', 'waa7ad wi arba3een', 'waa7ed wi arba3een', 'wa7ed wi arb3een'],
       why: 'waa7ad wi arb3een — ones, wi, tens, every time.',
     },
     {
@@ -375,7 +376,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Possessed + possessor',
       prompt: 'Write "Ahmad\'s pen" — two words.',
-      accept: ['qalam a7mad', 'alam a7mad', '2alam a7mad', 'qalam ahmad', 'alam ahmad', 'qalam a7med'],
+      model: ['qalam a7mad', 'alam a7mad', '2alam a7mad', 'qalam ahmad', 'alam ahmad', 'qalam a7med'],
       why: 'The thing owned comes first, the owner second, and nothing goes between them.',
     },
     {
@@ -388,7 +389,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'ال goes on the possessor',
       prompt: 'Write "the teacher\'s house" — two words.',
-      accept: ['beet elostaath', 'beet el-ostaath', 'bait elostaath', 'beet elustaath', 'beet el-ustaath'],
+      model: ['beet elostaath', 'beet el-ostaath', 'bait elostaath', 'beet elustaath', 'beet el-ustaath'],
       why: 'beet el-ostaath. ال goes on the owner, never on the thing owned.',
     },
     {
@@ -406,7 +407,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Possessed + possessor',
       prompt: 'Write "the girl\'s school" — two words.',
-      accept: ['madraset elbint', 'madraset el-bint', 'madrasat elbint', 'madrasat el-bint', 'madraset elbent'],
+      model: ['madraset elbint', 'madraset el-bint', 'madrasat elbint', 'madrasat el-bint', 'madraset elbent'],
       why: 'madraset el-bint. The ة on madrasah hardens to t because another word now leans on it.',
     },
   ],
@@ -416,7 +417,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: '3ind + suffix',
       prompt: 'Write "I have a car" — two words.',
-      accept: ['3indee sayyarah', '3indi sayyarah', '3indee sayyara', '3indi sayyara', '3ind-ee sayyarah'],
+      model: ['3indee sayyarah', '3indi sayyarah', '3indee sayyara', '3indi sayyara', '3ind-ee sayyarah'],
       why: '3ind-ee sayyarah. "Have" is not a verb here — it is a preposition with an ending.',
     },
     {
@@ -436,12 +437,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: '3ind + suffix',
       prompt: 'Ask a man whether he has a pen — two words.',
-      accept: ['3indak qalam', '3indak alam', '3indak 2alam', '3ind-ak qalam'],
+      model: ['3indak qalam', '3indak alam', '3indak 2alam', '3ind-ak qalam'],
       why: '3ind-ak qalam? Nothing is added to make it a question — the tone does it.',
     },
     {
       kind: 'choose', point: 'Complex idafah',
       prompt: '"the daughter of the shop owner" — where does ال go?',
+      gloss: ['saa7ib = owner', 'ma7al = shop'],
       options: [
         'Only on the last word: bint saa7ib el-ma7al',
         'On every word: el-bint el-saa7ib el-ma7al',
@@ -458,7 +460,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'ayya = which',
       prompt: 'Ask "which day?" — two words.',
-      accept: ['ayya yoom', 'aya yoom', 'ayya yom', 'ayy yoom'],
+      model: ['ayya yoom', 'aya yoom', 'ayya yom', 'ayy yoom'],
       why: 'ayya yoom? ayya comes BEFORE the noun, unlike haad in this lesson.',
     },
     {
@@ -483,7 +485,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'haad follows the noun here',
       prompt: 'Write "this week" the way this lesson does it — two words.',
-      accept: ['jum3a haad', 'jum3ah haad', 'esboo3 haad', 'usboo3 haad', 'jum3a had'],
+      model: ['jum3a haad', 'jum3ah haad', 'esboo3 haad', 'usboo3 haad', 'jum3a had'],
       why: 'The time word first, haad second — the same shape as shahir haad.',
     },
     {
@@ -505,13 +507,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Near vs far',
       prompt: 'haad is "this (m)". Write the far one — "that (m)".',
-      accept: ['hadaak', 'hadak', 'hadaake', 'hadhaak'],
+      model: ['hadaak', 'hadak', 'hadaake', 'hadhaak'],
       why: 'hadaak. The near/far pair is haad → hadaak.',
     },
     {
       kind: 'write', point: 'Near vs far',
       prompt: 'Now the feminine far one — "that (f)".',
-      accept: ['hadeek', 'hadik', 'hadeeke'],
+      model: ['hadeek', 'hadik', 'hadeeke'],
       why: 'haady → hadeek. Both halves change: nearness and gender.',
     },
     {
@@ -536,7 +538,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Ordinals take ‑ah',
       prompt: 'Write "the third lesson" — two words, both definite.',
-      accept: ['eddars ettaalit', 'ed-dars et-taalit', 'eddars ettaalet', 'el-7essah et-taaltah', 'el7essah ettaaltah'],
+      model: ['eddars ettaalit', 'ed-dars et-taalit', 'eddars ettaalet', 'el-7essah et-taaltah', 'el7essah ettaaltah'],
       why: 'Both words take ال, like any noun + adjective pair from lesson 6.',
     },
   ],
@@ -546,19 +548,19 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Nisba ‑ee / ‑iyyah',
       prompt: 'masr is Egypt. Write "Egyptian" about a woman.',
-      accept: ['masriyyah', 'masriyya', 'masreyyah', 'misriyyah', 'masriyeh'],
+      model: ['masriyyah', 'masriyya', 'masreyyah', 'misriyyah', 'masriyeh'],
       why: 'masr-iyyah. The feminine takes ‑iyyah, not just ‑ah.',
     },
     {
       kind: 'write', point: 'Drop a final stretching letter',
       prompt: 'soorya is Syria. Write "Syrian" about a man.',
-      accept: ['sooree', 'soori', 'suuree', 'suri', 'sooriy'],
+      model: ['sooree', 'soori', 'suuree', 'suri', 'sooriy'],
       why: 'The final stretching letter goes before the ending is added: soorya → soor-ee, not sooryaa-ee.',
     },
     {
       kind: 'write', point: 'Drop the ال first',
       prompt: 'el-urdun is Jordan. Write "Jordanian" about a man.',
-      accept: ['urdunee', 'urduni', 'ordonee', 'ordoni', 'urdoni', 'urdunii'],
+      model: ['urdunee', 'urduni', 'ordonee', 'ordoni', 'urdoni', 'urdunii'],
       why: 'ال is dropped first, then the ending: urdun-ee. el-urdun-ee would keep a "the" that does not belong.',
     },
     {
@@ -587,13 +589,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'The af3al pattern',
       prompt: 'kabeer means big. Write "bigger".',
-      accept: ['akbar', 'aakbar'],
+      model: ['akbar', 'aakbar'],
       why: 'The three letters of the adjective are poured into the pattern af3al: k‑b‑r → akbar.',
     },
     {
       kind: 'write', point: 'The af3al pattern',
       prompt: 'Same pattern. qareeb means near — write "nearer".',
-      accept: ['aqrab', 'a2rab', 'akrab', 'agrab'],
+      model: ['aqrab', 'a2rab', 'akrab', 'agrab'],
       why: 'q‑r‑b → aqrab. Once you see the pattern you can build it from any adjective.',
     },
     {
@@ -611,7 +613,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'A noun after illy takes a suffix',
       prompt: 'Complete so it means "whose age is twenty": el-walad illy ___ 3ishreen.',
-      accept: ['3omroh', '3omro', '3umroh', '3umro', '3omr-oh'],
+      model: ['3omroh', '3omro', '3umroh', '3umro', '3omr-oh'],
       why: '3omr-oh — literally "his age". Arabic keeps the owner on the noun where English drops it into "whose".',
     },
     {
@@ -644,20 +646,20 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     },
     {
       kind: 'write', point: 'Colors agree like adjectives',
-      prompt: 'a5dar is green. Write "the green tree" — two words, both definite (shajarah = tree, feminine).',
-      accept: ['eshshajarah el5adrah', 'esh-shajarah el-5adrah', 'eshshajara el5adra', 'esh-shajara el-khadra', 'eshshajarah elkhadrah'],
+      prompt: 'a5dar is green. Write "the green tree" — two words, both definite [shajarah = tree, feminine].',
+      model: ['eshshajarah el5adrah', 'esh-shajarah el-5adrah', 'eshshajara el5adra', 'esh-shajara el-khadra', 'eshshajarah elkhadrah'],
       why: 'Colors behave like any adjective: after the noun, feminine to match, and ال on both.',
     },
     {
       kind: 'write', point: 'bi‑ + kam',
       prompt: 'Ask "how much for?" — one word.',
-      accept: ['bikam', 'bi-kam', 'bkam', 'beekam'],
+      model: ['bikam', 'bi-kam', 'bkam', 'beekam'],
       why: 'bi‑ (for) joins kam (how many) into bi-kam.',
     },
     {
       kind: 'write', point: 'bidd conjugates',
       prompt: 'Write "I want" — one word.',
-      accept: ['biddee', 'biddi', 'bidee', 'bidi', 'bidd-ee'],
+      model: ['biddee', 'biddi', 'bidee', 'bidi', 'bidd-ee'],
       why: 'bidd takes the same endings as 3ind: bidd-ee, bidd-ak, bidd-ik.',
     },
     {
@@ -687,14 +689,14 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     },
     {
       kind: 'write', point: 'la‑ before a place',
-      prompt: 'Write "to the clinic" — one joined word (3iyaadah = clinic).',
-      accept: ['lal3iyaadah', 'la-l-3iyaadah', 'lel3iyaadah', 'lal3iyada', 'lil3iyaadah', 'la l 3iyaadah'],
+      prompt: 'Write "to the clinic" — one joined word [3iyaadah = clinic].',
+      model: ['lal3iyaadah', 'la-l-3iyaadah', 'lel3iyaadah', 'lal3iyada', 'lil3iyaadah', 'la l 3iyaadah'],
       why: 'la‑ + ال + the noun run together: la-l-3iyaadah.',
     },
     {
       kind: 'write', point: 'la‑ before a place',
       prompt: 'Ask "to where?" — one word.',
-      accept: ['lawain', 'la-wain', 'lawein', 'lawen', 'lawayn'],
+      model: ['lawain', 'la-wain', 'lawein', 'lawen', 'lawayn'],
       why: 'la‑ (to) joins wain (where): la-wain?',
     },
     {
@@ -716,13 +718,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'il‑ + suffix = possession',
       prompt: 'Write "mine" — one word.',
-      accept: ['ilee', 'ili', 'il-ee', 'elee', 'eli', 'illee'],
+      model: ['ilee', 'ili', 'il-ee', 'elee', 'eli', 'illee'],
       why: 'A hamza in front of لـ turns it into a possessive: il-ee.',
     },
     {
       kind: 'write', point: 'la-meen',
       prompt: 'Ask "whose is it?" / "belongs to who?" — one word.',
-      accept: ['lameen', 'la-meen', 'lamin', 'lameeen'],
+      model: ['lameen', 'la-meen', 'lamin', 'lameeen'],
       why: 'la‑ (belongs to) + meen (who) = la-meen?',
     },
     {
@@ -740,7 +742,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'il‑ + suffix = possession',
       prompt: 'Answer la-meen with "hers" — one word.',
-      accept: ['ilha', 'il-ha', 'elha', 'illha'],
+      model: ['ilha', 'il-ha', 'elha', 'illha'],
       why: 'il-ha. The endings are the same family as 3ind-ha and bidd-ha.',
     },
     {
@@ -757,13 +759,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: '13–19 take ‑tashar',
       prompt: 'arba3ah is 4. Write 14.',
-      accept: ['arba3tashar', 'arba3-tashar', 'arbatashar', 'arba3taashar'],
+      model: ['arba3tashar', 'arba3-tashar', 'arbatashar', 'arba3taashar'],
       why: 'The ة is dropped and ‑tashar added: arba3-tashar.',
     },
     {
       kind: 'write', point: 'The dual',
       prompt: 'kitaab is a book. Write "two books" — one word.',
-      accept: ['kitaabeen', 'kitabeen', 'kitaben', 'kitaabain'],
+      model: ['kitaabeen', 'kitabeen', 'kitaben', 'kitaabain'],
       why: 'Arabic has a form just for two: add ‑een. You do not say "two books" with a number.',
     },
     {
@@ -781,7 +783,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: '20–99',
       prompt: 'Write 23 in words.',
-      accept: ['talaatah wi 3ishreen', 'talaata wi 3ishreen', 'talaatah w 3ishreen', 'thalaathah wi 3ishreen', 'talatah wi 3ishreen'],
+      model: ['talaatah wi 3ishreen', 'talaata wi 3ishreen', 'talaatah w 3ishreen', 'thalaathah wi 3ishreen', 'talatah wi 3ishreen'],
       why: 'Ones, then wi, then tens — the same shape as 27 in lesson 8.',
     },
     {
@@ -798,13 +800,13 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'Hundreds take ‑miyyah',
       prompt: 'Write 400 in words — one word.',
-      accept: ['arba3miyyah', 'arba3miyya', 'arba3meyyah', 'arba3mieh', 'arba3miyeh'],
+      model: ['arba3miyyah', 'arba3miyya', 'arba3meyyah', 'arba3mieh', 'arba3miyeh'],
       why: 'The digit joins straight onto ‑miyyah: arba3-miyyah.',
     },
     {
       kind: 'write', point: 'Hundreds, then ones, then tens',
       prompt: 'Write 326 in words.',
-      accept: [
+      model: [
         'talatmiyyah wi sittah wi 3ishreen', 'talatmiyya wi sittah wi 3ishreen',
         'talatmiyyah w sittah w 3ishreen', 'thalathmiyyah wi sittah wi 3ishreen',
         'talatmiyyah wi sitta wi 3ishreen',
@@ -861,7 +863,7 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     {
       kind: 'write', point: 'raa7 + verb = future',
       prompt: 'Write "he will be" — two words. Careful with the second one.',
-      accept: ['raa7 yekoon', 'ra7 yekoon', 'raa7 ikoon', 'ra7 ykoon', 'raa7 yikoon'],
+      model: ['raa7 yekoon', 'ra7 yekoon', 'raa7 ikoon', 'ra7 ykoon', 'raa7 yikoon'],
       why: 'raa7 yekoon. The second verb drops its ب — beykoon would be one b too many.',
     },
     {
@@ -890,8 +892,8 @@ export const GRAMMAR_EXERCISES: Record<number, GrammarExercise[]> = {
     },
     {
       kind: 'write', point: 'The present "to be" exists',
-      prompt: 'Write "I will be at home" — three words (bi-l-beet = at home).',
-      accept: ['raa7 akoon bilbeet', 'ra7 akoon bilbeet', 'raa7 akoon bi-l-beet', 'raa7 akoon belbeet', 'ra7 akoon belbeet', 'raa7 akuun bilbeet'],
+      prompt: 'Write "I will be at home" — three words [bi-l-beet = at home].',
+      model: ['raa7 akoon bilbeet', 'ra7 akoon bilbeet', 'raa7 akoon bi-l-beet', 'raa7 akoon belbeet', 'ra7 akoon belbeet', 'raa7 akuun bilbeet'],
       why: 'raa7 akoon bi-l-beet — the "I" form after raa7 is akoon, with no ب.',
     },
   ],

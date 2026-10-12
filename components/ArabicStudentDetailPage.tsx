@@ -843,7 +843,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       )}
 
       {/* ── Lessons Vocabulary section (tutor + student portal) ── */}
-      {activeSection === 'grammar' && <ArabicGrammarTab lessons={dialectLessons} />}
+      {activeSection === 'grammar' && <ArabicGrammarTab lessons={dialectLessons} studentMode={studentMode} />}
 
       {activeSection === 'vocabulary' && (
         <ArabicLessonsVocabularyTab

@@ -13,9 +13,7 @@
 // -----------------------------------------------------------------------------
 import React, { useMemo, useState } from 'react';
 import { ArabicLesson } from '../types';
-import {
-  GRAMMAR_EXERCISES, answerIsRight, type GrammarExercise,
-} from '../utils/arabicGrammarExercises';
+import { GRAMMAR_EXERCISES, type GrammarExercise } from '../utils/arabicGrammarExercises';
 
 /** Grammar points live in `grammar_summary` as a JSON array of strings; older
  *  rows are plain text and count as a single point. */
@@ -30,58 +28,140 @@ function parseGrammarRows(raw?: string): string[] {
   return [raw.trim()].filter(Boolean);
 }
 
+/**
+ * A prompt with its glosses picked out. Anything written [like this] is a word
+ * the lesson has not taught, and is drawn in its own colour so the student can
+ * see at a glance what is a hint and what is the question.
+ */
+const Prompt: React.FC<{ text: string }> = ({ text }) => (
+  <>
+    {text.split(/(\[[^\]]*\])/g).map((part, n) =>
+      part.startsWith('[') && part.endsWith(']')
+        ? <span key={n} className="text-amber-700 dark:text-amber-400 font-semibold">{part}</span>
+        : <React.Fragment key={n}>{part}</React.Fragment>,
+    )}
+  </>
+);
+
 /* ── The drill ───────────────────────────────────────────────────────── */
 
+/**
+ * The student answers; nothing is marked as they go.
+ *
+ * Correction is the tutor's, so the run shows no right/wrong and no model
+ * answer — a verdict after each card would also tell the student the answer to
+ * the next one by elimination. At the end the answers are laid out together:
+ * the tutor marks them, and a student practising alone sees only what they
+ * wrote, to go through with the tutor later.
+ */
 const Drill: React.FC<{
   lessonTitle: string;
   items: GrammarExercise[];
+  /** Student's own portal: no model answers, no marking. */
+  studentMode: boolean;
   onClose: () => void;
-}> = ({ lessonTitle, items, onClose }) => {
+}> = ({ lessonTitle, items, studentMode, onClose }) => {
   const [i, setI] = useState(0);
-  const [typed, setTyped] = useState('');
-  const [picked, setPicked] = useState<number | null>(null);
-  const [checked, setChecked] = useState(false);
-  const [right, setRight] = useState(0);
-  const [done, setDone] = useState(false);
+  const [given, setGiven] = useState<Record<number, string | number>>({});
+  const [reviewing, setReviewing] = useState(false);
+  /** The tutor's marks, by question. Nothing is filled in by the app. */
+  const [marks, setMarks] = useState<Record<number, 'right' | 'wrong'>>({});
 
   const q = items[i];
   const isLast = i === items.length - 1;
+  const answered = given[i] !== undefined && String(given[i]).trim() !== '';
 
-  const check = () => {
-    if (checked || !q) return;
-    const ok = q.kind === 'write'
-      ? answerIsRight(typed, q.accept)
-      : picked === q.answer;
-    if (ok) setRight(n => n + 1);
-    setChecked(true);
-  };
+  const marked = Object.values(marks);
+  const rightCount = marked.filter(m => m === 'right').length;
 
-  const next = () => {
-    if (isLast) { setDone(true); return; }
-    setI(n => n + 1);
-    setTyped(''); setPicked(null); setChecked(false);
-  };
-
-  const wasRight = checked && (q?.kind === 'write'
-    ? answerIsRight(typed, q.accept)
-    : picked === q?.answer);
-
-  if (done) {
-    const pct = Math.round((right / items.length) * 100);
+  // ── Review ──────────────────────────────────────────────────────────
+  if (reviewing) {
     return (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
-        <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 p-6 text-center">
-          <p className="text-5xl font-black text-teal-600 dark:text-amber-400 tabular-nums">{right}<span className="text-2xl text-slate-400">/{items.length}</span></p>
-          <p className="mt-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-            {pct === 100 ? 'Every one right.' : pct >= 70 ? 'Solid — look again at the ones you missed.' : 'Worth going back over this lesson’s rules.'}
-          </p>
-          <div className="mt-5 flex gap-2">
-            <button onClick={() => { setI(0); setTyped(''); setPicked(null); setChecked(false); setRight(0); setDone(false); }}
-              className="flex-1 h-11 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200">
+      <div className="fixed inset-0 z-[70] flex items-start sm:items-center justify-center p-0 sm:p-4 bg-black/50 overflow-y-auto" role="dialog" aria-modal="true">
+        <div className="w-full sm:max-w-2xl bg-white dark:bg-gray-800 sm:rounded-2xl border border-slate-200 dark:border-gray-700 flex flex-col min-h-[100dvh] sm:min-h-0 sm:max-h-[90vh]">
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-gray-700">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-wider text-teal-700 dark:text-amber-400 truncate">{lessonTitle}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {studentMode
+                  ? `${items.length} answers — your tutor will go through these with you`
+                  : `Mark each one · ${marked.length} of ${items.length} marked${marked.length ? ` · ${rightCount} right` : ''}`}
+              </p>
+            </div>
+            <button onClick={onClose} aria-label="Close"
+              className="w-11 h-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {items.map((it, n) => {
+              const raw = given[n];
+              const said = it.kind === 'write'
+                ? (typeof raw === 'string' ? raw : '')
+                : (typeof raw === 'number' ? it.options[raw] : '');
+              const mark = marks[n];
+              return (
+                <div key={n} className={`rounded-xl border p-4 ${
+                  mark === 'right' ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/15'
+                  : mark === 'wrong' ? 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/15'
+                  : 'border-slate-200 dark:border-gray-700'}`}>
+                  <p className="text-[11px] font-black text-slate-400 dark:text-slate-500">{n + 1}</p>
+                  <p className="mt-1 text-[15px] font-bold text-slate-800 dark:text-slate-100">
+                    <Prompt text={it.prompt} />
+                  </p>
+                  {it.gloss && it.gloss.length > 0 && (
+                    <p className="mt-1 text-[13px] font-semibold text-amber-700 dark:text-amber-400">
+                      {it.gloss.map(g => `[${g}]`).join(' ')}
+                    </p>
+                  )}
+
+                  <p className="mt-2.5 text-[15px]">
+                    <span className="text-slate-500 dark:text-slate-400">Answered: </span>
+                    {said
+                      ? <span className="font-bold text-slate-800 dark:text-slate-100">{said}</span>
+                      : <span className="italic text-slate-400">left blank</span>}
+                  </p>
+
+                  {!studentMode && (
+                    <>
+                      <p className="mt-1.5 text-[15px]">
+                        <span className="text-slate-500 dark:text-slate-400">Model: </span>
+                        <span className="font-bold text-teal-700 dark:text-amber-400">
+                          {it.kind === 'write' ? it.model[0] : it.options[it.answer]}
+                        </span>
+                      </p>
+                      <p className="mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        <span className="font-bold">{it.point} · </span>{it.why}
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button onClick={() => setMarks(m => ({ ...m, [n]: 'right' }))}
+                          className={`h-10 px-4 rounded-xl text-sm font-bold border ${
+                            mark === 'right' ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>
+                          ✓ Right
+                        </button>
+                        <button onClick={() => setMarks(m => ({ ...m, [n]: 'wrong' }))}
+                          className={`h-10 px-4 rounded-xl text-sm font-bold border ${
+                            mark === 'wrong' ? 'bg-red-600 border-red-600 text-white'
+                              : 'border-slate-300 dark:border-gray-600 text-slate-600 dark:text-slate-300'}`}>
+                          ✗ Wrong
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="px-5 py-4 border-t border-slate-200 dark:border-gray-700 flex gap-2">
+            <button onClick={() => { setI(0); setGiven({}); setMarks({}); setReviewing(false); }}
+              className="flex-1 h-12 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200">
               Again
             </button>
             <button onClick={onClose}
-              className="flex-1 h-11 rounded-xl bg-teal-600 dark:bg-amber-600 text-white text-sm font-bold">
+              className="flex-1 h-12 rounded-xl bg-teal-600 dark:bg-amber-600 text-white text-sm font-bold">
               Done
             </button>
           </div>
@@ -92,6 +172,7 @@ const Drill: React.FC<{
 
   if (!q) return null;
 
+  // ── Answering ───────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[70] flex items-start sm:items-center justify-center p-0 sm:p-4 bg-black/50 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="w-full sm:max-w-lg bg-white dark:bg-gray-800 sm:rounded-2xl border border-slate-200 dark:border-gray-700 flex flex-col min-h-[100dvh] sm:min-h-0">
@@ -99,7 +180,7 @@ const Drill: React.FC<{
         <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-gray-700">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-black uppercase tracking-wider text-teal-700 dark:text-amber-400 truncate">{lessonTitle}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{i + 1} of {items.length} · {right} right</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{i + 1} of {items.length}</p>
           </div>
           <button onClick={onClose} aria-label="Close"
             className="w-11 h-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
@@ -108,67 +189,54 @@ const Drill: React.FC<{
         </div>
 
         <div className="flex-1 px-5 py-5">
-          <span className="inline-block px-2 py-0.5 rounded-full bg-slate-100 dark:bg-gray-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-            {q.point}
-          </span>
-          <p className="mt-3 text-[17px] font-bold leading-relaxed text-slate-800 dark:text-slate-100">{q.prompt}</p>
+          {/* No rule name here on purpose: naming it answers half the question. */}
+          <p className="text-[17px] font-bold leading-relaxed text-slate-800 dark:text-slate-100">
+            <Prompt text={q.prompt} />
+          </p>
+          {q.gloss && q.gloss.length > 0 && (
+            <p className="mt-2 text-[14px] font-semibold text-amber-700 dark:text-amber-400">
+              {q.gloss.map(g => `[${g}]`).join(' ')}
+            </p>
+          )}
 
           {q.kind === 'write' ? (
             <input
-              value={typed}
-              onChange={e => setTyped(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') (checked ? next() : check()); }}
-              disabled={checked}
+              value={typeof given[i] === 'string' ? given[i] as string : ''}
+              onChange={e => setGiven(g => ({ ...g, [i]: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter' && answered) (isLast ? setReviewing(true) : setI(n => n + 1)); }}
               autoFocus
               dir="ltr"
               placeholder="Write it in transliteration…"
-              className="mt-4 w-full h-12 px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-100 disabled:opacity-70"
+              className="mt-4 w-full h-12 px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-100"
             />
           ) : (
             <div className="mt-4 flex flex-col gap-2">
               {q.options.map((opt, n) => {
-                const chosen = picked === n;
-                const correct = checked && n === q.answer;
-                const wrongPick = checked && chosen && n !== q.answer;
+                const chosen = given[i] === n;
                 return (
-                  <button key={n} onClick={() => !checked && setPicked(n)} disabled={checked}
+                  <button key={n} onClick={() => setGiven(g => ({ ...g, [i]: n }))}
                     className={`text-start px-4 py-3 rounded-xl border text-[15px] transition-colors ${
-                      correct ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/25 text-emerald-800 dark:text-emerald-200 font-bold'
-                      : wrongPick ? 'border-red-400 bg-red-50 dark:bg-red-900/25 text-red-800 dark:text-red-200'
-                      : chosen ? 'border-teal-500 bg-teal-50 dark:bg-amber-900/20 text-slate-800 dark:text-slate-100'
-                      : 'border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 hover:border-slate-400'}`}>
+                      chosen ? 'border-teal-500 bg-teal-50 dark:bg-amber-900/20 text-slate-800 dark:text-slate-100 font-bold'
+                             : 'border-slate-200 dark:border-gray-600 text-slate-700 dark:text-slate-200 hover:border-slate-400'}`}>
                     {opt}
                   </button>
                 );
               })}
             </div>
           )}
-
-          {checked && (
-            <div className={`mt-4 p-3 rounded-xl text-sm leading-relaxed ${
-              wasRight ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-900 dark:text-emerald-200'
-                       : 'bg-amber-50 dark:bg-amber-900/25 text-amber-900 dark:text-amber-100'}`}>
-              <span className="font-black">{wasRight ? 'Right. ' : 'Not quite. '}</span>
-              {q.kind === 'write' && !wasRight && (
-                <span className="font-bold">Answer: {q.accept[0]}. </span>
-              )}
-              {q.why}
-            </div>
-          )}
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-200 dark:border-gray-700">
-          {!checked ? (
-            <button onClick={check}
-              disabled={q.kind === 'write' ? !typed.trim() : picked === null}
-              className="w-full h-12 rounded-xl bg-teal-600 dark:bg-amber-600 text-white font-bold disabled:opacity-40">
-              Check
-            </button>
-          ) : (
-            <button onClick={next} className="w-full h-12 rounded-xl bg-slate-800 dark:bg-gray-600 text-white font-bold">
-              {isLast ? 'See the score' : 'Next'}
+        <div className="px-5 py-4 border-t border-slate-200 dark:border-gray-700 flex gap-2">
+          {i > 0 && (
+            <button onClick={() => setI(n => n - 1)}
+              className="h-12 px-5 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200">
+              Back
             </button>
           )}
+          <button onClick={() => (isLast ? setReviewing(true) : setI(n => n + 1))} disabled={!answered}
+            className="flex-1 h-12 rounded-xl bg-teal-600 dark:bg-amber-600 text-white font-bold disabled:opacity-40">
+            {isLast ? 'Finish' : 'Next'}
+          </button>
         </div>
       </div>
     </div>
@@ -180,7 +248,9 @@ const Drill: React.FC<{
 const ArabicGrammarTab: React.FC<{
   /** Already filtered to the student's dialect. */
   lessons: ArabicLesson[];
-}> = ({ lessons }) => {
+  /** The student's own portal — no model answers, no marking. */
+  studentMode?: boolean;
+}> = ({ lessons, studentMode = false }) => {
   const levels = useMemo(
     () => [...new Set(lessons.map(l => l.level ?? 1))].sort((a, b) => a - b),
     [lessons],
@@ -259,7 +329,7 @@ const ArabicGrammarTab: React.FC<{
         <p className="py-16 text-center text-sm text-slate-400">No lessons in this level yet.</p>
       )}
 
-      {drill && <Drill lessonTitle={drill.title} items={drill.items} onClose={() => setDrill(null)} />}
+      {drill && <Drill lessonTitle={drill.title} items={drill.items} studentMode={studentMode} onClose={() => setDrill(null)} />}
     </div>
   );
 };
