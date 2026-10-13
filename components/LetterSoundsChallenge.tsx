@@ -14,6 +14,11 @@
 // The first sound needs a tap. Browsers refuse audio until the page has had a
 // gesture, so there is a start screen rather than a silent first letter the
 // student thinks is broken.
+//
+// The sound can be turned off, which turns the exercise around: the letter is
+// on screen and nobody has said it, so the student reads it out himself. The
+// choice is remembered, because a tutor who works that way works that way
+// every time.
 // ---------------------------------------------------------------------------
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { lettersForSet, letterAudioUrl, speakLetter } from '../services/letterAudioService';
@@ -39,6 +44,28 @@ const C = {
 };
 
 const FORMS: LetterForm[] = ['isolated', 'initial', 'medial', 'final'];
+
+/** Sound off is a way of working, not a per-run accident — so it is remembered. */
+const MUTE_KEY = 'quranful:letterSoundsMuted';
+const readMuted = (): boolean => {
+  try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; }
+};
+
+const Speaker: React.FC<{ size?: number }> = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 9.5v5h3.2L12 18.5v-13L7.2 9.5H4z" />
+    <path d="M16 9.2a4 4 0 0 1 0 5.6" />
+  </svg>
+);
+
+const SpeakerOff: React.FC<{ size?: number }> = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 9.5v5h3.2L12 18.5v-13L7.2 9.5H4z" />
+    <path d="M16.2 9.6l5 4.8M21.2 9.6l-5 4.8" />
+  </svg>
+);
 
 /* ── Setup: shape, then together or by link ──────────────────────────── */
 
@@ -222,8 +249,17 @@ const LetterSoundsChallenge: React.FC<{
   const [started, setStarted] = useState(false);
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState<boolean>(readMuted);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reachedEnd = useRef(false);
+
+  /** Turning it off stops whatever is mid-word; turning it on lets the effect
+   *  below say the letter that is already on screen. */
+  const setMuteTo = useCallback((off: boolean) => {
+    setMuted(off);
+    try { localStorage.setItem(MUTE_KEY, off ? '1' : '0'); } catch { /* private mode */ }
+    if (off) { audioRef.current?.pause(); setPlaying(false); }
+  }, []);
 
   // Alif takes no short vowel, so it is not in this run at all.
   const letters = lettersForSet(vowel);
@@ -241,11 +277,14 @@ const LetterSoundsChallenge: React.FC<{
     audio.play().catch(() => { setPlaying(false); });
   }, [vowel]);
 
-  // Every letter speaks as it arrives — that is the whole exercise.
+  // Every letter speaks as it arrives — that is the whole exercise, unless the
+  // sound is off, in which case the letter arrives in silence and waits to be
+  // read. Listing `muted` here is also what makes turning the sound back on
+  // say the letter already on screen.
   useEffect(() => {
-    if (!started) return;
+    if (!started || muted) return;
     play(letters[i]);
-  }, [started, i, play]);
+  }, [started, i, muted, play]);
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
@@ -265,11 +304,11 @@ const LetterSoundsChallenge: React.FC<{
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') setI(n => Math.min(letters.length - 1, n + 1));
       else if (e.key === 'ArrowLeft') setI(n => Math.max(0, n - 1));
-      else if (e.key === ' ') { e.preventDefault(); play(letters[i]); }
+      else if (e.key === ' ') { e.preventDefault(); if (!muted) play(letters[i]); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [started, i, play]);
+  }, [started, i, muted, play]);
 
   const shell = (inner: React.ReactNode) => (
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: C.ground, color: C.cream,
@@ -289,15 +328,27 @@ const LetterSoundsChallenge: React.FC<{
         <div>
           <h1 className="m-0 text-[22px] sm:text-[26px] font-extrabold" style={{ letterSpacing: '-0.015em' }}>{topicTitle}</h1>
           <p className="m-0 mt-2 text-[15px]" style={{ color: C.muted }}>
-            {letters.length} letters · {FORM_LABEL[form].toLowerCase()} · just listen
+            {letters.length} letters · {FORM_LABEL[form].toLowerCase()} · {muted ? 'no sound' : 'just listen'}
           </p>
         </div>
         <button type="button" onClick={() => setStarted(true)}
           className="inline-flex items-center gap-3 h-[60px] px-8 rounded-full text-[17px] font-extrabold"
           style={{ background: C.gold, color: C.onGold, border: 0 }}>
           <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
-          Start listening
+          {muted ? 'Start' : 'Start listening'}
         </button>
+
+        <button type="button" onClick={() => setMuteTo(!muted)} aria-pressed={muted}
+          className="inline-flex items-center gap-2.5 h-11 px-[18px] -mt-2 rounded-full text-[13.5px] font-bold"
+          style={{
+            background: muted ? C.raised : 'transparent',
+            border: `1px solid ${muted ? C.line : 'transparent'}`,
+            color: muted ? C.cream : C.muted,
+          }}>
+          {muted ? <SpeakerOff size={18} /> : <Speaker size={18} />}
+          {muted ? 'Sound off — he reads it himself' : 'Turn the sound off'}
+        </button>
+
         <button type="button" onClick={onExit} className="text-sm font-bold" style={{ background: 'none', border: 0, color: C.muted }}>
           Leave
         </button>
@@ -336,6 +387,19 @@ const LetterSoundsChallenge: React.FC<{
         <span className="text-[13.5px] font-bold tabular-nums" style={{ color: C.muted }}>
           {i + 1} of {letters.length}
         </span>
+
+        <button type="button" onClick={() => setMuteTo(!muted)} aria-pressed={muted}
+          aria-label={muted ? 'Turn the sound on' : 'Turn the sound off'}
+          className="inline-flex items-center gap-2 h-[34px] px-3 rounded-full text-[13px] font-bold"
+          style={{
+            background: muted ? C.gold : C.raised,
+            border: `1px solid ${muted ? C.gold : C.line}`,
+            color: muted ? C.onGold : C.body,
+          }}>
+          {muted ? <SpeakerOff size={17} /> : <Speaker size={17} />}
+          {muted ? 'Sound off' : 'Sound on'}
+        </button>
+
         <button type="button" onClick={onExit} aria-label="Leave"
           className="inline-flex items-center justify-center w-11 h-11 rounded-[11px]"
           style={{ background: 'transparent', border: 0, color: C.muted }}>
@@ -346,8 +410,8 @@ const LetterSoundsChallenge: React.FC<{
       </div>
     </div>
 
-    {/* the letter */}
-    <div className="flex-grow flex flex-col items-center justify-center gap-8 px-5 pt-8 pb-6 text-center">
+    {/* the letter — the whole middle, nothing under it */}
+    <div className="flex-grow flex items-center justify-center px-5 py-5 text-center">
       <div className="relative flex items-center justify-center w-full">
         <span aria-hidden="true" style={{
           position: 'absolute', width: 'min(520px, 76vw)', height: 'min(520px, 76vw)', borderRadius: '50%',
@@ -355,37 +419,41 @@ const LetterSoundsChallenge: React.FC<{
           opacity: playing ? 1 : 0, transition: 'opacity 240ms ease',
         }} />
         <span lang="ar" dir="rtl" aria-live="polite"
-          style={{ position: 'relative', fontFamily: ARABIC, fontSize: 'clamp(160px, 44vw, 360px)', lineHeight: 1.12, color: C.cream }}>
+          style={{ position: 'relative', fontFamily: ARABIC, fontSize: 'clamp(150px, min(50vw, 44vh), 380px)', lineHeight: 1.12, color: C.cream }}>
           {glyphFor(letter, form, vowel)}
         </span>
       </div>
-
-      <button type="button" onClick={() => play(letter)}
-        className="inline-flex items-center gap-3 h-[60px] px-[30px] rounded-full text-[17px] font-extrabold"
-        style={{ background: C.gold, color: C.onGold, border: 0 }}>
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 9.5v5h3.2L12 18.5v-13L7.2 9.5H4z" />
-          <path d="M16 9.2a4 4 0 0 1 0 5.6" />
-        </svg>
-        Listen again
-      </button>
     </div>
 
     {/* moving through the alphabet */}
     <div className="flex-shrink-0 px-5 pb-7">
-      <div className="flex items-center justify-center gap-4 max-w-[760px] mx-auto">
+      <div className="flex items-center justify-center gap-3 sm:gap-4 max-w-[760px] mx-auto">
         <button type="button" onClick={() => setI(n => Math.max(0, n - 1))} disabled={atStart}
           aria-label="Previous letter"
-          className="inline-flex items-center justify-center gap-2.5 h-16 flex-1 min-w-0 px-5 rounded-[18px] text-base font-bold disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-2 sm:gap-2.5 h-16 flex-1 min-w-0 px-3 sm:px-5 rounded-[18px] text-base font-bold disabled:opacity-40"
           style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.cream }}>
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14.5 5.5L8 12l6.5 6.5" />
           </svg>
           Back
         </button>
+        {/* Sound on: say it again. Sound off: the same seat turns the sound
+            back on, and the effect above says the letter on screen. */}
+        <button type="button" onClick={() => (muted ? setMuteTo(false) : play(letter))}
+          aria-label={muted ? 'Turn the sound on and hear this letter' : 'Listen again'}
+          title={muted ? 'Turn the sound on' : 'Listen again'}
+          className="flex-shrink-0 inline-flex items-center justify-center w-16 h-16 rounded-full"
+          style={{
+            background: muted ? C.panel : C.gold,
+            border: `1px solid ${muted ? C.line : C.gold}`,
+            color: muted ? C.muted : C.onGold,
+          }}>
+          {muted ? <SpeakerOff size={24} /> : <Speaker size={24} />}
+        </button>
+
         <button type="button" onClick={() => setI(n => Math.min(letters.length - 1, n + 1))} disabled={atEnd}
           aria-label="Next letter"
-          className="inline-flex items-center justify-center gap-2.5 h-16 flex-1 min-w-0 px-5 rounded-[18px] text-base font-extrabold disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-2 sm:gap-2.5 h-16 flex-1 min-w-0 px-3 sm:px-5 rounded-[18px] text-base font-extrabold disabled:opacity-40"
           style={{ background: C.raised, border: 0, color: C.cream }}>
           Next
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
