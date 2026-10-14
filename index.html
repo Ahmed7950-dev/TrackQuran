@@ -1055,6 +1055,199 @@
          `--m-screen` is the one thing that does not change: a video frame is
          black in every mode, because it is a screen.
       ── ────────────────────────────────────────────────────────────────── */
+      /* ── Letters Hunter ───────────────────────────────────────────────
+         The hunt paints from these, never from fixed hexes, so it takes the
+         site's mode like the rest of the app. Light is the base set; the
+         three others override it. Right and wrong keep their meaning in
+         every mode and are told apart by LIGHTNESS as well as hue — a tutor
+         marking quickly reads the shade before the colour. The `paper`
+         slots are the drawing board, which stays paper in every mode. */
+      .hunter-skin {
+        --h-ground: #F4F6F9;
+        --h-panel: #FFFFFF;
+        --h-raised: #EDF1F6;
+        --h-line: #D7DFE9;
+        --h-faint: #E3E9F1;
+        --h-rule: #E1E8F0;
+        --h-edge: #C3CEDC;
+        --h-sunken: #E9EEF4;
+        --h-pill: #EDF1F6;
+        --h-pill-now: #FFF1EA;
+        --h-cream: #16202E;
+        --h-body: #44505F;
+        --h-muted: #5C6875;
+        --h-dim: #6B7682;
+        --h-off: #8A95A2;
+        --h-coral: #B8431C;
+        --h-on-coral: #FFFFFF;
+        --h-coral-glow: rgba(184,67,28,0.16);
+        --h-knob: #FFFFFF;
+        --h-mint: #15704A;
+        --h-mint-bg: #E2F2E9;
+        --h-mint-ink: #0C3A24;
+        --h-mint-line: #A8D4BD;
+        --h-mint-dim: #EAF5EF;
+        --h-rose: #AE2238;
+        --h-rose-bg: #FBE5E9;
+        --h-rose-ink: #681524;
+        --h-rose-soft: #8E2033;
+        --h-better: #8F4710;
+        --h-better-bg: #FAEEE1;
+        --h-better-ink: #60300A;
+        --h-better-soft: #7A3D0D;
+        --h-bad-ink: #A12D25;
+        --h-ghost: #E7ECF3;
+        --h-veil: rgba(255,255,255,0.86);
+        --h-scrim: rgba(16,24,34,0.55);
+        --h-scrim-strong: rgba(16,24,34,0.72);
+        --h-paper: #FFFFFF;
+        --h-paper-raised: #FFFFFF;
+        --h-paper-edge: #D8DFE7;
+        --h-paper-ink: #16202E;
+        --h-paper-tool: #EDF1F6;
+        --h-paper-dim: #5C6875;
+        --h-paper-line: #E6EBF1;
+      }
+      .dark .hunter-skin {
+        --h-ground: #0B1220;
+        --h-panel: #141E31;
+        --h-raised: #1D2A42;
+        --h-line: #2A3A56;
+        --h-faint: #22304A;
+        --h-rule: #1C2840;
+        --h-edge: #3A4A68;
+        --h-sunken: #0F1828;
+        --h-pill: #111B2C;
+        --h-pill-now: #1A2538;
+        --h-cream: #F4F0E6;
+        --h-body: #AEBCD2;
+        --h-muted: #7D8CA6;
+        --h-dim: #6F7E98;
+        --h-off: #55637C;
+        --h-coral: #FF7A4D;
+        --h-on-coral: #1A0C06;
+        --h-coral-glow: rgba(255,122,77,0.18);
+        --h-knob: #FFF6F1;
+        --h-mint: #3FD39B;
+        --h-mint-bg: #16342A;
+        --h-mint-ink: #E8FFF5;
+        --h-mint-line: #2E6B53;
+        --h-mint-dim: #12261F;
+        --h-rose: #E0556B;
+        --h-rose-bg: #3A1520;
+        --h-rose-ink: #FFE9ED;
+        --h-rose-soft: #FF9AAA;
+        --h-better: #D4642F;
+        --h-better-bg: #2E1B10;
+        --h-better-ink: #FFD9C2;
+        --h-better-soft: #FFBE96;
+        --h-bad-ink: #F0B5AE;
+        --h-ghost: #121C2E;
+        --h-veil: rgba(20,30,49,0.86);
+        --h-scrim: rgba(4,8,16,0.78);
+        --h-scrim-strong: rgba(4,8,16,0.90);
+        --h-paper: #FBFAF6;
+        --h-paper-raised: #FFFFFF;
+        --h-paper-edge: #E3DED1;
+        --h-paper-ink: #1B2436;
+        --h-paper-tool: #F2EFE7;
+        --h-paper-dim: #5A5648;
+        --h-paper-line: #E8E2D4;
+      }
+      html.dark[data-theme="amber"] .hunter-skin {
+        --h-ground: #0C0A07;
+        --h-panel: #16120C;
+        --h-raised: #221B11;
+        --h-line: #3A2E1C;
+        --h-faint: #2B2215;
+        --h-rule: #241C10;
+        --h-edge: #4A3A22;
+        --h-sunken: #120E08;
+        --h-pill: #140F09;
+        --h-pill-now: #231A0E;
+        --h-cream: #F7EFE0;
+        --h-body: #D3C2A4;
+        --h-muted: #9C8A69;
+        --h-dim: #8C7B5D;
+        --h-off: #6B5C42;
+        --h-coral: #E8A33D;
+        --h-on-coral: #1A1203;
+        --h-coral-glow: rgba(232,163,61,0.20);
+        --h-knob: #FFF6E6;
+        --h-mint: #58C98F;
+        --h-mint-bg: #102A1C;
+        --h-mint-ink: #E6FBEF;
+        --h-mint-line: #2C6246;
+        --h-mint-dim: #0E2015;
+        --h-rose: #E26A74;
+        --h-rose-bg: #2E1115;
+        --h-rose-ink: #FFE8EA;
+        --h-rose-soft: #F09AA1;
+        --h-better: #D98B2B;
+        --h-better-bg: #2A1C09;
+        --h-better-ink: #FFE6C2;
+        --h-better-soft: #F3C183;
+        --h-bad-ink: #F2B3AC;
+        --h-ghost: #17120B;
+        --h-veil: rgba(22,18,12,0.88);
+        --h-scrim: rgba(8,6,3,0.80);
+        --h-scrim-strong: rgba(8,6,3,0.92);
+        --h-paper: #FBFAF6;
+        --h-paper-raised: #FFFFFF;
+        --h-paper-edge: #E3DED1;
+        --h-paper-ink: #1B2436;
+        --h-paper-tool: #F2EFE7;
+        --h-paper-dim: #5A5648;
+        --h-paper-line: #E8E2D4;
+      }
+      [data-theme="reading"] .hunter-skin {
+        /* a shade deeper than the site's reading ground, so the drawing board
+           reads as a sheet of paper lying ON something */
+        --h-ground: #f2eee3;
+        --h-panel: #f5f1e8;
+        --h-raised: #ede7d9;
+        --h-line: #ded5c4;
+        --h-faint: #e8e0d3;
+        --h-rule: #e4dbca;
+        --h-edge: #cabfa9;
+        --h-sunken: #efe9dc;
+        --h-pill: #f1ece0;
+        --h-pill-now: #f7ece0;
+        --h-cream: #3d3528;
+        --h-body: #5a5142;
+        --h-muted: #6b6050;
+        --h-dim: #786c59;
+        --h-off: #9a8d77;
+        --h-coral: #A0451A;
+        --h-on-coral: #fefcf8;
+        --h-coral-glow: rgba(160,69,26,0.15);
+        --h-knob: #fffaf2;
+        --h-mint: #27643F;
+        --h-mint-bg: #E7F0E9;
+        --h-mint-ink: #1A4529;
+        --h-mint-line: #AEC9B6;
+        --h-mint-dim: #EDF3EC;
+        --h-rose: #9C2E3C;
+        --h-rose-bg: #F6E5E4;
+        --h-rose-ink: #661C27;
+        --h-rose-soft: #8A2735;
+        --h-better: #8a5a14;
+        --h-better-bg: #f5ecda;
+        --h-better-ink: #5e3d0c;
+        --h-better-soft: #78500f;
+        --h-bad-ink: #8a3a2c;
+        --h-ghost: #efe9db;
+        --h-veil: rgba(245,241,232,0.9);
+        --h-scrim: rgba(61,53,40,0.55);
+        --h-scrim-strong: rgba(61,53,40,0.75);
+        --h-paper: #fffdf8;
+        --h-paper-raised: #fffdf8;
+        --h-paper-edge: #ddd3c0;
+        --h-paper-ink: #3d3528;
+        --h-paper-tool: #f1ebdd;
+        --h-paper-dim: #6b6050;
+        --h-paper-line: #e9e1d1;
+      }
       .media-booth {
         --m-ground: #F1F4F7;
         --m-thumb-dim: 0.88;

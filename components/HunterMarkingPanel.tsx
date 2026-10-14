@@ -18,7 +18,7 @@ import {
 
 const VERDICTS: { id: HunterVerdict; label: string; bg: string; bd: string; ink: string }[] = [
   { id: 'right',  label: 'Correct',       bg: C.mintBg,  bd: C.mint,   ink: C.mintInk },
-  { id: 'better', label: 'Can be better', bg: '#2E1B10', bd: '#D4642F', ink: '#FFD9C2' },
+  { id: 'better', label: 'Can be better', bg: 'var(--h-better-bg)', bd: 'var(--h-better)', ink: 'var(--h-better-ink)' },
   { id: 'wrong',  label: 'Wrong',         bg: C.roseBg,  bd: C.rose,   ink: C.roseInk },
 ];
 
@@ -57,10 +57,10 @@ const HunterMarkingPanel: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col"
+    <div className="hunter-skin fixed inset-0 z-[80] flex flex-col"
       style={{ background: C.ground, color: C.cream, fontFamily: "'Nunito', system-ui, sans-serif" }}>
 
-      <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid #1C2840` }}>
+      <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid var(--h-rule)` }}>
         <div className="min-w-0">
           <p className="m-0 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.coral }}>Homework · letters hunter</p>
           <p className="m-0 mt-1 text-[18px] font-extrabold">
@@ -71,7 +71,7 @@ const HunterMarkingPanel: React.FC<{
         <span className="flex-grow" />
         {hw.autoTotal != null && (
           <span className="h-9 px-3.5 rounded-full text-[12.5px] font-bold flex items-center"
-            style={{ background: '#12261F', border: `1px solid #2E6B53`, color: C.mint }}>
+            style={{ background: 'var(--h-mint-dim)', border: `1px solid var(--h-mint-line)`, color: C.mint }}>
             The listening rounds marked themselves · {hw.autoRight}/{hw.autoTotal}
           </span>
         )}
@@ -128,13 +128,13 @@ const HunterMarkingPanel: React.FC<{
             {drawings.map((d, i) => (
               <button key={i} type="button" onClick={() => setAt(i)}
                 className="relative rounded-[14px] overflow-hidden text-left"
-                style={{ background: '#FBFAF6', border: `${i === at ? 2 : 1}px solid ${i === at ? C.coral : C.line}`, height: 104 }}>
+                style={{ background: 'var(--h-paper)', border: `${i === at ? 2 : 1}px solid ${i === at ? C.coral : C.line}`, height: 104 }}>
                 <HunterBoard roomId={null} me="tutor" isHost={false} round={0} readOnly
                   initial={[...(d.strokes ?? []), ...(d.tutorStrokes ?? [])]} className="h-full p-1" />
-                <span className="absolute top-1.5 left-2 text-[12px]" style={{ fontFamily: 'ui-monospace, monospace', color: '#7A7466' }}>{i + 1}</span>
+                <span className="absolute top-1.5 left-2 text-[12px]" style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--h-paper-dim)' }}>{i + 1}</span>
                 {d.verdict && (
                   <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
-                    style={{ background: d.verdict === 'right' ? '#1F9D62' : d.verdict === 'better' ? '#D4642F' : '#C1374B', color: '#fff' }}>
+                    style={{ background: d.verdict === 'right' ? 'var(--h-mint)' : d.verdict === 'better' ? 'var(--h-better)' : 'var(--h-rose)', color: '#fff' }}>
                     {d.verdict === 'wrong' ? <Cross size={11} /> : <Tick size={11} />}
                   </span>
                 )}
@@ -147,7 +147,7 @@ const HunterMarkingPanel: React.FC<{
               {busy ? 'Sending…' : 'Send him the mark'}
             </button>
             {!allMarked && <p className="m-0 text-[11.5px] text-center" style={{ color: C.dim }}>Mark all of them first</p>}
-            {err && <p role="alert" className="m-0 text-[12px] text-center" style={{ color: '#F0B5AE' }}>{err}</p>}
+            {err && <p role="alert" className="m-0 text-[12px] text-center" style={{ color: 'var(--h-bad-ink)' }}>{err}</p>}
           </div>
         </div>
       )}

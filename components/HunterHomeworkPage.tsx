@@ -22,6 +22,8 @@ import {
   type HunterHomework, type HunterDrawing,
 } from '../services/lettersHunterHomeworkService';
 
+/** Every screen here is wrapped in `hunter-skin`, which is where the palette
+ *  lives — the hunt follows the site's mode. */
 const shellStyle: React.CSSProperties = {
   position: 'fixed', inset: 0, background: C.ground, color: C.cream,
   fontFamily: "'Nunito', system-ui, sans-serif", display: 'flex', flexDirection: 'column',
@@ -30,7 +32,7 @@ const shellStyle: React.CSSProperties = {
 
 const VERDICT_LOOK = {
   right:  { bg: C.mintBg, bd: C.mint, ink: C.mintInk, label: 'Right' },
-  better: { bg: '#2E1B10', bd: '#D4642F', ink: '#FFD9C2', label: 'Can be better' },
+  better: { bg: 'var(--h-better-bg)', bd: 'var(--h-better)', ink: 'var(--h-better-ink)', label: 'Can be better' },
   wrong:  { bg: C.roseBg, bd: C.rose, ink: C.roseInk, label: 'Not right' },
 };
 
@@ -130,13 +132,13 @@ const HunterHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) =>
   };
 
   if (loading) return (
-    <div style={shellStyle} className="items-center justify-center">
+    <div className="hunter-skin items-center justify-center" style={shellStyle}>
       <span className="w-9 h-9 rounded-full animate-spin" style={{ border: `3px solid ${C.faint}`, borderTopColor: C.coral }} />
     </div>
   );
 
   if (!hw) return (
-    <div style={shellStyle} className="items-center justify-center px-8 text-center">
+    <div className="hunter-skin items-center justify-center px-8 text-center" style={shellStyle}>
       <p className="m-0 text-[19px] font-extrabold">This homework is not here</p>
       <p className="m-0 mt-2 text-sm" style={{ color: C.muted }}>The link may be old. Ask your teacher for a new one.</p>
     </div>
@@ -147,7 +149,7 @@ const HunterHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) =>
     const mark = hunterMark(hw);
     const drawn = hw.drawings ?? [];
     return (
-      <div style={shellStyle}>
+      <div className="hunter-skin" style={shellStyle}>
         <div className="flex-grow overflow-y-auto px-5 py-8 flex flex-col items-center">
           <p className="m-0 text-[12px] font-extrabold uppercase" style={{ letterSpacing: '0.16em', color: C.coral }}>Letters hunter</p>
           <h1 className="m-0 mt-3 text-[28px] font-extrabold text-center" style={{ letterSpacing: '-0.02em' }}>
@@ -194,21 +196,21 @@ const HunterHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) =>
 
   /* ── doing it ── */
   if (!sub) return (
-    <div style={shellStyle} className="items-center justify-center px-8 text-center">
+    <div className="hunter-skin items-center justify-center px-8 text-center" style={shellStyle}>
       <p className="m-0 text-[17px] font-bold">Nothing was set in this one</p>
     </div>
   );
 
   return (
-    <div style={shellStyle}>
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3" style={{ borderBottom: `1px solid #1C2840` }}>
+    <div className="hunter-skin" style={shellStyle}>
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3" style={{ borderBottom: `1px solid var(--h-rule)` }}>
         <span className="text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.coral }}>Letters hunter</span>
         <span className="flex-grow flex gap-1.5">
           {order.map((id, i) => (
             <span key={id} className="flex-1 h-[30px] rounded-[9px] flex items-center justify-center gap-1.5 text-[11.5px] font-bold px-1"
               style={{
-                background: i < at ? '#12261F' : i === at ? '#1A2538' : '#111B2C',
-                border: `1px solid ${i < at ? '#2E6B53' : i === at ? C.coral : C.faint}`,
+                background: i < at ? 'var(--h-mint-dim)' : i === at ? 'var(--h-pill-now)' : 'var(--h-pill)',
+                border: `1px solid ${i < at ? 'var(--h-mint-line)' : i === at ? C.coral : C.faint}`,
                 color: i < at ? C.mint : i === at ? C.cream : C.dim,
               }}>
               {i < at ? <Tick size={12} /> : <span style={{ fontFamily: 'ui-monospace, monospace' }}>{subMeta(id).n}</span>}

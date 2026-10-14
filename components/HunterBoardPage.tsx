@@ -18,24 +18,24 @@ const HunterBoardPage: React.FC<{ roomId: string }> = ({ roomId }) => {
   })();
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#0B1220', color: '#F4F0E6',
+    <div className="hunter-skin" style={{
+      position: 'fixed', inset: 0, background: 'var(--h-ground)', color: 'var(--h-cream)',
       fontFamily: "'Nunito', system-ui, sans-serif", display: 'flex', flexDirection: 'column',
       paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid #1C2840' }}>
-        <span className="text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: '#FF7A4D' }}>Letters hunter</span>
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--h-rule)' }}>
+        <span className="text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: 'var(--h-coral)' }}>Letters hunter</span>
         <span className="text-[14px] font-bold">Write what you hear</span>
         <span className="flex-grow" />
         <span className="h-8 px-3 rounded-full text-[12px] font-bold flex items-center"
-          style={{ background: '#141E31', border: '1px solid #2A3A56', color: '#AEBCD2' }}>
+          style={{ background: 'var(--h-panel)', border: '1px solid var(--h-line)', color: 'var(--h-body)' }}>
           {ownerLabel[me]}
         </span>
       </div>
 
       <HunterBoard roomId={roomId} me={me} isHost={false} round={0} className="flex-grow px-3 py-3 min-h-0" />
 
-      <p className="m-0 px-4 pb-4 pt-1 text-center text-[12.5px]" style={{ color: '#6F7E98' }}>
+      <p className="m-0 px-4 pb-4 pt-1 text-center text-[12.5px]" style={{ color: 'var(--h-dim)' }}>
         {me === 'student'
           ? 'Listen on the big screen, then write the letter here.'
           : 'Your ink is the teacher’s — your eraser clears his as well.'}

@@ -37,23 +37,23 @@ export const ARABIC = "'Hafs', 'Amiri', serif";
 /** The hunt's own palette: ink ground, cream letters, one coral for the quarry.
  *  Deliberately not the Letter Sounds green or the Media amber. */
 export const C = {
-  ground:  '#0B1220',
-  panel:   '#141E31',
-  raised:  '#1D2A42',
-  line:    '#2A3A56',
-  faint:   '#22304A',
-  cream:   '#F4F0E6',
-  body:    '#AEBCD2',
-  muted:   '#7D8CA6',
-  dim:     '#6F7E98',
-  coral:   '#FF7A4D',
-  onCoral: '#1A0C06',
-  mintBg:  '#16342A',
-  mint:    '#3FD39B',
-  mintInk: '#E8FFF5',
-  roseBg:  '#3A1520',
-  rose:    '#E0556B',
-  roseInk: '#FFE9ED',
+  ground:  'var(--h-ground)',
+  panel:   'var(--h-panel)',
+  raised:  'var(--h-raised)',
+  line:    'var(--h-line)',
+  faint:   'var(--h-faint)',
+  cream:   'var(--h-cream)',
+  body:    'var(--h-body)',
+  muted:   'var(--h-muted)',
+  dim:     'var(--h-dim)',
+  coral:   'var(--h-coral)',
+  onCoral: 'var(--h-on-coral)',
+  mintBg:  'var(--h-mint-bg)',
+  mint:    'var(--h-mint)',
+  mintInk: 'var(--h-mint-ink)',
+  roseBg:  'var(--h-rose-bg)',
+  rose:    'var(--h-rose)',
+  roseInk: 'var(--h-rose-ink)',
 };
 
 export const Speaker: React.FC<{ size?: number }> = ({ size = 22 }) => (
@@ -140,8 +140,8 @@ export const LettersHunterSetup: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start sm:items-center justify-center overflow-y-auto p-0 sm:p-6"
-      style={{ background: 'rgba(4,8,16,0.78)' }} role="dialog" aria-modal="true" aria-label="Letters hunter">
+    <div className="hunter-skin fixed inset-0 z-[70] flex items-start sm:items-center justify-center overflow-y-auto p-0 sm:p-6"
+      style={{ background: 'var(--h-scrim)' }} role="dialog" aria-modal="true" aria-label="Letters hunter">
       <div className="w-full sm:max-w-[760px] sm:rounded-[22px] overflow-hidden flex flex-col"
         style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.cream, minHeight: '100dvh', maxHeight: '100dvh', fontFamily: "'Nunito', system-ui, sans-serif" }}>
 
@@ -176,7 +176,7 @@ export const LettersHunterSetup: React.FC<{
             return (
               <div key={s.id} className="flex items-center gap-3.5 px-4 py-3.5 rounded-[14px]"
                 style={{
-                  background: s.ready ? (on ? '#1A2538' : '#10192A') : '#0F1828',
+                  background: s.ready ? (on ? 'var(--h-pill-now)' : 'var(--h-sunken)') : 'var(--h-sunken)',
                   border: `1px ${s.ready ? 'solid' : 'dashed'} ${on ? C.coral : C.faint}`,
                   opacity: s.ready ? 1 : 0.65,
                 }}>
@@ -195,13 +195,13 @@ export const LettersHunterSetup: React.FC<{
                   <span className="flex-shrink-0 flex items-center gap-2">
                     <button type="button" onClick={() => bump(s.id, -1)} disabled={!on || plan[s.id].rounds <= MIN_ROUNDS}
                       aria-label={`Fewer ${s.unit}`} className="w-8 h-8 rounded-[9px] text-[17px] disabled:opacity-40"
-                      style={{ background: '#0F1828', border: `1px solid ${C.line}`, color: C.body }}>−</button>
+                      style={{ background: 'var(--h-sunken)', border: `1px solid ${C.line}`, color: C.body }}>−</button>
                     <span className="w-[26px] text-center text-[16px]" style={{ fontFamily: 'ui-monospace, monospace', color: on ? C.cream : C.dim }}>
                       {plan[s.id].rounds}
                     </span>
                     <button type="button" onClick={() => bump(s.id, 1)} disabled={!on || plan[s.id].rounds >= MAX_ROUNDS}
                       aria-label={`More ${s.unit}`} className="w-8 h-8 rounded-[9px] text-[17px] disabled:opacity-40"
-                      style={{ background: '#0F1828', border: `1px solid ${C.line}`, color: C.body }}>+</button>
+                      style={{ background: 'var(--h-sunken)', border: `1px solid ${C.line}`, color: C.body }}>+</button>
                   </span>
                 )}
 
@@ -209,9 +209,9 @@ export const LettersHunterSetup: React.FC<{
                   <button type="button" role="switch" aria-checked={on} aria-label={s.name}
                     onClick={() => set(s.id, { on: !on })}
                     className="flex-shrink-0 relative w-[46px] h-[27px] rounded-full"
-                    style={{ background: on ? C.coral : '#0F1828', border: on ? 0 : `1px solid ${C.line}`, padding: 0 }}>
+                    style={{ background: on ? C.coral : 'var(--h-sunken)', border: on ? 0 : `1px solid ${C.line}`, padding: 0 }}>
                     <span className="absolute top-[3px] w-[21px] h-[21px] rounded-full"
-                      style={{ left: on ? 22 : 3, background: on ? '#FFF6F1' : C.dim, transition: 'left 140ms ease' }} />
+                      style={{ left: on ? 22 : 3, background: on ? 'var(--h-knob)' : C.dim, transition: 'left 140ms ease' }} />
                   </button>
                 )}
               </div>
@@ -227,7 +227,7 @@ export const LettersHunterSetup: React.FC<{
           </p>
 
           {link ? (
-            <div className="p-[18px] rounded-[14px]" style={{ background: '#10192A', border: `1px solid ${C.coral}` }}>
+            <div className="p-[18px] rounded-[14px]" style={{ background: 'var(--h-sunken)', border: `1px solid ${C.coral}` }}>
               <p className="m-0 mb-2 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.coral }}>Set · his link</p>
               <p className="m-0 break-all text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.body }}>{link}</p>
               <div className="flex gap-2.5 mt-3">
@@ -241,7 +241,7 @@ export const LettersHunterSetup: React.FC<{
               </p>
             </div>
           ) : setting ? (
-            <div className="p-[18px] rounded-[14px]" style={{ background: '#10192A', border: `1px solid ${C.line}` }}>
+            <div className="p-[18px] rounded-[14px]" style={{ background: 'var(--h-sunken)', border: `1px solid ${C.line}` }}>
               <p className="m-0 mb-3 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>When is it due</p>
               <div className="flex flex-wrap gap-2">
                 {([['3', 'In 3 days'], ['7', 'In a week'], ['date', 'Pick a day'], ['open', 'No deadline']] as const).map(([k, label]) => (
@@ -255,7 +255,7 @@ export const LettersHunterSetup: React.FC<{
               {due === 'date' && (
                 <input type="date" value={onDate} onChange={e => setOnDate(e.target.value)} aria-label="The day it is due"
                   className="mt-3 h-11 px-3 rounded-[11px] text-sm w-full"
-                  style={{ background: '#0B1220', border: `1px solid ${C.line}`, color: C.cream }} />
+                  style={{ background: 'var(--h-ground)', border: `1px solid ${C.line}`, color: C.cream }} />
               )}
               <p className="m-0 mt-3.5 text-[12.5px] leading-relaxed" style={{ color: C.dim }}>
                 {goingHome.length
@@ -280,14 +280,14 @@ export const LettersHunterSetup: React.FC<{
               </button>
               <button type="button" onClick={() => setSetting(true)} disabled={chosen.length === 0}
                 className="flex-1 h-14 rounded-[15px] text-base font-bold flex items-center justify-center gap-2.5 disabled:opacity-50"
-                style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
+                style={{ background: C.raised, border: `1px solid var(--h-edge)`, color: C.cream }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v14l-7-4-7 4V6a2 2 0 0 1 2-2z" /></svg>
                 Set as homework
               </button>
             </div>
           )}
 
-          {err && <p role="alert" className="m-0 mt-3 text-[13.5px]" style={{ color: '#F0B5AE' }}>{err}</p>}
+          {err && <p role="alert" className="m-0 mt-3 text-[13.5px]" style={{ color: 'var(--h-bad-ink)' }}>{err}</p>}
         </div>
       </div>
     </div>
@@ -318,14 +318,14 @@ const Trail: React.FC<{
 
   const colourOf = (i: number, j: number): string => {
     const paint = (r?: RoundResult) =>
-      r === 'right' ? C.mint : r === 'better' ? '#D4642F' : r === 'wrong' ? C.rose : null;
+      r === 'right' ? C.mint : r === 'better' ? 'var(--h-better)' : r === 'wrong' ? C.rose : null;
     if (i < at) return paint(scores.find(s => s.id === order[i].id)?.results[j]) ?? C.faint;
     if (i > at) return C.faint;
     return paint(live?.done[j]) ?? (j === (live?.pos ?? 0) ? C.coral : C.faint);
   };
 
   return (
-    <div className="flex-shrink-0 px-4 sm:px-5 pt-3 pb-2.5" style={{ borderBottom: `1px solid #1C2840` }}>
+    <div className="flex-shrink-0 px-4 sm:px-5 pt-3 pb-2.5" style={{ borderBottom: `1px solid var(--h-rule)` }}>
       <div className="flex items-baseline gap-3">
         <span className="text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.coral }}>
           {String(now?.n ?? 0).padStart(2, '0')}
@@ -356,7 +356,7 @@ const Trail: React.FC<{
       <div className="flex gap-2.5 mt-1.5 text-[11px] font-bold">
         {order.map((s, i) => (
           <span key={s.id} className="truncate"
-            style={{ flex: `${plan[s.id].rounds} 1 0`, color: i < at ? C.mint : i === at ? C.cream : '#55637C' }}>
+            style={{ flex: `${plan[s.id].rounds} 1 0`, color: i < at ? C.mint : i === at ? C.cream : 'var(--h-off)' }}>
             {s.name.split(' ')[0]}
           </span>
         ))}
@@ -478,7 +478,7 @@ export const RowRound: React.FC<{
 
       <button type="button" onClick={() => row && play(row.target.letter, cellAudioSet(row.target))}
         className="mt-5 h-[72px] px-8 rounded-[20px] text-[17px] font-extrabold flex items-center gap-3.5"
-        style={{ background: C.coral, color: C.onCoral, border: 0, boxShadow: playing ? `0 0 0 6px rgba(255,122,77,0.18)` : 'none', transition: 'box-shadow 200ms ease' }}>
+        style={{ background: C.coral, color: C.onCoral, border: 0, boxShadow: playing ? `0 0 0 6px var(--h-coral-glow)` : 'none', transition: 'box-shadow 200ms ease' }}>
         <Speaker size={25} /> Play it again
       </button>
 
@@ -528,7 +528,7 @@ export const RowRound: React.FC<{
     <div className="flex-shrink-0 flex items-center justify-end gap-4 px-5 sm:px-8 py-5">
       <button type="button" onClick={advance}
         className="h-[52px] px-7 rounded-[15px] text-[15px] font-bold flex items-center gap-2.5"
-        style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
+        style={{ background: C.raised, border: `1px solid var(--h-edge)`, color: C.cream }}>
         {round + 1 < rounds ? 'Next round' : lastLabel}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5" /></svg>
       </button>
@@ -734,7 +734,7 @@ const WriteRound: React.FC<{
       </button>
       <span className="flex-grow" />
       <span className="h-9 px-3.5 rounded-full text-[12.5px] font-bold flex items-center gap-2"
-        style={{ background: peers ? '#12261F' : C.panel, border: `1px solid ${peers ? '#2E6B53' : C.line}`, color: peers ? C.mint : C.muted }}>
+        style={{ background: peers ? 'var(--h-mint-dim)' : C.panel, border: `1px solid ${peers ? 'var(--h-mint-line)' : C.line}`, color: peers ? C.mint : C.muted }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="8.5" r="2.4" /><path d="M16 14.2a4.6 4.6 0 0 1 4.6 4.8" />
         </svg>
@@ -750,9 +750,9 @@ const WriteRound: React.FC<{
       <div className="flex-shrink-0 w-[200px] flex flex-col gap-2.5 min-h-0">
         <button type="button" onClick={() => setBigQr(true)}
           className="p-3 rounded-[16px] flex flex-col items-center gap-2"
-          style={{ background: '#FFFFFF', border: `1px solid ${C.line}` }} aria-label="Make the code bigger">
+          style={{ background: 'var(--h-paper-raised)', border: `1px solid ${C.line}` }} aria-label="Make the code bigger">
           <QRCodeSVG value={link} size={152} level="M" />
-          <span className="text-[12px] font-bold" style={{ color: '#1B2436' }}>Scan to draw</span>
+          <span className="text-[12px] font-bold" style={{ color: 'var(--h-paper-ink)' }}>Scan to draw</span>
         </button>
 
         <button type="button" onClick={() => void copy()}
@@ -776,7 +776,7 @@ const WriteRound: React.FC<{
           style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>Correct</button>
         <button type="button" onClick={() => judge('better')}
           className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
-          style={{ background: '#2E1B10', border: `1px solid #D4642F`, color: '#FFD9C2' }}>Can be better</button>
+          style={{ background: 'var(--h-better-bg)', border: `1px solid var(--h-better)`, color: 'var(--h-better-ink)' }}>Can be better</button>
         <button type="button" onClick={() => judge('wrong')}
           className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
           style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>Wrong</button>
@@ -785,8 +785,8 @@ const WriteRound: React.FC<{
 
     {bigQr && (
       <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-5 p-6"
-        style={{ background: 'rgba(4,8,16,0.9)' }} onClick={() => setBigQr(false)} role="dialog" aria-label="The code, bigger">
-        <div className="p-6 rounded-[22px]" style={{ background: '#FFFFFF' }}>
+        style={{ background: 'var(--h-scrim-strong)' }} onClick={() => setBigQr(false)} role="dialog" aria-label="The code, bigger">
+        <div className="p-6 rounded-[22px]" style={{ background: 'var(--h-paper-raised)' }}>
           <QRCodeSVG value={link} size={Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 120, 420)} level="M" />
         </div>
         <p className="m-0 text-[15px] font-bold" style={{ color: C.cream }}>Scan it with the phone or tablet</p>
@@ -862,7 +862,10 @@ const LettersHunterRun: React.FC<{
   }, [phase, sub, isRow, isWrite, items, letters, rounds]);
 
   const shell = (inner: React.ReactNode) => (
-    <div style={{
+    // `hunter-skin` is where the palette comes from: the whole hunt paints
+    // through CSS variables, so it follows the site's mode instead of being
+    // its own fixed dark.
+    <div className="hunter-skin" style={{
       position: 'fixed', inset: 0, zIndex: 80, background: C.ground, color: C.cream,
       fontFamily: "'Nunito', system-ui, sans-serif", display: 'flex', flexDirection: 'column',
       paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)',
@@ -912,7 +915,7 @@ const LettersHunterRun: React.FC<{
     const pct = result.total ? result.right / result.total : 0;
     const worst = [...result.scores].sort((a, b) =>
       (a.rounds ? a.right / a.rounds : 1) - (b.rounds ? b.right / b.rounds : 1))[0];
-    const blockOf = (r: RoundResult) => (r === 'right' ? C.mint : r === 'better' ? '#D4642F' : C.rose);
+    const blockOf = (r: RoundResult) => (r === 'right' ? C.mint : r === 'better' ? 'var(--h-better)' : C.rose);
 
     return shell(
       <div className="flex-grow overflow-y-auto relative" style={{ overflowX: 'hidden' }}>
@@ -920,7 +923,7 @@ const LettersHunterRun: React.FC<{
         <span lang="ar" dir="rtl" aria-hidden="true"
           style={{
             position: 'absolute', right: -30, top: -70, fontFamily: ARABIC,
-            fontSize: 'clamp(240px, 42vw, 520px)', lineHeight: 1, color: '#121C2E', userSelect: 'none', pointerEvents: 'none',
+            fontSize: 'clamp(240px, 42vw, 520px)', lineHeight: 1, color: 'var(--h-ghost)', userSelect: 'none', pointerEvents: 'none',
           }}>
           {letters.join(' ')}
         </span>
@@ -929,7 +932,7 @@ const LettersHunterRun: React.FC<{
           <div className="min-w-0">
             <p className="m-0 text-[12px] font-extrabold uppercase" style={{ letterSpacing: '0.18em', color: C.coral }}>The hunt is over</p>
             <h1 className="m-0 mt-3 font-black" style={{ fontSize: 'clamp(40px, 7vw, 54px)', letterSpacing: '-0.035em', lineHeight: 1 }}>
-              {result.right}<span style={{ color: '#55637C', fontWeight: 700 }}> / {result.total}</span>
+              {result.right}<span style={{ color: 'var(--h-off)', fontWeight: 700 }}> / {result.total}</span>
             </h1>
             <p className="m-0 mt-3.5 text-[16px] leading-relaxed max-w-[440px]" style={{ color: C.body }}>
               {pct === 1
@@ -943,7 +946,7 @@ const LettersHunterRun: React.FC<{
           <span className="flex-grow" />
 
           <div className="flex-shrink-0 w-full sm:w-[330px] p-5 rounded-[18px]"
-            style={{ background: 'rgba(20,30,49,0.86)', border: `1px solid ${C.faint}` }}>
+            style={{ background: 'var(--h-veil)', border: `1px solid ${C.faint}` }}>
             <p className="m-0 mb-3 text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>Every round</p>
             <div className="flex flex-wrap gap-[5px]">
               {every.map((r, i) => (
@@ -952,8 +955,8 @@ const LettersHunterRun: React.FC<{
             </div>
             <div className="flex gap-4 mt-3.5 text-[11.5px] font-bold flex-wrap">
               <span className="flex items-center gap-1.5" style={{ color: C.mint }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.mint }} />right</span>
-              {result.better > 0 && <span className="flex items-center gap-1.5" style={{ color: '#FFBE96' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#D4642F' }} />can be better</span>}
-              <span className="flex items-center gap-1.5" style={{ color: '#FF9AAA' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.rose }} />wrong</span>
+              {result.better > 0 && <span className="flex items-center gap-1.5" style={{ color: 'var(--h-better-soft)' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--h-better)' }} />can be better</span>}
+              <span className="flex items-center gap-1.5" style={{ color: 'var(--h-rose-soft)' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.rose }} />wrong</span>
             </div>
           </div>
         </div>
@@ -964,7 +967,7 @@ const LettersHunterRun: React.FC<{
             const s = result.scores.find(x => x.id === meta.id);
             return (
               <div key={meta.id} className="flex items-center gap-3 sm:gap-5" style={{ opacity: s ? 1 : 0.45 }}>
-                <span className="flex-shrink-0 w-6 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: '#55637C' }}>
+                <span className="flex-shrink-0 w-6 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--h-off)' }}>
                   {String(meta.n).padStart(2, '0')}
                 </span>
                 <span className="flex-shrink-0 w-[120px] sm:w-[200px] truncate text-[14px] sm:text-[15px] font-bold"
@@ -979,7 +982,7 @@ const LettersHunterRun: React.FC<{
                   <span className="flex-grow" style={{ height: 1, background: C.faint }} />
                 )}
                 <span className="flex-shrink-0 w-[88px] text-right text-[14px] sm:text-[15px] whitespace-nowrap"
-                  style={{ fontFamily: 'ui-monospace, monospace', color: s ? C.cream : '#55637C' }}>
+                  style={{ fontFamily: 'ui-monospace, monospace', color: s ? C.cream : 'var(--h-off)' }}>
                   {s ? `${s.right}/${s.rounds}` : 'not played'}
                 </span>
               </div>
@@ -993,7 +996,7 @@ const LettersHunterRun: React.FC<{
           <button type="button"
             onClick={() => { setScores([]); setAt(0); setRound(r => r + 1); setItems(null); setLive(null); betterRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
             className="h-14 px-7 rounded-[15px] text-[15px] font-bold"
-            style={{ background: 'transparent', border: `1px solid #3A4A68`, color: C.cream }}>Hunt them again</button>
+            style={{ background: 'transparent', border: `1px solid var(--h-edge)`, color: C.cream }}>Hunt them again</button>
           <button type="button" onClick={() => onFinish(result)}
             className="h-14 px-9 rounded-[15px] text-base font-extrabold"
             style={{ background: C.coral, color: C.onCoral, border: 0 }}>Done</button>

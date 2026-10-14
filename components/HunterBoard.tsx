@@ -40,7 +40,7 @@ interface Props {
   className?: string;
 }
 
-const PAPER = '#FBFAF6';
+const PAPER = 'var(--h-paper)';
 
 const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onStrokes, onPeers, readOnly, className }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -266,9 +266,9 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
   return (
     <div className={`flex flex-col ${className ?? ''}`} style={{ minHeight: 0 }}>
       <div ref={wrapRef} className="flex-grow flex items-center justify-center min-h-0" style={{ touchAction: 'none' }}>
-        <div className="relative rounded-[18px] overflow-hidden" style={{ width: size.w || undefined, height: size.h || undefined, background: PAPER, border: '1px solid #E3DED1' }}>
+        <div className="relative rounded-[18px] overflow-hidden" style={{ width: size.w || undefined, height: size.h || undefined, background: PAPER, border: '1px solid var(--h-paper-edge)' }}>
           {/* a line to sit the letter on */}
-          <span aria-hidden="true" style={{ position: 'absolute', left: '7%', right: '7%', top: '62%', height: 1, background: '#E8E2D4' }} />
+          <span aria-hidden="true" style={{ position: 'absolute', left: '7%', right: '7%', top: '62%', height: 1, background: 'var(--h-paper-line)' }} />
           <canvas ref={studentRef} className="absolute inset-0" style={{ touchAction: 'none' }} />
           <canvas ref={tutorRef} className="absolute inset-0" style={{ touchAction: 'none' }}
             onPointerDown={readOnly ? undefined : down} onPointerMove={readOnly ? undefined : move}
@@ -278,42 +278,42 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
       </div>
 
       {!readOnly && <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-2.5 pt-3">
-        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: '#FFFFFF', border: '1px solid #E3DED1' }}>
+        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
           <button type="button" onClick={() => setTool('pen')} aria-label="Pen" aria-pressed={tool === 'pen'}
             className="w-11 h-11 rounded-xl flex items-center justify-center"
-            style={{ background: tool === 'pen' ? '#1B2436' : '#F2EFE7', border: tool === 'pen' ? 0 : '1px solid #E3DED1', color: tool === 'pen' ? PAPER : '#5A5648' }}>
+            style={{ background: tool === 'pen' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'pen' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'pen' ? PAPER : 'var(--h-paper-dim)' }}>
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20l4-1 10-10a2.4 2.4 0 0 0-3.4-3.4L4.6 15.6z" /></svg>
           </button>
           <button type="button" onClick={() => setTool('eraser')} aria-label="Eraser" aria-pressed={tool === 'eraser'}
             className="w-11 h-11 rounded-xl flex items-center justify-center"
-            style={{ background: tool === 'eraser' ? '#1B2436' : '#F2EFE7', border: tool === 'eraser' ? 0 : '1px solid #E3DED1', color: tool === 'eraser' ? PAPER : '#5A5648' }}>
+            style={{ background: tool === 'eraser' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'eraser' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'eraser' ? PAPER : 'var(--h-paper-dim)' }}>
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 19l-4-4 9-9 4 4-9 9z" /><path d="M8 19h10" /></svg>
           </button>
         </span>
 
         {tool === 'pen' && (
-          <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: '#FFFFFF', border: '1px solid #E3DED1' }}>
+          <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
             {PENS.map(p => (
               <button key={p.hex} type="button" onClick={() => setColour(p.hex)} aria-label={p.name} aria-pressed={colour === p.hex}
                 className="w-9 h-9 rounded-full"
-                style={{ background: p.hex, border: colour === p.hex ? '3px solid #1B2436' : '1px solid rgba(0,0,0,0.12)', boxShadow: colour === p.hex ? `inset 0 0 0 2px ${PAPER}` : 'none' }} />
+                style={{ background: p.hex, border: colour === p.hex ? '3px solid var(--h-paper-ink)' : '1px solid rgba(0,0,0,0.12)', boxShadow: colour === p.hex ? `inset 0 0 0 2px ${PAPER}` : 'none' }} />
             ))}
           </span>
         )}
 
-        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: '#FFFFFF', border: '1px solid #E3DED1' }}>
+        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
           {nibs.map((n, i) => (
             <button key={n} type="button" onClick={() => setNib(i)} aria-label={['Thin', 'Medium', 'Thick'][i]} aria-pressed={nib === i}
               className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: nib === i ? '#1B2436' : '#F2EFE7', border: nib === i ? 0 : '1px solid #E3DED1' }}>
-              <span style={{ width: 6 + i * 6, height: 6 + i * 6, borderRadius: '50%', background: nib === i ? PAPER : '#1B2436' }} />
+              style={{ background: nib === i ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: nib === i ? 0 : '1px solid var(--h-paper-edge)' }}>
+              <span style={{ width: 6 + i * 6, height: 6 + i * 6, borderRadius: '50%', background: nib === i ? PAPER : 'var(--h-paper-ink)' }} />
             </button>
           ))}
         </span>
 
         <button type="button" onClick={wipeMine}
           className="h-11 px-4 rounded-[13px] text-[13.5px] font-bold"
-          style={{ background: '#F2EFE7', border: '1px solid #E3DED1', color: '#5A5648' }}>
+          style={{ background: 'var(--h-paper-tool)', border: '1px solid var(--h-paper-edge)', color: 'var(--h-paper-dim)' }}>
           Clear mine
         </button>
       </div>}
