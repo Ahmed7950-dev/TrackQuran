@@ -64,6 +64,7 @@ import GunTunePage from './components/GunTunePage';
 import ZombieTunePage from './components/ZombieTunePage';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
+import HunterBoardPage from './components/HunterBoardPage';
 import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
@@ -493,6 +494,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (craneRoomId) return <CraneBuilderJoinPage roomId={craneRoomId} />;
+
+  // ── Letters Hunter board — a phone or tablet joins the lesson's board ─────
+  const hunterBoardId = (() => {
+    const m = window.location.pathname.match(/^\/board\/([a-z0-9-]{8,40})$/i);
+    return m ? m[1] : null;
+  })();
+  if (hunterBoardId) return <HunterBoardPage roomId={hunterBoardId} />;
 
   // ── Arabic vocabulary homework — the link the tutor sends, no auth ─────────
   const vocabHomeworkId = (() => {

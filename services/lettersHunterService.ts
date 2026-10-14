@@ -50,7 +50,7 @@ export const SUBS: SubMeta[] = [
   { id: 'spot',      n: 1, name: 'Spot the letter you hear', blurb: 'Ten cells, he calls out the numbers', defaultRounds: 5,  unit: 'rounds',    asHomework: true,  ready: true },
   { id: 'sounds',    n: 2, name: 'Sound discrimination',     blurb: 'The letter carrying a vowel',          defaultRounds: 5,  unit: 'rounds',    asHomework: true,  ready: true },
   { id: 'say',       n: 3, name: 'Say the letter',           blurb: 'He reads it, you mark it',             defaultRounds: 10, unit: 'letters',   asHomework: false, ready: true },
-  { id: 'write',     n: 4, name: 'Write',                    blurb: 'A board you both draw on',             defaultRounds: 5,  unit: 'letters',   asHomework: true,  ready: false },
+  { id: 'write',     n: 4, name: 'Write',                    blurb: 'A board you both draw on',             defaultRounds: 5,  unit: 'letters',   asHomework: true,  ready: true },
   { id: 'syllables', n: 5, name: 'Syllables',                blurb: 'Both letters in one breath',           defaultRounds: 10, unit: 'syllables', asHomework: false, ready: true },
   { id: 'words',     n: 6, name: "Qur'anic words",           blurb: 'Real words carrying the letters',      defaultRounds: 10, unit: 'words',     asHomework: false, ready: true },
   { id: 'ayat',      n: 7, name: 'Ayat',                     blurb: 'A verse to read them in',              defaultRounds: 5,  unit: 'verses',    asHomework: false, ready: true },
@@ -231,11 +231,16 @@ export interface HunterResult {
   scores: SubScore[];
   right: number;
   total: number;
+  /** Drawings that were neither right nor wrong — the shape is there, the hand
+   *  is not steady yet. They do not score, but losing them would throw away
+   *  the most useful thing the tutor said. */
+  better: number;
 }
 
-export const tally = (letters: string[], scores: SubScore[]): HunterResult => ({
+export const tally = (letters: string[], scores: SubScore[], better = 0): HunterResult => ({
   letters,
   scores,
+  better,
   right: scores.reduce((n, s) => n + s.right, 0),
   total: scores.reduce((n, s) => n + s.rounds, 0),
 });
@@ -245,7 +250,11 @@ export const logTitle = (letters: string[]): string =>
   `${letters.length} letters hunted — ${letters.join(' ')}`;
 
 export const logDetail = (r: HunterResult): string =>
-  [`${r.right}/${r.total} rounds right`, ...r.scores.map(s => `${subMeta(s.id).name} ${s.right}/${s.rounds}`)].join(' · ');
+  [
+    `${r.right}/${r.total} rounds right`,
+    ...r.scores.map(s => `${subMeta(s.id).name} ${s.right}/${s.rounds}`),
+    ...(r.better ? [`${r.better} drawing${r.better === 1 ? '' : 's'} could be better`] : []),
+  ].join(' · ');
 
 /* ── Rounds 3 and 5: what to put on the screen ───────────────────────────── */
 

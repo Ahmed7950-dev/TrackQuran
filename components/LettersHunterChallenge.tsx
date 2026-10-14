@@ -25,6 +25,9 @@ import {
   type HunterPlan, type SubId, type SubScore, type HunterRow, type HunterResult, type ShowItem,
 } from '../services/lettersHunterService';
 import { segmentWord } from '../services/tajweedColorService';
+import { QRCodeSVG } from 'qrcode.react';
+import HunterBoard from './HunterBoard';
+import { boardUrl, newRoomId, type Stroke } from '../services/hunterBoardService';
 
 const ARABIC = "'Hafs', 'Amiri', serif";
 
@@ -370,6 +373,98 @@ const Key: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     style={{ background: C.ground, border: `1px solid ${C.line}` }}>{children}</span>
 );
 
+/* ── Round 4: write it on the board ──────────────────────────────────────── */
+
+/** What the tutor decides about each drawing. 'better' is its own answer, not
+ *  a soft no: the letter is there but the hand is not steady yet. */
+export type Verdict = 'right' | 'better' | 'wrong';
+
+const WriteRound: React.FC<{
+  letters: string[];
+  rounds: number;
+  roomId: string;
+  play: (letter: string, set: 'plain') => void;
+  onDone: (right: number, better: number) => void;
+}> = ({ letters, rounds, roomId, play, onDone }) => {
+  const [pos, setPos] = useState(0);
+  const [verdicts, setVerdicts] = useState<Verdict[]>([]);
+  const [peers, setPeers] = useState(0);
+  const [bigQr, setBigQr] = useState(false);
+
+  /** The letters to write, settled up front so Back shows the same one. */
+  const [queue] = useState<string[]>(() =>
+    Array.from({ length: rounds }, () => letters[Math.floor(Math.random() * letters.length)]));
+
+  const letter = queue[pos];
+
+  useEffect(() => { const t = window.setTimeout(() => play(letter, 'plain'), 350); return () => window.clearTimeout(t); }, [letter, play]);
+
+  const judge = (v: Verdict) => {
+    const next = [...verdicts];
+    next[pos] = v;
+    setVerdicts(next);
+    if (pos + 1 < rounds) setPos(p => p + 1);
+    else onDone(next.filter(x => x === 'right').length, next.filter(x => x === 'better').length);
+  };
+
+  const link = boardUrl(roomId, 'student');
+
+  return (<>
+    <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-5 py-2.5">
+      <span className="text-[15px] font-extrabold">Write it</span>
+      <span className="text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>letter {pos + 1} / {rounds}</span>
+      <button type="button" onClick={() => play(letter, 'plain')}
+        className="h-10 px-4 rounded-xl text-[14px] font-extrabold flex items-center gap-2.5"
+        style={{ background: C.coral, color: C.onCoral, border: 0 }}>
+        <Speaker size={17} /> Play the letter
+      </button>
+      <span className="flex-grow" />
+      <span className="h-9 px-3.5 rounded-full text-[12.5px] font-bold flex items-center gap-2"
+        style={{ background: peers ? '#12261F' : C.panel, border: `1px solid ${peers ? '#2E6B53' : C.line}`, color: peers ? C.mint : C.muted }}>
+        {peers ? `${peers} joined` : 'nobody has scanned yet'}
+      </span>
+    </div>
+
+    <div className="flex-grow flex gap-4 px-5 pb-3 min-h-0">
+      <HunterBoard roomId={roomId} me="tutor" isHost round={pos} onPeers={setPeers} className="flex-grow min-w-0" />
+
+      <div className="flex-shrink-0 w-[172px] flex flex-col gap-3">
+        <button type="button" onClick={() => setBigQr(true)}
+          className="p-3 rounded-[16px] flex flex-col items-center gap-2"
+          style={{ background: '#FFFFFF', border: `1px solid ${C.line}` }} aria-label="Make the code bigger">
+          <QRCodeSVG value={link} size={140} level="M" />
+          <span className="text-[12px] font-bold" style={{ color: '#1B2436' }}>Scan to draw</span>
+          <span className="text-[11px]" style={{ color: '#7A7466' }}>tap to enlarge</span>
+        </button>
+        <p className="m-0 text-[12px] leading-relaxed" style={{ color: C.dim }}>
+          Your eraser clears his ink and yours. His only clears his own.
+        </p>
+        <span className="flex-grow" />
+        <button type="button" onClick={() => judge('right')}
+          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>Correct</button>
+        <button type="button" onClick={() => judge('better')}
+          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          style={{ background: '#2E1B10', border: `1px solid #D4642F`, color: '#FFD9C2' }}>Can be better</button>
+        <button type="button" onClick={() => judge('wrong')}
+          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>Wrong</button>
+      </div>
+    </div>
+
+    {bigQr && (
+      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-5 p-6"
+        style={{ background: 'rgba(4,8,16,0.9)' }} onClick={() => setBigQr(false)} role="dialog" aria-label="The code, bigger">
+        <div className="p-6 rounded-[22px]" style={{ background: '#FFFFFF' }}>
+          <QRCodeSVG value={link} size={Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 120, 420)} level="M" />
+        </div>
+        <p className="m-0 text-[15px] font-bold" style={{ color: C.cream }}>Scan it with the phone or tablet</p>
+        <p className="m-0 text-[13px]" style={{ color: C.muted }}>Tap anywhere to put it back</p>
+      </div>
+    )}
+  </>);
+};
+
 /* ── The run ─────────────────────────────────────────────────────────────── */
 
 type Phase = 'intro' | 'play' | 'done';
@@ -395,12 +490,16 @@ const LettersHunterRun: React.FC<{
   const roundRightRef = useRef(0);
 
   const [items, setItems] = useState<ShowItem[] | null>(null);
+  /** One room for the run, so a phone that scanned once stays on the board. */
+  const [roomId] = useState(newRoomId);
+  const betterRef = useRef(0);
 
   const sub = order[at];
   const withVowels = sub?.id === 'sounds';
   const rounds = sub ? plan[sub.id].rounds : 0;
   /** Rounds 1 and 2 are a row of ten; the rest show one thing at a time. */
   const isRow = sub?.id === 'spot' || sub?.id === 'sounds';
+  const isWrite = sub?.id === 'write';
 
   /** Bank a finished challenge and move to the next one, or to the mark.
    *  Once per challenge, whatever calls it: a second call for the same one is
@@ -421,7 +520,7 @@ const LettersHunterRun: React.FC<{
   /** What a show-and-mark round will put on the screen, built once when the
    *  challenge opens. The two Qur'an rounds read their file first. */
   useEffect(() => {
-    if (phase !== 'play' || !sub || isRow || items) return;
+    if (phase !== 'play' || !sub || isRow || isWrite || items) return;
     let alive = true;
     if (sub.id === 'say' || sub.id === 'syllables') {
       const make = sub.id === 'say' ? buildSayItem : buildSyllable;
@@ -431,7 +530,7 @@ const LettersHunterRun: React.FC<{
     (sub.id === 'words' ? loadWords() : loadVerses())
       .then(pool => { if (alive) setItems(pickItems(pool, letters, rounds)); });
     return () => { alive = false; };
-  }, [phase, sub, isRow, items, letters, rounds]);
+  }, [phase, sub, isRow, isWrite, items, letters, rounds]);
 
   /* sound */
   const play = useCallback((cellLetter: string, set: ReturnType<typeof cellAudioSet>) => {
@@ -549,7 +648,7 @@ const LettersHunterRun: React.FC<{
 
   /* ── the mark ── */
   if (phase === 'done') {
-    const result = tally(letters, scores);
+    const result = tally(letters, scores, betterRef.current);
     const pct = result.total ? result.right / result.total : 0;
     const ring = pct >= 0.8 ? C.mint : pct >= 0.5 ? C.coral : C.rose;
     return shell(
@@ -580,6 +679,11 @@ const LettersHunterRun: React.FC<{
                 <span className="w-[52px] text-right text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.cream }}>
                   {s.right} / {s.rounds}
                 </span>
+                {s.id === 'write' && result.better > 0 && (
+                  <span className="text-[12px] font-bold whitespace-nowrap" style={{ color: '#D4642F' }}>
+                    +{result.better} could be better
+                  </span>
+                )}
               </div>
             );
           })}
@@ -595,6 +699,15 @@ const LettersHunterRun: React.FC<{
         </div>
       </div>,
     );
+  }
+
+  /* ── he writes it, the tutor marks ── */
+  if (isWrite) {
+    return shell(<>
+      <Rail order={order} at={at} onExit={onExit} />
+      <WriteRound letters={letters} rounds={rounds} roomId={roomId} play={play}
+        onDone={(right, better) => { betterRef.current += better; bank('write', right, rounds); }} />
+    </>);
   }
 
   /* ── he reads, the tutor marks ── */
