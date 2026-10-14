@@ -35,6 +35,10 @@ interface Props {
   onStrokes?: (strokes: Stroke[]) => void;
   /** Hide the tools — a drawing being looked at rather than made. */
   readOnly?: boolean;
+  /** Float the pen tray ON the paper instead of giving it a row of its own.
+   *  Worth a whole row of height on a lesson screen; on a phone the tray is
+   *  wider than the paper, so there it stays below. */
+  toolsInside?: boolean;
   /** Host only: how many devices are drawing. */
   onPeers?: (n: number) => void;
   className?: string;
@@ -42,7 +46,7 @@ interface Props {
 
 const PAPER = 'var(--h-paper)';
 
-const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onStrokes, onPeers, readOnly, className }) => {
+const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onStrokes, onPeers, readOnly, toolsInside, className }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tutorRef = useRef<HTMLCanvasElement>(null);
   const studentRef = useRef<HTMLCanvasElement>(null);
@@ -263,6 +267,72 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
 
   const nibs = tool === 'eraser' ? ERASER_NIBS : NIBS;
 
+  /**
+   * The pen tray, in two sizes.
+   *
+   * `compact` is the copy that floats on the paper: no panel behind each group
+   * (the tray itself is the panel) and smaller controls, so it stays ONE strip.
+   * Wrapped onto a second row it covers the bottom third of the board.
+   */
+  const tools = (compact: boolean) => {
+    const pad = compact ? '' : 'px-2.5 py-2 rounded-[14px]';
+    const groupStyle = compact ? undefined
+      : { background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' };
+    const btn = compact ? 'w-9 h-9' : 'w-11 h-11';
+    const dot = compact ? 26 : 30;
+    const nibSize = compact ? 30 : 40;
+    const rule = <span style={{ width: 1, height: compact ? 22 : 32, background: 'var(--h-paper-edge)' }} />;
+    return (<>
+      <span className={`flex items-center gap-2 ${pad}`} style={groupStyle}>
+        <button type="button" onClick={() => setTool('pen')} aria-label="Pen" aria-pressed={tool === 'pen'}
+          className={`${btn} rounded-xl flex items-center justify-center`}
+          style={{ background: tool === 'pen' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'pen' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'pen' ? 'var(--h-paper)' : 'var(--h-paper-dim)' }}>
+          <svg width={compact ? 17 : 19} height={compact ? 17 : 19} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20l4-1 10-10a2.4 2.4 0 0 0-3.4-3.4L4.6 15.6z" /></svg>
+        </button>
+        <button type="button" onClick={() => setTool('eraser')} aria-label="Eraser" aria-pressed={tool === 'eraser'}
+          className={`${btn} rounded-xl flex items-center justify-center`}
+          style={{ background: tool === 'eraser' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'eraser' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'eraser' ? 'var(--h-paper)' : 'var(--h-paper-dim)' }}>
+          <svg width={compact ? 17 : 19} height={compact ? 17 : 19} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 19l-4-4 9-9 4 4-9 9z" /><path d="M8 19h10" /></svg>
+        </button>
+      </span>
+
+      {compact && rule}
+
+      {tool === 'pen' && (
+        <span className={`flex items-center gap-2 ${pad}`} style={groupStyle}>
+          {PENS.map(p => (
+            <button key={p.hex} type="button" onClick={() => setColour(p.hex)} aria-label={p.name} aria-pressed={colour === p.hex}
+              className="rounded-full" style={{
+                width: dot, height: dot, background: p.hex,
+                border: colour === p.hex ? '3px solid var(--h-paper-ink)' : '1px solid rgba(0,0,0,0.12)',
+                boxShadow: colour === p.hex ? 'inset 0 0 0 2px var(--h-paper)' : 'none',
+              }} />
+          ))}
+        </span>
+      )}
+
+      {compact && rule}
+
+      <span className={`flex items-center gap-2 ${pad}`} style={groupStyle}>
+        {nibs.map((n, i) => (
+          <button key={n} type="button" onClick={() => setNib(i)} aria-label={['Thin', 'Medium', 'Thick'][i]} aria-pressed={nib === i}
+            className="rounded-full flex items-center justify-center"
+            style={{ width: nib === i ? nibSize + 2 : nibSize, height: nib === i ? nibSize + 2 : nibSize, background: nib === i ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: nib === i ? 0 : '1px solid var(--h-paper-edge)' }}>
+            <span style={{ width: 6 + i * (compact ? 5 : 6), height: 6 + i * (compact ? 5 : 6), borderRadius: '50%', background: nib === i ? 'var(--h-paper)' : 'var(--h-paper-ink)' }} />
+          </button>
+        ))}
+      </span>
+
+      {compact && rule}
+
+      <button type="button" onClick={wipeMine}
+        className={`${compact ? 'h-8 px-3 text-[12.5px]' : 'h-11 px-4 text-[13.5px]'} rounded-[11px] font-bold whitespace-nowrap`}
+        style={{ background: 'var(--h-paper-tool)', border: '1px solid var(--h-paper-edge)', color: 'var(--h-paper-dim)' }}>
+        Clear mine
+      </button>
+    </>);
+  };
+
   return (
     <div className={`flex flex-col ${className ?? ''}`} style={{ minHeight: 0 }}>
       <div ref={wrapRef} className="flex-grow flex items-center justify-center min-h-0" style={{ touchAction: 'none' }}>
@@ -274,49 +344,23 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
             onPointerDown={readOnly ? undefined : down} onPointerMove={readOnly ? undefined : move}
             onPointerUp={readOnly ? undefined : up} onPointerCancel={readOnly ? undefined : up}
             onPointerLeave={readOnly ? undefined : up} />
+          {/* On a lesson screen the tray floats on the paper: given a row of
+              its own it costs the board a band of height, and the board is the
+              whole point of this round. One strip, never wrapping. */}
+          {!readOnly && toolsInside && (
+            <div className="absolute left-1/2 bottom-3 flex items-center gap-2 px-2.5 py-1.5 rounded-[14px]"
+              style={{ transform: 'translateX(-50%)', background: 'var(--h-tray)', border: '1px solid var(--h-paper-edge)' }}>
+              {tools(true)}
+            </div>
+          )}
         </div>
       </div>
 
-      {!readOnly && <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-2.5 pt-3">
-        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
-          <button type="button" onClick={() => setTool('pen')} aria-label="Pen" aria-pressed={tool === 'pen'}
-            className="w-11 h-11 rounded-xl flex items-center justify-center"
-            style={{ background: tool === 'pen' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'pen' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'pen' ? PAPER : 'var(--h-paper-dim)' }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20l4-1 10-10a2.4 2.4 0 0 0-3.4-3.4L4.6 15.6z" /></svg>
-          </button>
-          <button type="button" onClick={() => setTool('eraser')} aria-label="Eraser" aria-pressed={tool === 'eraser'}
-            className="w-11 h-11 rounded-xl flex items-center justify-center"
-            style={{ background: tool === 'eraser' ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: tool === 'eraser' ? 0 : '1px solid var(--h-paper-edge)', color: tool === 'eraser' ? PAPER : 'var(--h-paper-dim)' }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 19l-4-4 9-9 4 4-9 9z" /><path d="M8 19h10" /></svg>
-          </button>
-        </span>
-
-        {tool === 'pen' && (
-          <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
-            {PENS.map(p => (
-              <button key={p.hex} type="button" onClick={() => setColour(p.hex)} aria-label={p.name} aria-pressed={colour === p.hex}
-                className="w-9 h-9 rounded-full"
-                style={{ background: p.hex, border: colour === p.hex ? '3px solid var(--h-paper-ink)' : '1px solid rgba(0,0,0,0.12)', boxShadow: colour === p.hex ? `inset 0 0 0 2px ${PAPER}` : 'none' }} />
-            ))}
-          </span>
-        )}
-
-        <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: 'var(--h-paper-raised)', border: '1px solid var(--h-paper-edge)' }}>
-          {nibs.map((n, i) => (
-            <button key={n} type="button" onClick={() => setNib(i)} aria-label={['Thin', 'Medium', 'Thick'][i]} aria-pressed={nib === i}
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: nib === i ? 'var(--h-paper-ink)' : 'var(--h-paper-tool)', border: nib === i ? 0 : '1px solid var(--h-paper-edge)' }}>
-              <span style={{ width: 6 + i * 6, height: 6 + i * 6, borderRadius: '50%', background: nib === i ? PAPER : 'var(--h-paper-ink)' }} />
-            </button>
-          ))}
-        </span>
-
-        <button type="button" onClick={wipeMine}
-          className="h-11 px-4 rounded-[13px] text-[13.5px] font-bold"
-          style={{ background: 'var(--h-paper-tool)', border: '1px solid var(--h-paper-edge)', color: 'var(--h-paper-dim)' }}>
-          Clear mine
-        </button>
-      </div>}
+      {!readOnly && !toolsInside && (
+        <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-2.5 pt-3">
+          {tools(false)}
+        </div>
+      )}
     </div>
   );
 };

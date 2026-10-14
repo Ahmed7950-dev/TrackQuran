@@ -788,61 +788,86 @@ const WriteRound: React.FC<{
     catch { /* the code is on screen anyway */ }
   };
 
+  const VERDICTS: { id: Verdict; label: string; bg: string; bd: string; ink: string }[] = [
+    { id: 'right',  label: 'Correct',       bg: C.mintBg, bd: C.mint,  ink: C.mintInk },
+    { id: 'better', label: 'Can be better', bg: 'var(--h-better-bg)', bd: 'var(--h-better)', ink: 'var(--h-better-ink)' },
+    { id: 'wrong',  label: 'Wrong',         bg: C.roseBg, bd: C.rose,  ink: C.roseInk },
+  ];
+
   return (<>
-    <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-5 py-2.5">
-      <button type="button" onClick={() => play(letter, 'plain')}
-        className="h-10 px-4 rounded-xl text-[14px] font-extrabold flex items-center gap-2.5"
-        style={{ background: C.coral, color: C.onCoral, border: 0 }}>
-        <Speaker size={17} /> Play the letter
-      </button>
-      <span className="flex-grow" />
-      <span className="h-9 px-3.5 rounded-full text-[12.5px] font-bold flex items-center gap-2"
-        style={{ background: peers ? 'var(--h-mint-dim)' : C.panel, border: `1px solid ${peers ? 'var(--h-mint-line)' : C.line}`, color: peers ? C.mint : C.muted }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="8.5" r="2.4" /><path d="M16 14.2a4.6 4.6 0 0 1 4.6 4.8" />
-        </svg>
-        {peers} joined
-      </span>
-    </div>
+    {/* ONE rail, not a rail plus rows. With a single column beside it the 4:3
+        board becomes height-bound and fills the screen top to bottom; the pen
+        tray floats on the paper rather than taking a row of its own. */}
+    <div className="flex-grow flex gap-4 px-4 pb-4 pt-3 min-h-0">
 
-    {/* The board takes the room; the code and the verdicts sit in the margin
-        the 4:3 paper leaves behind, which is otherwise dead space. */}
-    <div className="flex-grow flex gap-4 px-5 pb-3 min-h-0">
-      <HunterBoard roomId={roomId} me="tutor" isHost round={pos} onPeers={setPeers} className="flex-grow min-w-0" />
+      <div className="flex-grow min-w-0 flex">
+        <HunterBoard roomId={roomId} me="tutor" isHost round={pos} onPeers={setPeers} toolsInside
+          className="flex-grow min-w-0" />
+      </div>
 
-      <div className="flex-shrink-0 w-[200px] flex flex-col gap-2.5 min-h-0">
-        <button type="button" onClick={() => setBigQr(true)}
-          className="p-3 rounded-[16px] flex flex-col items-center gap-2"
-          style={{ background: 'var(--h-paper-raised)', border: `1px solid ${C.line}` }} aria-label="Make the code bigger">
-          <QRCodeSVG value={link} size={152} level="M" />
-          <span className="text-[12px] font-bold" style={{ color: 'var(--h-paper-ink)' }}>Scan to draw</span>
+      <div className="flex-shrink-0 w-[260px] xl:w-[300px] flex flex-col gap-3 min-h-0">
+
+        <button type="button" onClick={() => play(letter, 'plain')}
+          className="flex-shrink-0 h-[60px] rounded-[16px] text-[16px] font-extrabold flex items-center justify-center gap-3"
+          style={{ background: C.coral, color: C.onCoral, border: 0 }}>
+          <Speaker size={21} /> Play the letter
         </button>
 
-        <button type="button" onClick={() => void copy()}
-          className="h-11 rounded-[12px] text-[13.5px] font-extrabold flex items-center justify-center gap-2"
-          style={{ background: copied ? C.mintBg : C.raised, border: `1px solid ${copied ? C.mint : C.line}`, color: copied ? C.mintInk : C.cream }}>
-          {copied ? <><Tick size={15} /> Copied</> : <>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="9" y="9" width="11" height="11" rx="2.2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" />
-            </svg>
-            Copy the link</>}
-        </button>
+        <div className="flex-shrink-0 p-3.5 rounded-[16px] flex gap-3.5 items-center"
+          style={{ background: C.panel, border: `1px solid ${C.faint}` }}>
+          <button type="button" onClick={() => setBigQr(true)} aria-label="Make the code bigger"
+            className="flex-shrink-0 rounded-[10px] p-1.5" style={{ background: 'var(--h-paper-raised)', border: 0 }}>
+            <QRCodeSVG value={link} size={84} level="M" />
+          </button>
+          <div className="min-w-0 flex-grow">
+            <p className="m-0 text-[13.5px] font-extrabold">Scan to draw</p>
+            <p className="m-0 mt-1 text-[12px]" style={{ color: C.muted }}>Tap the code to blow it up</p>
+            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+              <span className="h-[26px] px-2.5 rounded-full text-[11.5px] font-bold inline-flex items-center"
+                style={{ background: peers ? 'var(--h-mint-dim)' : C.raised, border: `1px solid ${peers ? 'var(--h-mint-line)' : C.line}`, color: peers ? C.mint : C.muted }}>
+                {peers} joined
+              </span>
+              <button type="button" onClick={() => void copy()}
+                className="h-[26px] px-2.5 rounded-full text-[11.5px] font-bold"
+                style={{ background: copied ? C.mintBg : C.raised, border: `1px solid ${copied ? C.mint : C.line}`, color: copied ? C.mintInk : C.cream }}>
+                {copied ? '✓ Copied' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <p className="m-0 text-[11.5px] leading-relaxed" style={{ color: C.dim }}>
+        <p className="m-0 flex-shrink-0 text-[12px] leading-relaxed" style={{ color: C.dim }}>
           Your eraser clears his ink and yours. His only clears his own.
         </p>
 
-        <span className="flex-grow" />
+        {/* The letters as the muṣḥaf draws them — what the handwriting is being
+            compared against. It GROWS to take the rail's middle, so there is no
+            hole between the code and the verdicts. */}
+        <div className="flex-grow min-h-[84px] rounded-[16px] px-4 py-3 flex flex-col items-center justify-center gap-1"
+          style={{ background: C.panel, border: `1px solid ${C.faint}` }}>
+          <span className="flex items-center justify-center gap-6 flex-wrap">
+            {letters.map(l => (
+              <span key={l} lang="ar" dir="rtl" className="font-quranic"
+                style={{ fontSize: 'clamp(44px, 9vh, 120px)', lineHeight: 1.15, color: l === letter ? C.coral : C.body }}>
+                {l}
+              </span>
+            ))}
+          </span>
+          <span className="text-[11.5px] font-semibold" style={{ color: C.dim }}>
+            writing the one in colour
+          </span>
+        </div>
 
-        <button type="button" onClick={() => judge('right')}
-          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
-          style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>Correct</button>
-        <button type="button" onClick={() => judge('better')}
-          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
-          style={{ background: 'var(--h-better-bg)', border: `1px solid var(--h-better)`, color: 'var(--h-better-ink)' }}>Can be better</button>
-        <button type="button" onClick={() => judge('wrong')}
-          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
-          style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>Wrong</button>
+        <p className="m-0 flex-shrink-0 text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>
+          How did he write it
+        </p>
+        {VERDICTS.map(v => (
+          <button key={v.id} type="button" onClick={() => judge(v.id)}
+            className="flex-shrink-0 h-[58px] rounded-[15px] text-[16px] font-extrabold text-left px-5"
+            style={{ background: v.bg, border: `1px solid ${v.bd}`, color: v.ink }}>
+            {v.label}
+          </button>
+        ))}
       </div>
     </div>
 
@@ -858,6 +883,7 @@ const WriteRound: React.FC<{
     )}
   </>);
 };
+
 
 
 /* ── The run ─────────────────────────────────────────────────────────────── */

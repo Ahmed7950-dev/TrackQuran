@@ -105,6 +105,7 @@ const HunterMarkingPanel: React.FC<{
               round={at}
               initial={[...(current?.strokes ?? []), ...(current?.tutorStrokes ?? [])]}
               onStrokes={keepInk}
+              toolsInside
               className="flex-grow min-h-0"
             />
             <div className="flex-shrink-0 flex gap-2.5 pt-3">
