@@ -19,10 +19,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { letterAudioUrl, speakLetter, warmSpeech, SET_MARK } from '../services/letterAudioService';
 import {
   SUBS, subMeta, defaultPlan, playOrder, buildRow, targetsOf, sameCell, cellText, cellAudioSet,
-  tally, logTitle, logDetail, dotsOf, introLine, enoughLetters,
+  tally, logTitle, logDetail, dotsOf, introLine, enoughLetters, scoreOf,
   buildSayItem, buildSyllable, loadWords, loadVerses, pickItems, foldChar, refLabel,
   MIN_ROUNDS, MAX_ROUNDS, MIN_LETTERS, MAX_LETTERS,
   type HunterPlan, type SubId, type SubScore, type HunterRow, type HunterResult, type ShowItem,
+  type RoundResult, type SubMeta,
 } from '../services/lettersHunterService';
 import { segmentWord } from '../services/tajweedColorService';
 import { QRCodeSVG } from 'qrcode.react';
@@ -293,36 +294,76 @@ export const LettersHunterSetup: React.FC<{
   );
 };
 
-/* ── The rail of rounds ──────────────────────────────────────────────────── */
+/* ── The trail ───────────────────────────────────────────────────────────── */
 
-const Rail: React.FC<{ order: ReturnType<typeof playOrder>; at: number; onExit: () => void }> = ({ order, at, onExit }) => (
-  <div className="flex-shrink-0 flex items-center gap-3 px-5 py-3" style={{ borderBottom: `1px solid #1C2840` }}>
-    <span className="text-[11.5px] font-extrabold uppercase whitespace-nowrap" style={{ letterSpacing: '0.14em', color: C.coral }}>
-      Letters hunter
-    </span>
-    <span className="flex-grow flex gap-1.5 min-w-0">
-      {order.map((s, i) => {
-        const done = i < at, now = i === at;
-        return (
-          <span key={s.id} className="flex-1 min-w-0 h-[34px] rounded-[10px] flex items-center justify-center gap-1.5 text-[11.5px] font-bold px-1"
-            style={{
-              background: done ? '#12261F' : now ? '#1A2538' : '#111B2C',
-              border: `1px solid ${done ? '#2E6B53' : now ? C.coral : C.faint}`,
-              color: done ? C.mint : now ? C.cream : C.dim,
-            }}>
-            {done ? <Tick size={13} /> : <span style={{ fontFamily: 'ui-monospace, monospace', color: now ? C.coral : C.dim }}>{s.n}</span>}
-            <span className="truncate hidden sm:inline">{s.name.split(' ')[0]}</span>
+/**
+ * One track across the top, in place of the two strips there used to be — a row
+ * of challenge pills AND a row of round dots under the letters, which between
+ * them never said how it was going.
+ *
+ * Every round of the whole run is a block, and a challenge's stretch of track
+ * is as wide as it has rounds. A finished block keeps its colour, so the strip
+ * the student is looking at IS the mark he is building.
+ */
+const Trail: React.FC<{
+  order: SubMeta[];
+  plan: HunterPlan;
+  at: number;
+  scores: SubScore[];
+  live: { done: RoundResult[]; pos: number } | null;
+  onExit: () => void;
+}> = ({ order, plan, at, scores, live, onExit }) => {
+  const now = order[at];
+  const rounds = now ? plan[now.id].rounds : 0;
+
+  const colourOf = (i: number, j: number): string => {
+    const paint = (r?: RoundResult) =>
+      r === 'right' ? C.mint : r === 'better' ? '#D4642F' : r === 'wrong' ? C.rose : null;
+    if (i < at) return paint(scores.find(s => s.id === order[i].id)?.results[j]) ?? C.faint;
+    if (i > at) return C.faint;
+    return paint(live?.done[j]) ?? (j === (live?.pos ?? 0) ? C.coral : C.faint);
+  };
+
+  return (
+    <div className="flex-shrink-0 px-4 sm:px-5 pt-3 pb-2.5" style={{ borderBottom: `1px solid #1C2840` }}>
+      <div className="flex items-baseline gap-3">
+        <span className="text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.coral }}>
+          {String(now?.n ?? 0).padStart(2, '0')}
+        </span>
+        <span className="text-[16px] sm:text-[18px] font-extrabold truncate" style={{ letterSpacing: '-0.015em' }}>{now?.name}</span>
+        <span className="flex-grow" />
+        <span className="hidden sm:inline text-[13px] whitespace-nowrap" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>
+          round {Math.min(rounds, (live?.pos ?? 0) + 1)} of {rounds} · challenge {at + 1} of {order.length}
+        </span>
+        <button type="button" onClick={onExit} aria-label="Leave"
+          className="flex-shrink-0 w-9 h-9 -mr-1 rounded-[10px] flex items-center justify-center"
+          style={{ background: 'transparent', border: 0, color: C.muted }}>
+          <Cross size={18} />
+        </button>
+      </div>
+
+      <div className="flex items-stretch gap-2.5 mt-2" style={{ height: 14 }}>
+        {order.map((s, i) => (
+          <div key={s.id} className="flex gap-[3px]" title={s.name}
+            style={{ flex: `${plan[s.id].rounds} 1 0`, opacity: i > at ? 0.45 : 1 }}>
+            {Array.from({ length: plan[s.id].rounds }, (_, j) => (
+              <span key={j} style={{ flex: 1, borderRadius: 3, background: colourOf(i, j), transition: 'background 180ms ease' }} />
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2.5 mt-1.5 text-[11px] font-bold">
+        {order.map((s, i) => (
+          <span key={s.id} className="truncate"
+            style={{ flex: `${plan[s.id].rounds} 1 0`, color: i < at ? C.mint : i === at ? C.cream : '#55637C' }}>
+            {s.name.split(' ')[0]}
           </span>
-        );
-      })}
-    </span>
-    <button type="button" onClick={onExit} aria-label="Leave"
-      className="flex-shrink-0 w-10 h-10 rounded-[11px] flex items-center justify-center"
-      style={{ background: 'transparent', border: 0, color: C.muted }}>
-      <Cross size={19} />
-    </button>
-  </div>
-);
+        ))}
+      </div>
+    </div>
+  );
+};
 
 /** The letter said out loud, with the browser's voice as the net when a
  *  recording is missing (hamzah has none in the bare set yet). */
@@ -361,14 +402,16 @@ export const RowRound: React.FC<{
   rounds: number;
   showNumbers: boolean;
   lastLabel: string;
-  onDone: (right: number) => void;
-}> = ({ letters, withVowels, rounds, showNumbers, lastLabel, onDone }) => {
+  onDone: (results: RoundResult[]) => void;
+  /** Where the trail at the top is told what to draw. */
+  onProgress?: (done: RoundResult[], pos: number) => void;
+}> = ({ letters, withVowels, rounds, showNumbers, lastLabel, onDone, onProgress }) => {
   const [round, setRound] = useState(0);
   const [row, setRow] = useState<HunterRow | null>(null);
   const [marks, setMarks] = useState<Record<number, Mark>>({});
   const { play, playing } = useLetterAudio();
   const timerRef = useRef<number | null>(null);
-  const rightRef = useRef(0);
+  const resultsRef = useRef<RoundResult[]>([]);
 
   /* a fresh row whenever the round changes — and after advance() tears the
      last one down, which is what `row == null` means */
@@ -383,6 +426,8 @@ export const RowRound: React.FC<{
   }, [round, row, letters, withVowels, play]);
 
   useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+
+  useEffect(() => { onProgress?.([...resultsRef.current], round); }, [round, onProgress]);
 
   const targets = row ? targetsOf(row) : [];
   const found = targets.filter(i => marks[i] === 'right').length;
@@ -401,11 +446,11 @@ export const RowRound: React.FC<{
   const advance = useCallback(() => {
     if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; }
     if (!row) return;
-    if (found === targets.length && missed === 0) rightRef.current += 1;
+    resultsRef.current.push(found === targets.length && missed === 0 ? 'right' : 'wrong');
     setRow(null);
     setMarks({});
     if (round + 1 < rounds) setRound(r => r + 1);
-    else onDone(rightRef.current);
+    else onDone(resultsRef.current);
   }, [row, found, targets.length, missed, round, rounds, onDone]);
 
   /* a finished row moves on by itself, with a beat to see it */
@@ -422,12 +467,9 @@ export const RowRound: React.FC<{
 
   return (<>
     <div className="flex-grow flex flex-col items-center justify-center px-4 sm:px-8 py-5 min-h-0">
-      <div className="flex items-baseline gap-4 flex-wrap justify-center">
-        <h1 className="m-0 text-[24px] sm:text-[30px] font-extrabold" style={{ letterSpacing: '-0.02em' }}>
-          {withVowels ? 'Which one did you hear?' : 'Spot the letter you hear'}
-        </h1>
-        <span className="text-[15px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>round {round + 1} / {rounds}</span>
-      </div>
+      <h1 className="m-0 text-[24px] sm:text-[30px] font-extrabold text-center" style={{ letterSpacing: '-0.02em' }}>
+        {withVowels ? 'Which one did you hear?' : 'Spot the letter you hear'}
+      </h1>
       <p className="m-0 mt-2 text-[14.5px] text-center" style={{ color: C.body }}>
         {withVowels
           ? <>The letter <em className="not-italic font-bold" style={{ color: C.coral }}>and</em> its vowel have to match.</>
@@ -483,13 +525,7 @@ export const RowRound: React.FC<{
       </p>
     </div>
 
-    <div className="flex-shrink-0 flex items-center gap-4 px-5 sm:px-8 py-5">
-      <span className="flex gap-1.5 flex-wrap">
-        {Array.from({ length: rounds }, (_, i) => (
-          <span key={i} style={{ width: 28, height: 6, borderRadius: 3, background: i < round ? C.mint : i === round ? C.coral : C.faint }} />
-        ))}
-      </span>
-      <span className="flex-grow" />
+    <div className="flex-shrink-0 flex items-center justify-end gap-4 px-5 sm:px-8 py-5">
       <button type="button" onClick={advance}
         className="h-[52px] px-7 rounded-[15px] text-[15px] font-bold flex items-center gap-2.5"
         style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
@@ -532,13 +568,18 @@ const ShowAndMark: React.FC<{
   sub: ReturnType<typeof subMeta>;
   letters: string[];
   items: ShowItem[] | null;
-  onDone: (right: number) => void;
-}> = ({ sub, letters, items, onDone }) => {
+  onDone: (results: RoundResult[]) => void;
+  onProgress?: (done: RoundResult[], pos: number) => void;
+}> = ({ sub, letters, items, onDone, onProgress }) => {
   const [pos, setPos] = useState(0);
   const [marks, setMarks] = useState<Record<number, Mark>>({});
 
   const total = items?.length ?? 0;
-  const right = Object.values(marks).filter(m => m === 'right').length;
+
+  /** Every one in order, so the mark can show WHICH went wrong. Anything left
+   *  unmarked counts as wrong — it was shown and not read. */
+  const asResults = useCallback((m: Record<number, Mark>): RoundResult[] =>
+    Array.from({ length: total }, (_, i) => (m[i] === 'right' ? 'right' : 'wrong')), [total]);
 
   // The new marks are worked out here rather than inside the state updater:
   // React may run an updater twice, and finishing the challenge from inside one
@@ -546,19 +587,22 @@ const ShowAndMark: React.FC<{
   const mark = useCallback((m: Mark) => {
     const next = { ...marks, [pos]: m };
     setMarks(next);
-    // Marking him is also what moves on — the tutor's hand stays on one key.
+    // Marking moves on by itself; going back over one already marked and
+    // changing it is allowed, and only the last one ends the challenge.
     if (pos + 1 < total) setPos(p => p + 1);
-    else onDone(Object.values(next).filter(x => x === 'right').length);
-  }, [marks, pos, total, onDone]);
+    else onDone(asResults(next));
+  }, [marks, pos, total, onDone, asResults]);
 
-  /** The tutor's mapping, kept as asked: reading runs right to left, so LEFT is
-   *  forward. It is the opposite of the Letter Sounds booth on purpose. */
+  useEffect(() => {
+    onProgress?.(Array.from({ length: total }, (_, i) => marks[i]).filter(Boolean) as RoundResult[], pos);
+  }, [marks, pos, total, onProgress]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp') { e.preventDefault(); mark('right'); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); mark('wrong'); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); setPos(p => Math.min(total - 1, p + 1)); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); setPos(p => Math.max(0, p - 1)); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setPos(p => Math.min(total - 1, p + 1)); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); setPos(p => Math.max(0, p - 1)); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -577,7 +621,7 @@ const ShowAndMark: React.FC<{
       <div className="flex-grow flex flex-col items-center justify-center gap-3 px-8 text-center">
         <p className="m-0 text-[17px] font-bold">Nothing to show for these letters</p>
         <p className="m-0 text-sm" style={{ color: C.muted }}>Skipping this round.</p>
-        <button type="button" onClick={() => onDone(0)} className="mt-2 h-12 px-6 rounded-[14px] font-bold"
+        <button type="button" onClick={() => onDone([])} className="mt-2 h-12 px-6 rounded-[14px] font-bold"
           style={{ background: C.raised, border: `1px solid ${C.line}`, color: C.cream }}>Go on</button>
       </div>
     );
@@ -589,11 +633,6 @@ const ShowAndMark: React.FC<{
 
   return (<>
     <div className="flex-grow flex flex-col items-center justify-center px-5 sm:px-10 py-4 min-h-0">
-      <div className="flex items-baseline gap-4">
-        <h1 className="m-0 text-[22px] sm:text-[26px] font-extrabold" style={{ letterSpacing: '-0.02em' }}>{sub.name}</h1>
-        <span className="text-[15px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{pos + 1} / {total}</span>
-      </div>
-
       <div className={`mt-5 w-full max-w-[1100px] flex-grow flex flex-col items-center justify-center ${long ? 'rounded-[26px] px-8 py-8' : ''}`}
         style={long ? { background: C.panel, border: `1px solid ${C.line}` } : undefined}>
         <div className="text-center">
@@ -601,45 +640,37 @@ const ShowAndMark: React.FC<{
               OTHERS. On a bare letter or a syllable everything on screen is a
               hunted letter, and colouring the lot just looks like a warning. */}
           <Picked text={item.text} letters={pickOut ? letters : []}
-            size={sub.id === 'ayat' ? 'clamp(30px, 4.4vw, 58px)' : long ? 'clamp(54px, 8vw, 110px)' : 'clamp(96px, 20vh, 300px)'} />
+            size={sub.id === 'ayat' ? 'clamp(30px, 4.4vw, 58px)' : long ? 'clamp(54px, 8vw, 110px)' : 'clamp(150px, 34vh, 420px)'} />
         </div>
         {item.ref && <p className="m-0 mt-5 text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{refLabel(item.ref)}</p>}
       </div>
 
-      <div className="flex gap-1.5 flex-wrap justify-center mt-4">
-        {items.map((_, i) => (
-          <span key={i} style={{
-            width: 34, height: 7, borderRadius: 4,
-            background: marks[i] === 'right' ? C.mint : marks[i] === 'wrong' ? C.rose : i === pos ? C.coral : C.faint,
-          }} />
-        ))}
-      </div>
     </div>
 
     <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-3 px-5 pb-4">
       <button type="button" onClick={() => setPos(p => Math.max(0, p - 1))} disabled={pos === 0}
         className="h-[60px] px-5 rounded-[17px] text-[15px] font-bold flex items-center gap-3 disabled:opacity-40"
         style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.body }}>
-        <Key>→</Key> Back
+        <Key>←</Key> Back
       </button>
       <button type="button" onClick={() => mark('right')}
-        className="h-[60px] px-6 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
-        style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>
-        <Key>↑</Key> He said it right
+        className="h-[60px] px-8 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
+        style={{ background: marks[pos] === 'right' ? C.mint : C.mintBg, border: `1px solid ${C.mint}`, color: marks[pos] === 'right' ? C.ground : C.mintInk }}>
+        <Key>↑</Key> Right
       </button>
       <button type="button" onClick={() => mark('wrong')}
-        className="h-[60px] px-6 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
-        style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>
-        <Key>↓</Key> Not yet
+        className="h-[60px] px-8 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
+        style={{ background: marks[pos] === 'wrong' ? C.rose : C.roseBg, border: `1px solid ${C.rose}`, color: marks[pos] === 'wrong' ? C.ground : C.roseInk }}>
+        <Key>↓</Key> Wrong
       </button>
-      <button type="button" onClick={() => (pos + 1 < total ? setPos(p => p + 1) : onDone(right))}
+      <button type="button" onClick={() => (pos + 1 < total ? setPos(p => p + 1) : onDone(asResults(marks)))}
         className="h-[60px] px-5 rounded-[17px] text-[15px] font-bold flex items-center gap-3"
         style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.body }}>
-        {pos + 1 < total ? 'Next' : 'Finish'} <Key>←</Key>
+        {pos + 1 < total ? 'Next' : 'Finish'} <Key>→</Key>
       </button>
     </div>
     <p className="m-0 pb-5 text-center text-[12.5px]" style={{ color: C.dim }}>
-      Marking him moves on by itself — the arrows are there to go back.
+      Marking moves on by itself. Go back with ← and change it if you want.
     </p>
   </>);
 };
@@ -660,12 +691,14 @@ const WriteRound: React.FC<{
   rounds: number;
   roomId: string;
   play: (letter: string, set: 'plain') => void;
-  onDone: (right: number, better: number) => void;
-}> = ({ letters, rounds, roomId, play, onDone }) => {
+  onDone: (results: RoundResult[]) => void;
+  onProgress?: (done: RoundResult[], pos: number) => void;
+}> = ({ letters, rounds, roomId, play, onDone, onProgress }) => {
   const [pos, setPos] = useState(0);
   const [verdicts, setVerdicts] = useState<Verdict[]>([]);
   const [peers, setPeers] = useState(0);
   const [bigQr, setBigQr] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   /** The letters to write, settled up front so Back shows the same one. */
   const [queue] = useState<string[]>(() =>
@@ -675,20 +708,25 @@ const WriteRound: React.FC<{
 
   useEffect(() => { const t = window.setTimeout(() => play(letter, 'plain'), 350); return () => window.clearTimeout(t); }, [letter, play]);
 
+  useEffect(() => { onProgress?.(verdicts.filter(Boolean), pos); }, [verdicts, pos, onProgress]);
+
   const judge = (v: Verdict) => {
     const next = [...verdicts];
     next[pos] = v;
     setVerdicts(next);
     if (pos + 1 < rounds) setPos(p => p + 1);
-    else onDone(next.filter(x => x === 'right').length, next.filter(x => x === 'better').length);
+    else onDone(Array.from({ length: rounds }, (_, i) => next[i] ?? 'wrong'));
   };
 
   const link = boardUrl(roomId, 'student');
 
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); window.setTimeout(() => setCopied(false), 2000); }
+    catch { /* the code is on screen anyway */ }
+  };
+
   return (<>
     <div className="flex-shrink-0 flex flex-wrap items-center gap-3 px-5 py-2.5">
-      <span className="text-[15px] font-extrabold">Write it</span>
-      <span className="text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>letter {pos + 1} / {rounds}</span>
       <button type="button" onClick={() => play(letter, 'plain')}
         className="h-10 px-4 rounded-xl text-[14px] font-extrabold flex items-center gap-2.5"
         style={{ background: C.coral, color: C.onCoral, border: 0 }}>
@@ -697,33 +735,50 @@ const WriteRound: React.FC<{
       <span className="flex-grow" />
       <span className="h-9 px-3.5 rounded-full text-[12.5px] font-bold flex items-center gap-2"
         style={{ background: peers ? '#12261F' : C.panel, border: `1px solid ${peers ? '#2E6B53' : C.line}`, color: peers ? C.mint : C.muted }}>
-        {peers ? `${peers} joined` : 'nobody has scanned yet'}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="8.5" r="2.4" /><path d="M16 14.2a4.6 4.6 0 0 1 4.6 4.8" />
+        </svg>
+        {peers} joined
       </span>
     </div>
 
+    {/* The board takes the room; the code and the verdicts sit in the margin
+        the 4:3 paper leaves behind, which is otherwise dead space. */}
     <div className="flex-grow flex gap-4 px-5 pb-3 min-h-0">
       <HunterBoard roomId={roomId} me="tutor" isHost round={pos} onPeers={setPeers} className="flex-grow min-w-0" />
 
-      <div className="flex-shrink-0 w-[172px] flex flex-col gap-3">
+      <div className="flex-shrink-0 w-[200px] flex flex-col gap-2.5 min-h-0">
         <button type="button" onClick={() => setBigQr(true)}
           className="p-3 rounded-[16px] flex flex-col items-center gap-2"
           style={{ background: '#FFFFFF', border: `1px solid ${C.line}` }} aria-label="Make the code bigger">
-          <QRCodeSVG value={link} size={140} level="M" />
+          <QRCodeSVG value={link} size={152} level="M" />
           <span className="text-[12px] font-bold" style={{ color: '#1B2436' }}>Scan to draw</span>
-          <span className="text-[11px]" style={{ color: '#7A7466' }}>tap to enlarge</span>
         </button>
-        <p className="m-0 text-[12px] leading-relaxed" style={{ color: C.dim }}>
+
+        <button type="button" onClick={() => void copy()}
+          className="h-11 rounded-[12px] text-[13.5px] font-extrabold flex items-center justify-center gap-2"
+          style={{ background: copied ? C.mintBg : C.raised, border: `1px solid ${copied ? C.mint : C.line}`, color: copied ? C.mintInk : C.cream }}>
+          {copied ? <><Tick size={15} /> Copied</> : <>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2.2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" />
+            </svg>
+            Copy the link</>}
+        </button>
+
+        <p className="m-0 text-[11.5px] leading-relaxed" style={{ color: C.dim }}>
           Your eraser clears his ink and yours. His only clears his own.
         </p>
+
         <span className="flex-grow" />
+
         <button type="button" onClick={() => judge('right')}
-          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
           style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>Correct</button>
         <button type="button" onClick={() => judge('better')}
-          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
           style={{ background: '#2E1B10', border: `1px solid #D4642F`, color: '#FFD9C2' }}>Can be better</button>
         <button type="button" onClick={() => judge('wrong')}
-          className="h-[52px] rounded-[14px] text-[15px] font-extrabold"
+          className="h-[50px] rounded-[14px] text-[15px] font-extrabold"
           style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>Wrong</button>
       </div>
     </div>
@@ -740,6 +795,7 @@ const WriteRound: React.FC<{
     )}
   </>);
 };
+
 
 /* ── The run ─────────────────────────────────────────────────────────────── */
 
@@ -761,6 +817,9 @@ const LettersHunterRun: React.FC<{
   const { play } = useLetterAudio();
 
   const [items, setItems] = useState<ShowItem[] | null>(null);
+  /** What the challenge on screen has done so far, for the trail. */
+  const [live, setLive] = useState<{ done: RoundResult[]; pos: number } | null>(null);
+  const progress = useCallback((done: RoundResult[], pos: number) => setLive({ done, pos }), []);
   /** One room for the run, so a phone that scanned once stays on the board. */
   const [roomId] = useState(newRoomId);
   const betterRef = useRef(0);
@@ -776,10 +835,11 @@ const LettersHunterRun: React.FC<{
    *  Once per challenge, whatever calls it: a second call for the same one is
    *  a repeat, never a second score. */
   const bankedRef = useRef<Set<SubId>>(new Set());
-  const bank = useCallback((id: SubId, right: number, of: number) => {
+  const bank = useCallback((id: SubId, results: RoundResult[]) => {
     if (bankedRef.current.has(id)) return;
     bankedRef.current.add(id);
-    setScores(s => [...s, { id, right, rounds: of }]);
+    setScores(s => [...s, scoreOf(id, results)]);
+    setLive(null);
     setItems(null);
     setRound(0);
     setAt(n => (n + 1 < order.length ? n + 1 : n));
@@ -812,7 +872,7 @@ const LettersHunterRun: React.FC<{
   /* ── before anything: look at them ── */
   if (phase === 'intro') {
     return shell(<>
-      <Rail order={order} at={-1} onExit={onExit} />
+      <Trail order={order} plan={plan} at={0} scores={[]} live={null} onExit={onExit} />
       <div className="flex-grow overflow-y-auto flex flex-col items-center px-6 pt-7">
         <p className="m-0 text-[12.5px] font-extrabold uppercase" style={{ letterSpacing: '0.16em', color: C.muted }}>Before we start</p>
         <h1 className="m-0 mt-2.5 text-[30px] sm:text-[34px] font-extrabold text-center" style={{ letterSpacing: '-0.02em' }}>Look at them together</h1>
@@ -845,52 +905,95 @@ const LettersHunterRun: React.FC<{
   }
 
   /* ── the mark ── */
+  /* ── the mark ── */
   if (phase === 'done') {
     const result = tally(letters, scores, betterRef.current);
+    const every = result.scores.flatMap(s => s.results);
     const pct = result.total ? result.right / result.total : 0;
-    const ring = pct >= 0.8 ? C.mint : pct >= 0.5 ? C.coral : C.rose;
-    return shell(
-      <div className="flex-grow overflow-y-auto flex flex-col items-center px-6 py-9">
-        <p className="m-0 text-[12px] font-extrabold uppercase" style={{ letterSpacing: '0.16em', color: C.coral }}>Letters hunter · done</p>
-        <h1 className="m-0 mt-3 text-[30px] sm:text-[34px] font-extrabold text-center" style={{ letterSpacing: '-0.025em' }}>
-          He hunted <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC }}>{letters.join(' ')}</span>
-        </h1>
+    const worst = [...result.scores].sort((a, b) =>
+      (a.rounds ? a.right / a.rounds : 1) - (b.rounds ? b.right / b.rounds : 1))[0];
+    const blockOf = (r: RoundResult) => (r === 'right' ? C.mint : r === 'better' ? '#D4642F' : C.rose);
 
-        <div className="mt-7 flex flex-col items-center justify-center rounded-full"
-          style={{ width: 196, height: 196, border: `10px solid ${ring}`, background: '#10281F' }}>
-          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 54, lineHeight: 1, color: C.cream }}>{result.right}</span>
-          <span className="mt-1 text-[15px] font-bold" style={{ color: C.body }}>out of {result.total}</span>
+    return shell(
+      <div className="flex-grow overflow-y-auto relative" style={{ overflowX: 'hidden' }}>
+        {/* the quarry, enormous and faint, behind everything */}
+        <span lang="ar" dir="rtl" aria-hidden="true"
+          style={{
+            position: 'absolute', right: -30, top: -70, fontFamily: ARABIC,
+            fontSize: 'clamp(240px, 42vw, 520px)', lineHeight: 1, color: '#121C2E', userSelect: 'none', pointerEvents: 'none',
+          }}>
+          {letters.join(' ')}
+        </span>
+
+        <div className="relative px-6 sm:px-12 pt-9 flex flex-wrap items-start gap-8">
+          <div className="min-w-0">
+            <p className="m-0 text-[12px] font-extrabold uppercase" style={{ letterSpacing: '0.18em', color: C.coral }}>The hunt is over</p>
+            <h1 className="m-0 mt-3 font-black" style={{ fontSize: 'clamp(40px, 7vw, 54px)', letterSpacing: '-0.035em', lineHeight: 1 }}>
+              {result.right}<span style={{ color: '#55637C', fontWeight: 700 }}> / {result.total}</span>
+            </h1>
+            <p className="m-0 mt-3.5 text-[16px] leading-relaxed max-w-[440px]" style={{ color: C.body }}>
+              {pct === 1
+                ? 'Every round clean.'
+                : worst
+                  ? <>Where it slipped most was <strong style={{ color: C.cream }}>{subMeta(worst.id).name.toLowerCase()}</strong> — {worst.right} of {worst.rounds}.</>
+                  : 'Nothing was played.'}
+            </p>
+          </div>
+
+          <span className="flex-grow" />
+
+          <div className="flex-shrink-0 w-full sm:w-[330px] p-5 rounded-[18px]"
+            style={{ background: 'rgba(20,30,49,0.86)', border: `1px solid ${C.faint}` }}>
+            <p className="m-0 mb-3 text-[11px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>Every round</p>
+            <div className="flex flex-wrap gap-[5px]">
+              {every.map((r, i) => (
+                <span key={i} style={{ width: 22, height: 22, borderRadius: 6, background: blockOf(r) }} />
+              ))}
+            </div>
+            <div className="flex gap-4 mt-3.5 text-[11.5px] font-bold flex-wrap">
+              <span className="flex items-center gap-1.5" style={{ color: C.mint }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.mint }} />right</span>
+              {result.better > 0 && <span className="flex items-center gap-1.5" style={{ color: '#FFBE96' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: '#D4642F' }} />can be better</span>}
+              <span className="flex items-center gap-1.5" style={{ color: '#FF9AAA' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.rose }} />wrong</span>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-8 w-full max-w-[640px] flex flex-col gap-2">
-          {result.scores.map(s => {
-            const m = subMeta(s.id);
-            const w = s.rounds ? Math.round((s.right / s.rounds) * 100) : 0;
+        {/* one line per challenge, every round its own block */}
+        <div className="relative px-6 sm:px-12 pt-8 flex flex-col gap-2.5">
+          {SUBS.filter(s => s.ready).map(meta => {
+            const s = result.scores.find(x => x.id === meta.id);
             return (
-              <div key={s.id} className="flex items-center gap-4 px-4 py-3 rounded-[13px]"
-                style={{ background: C.panel, border: `1px solid ${C.faint}` }}>
-                <span className="w-5 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{m.n}</span>
-                <span className="flex-grow min-w-0 truncate text-[14.5px] font-bold">{m.name}</span>
-                <span className="w-[90px] sm:w-[160px] h-2.5 rounded-full overflow-hidden" style={{ background: '#0E1728' }}>
-                  <span className="block h-full" style={{ width: `${w}%`, background: w >= 80 ? C.mint : w >= 50 ? C.coral : C.rose }} />
+              <div key={meta.id} className="flex items-center gap-3 sm:gap-5" style={{ opacity: s ? 1 : 0.45 }}>
+                <span className="flex-shrink-0 w-6 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: '#55637C' }}>
+                  {String(meta.n).padStart(2, '0')}
                 </span>
-                <span className="w-[52px] text-right text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.cream }}>
-                  {s.right} / {s.rounds}
-                </span>
-                {s.id === 'write' && result.better > 0 && (
-                  <span className="text-[12px] font-bold whitespace-nowrap" style={{ color: '#D4642F' }}>
-                    +{result.better} could be better
+                <span className="flex-shrink-0 w-[120px] sm:w-[200px] truncate text-[14px] sm:text-[15px] font-bold"
+                  style={{ color: s ? C.cream : C.muted }}>{meta.name}</span>
+                {s ? (
+                  <span className="flex-grow flex gap-[5px] min-w-0">
+                    {s.results.map((r, i) => (
+                      <span key={i} style={{ flex: 1, height: 26, borderRadius: 7, background: blockOf(r) }} />
+                    ))}
                   </span>
+                ) : (
+                  <span className="flex-grow" style={{ height: 1, background: C.faint }} />
                 )}
+                <span className="flex-shrink-0 w-[88px] text-right text-[14px] sm:text-[15px] whitespace-nowrap"
+                  style={{ fontFamily: 'ui-monospace, monospace', color: s ? C.cream : '#55637C' }}>
+                  {s ? `${s.right}/${s.rounds}` : 'not played'}
+                </span>
               </div>
             );
           })}
         </div>
 
-        <div className="mt-8 flex gap-3">
-          <button type="button" onClick={() => { setScores([]); setAt(0); setRound(r => r + 1); setItems(null); betterRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
+        <div className="relative px-6 sm:px-12 py-9 flex flex-wrap items-center gap-3.5">
+          <p className="m-0 text-[13px]" style={{ color: C.muted }}>Saved to his logbook — today is marked as a letters hunt.</p>
+          <span className="flex-grow" />
+          <button type="button"
+            onClick={() => { setScores([]); setAt(0); setRound(r => r + 1); setItems(null); setLive(null); betterRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
             className="h-14 px-7 rounded-[15px] text-[15px] font-bold"
-            style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>Hunt them again</button>
+            style={{ background: 'transparent', border: `1px solid #3A4A68`, color: C.cream }}>Hunt them again</button>
           <button type="button" onClick={() => onFinish(result)}
             className="h-14 px-9 rounded-[15px] text-base font-extrabold"
             style={{ background: C.coral, color: C.onCoral, border: 0 }}>Done</button>
@@ -902,24 +1005,27 @@ const LettersHunterRun: React.FC<{
   /* ── he writes it, the tutor marks ── */
   if (isWrite) {
     return shell(<>
-      <Rail order={order} at={at} onExit={onExit} />
+      <Trail order={order} plan={plan} at={at} scores={scores} live={live} onExit={onExit} />
       <WriteRound letters={letters} rounds={rounds} roomId={roomId} play={play}
-        onDone={(right, better) => { betterRef.current += better; bank('write', right, rounds); }} />
+        onProgress={progress}
+        onDone={results => { betterRef.current += results.filter(r => r === 'better').length; bank('write', results); }} />
     </>);
   }
 
   /* ── he reads, the tutor marks ── */
   if (!isRow) {
     return shell(<>
-      <Rail order={order} at={at} onExit={onExit} />
-      <ShowAndMark sub={sub} letters={letters} items={items}
-        onDone={right => bank(sub.id, right, items?.length || rounds)} />
+      <Trail order={order} plan={plan} at={at} scores={scores} live={live} onExit={onExit} />
+      {/* Keyed by the challenge: without it the position carried over from the
+          round before, so the first word of the next one finished it. */}
+      <ShowAndMark key={sub.id} sub={sub} letters={letters} items={items}
+        onProgress={progress} onDone={results => bank(sub.id, results)} />
     </>);
   }
 
   /* ── a row of ten ── */
   return shell(<>
-    <Rail order={order} at={at} onExit={onExit} />
+    <Trail order={order} plan={plan} at={at} scores={scores} live={live} onExit={onExit} />
     <RowRound
       key={`${sub.id}-${round}`}
       letters={letters}
@@ -927,7 +1033,8 @@ const LettersHunterRun: React.FC<{
       rounds={rounds}
       showNumbers
       lastLabel={at + 1 < order.length ? 'Next challenge' : 'See the mark'}
-      onDone={right => bank(sub.id, right, rounds)}
+      onProgress={progress}
+      onDone={results => bank(sub.id, results)}
     />
   </>);
 };

@@ -222,9 +222,22 @@ export const introLine = (letters: string[]): string =>
 
 /* ── What a run adds up to ───────────────────────────────────────────────── */
 
+/** How one round went. 'better' belongs to the writing round only: the letter
+ *  is there and the hand is not steady yet. */
+export type RoundResult = 'right' | 'wrong' | 'better';
+
 /** One round is right only when every target was found and nothing else was
- *  tapped. Partial credit would hide exactly the confusion being measured. */
-export interface SubScore { id: SubId; right: number; rounds: number; }
+ *  tapped. Partial credit would hide exactly the confusion being measured.
+ *  The results are kept round by round, not just counted, because the mark
+ *  shows WHICH ones went wrong — a bar of 7/10 says nothing about where. */
+export interface SubScore { id: SubId; right: number; rounds: number; results: RoundResult[] }
+
+export const scoreOf = (id: SubId, results: RoundResult[]): SubScore => ({
+  id,
+  results,
+  right: results.filter(r => r === 'right').length,
+  rounds: results.length,
+});
 
 export interface HunterResult {
   letters: string[];

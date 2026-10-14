@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { C, RowRound, Speaker, Tick, Cross, ARABIC } from './LettersHunterChallenge';
 import HunterBoard from './HunterBoard';
 import { letterAudioUrl, speakLetter } from '../services/letterAudioService';
-import { subMeta, type SubId, type SubScore } from '../services/lettersHunterService';
+import { subMeta, scoreOf, type SubId, type SubScore, type RoundResult } from '../services/lettersHunterService';
 import type { Stroke } from '../services/hunterBoardService';
 import {
   getHunterHomework, submitHunterHomework, hunterMark, dueLabel, HOMEWORK_SUBS,
@@ -122,8 +122,8 @@ const HunterHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) =>
     else setHw(await getHunterHomework(homeworkId));   // someone handed it in already
   };
 
-  const bank = (id: SubId, right: number, rounds: number) => {
-    const next = [...scores, { id, right, rounds }];
+  const bank = (id: SubId, results: RoundResult[]) => {
+    const next = [...scores, scoreOf(id, results)];
     setScores(next);
     if (at + 1 < order.length) setAt(n => n + 1);
     else void finish([], next);                        // no writing round in this one
@@ -235,7 +235,7 @@ const HunterHomeworkPage: React.FC<{ homeworkId: string }> = ({ homeworkId }) =>
           rounds={hw.plan[sub].rounds}
           showNumbers={false}
           lastLabel={at + 1 < order.length ? 'Next' : 'Hand it in'}
-          onDone={right => bank(sub, right, hw.plan[sub].rounds)}
+          onDone={results => bank(sub, results)}
         />
       )}
     </div>
