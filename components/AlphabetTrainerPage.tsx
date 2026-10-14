@@ -12,6 +12,8 @@ import FlappyLettersGame from './FlappyLettersGame';
 import OddLetterGame from './OddLetterGame';
 import { LetterMatchSetup } from './LetterMatchChallenge';
 import { LetterCardsSetup } from './LetterCardsGame';
+import LettersHunterChallenge from './LettersHunterChallenge';
+import { MIN_LETTERS as HUNT_MIN, MAX_LETTERS as HUNT_MAX } from '../services/lettersHunterService';
 import { getFormMisses, clearFormMisses, FormMisses, MatchForm } from '../services/letterMatchService';
 
 const LottieAnim: React.FC<{ src: string; width: number; height: number; style?: React.CSSProperties }> = ({ src, width, height, style }) => {
@@ -124,12 +126,12 @@ function buildQueue(priorities: number[]): string[] {
   return shuffle(q);
 }
 
-type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch' | 'lettercards';
+type View = 'select' | 'practice' | 'win' | 'airplane' | 'race' | 'flappy' | 'oddletter' | 'battle' | 'wordchallenge' | 'letterhunt' | 'formdrill' | 'lettermatch' | 'lettercards' | 'lettershunter';
 
 /** Everything that can be started from this page: a challenge on the left rail,
  *  a game on the right. One is chosen at a time, and Start opens it. */
 type PickId =
-  | 'guess' | 'wordchallenge' | 'formdrill' | 'lettermatch'
+  | 'guess' | 'wordchallenge' | 'formdrill' | 'lettermatch' | 'lettershunter'
   | 'lettercards' | 'tower' | 'airplane' | 'race' | 'battle' | 'flappy' | 'letterhunt' | 'oddletter';
 
 interface Activity {
@@ -143,6 +145,10 @@ interface Activity {
   soft: string;
   /** False for the two that bring their own content. */
   needsLetters: boolean;
+  /** A challenge built on confusion needs a FEW letters, not any number: the
+   *  table caps itself at `maxLetters` while this one is chosen. */
+  minLetters?: number;
+  maxLetters?: number;
   /** Making a link or a shared board needs the tutor's account. */
   tutorOnly?: boolean;
 }
@@ -174,6 +180,7 @@ const CHALLENGES: Activity[] = [
   { id: 'wordchallenge',name: 'Word challenge',   hint: 'Read a word, letter by letter', icon: '✦',              tint: '#7c3aed', soft: '#ede9fe', needsLetters: true },
   { id: 'formdrill',    name: 'Letter form drill',hint: 'Beginning, middle, end',        icon: 'ـبـ', arabic: true, tint: '#0284c7', soft: '#e0f2fe', needsLetters: true },
   { id: 'lettermatch',  name: 'Letter shapes match', hint: 'Match a letter to its shape', icon: '⇄',             tint: '#4f46e5', soft: '#e0e7ff', needsLetters: true, tutorOnly: true },
+  { id: 'lettershunter',name: 'Letters hunter',   hint: 'Tell apart the ones he mixes',  icon: '◎',              tint: '#ea580c', soft: '#ffedd5', needsLetters: true, minLetters: HUNT_MIN, maxLetters: HUNT_MAX, tutorOnly: true },
 ];
 
 const GAMES: Activity[] = [
@@ -459,13 +466,23 @@ const AlphabetTrainerPage: React.FC<{
   const handleLetterClick = (i: number) => {
     // A long press already did its job — don't also cycle the priority.
     if (longFired.current) { longFired.current = false; return; }
-    setPriorities(prev => { const n = fitPriorities(prev); n[i] = (n[i] + 1) % 4; return n; });
+    setPriorities(prev => {
+      const n = fitPriorities(prev);
+      const next = (n[i] + 1) % 4;
+      // A challenge with a ceiling (the hunt) takes a few letters, not a set:
+      // once it has its three, a fourth letter simply does not light up.
+      const cap = chosen?.maxLetters;
+      if (cap && next > 0 && n[i] === 0 && n.filter(p => p > 0).length >= cap) return n;
+      n[i] = next;
+      return n;
+    });
   };
 
   const handleStart = () => {
     if (!chosen) return;
     // Two of them bring their own content and need no letters chosen.
     if (chosen.needsLetters && unique === 0) return;
+    if (chosen.minLetters && unique < chosen.minLetters) return;
     // Everything except the two letter runs is a view of its own.
     if (pick !== 'guess' && pick !== 'tower') { setView(pick as View); return; }
     const q = buildQueue(priorities);
@@ -572,13 +589,13 @@ const AlphabetTrainerPage: React.FC<{
    *  tinted look, with its icon, name and hint. */
   const railCard = (a: Activity) => {
     const active = pick === a.id;
-    const locked = a.needsLetters && unique === 0;
+    const locked = (a.needsLetters && unique === 0) || (!!a.minLetters && unique < a.minLetters);
     const art = !noArt[a.id];
     return (
       <button
         key={a.id}
         onClick={() => setPick(a.id)}
-        title={locked ? 'Pick some letters first' : a.hint}
+        title={locked ? (a.minLetters ? `Pick ${a.minLetters} letters he mixes up` : 'Pick some letters first') : a.hint}
         className={`group relative w-full aspect-[4/1] overflow-hidden rounded-2xl border-2 text-start transition-all duration-150 ${
           active
             ? 'at-rail-on -translate-y-0.5'
@@ -678,7 +695,9 @@ const AlphabetTrainerPage: React.FC<{
             <span className="flex-grow" />
             <button
               onClick={() => setPriorities(new Array(LETTERS.length).fill(1))}
-              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300"
+              disabled={!!chosen?.maxLetters}
+              title={chosen?.maxLetters ? `${chosen.name} takes ${chosen.maxLetters} letters at the most` : undefined}
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
             >{t('alphabetTrainer.selectAll')}</button>
             <button
               onClick={() => setPriorities(new Array(LETTERS.length).fill(0))}
@@ -798,14 +817,18 @@ const AlphabetTrainerPage: React.FC<{
               {chosen?.name ?? 'Pick a game or a challenge'}
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
-              {unique === 0
-                ? (chosen?.needsLetters === false ? 'Ready — no letters needed' : t('alphabetTrainer.noLetters'))
-                : <>{unique} {unique === 1 ? t('alphabetTrainer.letter') : t('alphabetTrainer.letters')} · {total} {t('alphabetTrainer.rounds')}</>}
+              {chosen?.minLetters && unique < chosen.minLetters
+                ? `Pick ${chosen.minLetters} letters he mixes up${chosen.maxLetters ? ` (${chosen.maxLetters} at the most)` : ''}`
+                : chosen?.maxLetters
+                  ? <>{unique} of {chosen.maxLetters} letters · {selectedLetters.join(' ')}</>
+                  : unique === 0
+                    ? (chosen?.needsLetters === false ? 'Ready — no letters needed' : t('alphabetTrainer.noLetters'))
+                    : <>{unique} {unique === 1 ? t('alphabetTrainer.letter') : t('alphabetTrainer.letters')} · {total} {t('alphabetTrainer.rounds')}</>}
             </p>
           </div>
           <button
             onClick={handleStart}
-            disabled={!chosen || (chosen.needsLetters && unique === 0)}
+            disabled={!chosen || (chosen.needsLetters && unique === 0) || (!!chosen.minLetters && unique < chosen.minLetters)}
             className="flex-shrink-0 h-11 px-7 rounded-2xl bg-teal-600 dark:bg-amber-600 hover:bg-teal-700 dark:hover:bg-amber-700 text-white text-sm font-black transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           >Start</button>
         </div>
@@ -1115,6 +1138,16 @@ const AlphabetTrainerPage: React.FC<{
               detail: `${attempt.correct}/${attempt.total} matched · ${attempt.mistakes} mistake${attempt.mistakes === 1 ? '' : 's'} · ${c.form} · attempt ${attempt.attemptNo} · ${c.letters.join(' ')}`,
               sourceId: `LetterMatch:${c.id}:${attempt.attemptNo}`,
             }, logTarget.name);
+          }}
+        />
+      )}
+      {view === 'lettershunter' && (
+        <LettersHunterChallenge
+          letters={selectedLetters}
+          onExit={() => setView('select')}
+          onFinish={(title, detail, sourceId) => {
+            if (!logTarget || !onLogActivity) return;
+            onLogActivity(logTarget.id, { kind: 'letters', title, detail, sourceId }, logTarget.name);
           }}
         />
       )}
