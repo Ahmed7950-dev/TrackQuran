@@ -55,6 +55,19 @@ const PRAISE = [
 
 const CONFETTI_COLORS = ['#ff6b9d','#ffd93d','#6bcb77','#4d96ff','#ff9a3c','#c77dff','#ff595e','#6af2f0'];
 const STORAGE_KEY = 'alphabet_trainer_priorities';
+
+/** A saved selection, fitted to today's alphabet.
+ *
+ *  Hamzah was added to LETTERS after this key was first written, so anything
+ *  saved before that is 28 long where the grid now draws 29. Padding rather
+ *  than rejecting keeps the tutor's chosen letters; rejecting lost them, and
+ *  reading the short array left ء as NaN — a cell that could never be picked
+ *  and that poisoned the next save. */
+const fitPriorities = (raw: unknown): number[] =>
+  Array.from({ length: LETTERS.length }, (_, i) => {
+    const v = Array.isArray(raw) ? Number(raw[i]) : 0;
+    return Number.isFinite(v) && v > 0 ? Math.min(3, Math.floor(v)) : 0;
+  });
 /** Missed-letter tallies, per student (each reader misses different letters).
  *  Only the practice challenge feeds this — adult mode and the child-mode
  *  castle battle — never the arcade games. */
@@ -190,9 +203,9 @@ const AlphabetTrainerPage: React.FC<{
   const [priorities, setPriorities] = useState<number[]>(() => {
     try {
       const s = localStorage.getItem(STORAGE_KEY);
-      if (s) { const p = JSON.parse(s); if (Array.isArray(p) && p.length === 28) return p; }
-    } catch {}
-    return new Array(28).fill(0);
+      if (s) return fitPriorities(JSON.parse(s));
+    } catch { /* private mode, or something that is not JSON */ }
+    return fitPriorities(null);
   });
 
   /** The one game or challenge that Start will open. */
@@ -446,7 +459,7 @@ const AlphabetTrainerPage: React.FC<{
   const handleLetterClick = (i: number) => {
     // A long press already did its job — don't also cycle the priority.
     if (longFired.current) { longFired.current = false; return; }
-    setPriorities(prev => { const n = [...prev]; n[i] = (n[i] + 1) % 4; return n; });
+    setPriorities(prev => { const n = fitPriorities(prev); n[i] = (n[i] + 1) % 4; return n; });
   };
 
   const handleStart = () => {
@@ -664,11 +677,11 @@ const AlphabetTrainerPage: React.FC<{
             })}
             <span className="flex-grow" />
             <button
-              onClick={() => setPriorities(new Array(28).fill(1))}
+              onClick={() => setPriorities(new Array(LETTERS.length).fill(1))}
               className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300"
             >{t('alphabetTrainer.selectAll')}</button>
             <button
-              onClick={() => setPriorities(new Array(28).fill(0))}
+              onClick={() => setPriorities(new Array(LETTERS.length).fill(0))}
               className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-gray-700 hover:border-slate-300"
             >{t('alphabetTrainer.clearAll')}</button>
           </div>
@@ -681,7 +694,7 @@ const AlphabetTrainerPage: React.FC<{
             </p>
           )}
 
-          {/* the 28, in the order they are recited */}
+          {/* the 29, in the order they are recited */}
           <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-7 gap-1.5 sm:gap-2" style={{ direction: 'rtl' }}>
             {LETTERS.map((letter, i) => {
               const p = priorities[i];
