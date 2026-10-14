@@ -26,6 +26,9 @@ import {
   type RoundResult, type SubMeta,
 } from '../services/lettersHunterService';
 import { segmentWord } from '../services/tajweedColorService';
+import {
+  splitVerseWords, renderWordWithMarks, hasSpecialQuranMark, hasLowMeem, tanweenOnSeatAlif,
+} from '../utils/quranicMarks';
 import { QRCodeSVG } from 'qrcode.react';
 import HunterBoard from './HunterBoard';
 import { boardUrl, newRoomId, type Stroke } from '../services/hunterBoardService';
@@ -546,8 +549,7 @@ export const RowRound: React.FC<{
  * letter keeps its own marks (segmentWord gives letter units, not characters),
  * so a vowel never ends up in a different colour from the letter it sits on.
  */
-const Picked: React.FC<{ text: string; letters: string[]; size: string }> = ({ text, letters, size }) => {
-  const want = new Set(letters);
+const tintRuns = (text: string, want: Set<string>): React.ReactNode[] => {
   const runs: { text: string; on: boolean }[] = [];
   for (const unit of segmentWord(text)) {
     const on = want.has(foldChar(unit[0]));
@@ -555,9 +557,57 @@ const Picked: React.FC<{ text: string; letters: string[]; size: string }> = ({ t
     if (last && last.on === on) last.text += unit;
     else runs.push({ text: unit, on });
   }
+  return runs.map((r, i) => <span key={i} style={r.on ? { color: C.coral } : undefined}>{r.text}</span>);
+};
+
+/**
+ * Qur'anic text, drawn the way the live logging page draws it.
+ *
+ * Three things make it match, and leaving any of them out shows:
+ *   `splitVerseWords` rewrites the API's round sukun (U+0652) to the khaa-head
+ *   (U+06E1) the Uthmani script actually uses — that is the circle-instead-of-
+ *   small-ح the tutor saw — and merges standalone waqf signs into the word
+ *   before them, which Safari otherwise drops.
+ *   `font-quranic` picks the tutor's own chosen muṣḥaf font, hand-patched so
+ *   U+06DF renders as a proper combining mark.
+ *   `renderWordWithMarks` puts the imāla / ishmām words in their corrective
+ *   font and re-draws an iqlab low-meem unit with its measured overlay.
+ *
+ * A word needing either of those last two is drawn WHOLE by that renderer and
+ * goes untinted: those words are a handful in the muṣḥaf, and drawing them
+ * right matters more than colouring them.
+ */
+const Picked: React.FC<{
+  text: string;
+  letters: string[];
+  size: string;
+  /** Qur'anic text (a word or a verse) rather than a bare letter or syllable. */
+  quranic?: boolean;
+  lineHeight?: number;
+}> = ({ text, letters, size, quranic, lineHeight = 1.75 }) => {
+  const want = new Set(letters);
+
+  if (!quranic) {
+    return (
+      <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: size, lineHeight, color: C.cream }}>
+        {tintRuns(text, want)}
+      </span>
+    );
+  }
+
+  const words = splitVerseWords(text);
   return (
-    <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: size, lineHeight: 1.75, color: C.cream }}>
-      {runs.map((r, i) => <span key={i} style={r.on ? { color: C.coral } : undefined}>{r.text}</span>)}
+    <span lang="ar" dir="rtl" className="font-quranic" style={{ fontSize: size, lineHeight, color: C.cream }}>
+      {words.map((w, i) => (
+        <React.Fragment key={i}>
+          {hasSpecialQuranMark(w) || hasLowMeem(w)
+            ? renderWordWithMarks(w, `h${i}`, lineHeight)
+            /* tanweenOnSeatAlif is what renderWordWithMarks does first, so the
+               tinted path has to do it too or the two draw differently. */
+            : tintRuns(tanweenOnSeatAlif(w), want)}
+          {i < words.length - 1 ? ' ' : ''}
+        </React.Fragment>
+      ))}
     </span>
   );
 };
@@ -628,19 +678,32 @@ const ShowAndMark: React.FC<{
   }
 
   const item = items[pos];
-  const long = sub.id === 'ayat' || item.text.length > 14;
   const pickOut = sub.id === 'words' || sub.id === 'ayat';
+  /** A verse is boxed and wraps; everything else stands on its own. Sized by
+   *  WHAT it is, never by how many characters it has — a short word is still a
+   *  word and must not come out the size of a single letter. */
+  const boxed = sub.id === 'ayat';
+  const size = sub.id === 'ayat' ? 'clamp(44px, 6.6vw, 96px)'
+    : sub.id === 'words' ? 'clamp(72px, 10vw, 168px)'
+    : 'clamp(150px, 34vh, 420px)';
 
   return (<>
     <div className="flex-grow flex flex-col items-center justify-center px-5 sm:px-10 py-4 min-h-0">
-      <div className={`mt-5 w-full max-w-[1100px] flex-grow flex flex-col items-center justify-center ${long ? 'rounded-[26px] px-8 py-8' : ''}`}
-        style={long ? { background: C.panel, border: `1px solid ${C.line}` } : undefined}>
+      <div className={`mt-5 w-full max-w-[1100px] flex-grow flex flex-col items-center justify-center ${boxed ? 'rounded-[26px] px-8 py-7' : ''}`}
+        style={boxed ? { background: C.panel, border: `1px solid ${C.line}` } : undefined}>
         <div className="text-center">
           {/* Picking the letters out only says something when they sit among
               OTHERS. On a bare letter or a syllable everything on screen is a
-              hunted letter, and colouring the lot just looks like a warning. */}
-          <Picked text={item.text} letters={pickOut ? letters : []}
-            size={sub.id === 'ayat' ? 'clamp(30px, 4.4vw, 58px)' : long ? 'clamp(54px, 8vw, 110px)' : 'clamp(150px, 34vh, 420px)'} />
+              hunted letter, and colouring the lot just looks like a warning.
+              Those two are also not Qur'anic text, so they keep the plain
+              alphabet font and none of the muṣḥaf mark handling. */}
+          <Picked
+            text={item.text}
+            letters={pickOut ? letters : []}
+            quranic={pickOut}
+            lineHeight={sub.id === 'ayat' ? 2.1 : 1.9}
+            size={size}
+          />
         </div>
         {item.ref && <p className="m-0 mt-5 text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{refLabel(item.ref)}</p>}
       </div>
