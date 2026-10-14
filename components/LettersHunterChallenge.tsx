@@ -20,9 +20,11 @@ import { letterAudioUrl, speakLetter, warmSpeech, SET_MARK } from '../services/l
 import {
   SUBS, subMeta, defaultPlan, playOrder, buildRow, targetsOf, sameCell, cellText, cellAudioSet,
   tally, logTitle, logDetail, dotsOf, introLine, enoughLetters,
+  buildSayItem, buildSyllable, loadWords, loadVerses, pickItems, foldChar, refLabel,
   MIN_ROUNDS, MAX_ROUNDS, MIN_LETTERS, MAX_LETTERS,
-  type HunterPlan, type SubId, type SubScore, type HunterRow, type HunterResult,
+  type HunterPlan, type SubId, type SubScore, type HunterRow, type HunterResult, type ShowItem,
 } from '../services/lettersHunterService';
+import { segmentWord } from '../services/tajweedColorService';
 
 const ARABIC = "'Hafs', 'Amiri', serif";
 
@@ -217,10 +219,160 @@ const Rail: React.FC<{ order: ReturnType<typeof playOrder>; at: number; onExit: 
   </div>
 );
 
+/* ── A word with the hunted letters picked out ───────────────────────────── */
+
+/**
+ * The chosen letters are tinted wherever they fall.
+ *
+ * Runs of letters are grouped into as FEW spans as possible: Arabic joins, and
+ * a span per character would cut every word into disconnected stumps. Each
+ * letter keeps its own marks (segmentWord gives letter units, not characters),
+ * so a vowel never ends up in a different colour from the letter it sits on.
+ */
+const Picked: React.FC<{ text: string; letters: string[]; size: string }> = ({ text, letters, size }) => {
+  const want = new Set(letters);
+  const runs: { text: string; on: boolean }[] = [];
+  for (const unit of segmentWord(text)) {
+    const on = want.has(foldChar(unit[0]));
+    const last = runs[runs.length - 1];
+    if (last && last.on === on) last.text += unit;
+    else runs.push({ text: unit, on });
+  }
+  return (
+    <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: size, lineHeight: 1.75, color: C.cream }}>
+      {runs.map((r, i) => <span key={i} style={r.on ? { color: C.coral } : undefined}>{r.text}</span>)}
+    </span>
+  );
+};
+
+/* ── Rounds 3, 5, 6 and 7: he reads, the tutor marks ─────────────────────── */
+
+type Mark = 'right' | 'wrong';
+
+const ShowAndMark: React.FC<{
+  sub: ReturnType<typeof subMeta>;
+  letters: string[];
+  items: ShowItem[] | null;
+  onDone: (right: number) => void;
+}> = ({ sub, letters, items, onDone }) => {
+  const [pos, setPos] = useState(0);
+  const [marks, setMarks] = useState<Record<number, Mark>>({});
+
+  const total = items?.length ?? 0;
+  const right = Object.values(marks).filter(m => m === 'right').length;
+
+  // The new marks are worked out here rather than inside the state updater:
+  // React may run an updater twice, and finishing the challenge from inside one
+  // would bank the score twice over.
+  const mark = useCallback((m: Mark) => {
+    const next = { ...marks, [pos]: m };
+    setMarks(next);
+    // Marking him is also what moves on — the tutor's hand stays on one key.
+    if (pos + 1 < total) setPos(p => p + 1);
+    else onDone(Object.values(next).filter(x => x === 'right').length);
+  }, [marks, pos, total, onDone]);
+
+  /** The tutor's mapping, kept as asked: reading runs right to left, so LEFT is
+   *  forward. It is the opposite of the Letter Sounds booth on purpose. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp') { e.preventDefault(); mark('right'); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); mark('wrong'); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); setPos(p => Math.min(total - 1, p + 1)); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setPos(p => Math.max(0, p - 1)); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mark, total]);
+
+  if (!items) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center gap-3">
+        <span className="w-9 h-9 rounded-full animate-spin" style={{ border: `3px solid ${C.faint}`, borderTopColor: C.coral }} />
+        <p className="m-0 text-sm" style={{ color: C.muted }}>Finding them in the Qur'an…</p>
+      </div>
+    );
+  }
+  if (!items.length) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center gap-3 px-8 text-center">
+        <p className="m-0 text-[17px] font-bold">Nothing to show for these letters</p>
+        <p className="m-0 text-sm" style={{ color: C.muted }}>Skipping this round.</p>
+        <button type="button" onClick={() => onDone(0)} className="mt-2 h-12 px-6 rounded-[14px] font-bold"
+          style={{ background: C.raised, border: `1px solid ${C.line}`, color: C.cream }}>Go on</button>
+      </div>
+    );
+  }
+
+  const item = items[pos];
+  const long = sub.id === 'ayat' || item.text.length > 14;
+  const pickOut = sub.id === 'words' || sub.id === 'ayat';
+
+  return (<>
+    <div className="flex-grow flex flex-col items-center justify-center px-5 sm:px-10 py-4 min-h-0">
+      <div className="flex items-baseline gap-4">
+        <h1 className="m-0 text-[22px] sm:text-[26px] font-extrabold" style={{ letterSpacing: '-0.02em' }}>{sub.name}</h1>
+        <span className="text-[15px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{pos + 1} / {total}</span>
+      </div>
+
+      <div className={`mt-5 w-full max-w-[1100px] flex-grow flex flex-col items-center justify-center ${long ? 'rounded-[26px] px-8 py-8' : ''}`}
+        style={long ? { background: C.panel, border: `1px solid ${C.line}` } : undefined}>
+        <div className="text-center">
+          {/* Picking the letters out only says something when they sit among
+              OTHERS. On a bare letter or a syllable everything on screen is a
+              hunted letter, and colouring the lot just looks like a warning. */}
+          <Picked text={item.text} letters={pickOut ? letters : []}
+            size={sub.id === 'ayat' ? 'clamp(30px, 4.4vw, 58px)' : long ? 'clamp(54px, 8vw, 110px)' : 'clamp(96px, 20vh, 300px)'} />
+        </div>
+        {item.ref && <p className="m-0 mt-5 text-[14px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>{refLabel(item.ref)}</p>}
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap justify-center mt-4">
+        {items.map((_, i) => (
+          <span key={i} style={{
+            width: 34, height: 7, borderRadius: 4,
+            background: marks[i] === 'right' ? C.mint : marks[i] === 'wrong' ? C.rose : i === pos ? C.coral : C.faint,
+          }} />
+        ))}
+      </div>
+    </div>
+
+    <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-3 px-5 pb-4">
+      <button type="button" onClick={() => setPos(p => Math.max(0, p - 1))} disabled={pos === 0}
+        className="h-[60px] px-5 rounded-[17px] text-[15px] font-bold flex items-center gap-3 disabled:opacity-40"
+        style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.body }}>
+        <Key>→</Key> Back
+      </button>
+      <button type="button" onClick={() => mark('right')}
+        className="h-[60px] px-6 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
+        style={{ background: C.mintBg, border: `1px solid ${C.mint}`, color: C.mintInk }}>
+        <Key>↑</Key> He said it right
+      </button>
+      <button type="button" onClick={() => mark('wrong')}
+        className="h-[60px] px-6 rounded-[17px] text-[16px] font-extrabold flex items-center gap-3"
+        style={{ background: C.roseBg, border: `1px solid ${C.rose}`, color: C.roseInk }}>
+        <Key>↓</Key> Not yet
+      </button>
+      <button type="button" onClick={() => (pos + 1 < total ? setPos(p => p + 1) : onDone(right))}
+        className="h-[60px] px-5 rounded-[17px] text-[15px] font-bold flex items-center gap-3"
+        style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.body }}>
+        {pos + 1 < total ? 'Next' : 'Finish'} <Key>←</Key>
+      </button>
+    </div>
+    <p className="m-0 pb-5 text-center text-[12.5px]" style={{ color: C.dim }}>
+      Marking him moves on by itself — the arrows are there to go back.
+    </p>
+  </>);
+};
+
+const Key: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-[15px]"
+    style={{ background: C.ground, border: `1px solid ${C.line}` }}>{children}</span>
+);
+
 /* ── The run ─────────────────────────────────────────────────────────────── */
 
 type Phase = 'intro' | 'play' | 'done';
-type Mark = 'right' | 'wrong';
 
 const LettersHunterRun: React.FC<{
   letters: string[];
@@ -242,9 +394,44 @@ const LettersHunterRun: React.FC<{
   const timerRef = useRef<number | null>(null);
   const roundRightRef = useRef(0);
 
+  const [items, setItems] = useState<ShowItem[] | null>(null);
+
   const sub = order[at];
   const withVowels = sub?.id === 'sounds';
   const rounds = sub ? plan[sub.id].rounds : 0;
+  /** Rounds 1 and 2 are a row of ten; the rest show one thing at a time. */
+  const isRow = sub?.id === 'spot' || sub?.id === 'sounds';
+
+  /** Bank a finished challenge and move to the next one, or to the mark.
+   *  Once per challenge, whatever calls it: a second call for the same one is
+   *  a repeat, never a second score. */
+  const bankedRef = useRef<Set<SubId>>(new Set());
+  const bank = useCallback((id: SubId, right: number, of: number) => {
+    if (bankedRef.current.has(id)) return;
+    bankedRef.current.add(id);
+    setScores(s => [...s, { id, right, rounds: of }]);
+    roundRightRef.current = 0;
+    setRow(null);
+    setItems(null);
+    setRound(0);
+    setAt(n => (n + 1 < order.length ? n + 1 : n));
+    if (at + 1 >= order.length) setPhase('done');
+  }, [at, order.length]);
+
+  /** What a show-and-mark round will put on the screen, built once when the
+   *  challenge opens. The two Qur'an rounds read their file first. */
+  useEffect(() => {
+    if (phase !== 'play' || !sub || isRow || items) return;
+    let alive = true;
+    if (sub.id === 'say' || sub.id === 'syllables') {
+      const make = sub.id === 'say' ? buildSayItem : buildSyllable;
+      setItems(Array.from({ length: rounds }, () => make(letters)));
+      return;
+    }
+    (sub.id === 'words' ? loadWords() : loadVerses())
+      .then(pool => { if (alive) setItems(pickItems(pool, letters, rounds)); });
+    return () => { alive = false; };
+  }, [phase, sub, isRow, items, letters, rounds]);
 
   /* sound */
   const play = useCallback((cellLetter: string, set: ReturnType<typeof cellAudioSet>) => {
@@ -270,14 +457,14 @@ const LettersHunterRun: React.FC<{
   /* a fresh row whenever the round or the sub-challenge changes — and after
      advance() tears the last one down, which is what `row == null` means */
   useEffect(() => {
-    if (phase !== 'play' || !sub || row) return;
+    if (phase !== 'play' || !sub || row || !isRow) return;
     const r = buildRow(letters, withVowels);
     setRow(r);
     setMarks({});
     // The sound is the question, so it comes without being asked for.
     const t = window.setTimeout(() => play(r.target.letter, cellAudioSet(r.target)), 260);
     return () => window.clearTimeout(t);
-  }, [phase, at, round, sub, row, letters, withVowels, play]);
+  }, [phase, at, round, sub, row, isRow, letters, withVowels, play]);
 
   const targets = row ? targetsOf(row) : [];
   const found = targets.filter(i => marks[i] === 'right').length;
@@ -302,14 +489,8 @@ const LettersHunterRun: React.FC<{
     setMarks({});
 
     if (round + 1 < rounds) { setRound(r => r + 1); return; }
-
-    const banked: SubScore = { id: sub.id, right: roundRightRef.current, rounds };
-    roundRightRef.current = 0;
-    setScores(s => [...s, banked]);
-    setRound(0);
-    if (at + 1 < order.length) setAt(n => n + 1);
-    else setPhase('done');
-  }, [sub, row, found, targets.length, missed, round, rounds, at, order.length]);
+    bank(sub.id, roundRightRef.current, rounds);
+  }, [sub, row, found, targets.length, missed, round, rounds, bank]);
 
   /* a finished row moves on by itself, with a beat to see it */
   useEffect(() => {
@@ -405,7 +586,7 @@ const LettersHunterRun: React.FC<{
         </div>
 
         <div className="mt-8 flex gap-3">
-          <button type="button" onClick={() => { setScores([]); setAt(0); setRound(0); roundRightRef.current = 0; setPhase('intro'); }}
+          <button type="button" onClick={() => { setScores([]); setAt(0); setRound(0); setRow(null); setItems(null); roundRightRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
             className="h-14 px-7 rounded-[15px] text-[15px] font-bold"
             style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>Hunt them again</button>
           <button type="button" onClick={() => onFinish(result)}
@@ -414,6 +595,15 @@ const LettersHunterRun: React.FC<{
         </div>
       </div>,
     );
+  }
+
+  /* ── he reads, the tutor marks ── */
+  if (!isRow) {
+    return shell(<>
+      <Rail order={order} at={at} onExit={onExit} />
+      <ShowAndMark sub={sub} letters={letters} items={items}
+        onDone={right => bank(sub.id, right, items?.length || rounds)} />
+    </>);
   }
 
   /* ── a row of ten ── */

@@ -49,11 +49,11 @@ export interface SubMeta {
 export const SUBS: SubMeta[] = [
   { id: 'spot',      n: 1, name: 'Spot the letter you hear', blurb: 'Ten cells, he calls out the numbers', defaultRounds: 5,  unit: 'rounds',    asHomework: true,  ready: true },
   { id: 'sounds',    n: 2, name: 'Sound discrimination',     blurb: 'The letter carrying a vowel',          defaultRounds: 5,  unit: 'rounds',    asHomework: true,  ready: true },
-  { id: 'say',       n: 3, name: 'Say the letter',           blurb: 'He reads it, you mark it',             defaultRounds: 10, unit: 'letters',   asHomework: false, ready: false },
+  { id: 'say',       n: 3, name: 'Say the letter',           blurb: 'He reads it, you mark it',             defaultRounds: 10, unit: 'letters',   asHomework: false, ready: true },
   { id: 'write',     n: 4, name: 'Write',                    blurb: 'A board you both draw on',             defaultRounds: 5,  unit: 'letters',   asHomework: true,  ready: false },
-  { id: 'syllables', n: 5, name: 'Syllables',                blurb: 'Both letters in one breath',           defaultRounds: 10, unit: 'syllables', asHomework: false, ready: false },
-  { id: 'words',     n: 6, name: "Qur'anic words",           blurb: 'Real words carrying the letters',      defaultRounds: 10, unit: 'words',     asHomework: false, ready: false },
-  { id: 'ayat',      n: 7, name: 'Ayat',                     blurb: 'A verse to read them in',              defaultRounds: 5,  unit: 'verses',    asHomework: false, ready: false },
+  { id: 'syllables', n: 5, name: 'Syllables',                blurb: 'Both letters in one breath',           defaultRounds: 10, unit: 'syllables', asHomework: false, ready: true },
+  { id: 'words',     n: 6, name: "Qur'anic words",           blurb: 'Real words carrying the letters',      defaultRounds: 10, unit: 'words',     asHomework: false, ready: true },
+  { id: 'ayat',      n: 7, name: 'Ayat',                     blurb: 'A verse to read them in',              defaultRounds: 5,  unit: 'verses',    asHomework: false, ready: true },
 ];
 
 export const subMeta = (id: SubId): SubMeta => SUBS.find(s => s.id === id) as SubMeta;
@@ -246,3 +246,133 @@ export const logTitle = (letters: string[]): string =>
 
 export const logDetail = (r: HunterResult): string =>
   [`${r.right}/${r.total} rounds right`, ...r.scores.map(s => `${subMeta(s.id).name} ${s.right}/${s.rounds}`)].join(' · ');
+
+/* ── Rounds 3 and 5: what to put on the screen ───────────────────────────── */
+
+/** One thing shown, marked right or wrong by the tutor as the student reads. */
+export interface ShowItem {
+  /** What is drawn, with its vowels. */
+  text: string;
+  /** Where it is from, for a word or a verse. */
+  ref?: string;
+}
+
+/** A letter wearing one of the three vowels. */
+export const buildSayItem = (letters: string[]): ShowItem => {
+  const l = pick(letters);
+  return { text: l + SET_MARK[pick(HUNTER_VOWELS)] };
+};
+
+/**
+ * Two letters run together, each with its own vowel: زَرِ.
+ *
+ * The pair is drawn from the chosen letters and may repeat one of them (زَزِ
+ * is worth reading too) but prefers two different ones, which is where the
+ * confusion lives.
+ */
+export const buildSyllable = (letters: string[]): ShowItem => {
+  const a = pick(letters);
+  const rest = letters.filter(l => l !== a);
+  const b = rest.length && Math.random() < 0.8 ? pick(rest) : pick(letters);
+  return { text: a + SET_MARK[pick(HUNTER_VOWELS)] + b + SET_MARK[pick(HUNTER_VOWELS)] };
+};
+
+/* ── Rounds 6 and 7: the Qur'an ──────────────────────────────────────────── */
+
+/** Alef and hamza are written half a dozen ways; a hunt for ء should find أ. */
+const FOLD: Record<string, string> = {
+  'أ': 'ء', 'إ': 'ء', 'آ': 'ء', 'ؤ': 'ء', 'ئ': 'ء', 'ٱ': 'ا', 'ى': 'ي', 'ة': 'ه',
+};
+
+const LETTER_SET = new Set('ابتثجحخدذرزسشصضطظعغفقكلمنهوي ء'.replace(/\s/g, ''));
+
+/** The letters of a word or verse with every mark taken off — what matching
+ *  runs against. The index ships without these; stripping here costs a few ms
+ *  and saves the download from doubling. */
+export const strip = (text: string): string => {
+  let out = '';
+  for (const ch of text) {
+    const c = FOLD[ch] ?? ch;
+    if (LETTER_SET.has(c)) out += c;
+  }
+  return out;
+};
+
+/** One character as matching sees it — أ and ٱ are not their own letters here. */
+export const foldChar = (ch: string): string => FOLD[ch] ?? ch;
+
+type Entry = { text: string; ref?: string; skel: string };
+
+let wordsCache: Entry[] | null = null;
+let versesCache: Entry[] | null = null;
+let wordsPromise: Promise<Entry[]> | null = null;
+let versesPromise: Promise<Entry[]> | null = null;
+
+/** Both files are built by scripts/build-letter-index.py and are fetched only
+ *  by the round that needs them. */
+export function loadWords(): Promise<Entry[]> {
+  if (wordsCache) return Promise.resolve(wordsCache);
+  wordsPromise ??= fetch('/quran-words.json')
+    .then(r => r.json())
+    .then((d: { words: string[] }) => {
+      wordsCache = d.words.map(w => ({ text: w, skel: strip(w) }));
+      return wordsCache;
+    })
+    .catch(e => { console.error('loadWords:', e); wordsPromise = null; return []; });
+  return wordsPromise;
+}
+
+export function loadVerses(): Promise<Entry[]> {
+  if (versesCache) return Promise.resolve(versesCache);
+  versesPromise ??= fetch('/quran-short-verses.json')
+    .then(r => r.json())
+    .then((d: { verses: [string, string][] }) => {
+      versesCache = d.verses.map(([ref, text]) => ({ text, ref, skel: strip(text) }));
+      return versesCache;
+    })
+    .catch(e => { console.error('loadVerses:', e); versesPromise = null; return []; });
+  return versesPromise;
+}
+
+/**
+ * Pick `n` words or verses for these letters.
+ *
+ * Best first: something holding ALL the chosen letters is the real test, two of
+ * them is the next best, one is the fallback. The fallback is not a lesser
+ * version of the same thing — for د/ذ, ح/خ, ص/ض, ط/ظ and ع/غ there is NO
+ * Qur'anic word holding both, so those pairs live entirely in it. When it is
+ * used the letters take turns, or a hunt for ص and ض would show nothing but ص.
+ */
+export function pickItems(pool: Entry[], letters: string[], n: number): ShowItem[] {
+  const holds = (e: Entry, ls: string[]) => ls.every(l => e.skel.includes(l));
+  const all = pool.filter(e => holds(e, letters));
+  const two = letters.length > 2
+    ? pool.filter(e => letters.filter(l => e.skel.includes(l)).length >= 2 && !holds(e, letters))
+    : [];
+
+  const out: Entry[] = [];
+  const take = (from: Entry[]) => {
+    for (const e of shuffled(from)) {
+      if (out.length >= n) return;
+      if (!out.includes(e)) out.push(e);
+    }
+  };
+  take(all);
+  take(two);
+
+  // The fallback, letter by letter in turn.
+  if (out.length < n) {
+    const byLetter = letters.map(l => shuffled(pool.filter(e => e.skel.includes(l) && !out.includes(e))));
+    let turn = 0;
+    while (out.length < n && byLetter.some(b => b.length)) {
+      const bucket = byLetter[turn % byLetter.length];
+      const e = bucket.pop();
+      if (e && !out.includes(e)) out.push(e);
+      turn++;
+    }
+  }
+  return out.slice(0, n).map(e => ({ text: e.text, ref: e.ref }));
+}
+
+/** Surah 18, verse 7 → "18:7" is all the index keeps; the reader names it. */
+export const refLabel = (ref?: string): string => (ref ? `Ayah ${ref}` : '');
