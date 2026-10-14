@@ -65,6 +65,9 @@ import ZombieTunePage from './components/ZombieTunePage';
 import OddLetterGame from './components/OddLetterGame';
 import CraneBuilderJoinPage from './components/CraneBuilderJoinPage';
 import HunterBoardPage from './components/HunterBoardPage';
+import HunterHomeworkPage from './components/HunterHomeworkPage';
+import HunterMarkingPanel from './components/HunterMarkingPanel';
+import { listHunterHomework, hunterHomeworkUrl, type HunterHomework } from './services/lettersHunterHomeworkService';
 import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
@@ -501,6 +504,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (hunterBoardId) return <HunterBoardPage roomId={hunterBoardId} />;
+
+  // ── Letters Hunter homework — the link the tutor sends, no auth ───────────
+  const hunterHomeworkId = (() => {
+    const m = window.location.pathname.match(/^\/hunt\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (hunterHomeworkId) return <HunterHomeworkPage homeworkId={hunterHomeworkId} />;
 
   // ── Arabic vocabulary homework — the link the tutor sends, no auth ─────────
   const vocabHomeworkId = (() => {
@@ -944,6 +954,16 @@ const App: React.FC = () => {
       const tries = await listLetterCardsAttempts(games.map(g => g.id));
       if (live) setCardAttempts(tries);
     }).catch(() => {});
+    return () => { live = false; };
+  }, [currentUserRole, hwStudentId, activeTab]);
+
+  // Letters Hunter set as homework for that student, and the one being marked.
+  const [hunts, setHunts] = useState<HunterHomework[]>([]);
+  const [markingHunt, setMarkingHunt] = useState<HunterHomework | null>(null);
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !hwStudentId) { setHunts([]); return; }
+    let live = true;
+    listHunterHomework(hwStudentId).then(list => { if (live) setHunts(list); }).catch(() => {});
     return () => { live = false; };
   }, [currentUserRole, hwStudentId, activeTab]);
 
@@ -2395,6 +2415,9 @@ const App: React.FC = () => {
               onClearFinished={clearFinished}
               cardGames={cardGames}
               cardAttempts={cardAttempts}
+              hunts={hunts}
+              onOpenHunt={setMarkingHunt}
+              onCopyHuntLink={h => navigator.clipboard?.writeText(hunterHomeworkUrl(h.id)).catch(() => {})}
             />
           );
         })() : activeTab === 'bill' && currentUser?.role === 'teacher' && (sessionStudent ?? selectedStudent)?.studentType === 'platform' ? (
@@ -2524,6 +2547,19 @@ const App: React.FC = () => {
         arabicStudents={arabicStudents}
         onUpdateArabicStudent={handleUpdateArabicStudent}
       />
+
+      {/* Going through the drawings a student handed in. At the shell, so it
+          covers whatever page the tutor opened it from. */}
+      {markingHunt && (
+        <HunterMarkingPanel
+          hw={markingHunt}
+          onClose={() => setMarkingHunt(null)}
+          onMarked={done => {
+            setHunts(list => list.map(h => (h.id === done.id ? done : h)));
+            setMarkingHunt(null);
+          }}
+        />
+      )}
 
       {/* Asks what happened whenever a finished lesson has nothing logged.
           Mounted at the shell so it shows on any tutor page. */}

@@ -17,6 +17,7 @@ import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
 import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
+import { dueLabel, hunterMark, type HunterHomework } from '../services/lettersHunterHomeworkService';
 
 const SERIF = "'Cormorant Garamond', Georgia, serif";
 
@@ -108,10 +109,15 @@ const HomeworkTab: React.FC<{
   cardAttempts?: Record<string, LetterCardsAttempt[]>;
   /** Student: open the board. */
   onPlayCards?: (game: LetterCardsGame) => void;
+  /** Letters Hunter set as homework, newest first. */
+  hunts?: HunterHomework[];
+  /** Student: do it. Tutor: look at the drawings and mark them. */
+  onOpenHunt?: (hw: HunterHomework) => void;
+  onCopyHuntLink?: (hw: HunterHomework) => void;
 }> = ({
   side, homework, recitations, untilLesson,
   onOpenVerses, onListen, onCopyLink, onMarkDone, onRemove, onClearFinished, onRecord,
-  cardGames, cardAttempts, onPlayCards,
+  cardGames, cardAttempts, onPlayCards, hunts, onOpenHunt, onCopyHuntLink,
 }) => {
   const isTutor = side === 'tutor';
   const [showFinished, setShowFinished] = useState(false);
@@ -388,6 +394,50 @@ const HomeworkTab: React.FC<{
         )}
       </div>
 
+      {(hunts ?? []).map(h => {
+        const mark = hunterMark(h);
+        const waiting = h.status === 'submitted';
+        return (
+          <div key={h.id} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <div className="px-5 py-4 flex items-center gap-3 flex-wrap">
+              <span className="text-2xl" aria-hidden="true">◎</span>
+              <div className="min-w-0">
+                <p className="text-lg text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                  Letters hunter ·{' '}
+                  <span dir="rtl" lang="ar" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{h.letters.join(' ')}</span>
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  set {shortDate(h.createdAt)} · {dueLabel(h)}
+                  {waiting && ' · handed in, waiting to be marked'}
+                </p>
+              </div>
+              <span className="flex-grow" />
+              {mark && (
+                <span className="inline-flex items-baseline gap-1.5">
+                  <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
+                    {mark.right}/{mark.total}
+                  </span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">marked</span>
+                </span>
+              )}
+              {isTutor && onCopyHuntLink && (
+                <button onClick={() => onCopyHuntLink(h)}
+                  className="flex-shrink-0 h-9 px-4 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-bold text-slate-600 dark:text-slate-300">
+                  Copy link
+                </button>
+              )}
+              {onOpenHunt && (isTutor ? h.status !== 'assigned' : h.status !== 'submitted') && (
+                <button onClick={() => onOpenHunt(h)}
+                  className={`flex-shrink-0 h-9 px-4 rounded-full text-[13px] font-black text-white ${
+                    waiting && isTutor ? 'bg-orange-500 hover:bg-orange-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                  {isTutor ? (waiting ? 'Mark the writing' : 'Look at it') : mark ? 'See the mark' : 'Do it'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
       {(cardGames ?? []).map(g => {
         const tries = cardAttempts?.[g.id] ?? [];
         const best = tries.reduce((m, a) => Math.max(m, a.score), 0);
@@ -444,7 +494,7 @@ const HomeworkTab: React.FC<{
         );
       })}
 
-      {openBlocks.length === 0 && (cardGames ?? []).length === 0 ? (
+      {openBlocks.length === 0 && (cardGames ?? []).length === 0 && (hunts ?? []).length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-10 text-center">
           <p className="text-lg text-slate-700 dark:text-slate-200" style={{ fontFamily: SERIF, fontWeight: 600 }}>
             {isTutor ? 'Nothing open' : 'All done'}

@@ -22,7 +22,8 @@ import {
 type Tool = 'pen' | 'eraser';
 
 interface Props {
-  roomId: string;
+  /** null for a board nobody else is on — homework, where there is no room. */
+  roomId: string | null;
   me: InkOwner;
   /** The lesson screen holds the room open and mirrors everyone's ink. */
   isHost: boolean;
@@ -32,6 +33,8 @@ interface Props {
   initial?: Stroke[];
   /** Fires on every finished stroke, so the owner can keep what was drawn. */
   onStrokes?: (strokes: Stroke[]) => void;
+  /** Hide the tools — a drawing being looked at rather than made. */
+  readOnly?: boolean;
   /** Host only: how many devices are drawing. */
   onPeers?: (n: number) => void;
   className?: string;
@@ -39,7 +42,7 @@ interface Props {
 
 const PAPER = '#FBFAF6';
 
-const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onStrokes, onPeers, className }) => {
+const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onStrokes, onPeers, readOnly, className }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tutorRef = useRef<HTMLCanvasElement>(null);
   const studentRef = useRef<HTMLCanvasElement>(null);
@@ -130,6 +133,8 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
 
   /* ── the room ── */
   useEffect(() => {
+    // Homework is drawn alone: no room, no channel, nothing to mirror.
+    if (!roomId) return;
     const ch = createGameChannel(boardChannel(roomId), isHost ? 'host' : 'guest');
     chanRef.current = ch;
 
@@ -266,11 +271,13 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
           <span aria-hidden="true" style={{ position: 'absolute', left: '7%', right: '7%', top: '62%', height: 1, background: '#E8E2D4' }} />
           <canvas ref={studentRef} className="absolute inset-0" style={{ touchAction: 'none' }} />
           <canvas ref={tutorRef} className="absolute inset-0" style={{ touchAction: 'none' }}
-            onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={up} />
+            onPointerDown={readOnly ? undefined : down} onPointerMove={readOnly ? undefined : move}
+            onPointerUp={readOnly ? undefined : up} onPointerCancel={readOnly ? undefined : up}
+            onPointerLeave={readOnly ? undefined : up} />
         </div>
       </div>
 
-      <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-2.5 pt-3">
+      {!readOnly && <div className="flex-shrink-0 flex flex-wrap items-center justify-center gap-2.5 pt-3">
         <span className="flex items-center gap-2 px-2.5 py-2 rounded-[14px]" style={{ background: '#FFFFFF', border: '1px solid #E3DED1' }}>
           <button type="button" onClick={() => setTool('pen')} aria-label="Pen" aria-pressed={tool === 'pen'}
             className="w-11 h-11 rounded-xl flex items-center justify-center"
@@ -309,7 +316,7 @@ const HunterBoard: React.FC<Props> = ({ roomId, me, isHost, round, initial, onSt
           style={{ background: '#F2EFE7', border: '1px solid #E3DED1', color: '#5A5648' }}>
           Clear mine
         </button>
-      </div>
+      </div>}
     </div>
   );
 };

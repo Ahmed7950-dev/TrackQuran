@@ -28,12 +28,14 @@ import { segmentWord } from '../services/tajweedColorService';
 import { QRCodeSVG } from 'qrcode.react';
 import HunterBoard from './HunterBoard';
 import { boardUrl, newRoomId, type Stroke } from '../services/hunterBoardService';
+import { supabase } from '../lib/supabase';
+import { createHunterHomework, hunterHomeworkUrl, HOMEWORK_SUBS } from '../services/lettersHunterHomeworkService';
 
-const ARABIC = "'Hafs', 'Amiri', serif";
+export const ARABIC = "'Hafs', 'Amiri', serif";
 
 /** The hunt's own palette: ink ground, cream letters, one coral for the quarry.
  *  Deliberately not the Letter Sounds green or the Media amber. */
-const C = {
+export const C = {
   ground:  '#0B1220',
   panel:   '#141E31',
   raised:  '#1D2A42',
@@ -53,7 +55,7 @@ const C = {
   roseInk: '#FFE9ED',
 };
 
-const Speaker: React.FC<{ size?: number }> = ({ size = 22 }) => (
+export const Speaker: React.FC<{ size?: number }> = ({ size = 22 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M4 9.5v5h3.2L12 18.5v-13L7.2 9.5H4z" />
@@ -62,14 +64,14 @@ const Speaker: React.FC<{ size?: number }> = ({ size = 22 }) => (
   </svg>
 );
 
-const Tick: React.FC<{ size?: number }> = ({ size = 16 }) => (
+export const Tick: React.FC<{ size?: number }> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m5 13 4 4L19 7" />
   </svg>
 );
 
-const Cross: React.FC<{ size?: number }> = ({ size = 15 }) => (
+export const Cross: React.FC<{ size?: number }> = ({ size = 15 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={3.2} strokeLinecap="round" aria-hidden="true">
     <path d="M6 6l12 12M18 6L6 18" />
@@ -80,10 +82,19 @@ const Cross: React.FC<{ size?: number }> = ({ size = 15 }) => (
 
 export const LettersHunterSetup: React.FC<{
   letters: string[];
+  /** Absent when no student is open — then it can only be run, not set. */
+  student?: { id: string; name: string } | null;
   onStart: (plan: HunterPlan) => void;
   onClose: () => void;
-}> = ({ letters, onStart, onClose }) => {
+}> = ({ letters, student, onStart, onClose }) => {
   const [plan, setPlan] = useState<HunterPlan>(defaultPlan);
+  const [setting, setSetting] = useState(false);
+  const [due, setDue] = useState<'open' | '3' | '7' | 'date'>('7');
+  const [onDate, setOnDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const set = (id: SubId, patch: Partial<{ on: boolean; rounds: number }>) =>
     setPlan(p => ({ ...p, [id]: { ...p[id], ...patch } }));
@@ -92,6 +103,40 @@ export const LettersHunterSetup: React.FC<{
     set(id, { rounds: Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, plan[id].rounds + by)) });
 
   const chosen = playOrder(plan);
+  /** What would actually go home: the other four need someone listening. */
+  const goingHome = chosen.filter(s => HOMEWORK_SUBS.includes(s.id));
+
+  const dueIso = (): string | null => {
+    if (due === 'open') return null;
+    if (due === 'date') return onDate ? new Date(`${onDate}T23:59:00`).toISOString() : null;
+    const d = new Date();
+    d.setDate(d.getDate() + Number(due));
+    d.setHours(23, 59, 0, 0);
+    return d.toISOString();
+  };
+
+  const send = async () => {
+    if (!student) { setErr('Open a student first to set this as homework.'); return; }
+    setBusy(true); setErr('');
+    const { data } = await supabase.auth.getUser();
+    const teacherId = data.user?.id;
+    if (!teacherId) { setBusy(false); setErr('Sign in again to set homework.'); return; }
+    // Only the rounds that can be done alone are sent, whatever is ticked.
+    const homeworkPlan = { ...plan };
+    for (const s of SUBS) if (!HOMEWORK_SUBS.includes(s.id)) homeworkPlan[s.id] = { ...homeworkPlan[s.id], on: false };
+    const made = await createHunterHomework({
+      teacherId, studentId: student.id, studentName: student.name,
+      letters, plan: homeworkPlan, dueAt: dueIso(),
+    });
+    setBusy(false);
+    if (!made) { setErr('Could not set it. Try again.'); return; }
+    setLink(hunterHomeworkUrl(made.id));
+  };
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); window.setTimeout(() => setCopied(false), 2000); }
+    catch { /* the link is on screen anyway */ }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-start sm:items-center justify-center overflow-y-auto p-0 sm:p-6"
@@ -179,12 +224,69 @@ export const LettersHunterSetup: React.FC<{
               ? 'Turn at least one round on.'
               : `${chosen.length} round${chosen.length === 1 ? '' : 's'} · ${chosen.reduce((n, s) => n + plan[s.id].rounds, 0)} turns in all`}
           </p>
-          <button type="button" onClick={() => { warmSpeech(); onStart(plan); }} disabled={chosen.length === 0}
-            className="w-full h-14 rounded-[15px] text-base font-extrabold flex items-center justify-center gap-2.5 disabled:opacity-50"
-            style={{ background: C.coral, color: C.onCoral, border: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
-            Start the hunt now
-          </button>
+
+          {link ? (
+            <div className="p-[18px] rounded-[14px]" style={{ background: '#10192A', border: `1px solid ${C.coral}` }}>
+              <p className="m-0 mb-2 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.coral }}>Set · his link</p>
+              <p className="m-0 break-all text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.body }}>{link}</p>
+              <div className="flex gap-2.5 mt-3">
+                <button type="button" onClick={() => void copy()} className="h-11 px-5 rounded-[11px] text-sm font-extrabold"
+                  style={{ background: C.coral, color: C.onCoral, border: 0 }}>{copied ? '✓ Copied' : 'Copy link'}</button>
+                <button type="button" onClick={onClose} className="h-11 px-5 rounded-[11px] text-sm font-bold"
+                  style={{ background: C.raised, border: `1px solid ${C.line}`, color: C.cream }}>Done</button>
+              </div>
+              <p className="m-0 mt-3 text-[12.5px]" style={{ color: C.dim }}>
+                It is in his homework tab too — the link only saves him looking.
+              </p>
+            </div>
+          ) : setting ? (
+            <div className="p-[18px] rounded-[14px]" style={{ background: '#10192A', border: `1px solid ${C.line}` }}>
+              <p className="m-0 mb-3 text-[11.5px] font-extrabold uppercase" style={{ letterSpacing: '0.14em', color: C.muted }}>When is it due</p>
+              <div className="flex flex-wrap gap-2">
+                {([['3', 'In 3 days'], ['7', 'In a week'], ['date', 'Pick a day'], ['open', 'No deadline']] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setDue(k)} aria-pressed={due === k}
+                    className="h-11 px-4 rounded-[12px] text-[13.5px] font-bold"
+                    style={{ background: due === k ? C.raised : 'transparent', border: `1px solid ${due === k ? C.coral : C.line}`, color: due === k ? C.cream : C.body }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {due === 'date' && (
+                <input type="date" value={onDate} onChange={e => setOnDate(e.target.value)} aria-label="The day it is due"
+                  className="mt-3 h-11 px-3 rounded-[11px] text-sm w-full"
+                  style={{ background: '#0B1220', border: `1px solid ${C.line}`, color: C.cream }} />
+              )}
+              <p className="m-0 mt-3.5 text-[12.5px] leading-relaxed" style={{ color: C.dim }}>
+                {goingHome.length
+                  ? <>Going home: {goingHome.map(s => s.name).join(', ')}. The other rounds need you listening, so they stay in the lesson.</>
+                  : <>None of the rounds you picked can be done alone. Turn on spot the letter, sound discrimination or write.</>}
+              </p>
+              <div className="flex gap-2.5 mt-3">
+                <button type="button" onClick={() => void send()} disabled={busy || goingHome.length === 0}
+                  className="h-12 px-6 rounded-[13px] text-[15px] font-extrabold disabled:opacity-50"
+                  style={{ background: C.coral, color: C.onCoral, border: 0 }}>{busy ? 'Setting…' : 'Set it'}</button>
+                <button type="button" onClick={() => setSetting(false)} className="h-12 px-5 rounded-[13px] text-[15px] font-bold"
+                  style={{ background: 'transparent', border: `1px solid ${C.line}`, color: C.body }}>Back</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <button type="button" onClick={() => { warmSpeech(); onStart(plan); }} disabled={chosen.length === 0}
+                className="flex-1 h-14 rounded-[15px] text-base font-extrabold flex items-center justify-center gap-2.5 disabled:opacity-50"
+                style={{ background: C.coral, color: C.onCoral, border: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+                Start the hunt now
+              </button>
+              <button type="button" onClick={() => setSetting(true)} disabled={chosen.length === 0}
+                className="flex-1 h-14 rounded-[15px] text-base font-bold flex items-center justify-center gap-2.5 disabled:opacity-50"
+                style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v14l-7-4-7 4V6a2 2 0 0 1 2-2z" /></svg>
+                Set as homework
+              </button>
+            </div>
+          )}
+
+          {err && <p role="alert" className="m-0 mt-3 text-[13.5px]" style={{ color: '#F0B5AE' }}>{err}</p>}
         </div>
       </div>
     </div>
@@ -222,6 +324,182 @@ const Rail: React.FC<{ order: ReturnType<typeof playOrder>; at: number; onExit: 
   </div>
 );
 
+/** The letter said out loud, with the browser's voice as the net when a
+ *  recording is missing (hamzah has none in the bare set yet). */
+function useLetterAudio() {
+  const ref = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const play = useCallback((letter: string, set: ReturnType<typeof cellAudioSet>) => {
+    ref.current?.pause();
+    const audio = new Audio(letterAudioUrl(letter, set));
+    ref.current = audio;
+    setPlaying(true);
+    audio.onended = () => setPlaying(false);
+    audio.onerror = () => { setPlaying(false); speakLetter(letter + (set === 'plain' ? '' : SET_MARK[set])); };
+    audio.play().catch(() => setPlaying(false));
+  }, []);
+  useEffect(() => () => ref.current?.pause(), []);
+  return { play, playing };
+}
+
+/* ── Rounds 1 and 2: a row of ten ────────────────────────────────────────── */
+
+type Mark = 'right' | 'wrong';
+
+/**
+ * One whole challenge of rows — every round of it — ending in how many were
+ * clean.
+ *
+ * The same screen serves the lesson and the homework. The only difference is
+ * the numbers in the corners: in the lesson they are how the student tells the
+ * tutor what he heard, and at home he taps the cells himself, so they would be
+ * furniture.
+ */
+export const RowRound: React.FC<{
+  letters: string[];
+  withVowels: boolean;
+  rounds: number;
+  showNumbers: boolean;
+  lastLabel: string;
+  onDone: (right: number) => void;
+}> = ({ letters, withVowels, rounds, showNumbers, lastLabel, onDone }) => {
+  const [round, setRound] = useState(0);
+  const [row, setRow] = useState<HunterRow | null>(null);
+  const [marks, setMarks] = useState<Record<number, Mark>>({});
+  const { play, playing } = useLetterAudio();
+  const timerRef = useRef<number | null>(null);
+  const rightRef = useRef(0);
+
+  /* a fresh row whenever the round changes — and after advance() tears the
+     last one down, which is what `row == null` means */
+  useEffect(() => {
+    if (row) return;
+    const r = buildRow(letters, withVowels);
+    setRow(r);
+    setMarks({});
+    // The sound is the question, so it comes without being asked for.
+    const t = window.setTimeout(() => play(r.target.letter, cellAudioSet(r.target)), 260);
+    return () => window.clearTimeout(t);
+  }, [round, row, letters, withVowels, play]);
+
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+
+  const targets = row ? targetsOf(row) : [];
+  const found = targets.filter(i => marks[i] === 'right').length;
+  const missed = Object.values(marks).filter(m => m === 'wrong').length;
+  const roundOver = row != null && targets.length > 0 && found === targets.length;
+
+  /**
+   * Move on: bank this round, then the next one.
+   *
+   * The row is torn down FIRST. `roundOver` is derived from the row that is on
+   * screen, so while an old finished row is still mounted it stays true — and
+   * the effect below would arm a second timer and bank the same round twice (a
+   * two-round challenge scored 4/4 and appeared twice on the mark screen). A
+   * null row is also what makes a second call here a no-op.
+   */
+  const advance = useCallback(() => {
+    if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    if (!row) return;
+    if (found === targets.length && missed === 0) rightRef.current += 1;
+    setRow(null);
+    setMarks({});
+    if (round + 1 < rounds) setRound(r => r + 1);
+    else onDone(rightRef.current);
+  }, [row, found, targets.length, missed, round, rounds, onDone]);
+
+  /* a finished row moves on by itself, with a beat to see it */
+  useEffect(() => {
+    if (!roundOver) return;
+    timerRef.current = window.setTimeout(advance, 1100);
+    return () => { if (timerRef.current) window.clearTimeout(timerRef.current); };
+  }, [roundOver, advance]);
+
+  const tap = (i: number) => {
+    if (!row || marks[i] || roundOver) return;
+    setMarks(m => ({ ...m, [i]: sameCell(row.cells[i], row.target) ? 'right' : 'wrong' }));
+  };
+
+  return (<>
+    <div className="flex-grow flex flex-col items-center justify-center px-4 sm:px-8 py-5 min-h-0">
+      <div className="flex items-baseline gap-4 flex-wrap justify-center">
+        <h1 className="m-0 text-[24px] sm:text-[30px] font-extrabold" style={{ letterSpacing: '-0.02em' }}>
+          {withVowels ? 'Which one did you hear?' : 'Spot the letter you hear'}
+        </h1>
+        <span className="text-[15px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>round {round + 1} / {rounds}</span>
+      </div>
+      <p className="m-0 mt-2 text-[14.5px] text-center" style={{ color: C.body }}>
+        {withVowels
+          ? <>The letter <em className="not-italic font-bold" style={{ color: C.coral }}>and</em> its vowel have to match.</>
+          : showNumbers ? 'Say the numbers of every cell that holds it — out loud.' : 'Tap every cell that holds it.'}
+      </p>
+
+      <button type="button" onClick={() => row && play(row.target.letter, cellAudioSet(row.target))}
+        className="mt-5 h-[72px] px-8 rounded-[20px] text-[17px] font-extrabold flex items-center gap-3.5"
+        style={{ background: C.coral, color: C.onCoral, border: 0, boxShadow: playing ? `0 0 0 6px rgba(255,122,77,0.18)` : 'none', transition: 'box-shadow 200ms ease' }}>
+        <Speaker size={25} /> Play it again
+      </button>
+
+      {/* Ten across on the screen the lesson is run from, so he can read them
+          at a glance and call out the numbers. On a phone ten would be 35px
+          wide — there they sit five and five. */}
+      <div className="mt-7 w-full grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-2.5">
+        {row?.cells.map((cell, i) => {
+          const mark = marks[i];
+          const bg = mark === 'right' ? C.mintBg : mark === 'wrong' ? C.roseBg : C.panel;
+          const bd = mark === 'right' ? C.mint : mark === 'wrong' ? C.rose : C.line;
+          const ink = mark === 'right' ? C.mintInk : mark === 'wrong' ? C.roseInk : C.cream;
+          const nearMiss = mark === 'wrong' && cell.letter === row.target.letter;
+          return (
+            <button key={i} type="button" onClick={() => tap(i)} disabled={!!mark || roundOver}
+              aria-label={`Cell ${i + 1}`}
+              className="relative flex items-center justify-center rounded-[16px] sm:rounded-[18px]"
+              style={{
+                height: 'clamp(88px, 22vh, 180px)',
+                background: bg, border: `${mark ? 2 : 1}px solid ${bd}`,
+                color: ink, padding: 0, cursor: mark || roundOver ? 'default' : 'pointer',
+              }}>
+              {showNumbers && (
+                <span className="absolute top-1.5 left-2 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: mark ? ink : C.muted }}>{i + 1}</span>
+              )}
+              {mark && <span className="absolute top-1.5 right-2">{mark === 'right' ? <Tick /> : <Cross />}</span>}
+              <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 'clamp(38px, 5.2vw, 72px)', lineHeight: 1 }}>
+                {cellText(cell)}
+              </span>
+              {nearMiss && (
+                <span className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] font-bold leading-tight" style={{ color: C.rose }}>
+                  right letter<br />wrong vowel
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="m-0 mt-4 text-[13.5px]" style={{ color: roundOver ? C.mint : C.muted }}>
+        {roundOver
+          ? (missed === 0 ? 'All of them, nothing else.' : `Found them · ${missed} wrong`)
+          : `${found} of ${targets.length} found${missed ? ` · ${missed} wrong` : ''}`}
+      </p>
+    </div>
+
+    <div className="flex-shrink-0 flex items-center gap-4 px-5 sm:px-8 py-5">
+      <span className="flex gap-1.5 flex-wrap">
+        {Array.from({ length: rounds }, (_, i) => (
+          <span key={i} style={{ width: 28, height: 6, borderRadius: 3, background: i < round ? C.mint : i === round ? C.coral : C.faint }} />
+        ))}
+      </span>
+      <span className="flex-grow" />
+      <button type="button" onClick={advance}
+        className="h-[52px] px-7 rounded-[15px] text-[15px] font-bold flex items-center gap-2.5"
+        style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
+        {round + 1 < rounds ? 'Next round' : lastLabel}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5" /></svg>
+      </button>
+    </div>
+  </>);
+};
+
 /* ── A word with the hunted letters picked out ───────────────────────────── */
 
 /**
@@ -249,8 +527,6 @@ const Picked: React.FC<{ text: string; letters: string[]; size: string }> = ({ t
 };
 
 /* ── Rounds 3, 5, 6 and 7: he reads, the tutor marks ─────────────────────── */
-
-type Mark = 'right' | 'wrong';
 
 const ShowAndMark: React.FC<{
   sub: ReturnType<typeof subMeta>;
@@ -479,15 +755,10 @@ const LettersHunterRun: React.FC<{
 
   const [phase, setPhase] = useState<Phase>('intro');
   const [at, setAt] = useState(0);                 // which sub-challenge
-  const [round, setRound] = useState(0);           // which round inside it
+  /** Bumped to throw away a finished challenge's screen before the next one. */
+  const [round, setRound] = useState(0);
   const [scores, setScores] = useState<SubScore[]>([]);
-  const [row, setRow] = useState<HunterRow | null>(null);
-  const [marks, setMarks] = useState<Record<number, Mark>>({});
-  const [playing, setPlaying] = useState(false);
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const roundRightRef = useRef(0);
+  const { play } = useLetterAudio();
 
   const [items, setItems] = useState<ShowItem[] | null>(null);
   /** One room for the run, so a phone that scanned once stays on the board. */
@@ -509,8 +780,6 @@ const LettersHunterRun: React.FC<{
     if (bankedRef.current.has(id)) return;
     bankedRef.current.add(id);
     setScores(s => [...s, { id, right, rounds: of }]);
-    roundRightRef.current = 0;
-    setRow(null);
     setItems(null);
     setRound(0);
     setAt(n => (n + 1 < order.length ? n + 1 : n));
@@ -531,77 +800,6 @@ const LettersHunterRun: React.FC<{
       .then(pool => { if (alive) setItems(pickItems(pool, letters, rounds)); });
     return () => { alive = false; };
   }, [phase, sub, isRow, isWrite, items, letters, rounds]);
-
-  /* sound */
-  const play = useCallback((cellLetter: string, set: ReturnType<typeof cellAudioSet>) => {
-    audioRef.current?.pause();
-    const audio = new Audio(letterAudioUrl(cellLetter, set));
-    audioRef.current = audio;
-    setPlaying(true);
-    audio.onended = () => setPlaying(false);
-    audio.onerror = () => { setPlaying(false); speakLetter(cellLetter + (set === 'plain' ? '' : SET_MARK[set])); };
-    audio.play().catch(() => setPlaying(false));
-  }, []);
-
-  const sayTarget = useCallback(() => {
-    if (!row) return;
-    play(row.target.letter, cellAudioSet(row.target));
-  }, [row, play]);
-
-  useEffect(() => () => {
-    audioRef.current?.pause();
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-  }, []);
-
-  /* a fresh row whenever the round or the sub-challenge changes — and after
-     advance() tears the last one down, which is what `row == null` means */
-  useEffect(() => {
-    if (phase !== 'play' || !sub || row || !isRow) return;
-    const r = buildRow(letters, withVowels);
-    setRow(r);
-    setMarks({});
-    // The sound is the question, so it comes without being asked for.
-    const t = window.setTimeout(() => play(r.target.letter, cellAudioSet(r.target)), 260);
-    return () => window.clearTimeout(t);
-  }, [phase, at, round, sub, row, isRow, letters, withVowels, play]);
-
-  const targets = row ? targetsOf(row) : [];
-  const found = targets.filter(i => marks[i] === 'right').length;
-  const missed = Object.values(marks).filter(m => m === 'wrong').length;
-  const roundOver = row != null && targets.length > 0 && found === targets.length;
-
-  /**
-   * Move on: bank this round, then the next round or the next challenge.
-   *
-   * The row is torn down FIRST. `roundOver` is derived from the row that is on
-   * screen, so while an old finished row is still mounted it stays true — and
-   * the effect below would arm a second timer and bank the same round twice
-   * (a two-round challenge scored 4/4 and appeared twice on the mark screen).
-   * A null row is also what makes a second call here a no-op.
-   */
-  const advance = useCallback(() => {
-    if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; }
-    if (!sub || !row) return;
-    const clean = found === targets.length && missed === 0;
-    if (clean) roundRightRef.current += 1;
-    setRow(null);
-    setMarks({});
-
-    if (round + 1 < rounds) { setRound(r => r + 1); return; }
-    bank(sub.id, roundRightRef.current, rounds);
-  }, [sub, row, found, targets.length, missed, round, rounds, bank]);
-
-  /* a finished row moves on by itself, with a beat to see it */
-  useEffect(() => {
-    if (!roundOver) return;
-    timerRef.current = window.setTimeout(advance, 1100);
-    return () => { if (timerRef.current) window.clearTimeout(timerRef.current); };
-  }, [roundOver, advance]);
-
-  const tap = (i: number) => {
-    if (!row || marks[i] || roundOver) return;
-    setMarks(m => ({ ...m, [i]: sameCell(row.cells[i], row.target) ? 'right' : 'wrong' }));
-  };
 
   const shell = (inner: React.ReactNode) => (
     <div style={{
@@ -690,7 +888,7 @@ const LettersHunterRun: React.FC<{
         </div>
 
         <div className="mt-8 flex gap-3">
-          <button type="button" onClick={() => { setScores([]); setAt(0); setRound(0); setRow(null); setItems(null); roundRightRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
+          <button type="button" onClick={() => { setScores([]); setAt(0); setRound(r => r + 1); setItems(null); betterRef.current = 0; bankedRef.current = new Set(); setPhase('intro'); }}
             className="h-14 px-7 rounded-[15px] text-[15px] font-bold"
             style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>Hunt them again</button>
           <button type="button" onClick={() => onFinish(result)}
@@ -722,84 +920,15 @@ const LettersHunterRun: React.FC<{
   /* ── a row of ten ── */
   return shell(<>
     <Rail order={order} at={at} onExit={onExit} />
-
-    <div className="flex-grow flex flex-col items-center justify-center px-4 sm:px-8 py-5 min-h-0">
-      <div className="flex items-baseline gap-4 flex-wrap justify-center">
-        <h1 className="m-0 text-[24px] sm:text-[30px] font-extrabold" style={{ letterSpacing: '-0.02em' }}>
-          {withVowels ? 'Which one did you hear?' : 'Spot the letter you hear'}
-        </h1>
-        <span className="text-[15px]" style={{ fontFamily: 'ui-monospace, monospace', color: C.muted }}>round {round + 1} / {rounds}</span>
-      </div>
-      <p className="m-0 mt-2 text-[14.5px] text-center" style={{ color: C.body }}>
-        {withVowels
-          ? <>The letter <em className="not-italic font-bold" style={{ color: C.coral }}>and</em> its vowel have to match.</>
-          : 'Say the numbers of every cell that holds it — out loud.'}
-      </p>
-
-      <button type="button" onClick={sayTarget}
-        className="mt-5 h-[72px] px-8 rounded-[20px] text-[17px] font-extrabold flex items-center gap-3.5"
-        style={{ background: C.coral, color: C.onCoral, border: 0, boxShadow: playing ? `0 0 0 6px rgba(255,122,77,0.18)` : 'none', transition: 'box-shadow 200ms ease' }}>
-        <Speaker size={25} /> Play it again
-      </button>
-
-      {/* Ten across on the screen the lesson is run from, so he can read them
-          at a glance and call out the numbers. On a phone ten would be 35px
-          wide — there they sit five and five. */}
-      <div className="mt-7 w-full grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-2.5">
-        {row?.cells.map((cell, i) => {
-          const mark = marks[i];
-          const bg = mark === 'right' ? C.mintBg : mark === 'wrong' ? C.roseBg : C.panel;
-          const bd = mark === 'right' ? C.mint : mark === 'wrong' ? C.rose : C.line;
-          const ink = mark === 'right' ? C.mintInk : mark === 'wrong' ? C.roseInk : C.cream;
-          const nearMiss = mark === 'wrong' && cell.letter === row.target.letter;
-          return (
-            <button key={i} type="button" onClick={() => tap(i)} disabled={!!mark || roundOver}
-              aria-label={`Cell ${i + 1}`}
-              className="relative flex items-center justify-center rounded-[16px] sm:rounded-[18px]"
-              style={{
-                height: 'clamp(88px, 22vh, 180px)',
-                background: bg, border: `${mark ? 2 : 1}px solid ${bd}`,
-                color: ink, padding: 0, cursor: mark || roundOver ? 'default' : 'pointer',
-              }}>
-              <span className="absolute top-1.5 left-2 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: mark ? ink : C.muted }}>{i + 1}</span>
-              {mark && <span className="absolute top-1.5 right-2">{mark === 'right' ? <Tick /> : <Cross />}</span>}
-              <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 'clamp(38px, 5.2vw, 72px)', lineHeight: 1 }}>
-                {cellText(cell)}
-              </span>
-              {nearMiss && (
-                <span className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] font-bold leading-tight" style={{ color: C.rose }}>
-                  right letter<br />wrong vowel
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="m-0 mt-4 text-[13.5px]" style={{ color: roundOver ? C.mint : C.muted }}>
-        {roundOver
-          ? (missed === 0 ? 'All of them, nothing else.' : `Found them · ${missed} wrong`)
-          : `${found} of ${targets.length} found${missed ? ` · ${missed} wrong` : ''}`}
-      </p>
-    </div>
-
-    <div className="flex-shrink-0 flex items-center gap-4 px-5 sm:px-8 py-5">
-      <span className="flex gap-1.5 flex-wrap">
-        {Array.from({ length: rounds }, (_, i) => (
-          <span key={i} style={{
-            width: 28, height: 6, borderRadius: 3,
-            background: i < round ? C.mint : i === round ? C.coral : C.faint,
-          }} />
-        ))}
-      </span>
-      <span className="flex-grow" />
-      <button type="button" onClick={advance}
-        className="h-[52px] px-7 rounded-[15px] text-[15px] font-bold flex items-center gap-2.5"
-        style={{ background: C.raised, border: `1px solid #3A4A68`, color: C.cream }}>
-        {round + 1 < rounds ? 'Next round' : at + 1 < order.length ? 'Next challenge' : 'See the mark'}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.5 5.5L16 12l-6.5 6.5" /></svg>
-      </button>
-    </div>
+    <RowRound
+      key={`${sub.id}-${round}`}
+      letters={letters}
+      withVowels={withVowels}
+      rounds={rounds}
+      showNumbers
+      lastLabel={at + 1 < order.length ? 'Next challenge' : 'See the mark'}
+      onDone={right => bank(sub.id, right, rounds)}
+    />
   </>);
 };
 
@@ -807,10 +936,12 @@ const LettersHunterRun: React.FC<{
 
 const LettersHunterChallenge: React.FC<{
   letters: string[];
+  /** The student the work is for — needed to set it as homework. */
+  student?: { id: string; name: string } | null;
   /** Fired once, when the tutor leaves the mark screen by Done. */
   onFinish?: (title: string, detail: string, sourceId: string) => void;
   onExit: () => void;
-}> = ({ letters, onFinish, onExit }) => {
+}> = ({ letters, student, onFinish, onExit }) => {
   const [plan, setPlan] = useState<HunterPlan | null>(null);
 
   if (!enoughLetters(letters)) {
@@ -825,7 +956,7 @@ const LettersHunterChallenge: React.FC<{
     );
   }
 
-  if (!plan) return <LettersHunterSetup letters={letters} onStart={setPlan} onClose={onExit} />;
+  if (!plan) return <LettersHunterSetup letters={letters} student={student} onStart={setPlan} onClose={onExit} />;
 
   return (
     <LettersHunterRun

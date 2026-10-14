@@ -28,6 +28,7 @@ import HomeworkTab from './HomeworkTab';
 import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
 import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
+import { listHunterHomeworkForStudent, type HunterHomework } from '../services/lettersHunterHomeworkService';
 import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
 import ThemeIcon from './ThemeIcon';
 import {
@@ -202,11 +203,14 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
 
   // Recitation homework rows (status + recordings) for this student's cards.
   const [recitations, setRecitations] = useState<Record<string, RecitationHomework>>({});
+  // Letters Hunter set as homework — read through the function, not the table.
+  const [hunts, setHunts] = useState<HunterHomework[]>([]);
   useEffect(() => {
     if (!report?.student_id) return;
     listRecitationHomework(report.student_id)
       .then(list => setRecitations(Object.fromEntries(list.map(r => [r.id, r]))))
       .catch(() => {});
+    listHunterHomeworkForStudent(report.student_id).then(setHunts).catch(() => {});
   }, [report?.student_id, activeTab, refreshNonce]);
 
   // The card games set as homework, with every run the student has played.
@@ -1118,6 +1122,8 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                   cardGames={cardGames}
                   cardAttempts={cardAttempts}
                   onPlayCards={g => { window.location.href = `/letter-cards/${g.id}`; }}
+                  hunts={hunts}
+                  onOpenHunt={h => { window.location.href = `/hunt/${h.id}`; }}
                 />
               );
             })()}

@@ -1144,6 +1144,7 @@ const AlphabetTrainerPage: React.FC<{
       {view === 'lettershunter' && (
         <LettersHunterChallenge
           letters={selectedLetters}
+          student={logTarget}
           onExit={() => setView('select')}
           onFinish={(title, detail, sourceId) => {
             if (!logTarget || !onLogActivity) return;

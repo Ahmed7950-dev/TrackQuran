@@ -54,7 +54,7 @@ export async function loadOpenHomework(
   const recitationIds = quranIds.flatMap(id =>
     ((quranById.get(id)?.quran_homework ?? []) as any[]).map(h => h.recitationId).filter(Boolean));
 
-  const [recitations, vocab, letterMatch, reports] = await Promise.all([
+  const [recitations, vocab, letterMatch, hunts, reports] = await Promise.all([
     recitationIds.length
       ? db.from('quran_recitation_homework').select('id, status').in('id', recitationIds)
       : Promise.resolve({ data: [] as any[] }),
@@ -63,6 +63,12 @@ export async function loadOpenHomework(
       : Promise.resolve({ data: [] as any[] }),
     studentIds.length
       ? db.from('letter_match_challenges').select('student_id').in('student_id', studentIds).neq('status', 'completed').gte('created_at', sinceIso)
+      : Promise.resolve({ data: [] as any[] }),
+    // A letters hunt is open until it is handed in. A deadline that has gone by
+    // stops the nudge: by then it is late, not outstanding, and the tutor can
+    // see that for himself.
+    studentIds.length
+      ? db.from('letters_hunter_homework').select('student_id, letters, due_at').in('student_id', studentIds).eq('status', 'assigned').gte('created_at', sinceIso)
       : Promise.resolve({ data: [] as any[] }),
     quranIds.length
       ? db.from('shared_reports').select('id, student_id, created_at').in('student_id', quranIds).order('created_at', { ascending: false })
@@ -104,6 +110,11 @@ export async function loadOpenHomework(
     }
 
     if ((letterMatch.data ?? []).some((m: any) => m.student_id === studentId)) items.push('your letter shapes challenge');
+    for (const h of (hunts.data ?? []) as any[]) {
+      if (h.student_id !== studentId) continue;
+      if (h.due_at && Date.parse(h.due_at) < Date.now()) continue;
+      items.push(`your letters hunt (${(h.letters ?? []).join(' ')})`);
+    }
     return { items, reciteId };
   };
 

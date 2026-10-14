@@ -37,6 +37,9 @@ export type NotificationType =
   | 'quran_recitation_assigned'
   | 'quran_recitation_submitted'
   | 'quran_recitation_reviewed'
+  | 'hunter_homework_assigned'
+  | 'hunter_homework_submitted'
+  | 'hunter_homework_marked'
   | 'tadabbur_deck_assigned'
   | 'tadabbur_deck_completed'
   | 'homework_nudge';
