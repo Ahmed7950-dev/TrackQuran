@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { ArabicStudent, ArabicLesson } from '../types';
 import { listVocabHomework, homeworkUrl, type VocabHomework } from '../services/vocabHomeworkService';
 import { homeworkStatus, setArabicHomeworkStatus } from '../services/arabicHomeworkService';
+import { listLetterCardsAttempts, type LetterCardsAttempt } from '../services/letterCardsService';
 import PushToggle from './PushToggle';
 import InstallButton from './InstallButton';
 import ArabicLessonDetailPage, { HomeworkTab } from './ArabicLessonDetailPage';
@@ -18,8 +19,18 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
    *  assigned from, in the same screen a lesson's homework uses. */
   const [custom, setCustom] = useState<VocabHomework | null>(null);
   const [now, setNow] = useState(Date.now());
+  /** Every go the student has had at a word-cards homework, newest first.
+   *  Without this a word-cards row said only "assigned" — the tutor could not
+   *  see that he had played it three times and stalled at 6/10. */
+  const [cardTries, setCardTries] = useState<Record<string, LetterCardsAttempt[]>>({});
   const load = useCallback(async () => {
-    try { setRows((await listVocabHomework(student.id)).filter(h => h.status !== 'draft')); setError(''); }
+    try {
+      const list = (await listVocabHomework(student.id)).filter(h => h.status !== 'draft');
+      setRows(list);
+      const gameIds = list.filter(h => h.kind === 'word_cards' && h.gameId).map(h => h.gameId!);
+      setCardTries(gameIds.length ? await listLetterCardsAttempts(gameIds) : {});
+      setError('');
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not load homework.'); }
     finally { setLoading(false); }
   }, [student.id]);
@@ -57,6 +68,47 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
     catch (e) { setError(e instanceof Error ? e.message : 'Could not update homework.'); }
     finally { setBusy(null); }
   };
+  /** Every go at a word-cards homework: when, what he scored, how many he got
+   *  wrong, and whether he finished or ran out of lives. Best score first in
+   *  the heading, because that is the one question asked about a game that can
+   *  be replayed. */
+  const tries = (hw: VocabHomework) => {
+    if (hw.kind !== 'word_cards' || !hw.gameId) return null;
+    const list = cardTries[hw.gameId] ?? [];
+    if (!list.length) {
+      return <p className="text-xs text-slate-400 dark:text-slate-500">
+        {studentMode ? 'You have not played it yet.' : 'He has not opened it yet.'}
+      </p>;
+    }
+    const best = list.reduce((m, a) => Math.max(m, a.score), 0);
+    const outOf = list[0].total;
+    return <div className="rounded-xl border border-slate-200 dark:border-gray-700 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-gray-700/50">
+        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+          {list.length} {list.length === 1 ? 'go' : 'goes'}
+        </span>
+        <span className="flex-grow" />
+        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">best {best}/{outOf}</span>
+      </div>
+      <div className="divide-y divide-slate-100 dark:divide-gray-700">
+        {list.slice(0, 5).map((a, i) => (
+          <div key={a.id} className="flex items-center gap-3 px-3 py-2 text-xs">
+            <span className="w-5 text-slate-400 dark:text-slate-500 tabular-nums">{list.length - i}</span>
+            <span className="text-slate-500 dark:text-slate-400">
+              {new Date(a.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            </span>
+            <span className="flex-grow" />
+            {a.mistakes > 0 && <span className="font-bold text-rose-600 dark:text-rose-400">{a.mistakes} wrong</span>}
+            <span className={`font-bold ${a.endedReason === 'done'
+              ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300'}`}>
+              {a.score}/{a.total}{a.endedReason === 'lives' ? ' · out of lives' : a.endedReason === 'done' ? '' : ' · left early'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>;
+  };
+
   const render = (hw: VocabHomework) => {
     const status = homeworkStatus(hw, now);
     const active = status === 'With student';
@@ -75,6 +127,7 @@ export default function ArabicHomeworkTab({ student, lessons, studentMode = fals
           <button disabled={busy === hw.id} onClick={() => change(hw, 'cancelled')} className="px-3 py-2 rounded-lg text-red-600 text-sm">Cancel</button>
         </>}
       </div>
+      {tries(hw)}
     </article>;
   };
   // Its own page: nothing of the list renders behind it.
