@@ -29,6 +29,7 @@ import VerseAudioPlayer from './VerseAudioPlayer';
 import { useI18n } from '../context/I18nProvider';
 import { listRecitationHomework, RecitationHomework } from '../services/recitationHomeworkService';
 import { listHunterHomeworkForStudent, type HunterHomework } from '../services/lettersHunterHomeworkService';
+import { outcomeOf } from '../utils/quranHomework';
 import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
 import ThemeIcon from './ThemeIcon';
 import {
@@ -974,7 +975,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
                                   }`}
                                 >
-                                  ✅ Done ({doneHwList.length})
+                                  ✅ Done ({doneHwList.filter(hw => outcomeOf(hw) === 'done').length})
                                 </button>
                               )}
                             </div>
@@ -998,7 +999,11 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                                 <p className="text-slate-400 dark:text-slate-500 text-sm italic text-center py-2">{t('studentPortal.noCompletedYet')}</p>
                               ) : doneHwList.map(hw => (
                                 <div key={hw.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-700/50">
-                                  <span className="text-base mt-0.5">✅</span>
+                                  {/* A tick only for the ones he actually did —
+                                      closed is not the same as done. */}
+                                  <span className="text-base mt-0.5">
+                                    {outcomeOf(hw) === 'done' ? '✅' : outcomeOf(hw) === 'missed' ? '❌' : '—'}
+                                  </span>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate">{formatRange(hw)}</p>
                                     {hw.note && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">{hw.note}</p>}

@@ -135,7 +135,12 @@ export interface QuranHomework {
   endAyah: number;
   note?: string;
   assignedAt: string;
+  /** Closed — done, missed or withdrawn. Everything that counts OPEN homework
+   *  or decides whether to nag reads this and nothing else. */
   isDone: boolean;
+  /** Which kind of closed. Absent on anything closed before this existed, and
+   *  that reads as 'done' — see utils/quranHomework. */
+  outcome?: 'done' | 'missed' | 'removed';
   /** Set when the student records each verse (quran_recitation_homework.id). */
   recitationId?: string;
 }

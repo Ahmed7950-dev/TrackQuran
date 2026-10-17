@@ -1670,14 +1670,32 @@ const App: React.FC = () => {
   };
 
   // Mark a homework item done (tutor side) and push it to the student's portal.
-  const handleMarkHomeworkDone = async (studentId: string, homeworkId: string | string[]) => {
+  const handleMarkHomeworkDone = async (
+    studentId: string, homeworkId: string | string[], outcome: 'done' | 'missed' | 'removed' = 'done',
+  ) => {
     // Read the freshest copy: this can run after an await (closing follow-ups),
     // and writing a stale student back would drop a mistake logged meanwhile.
     const student = studentsRef.current.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
     const ids = new Set(Array.isArray(homeworkId) ? homeworkId : [homeworkId]);
     const updatedHomework = (student.quranHomework || []).map(hw =>
-      ids.has(hw.id) ? { ...hw, isDone: true } : hw);
+      ids.has(hw.id) ? { ...hw, isDone: true, outcome } : hw);
+    handleUpdateStudent({ ...student, quranHomework: updatedHomework });
+    const reportId = await getStudentReportId(currentUser.id, studentId);
+    if (reportId) {
+      await updateQuranHomeworkInReport(reportId, updatedHomework);
+      supabase.channel(`report-plays-${reportId}`).send({
+        type: 'broadcast', event: 'homework_assigned', payload: { quranHomework: updatedHomework },
+      });
+    }
+  };
+
+  /** Put a closed homework back on the list — the way out of a mis-tap. */
+  const handleReopenHomework = async (studentId: string, homeworkId: string) => {
+    const student = studentsRef.current.find(s => s.id === studentId);
+    if (!student || currentUser?.role !== 'teacher') return;
+    const updatedHomework = (student.quranHomework || []).map(hw =>
+      hw.id === homeworkId ? { ...hw, isDone: false, outcome: undefined } : hw);
     handleUpdateStudent({ ...student, quranHomework: updatedHomework });
     const reportId = await getStudentReportId(currentUser.id, studentId);
     if (reportId) {
@@ -2377,10 +2395,14 @@ const App: React.FC = () => {
         ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {
           const hw_student = sessionStudent ?? selectedStudent!;
           const hw_all = hw_student.quranHomework ?? [];
+          // Withdrawing it keeps the line in History — the tutor still wants to
+          // see that it was set and then taken back. The RECORDINGS still go:
+          // they are the storage hog, and nobody listens to a withdrawn one.
           const removeHomework = async (hw: QuranHomework) => {
             const rec = hw.recitationId ? recitations[hw.recitationId] : undefined;
-            if (rec) deleteRecitationHomework(rec);   // its recordings too
-            const updated = hw_all.filter(h => h.id !== hw.id);
+            if (rec) deleteRecitationHomework(rec);
+            const updated = hw_all.map(h =>
+              h.id === hw.id ? { ...h, isDone: true, outcome: 'removed' as const, recitationId: undefined } : h);
             handleUpdateStudent({ ...hw_student, quranHomework: updated });
             const reportId = await getStudentReportId(currentUser!.id, hw_student.id);
             if (reportId) {
@@ -2411,6 +2433,8 @@ const App: React.FC = () => {
               onListen={openRecitationReview}
               onCopyLink={rec => navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {})}
               onMarkDone={hw => handleMarkHomeworkDone(hw_student.id, hw.id)}
+              onMarkMissed={hw => handleMarkHomeworkDone(hw_student.id, hw.id, 'missed')}
+              onReopen={hw => handleReopenHomework(hw_student.id, hw.id)}
               onRemove={removeHomework}
               onClearFinished={clearFinished}
               cardGames={cardGames}

@@ -12,12 +12,12 @@
 // line — the corrected reading, with none of the wrong ones kept.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useMemo, useState } from 'react';
-import ReactDOM from 'react-dom';
 import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
 import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
 import { dueLabel, hunterMark, type HunterHomework } from '../services/lettersHunterHomeworkService';
+import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome } from '../utils/quranHomework';
 
 const SERIF = "'Cormorant Garamond', Georgia, serif";
 
@@ -80,11 +80,51 @@ interface Block {
   attempts: Attempt[];
   /** No recording homework: one plain row, nothing to line up. */
   plain: boolean;
+  outcome: HomeworkOutcome;
   /** How it is recorded: reading verse by verse, or hifz in one take. */
   kind: 'reading' | 'hifz' | null;
   done: boolean;
   lastDate: string;
 }
+
+/**
+ * One small action in a homework's header.
+ *
+ * Four tempers off one shape: a ghost for the ones that only navigate, and a
+ * tinted fill for the three that CLOSE the homework — green for done, red for
+ * not done, orange for withdrawn. Tinted rather than solid because three solid
+ * blocks of colour in a row shout at the tutor every time the tab opens, and
+ * none of them is the thing he does most.
+ */
+const LOOK: Record<string, string> = {
+  ghost:  'border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700',
+  green:  'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800/70 dark:hover:bg-emerald-900/50',
+  red:    'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800/70 dark:hover:bg-rose-900/50',
+  orange: 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-800/70 dark:hover:bg-orange-900/50',
+};
+
+const ICON = {
+  tick:  <path d="m5 13 4 4L19 7" />,
+  cross: <path d="M6 6l12 12M18 6L6 18" />,
+  bin:   <><path d="M4 7h16" /><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" /><path d="M6.5 7.5 7.4 19a1.3 1.3 0 0 0 1.3 1.2h6.6a1.3 1.3 0 0 0 1.3-1.2l.9-11.5" /></>,
+};
+
+const Action: React.FC<{
+  onClick: () => void;
+  look: keyof typeof LOOK;
+  icon?: React.ReactNode;
+  title?: string;
+  children: React.ReactNode;
+}> = ({ onClick, look, icon, title, children }) => (
+  <button onClick={onClick} title={title}
+    className={`flex-shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-bold transition-colors ${LOOK[look]}`}>
+    {icon && (
+      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6}
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
+    )}
+    {children}
+  </button>
+);
 
 /** The shape the student holds, as the card game names it. */
 const CARD_FORM: Record<string, string> = { initial: 'Beginning', medial: 'Middle', final: 'End' };
@@ -100,7 +140,12 @@ const HomeworkTab: React.FC<{
   onListen?: (rec: RecitationHomework) => void;
   onCopyLink?: (rec: RecitationHomework) => void;
   onMarkDone?: (hw: QuranHomework) => void;
+  /** The lesson came and he had not done it. Closes it, in red. */
+  onMarkMissed?: (hw: QuranHomework) => void;
+  /** Withdrawn: it stays in History, its recordings do not. */
   onRemove?: (hw: QuranHomework) => void;
+  /** Put a closed one back on the list — the way out of a mis-tap. */
+  onReopen?: (hw: QuranHomework) => void;
   onClearFinished?: () => void;
   /** Student: open the recording page. */
   onRecord?: (hw: QuranHomework, rec: RecitationHomework | undefined) => void;
@@ -116,14 +161,12 @@ const HomeworkTab: React.FC<{
   onCopyHuntLink?: (hw: HunterHomework) => void;
 }> = ({
   side, homework, recitations, untilLesson,
-  onOpenVerses, onListen, onCopyLink, onMarkDone, onRemove, onClearFinished, onRecord,
+  onOpenVerses, onListen, onCopyLink, onMarkDone, onMarkMissed, onRemove, onReopen, onClearFinished, onRecord,
   cardGames, cardAttempts, onPlayCards, hunts, onOpenHunt, onCopyHuntLink,
 }) => {
   const isTutor = side === 'tutor';
-  const [showFinished, setShowFinished] = useState(false);
-  /** The open ⋯ menu and where to draw it — in the page, so a short block
-   *  cannot clip it (the card rounds its corners with overflow-hidden). */
-  const [menu, setMenu] = useState<{ key: string; top: number; right: number } | null>(null);
+  /** History shows the last few without being asked; this reveals the rest. */
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   /** Homework grouped by the chain its recording belongs to, oldest try first. */
   const blocks = useMemo<Block[]>(() => {
@@ -179,6 +222,8 @@ const HomeworkTab: React.FC<{
         plain: false,
         kind: attempts[0].rec.kind === 'hifz' ? 'hifz' : 'reading',
         done: last.rec.status === 'passed' || last.hw.isDone,
+        // A recitation that passed IS done, whatever the flag says.
+        outcome: last.rec.status === 'passed' ? 'done' : outcomeOf(last.hw),
         lastDate: last.rec.createdAt,
       });
     }
@@ -186,7 +231,8 @@ const HomeworkTab: React.FC<{
     for (const hw of plain) {
       out.push({
         key: hw.id, hw, title: homeworkRange(hw), arabic: surahArabic(hw.startSurah),
-        columns: [], attempts: [], plain: true, kind: null, done: !!hw.isDone, lastDate: hw.assignedAt,
+        columns: [], attempts: [], plain: true, kind: null,
+        done: !!hw.isDone, outcome: outcomeOf(hw), lastDate: hw.assignedAt,
       });
     }
 
@@ -194,7 +240,10 @@ const HomeworkTab: React.FC<{
   }, [homework, recitations]);
 
   const openBlocks = useMemo(() => blocks.filter(b => !b.done), [blocks]);
-  const doneBlocks = useMemo(() => blocks.filter(b => b.done), [blocks]);
+  /** Everything closed, newest first — done, not done and withdrawn alike. */
+  const history = useMemo(() => blocks.filter(b => b.done), [blocks]);
+  const HISTORY_SHOWN = 5;
+  const historyShown = showAllHistory ? history : history.slice(0, HISTORY_SHOWN);
 
   const verseNumber = (key: string) => key.split(':')[1];
 
@@ -304,7 +353,7 @@ const HomeworkTab: React.FC<{
 
   const blockCard = (b: Block) => (
     <section key={b.key} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3.5 border-b border-slate-100 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 px-4 sm:px-6 py-3 border-b border-slate-100 dark:border-gray-700">
         <h2 className="min-w-0 truncate text-xl sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 700 }}>
           {b.title}
         </h2>
@@ -318,20 +367,36 @@ const HomeworkTab: React.FC<{
         )}
         <span dir="rtl" className="hidden sm:inline font-quranic text-lg text-slate-500 dark:text-slate-400">{b.arabic}</span>
         <span className="flex-grow" />
-        <button onClick={() => onOpenVerses(b.hw)}
-          className="flex-shrink-0 h-8 px-3 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">
-          Open verses
-        </button>
-        {isTutor && (
-          <button
-            onClick={e => {
-              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              setMenu(m => (m?.key === b.key ? null : {
-                key: b.key, top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right),
-              }));
-            }}
-            aria-label="More" aria-haspopup="menu" aria-expanded={menu?.key === b.key}
-            className="flex-shrink-0 w-8 h-8 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 text-lg leading-none">⋯</button>
+
+        {/* Closed: how it ended, and the way back if it was a mis-tap. */}
+        {b.done && (
+          <span className={`flex-shrink-0 inline-flex items-center h-8 px-3 rounded-full text-[12.5px] font-bold ${OUTCOME_PILL[b.outcome]}`}>
+            {OUTCOME_LABEL[b.outcome]}
+          </span>
+        )}
+        {b.done && isTutor && onReopen && (
+          <button onClick={() => onReopen(b.hw)} title="Put it back on the list"
+            className="flex-shrink-0 h-8 px-3 rounded-full text-[12.5px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700">
+            Reopen
+          </button>
+        )}
+
+        {!b.done && <Action onClick={() => onOpenVerses(b.hw)} look="ghost">Open verses</Action>}
+
+        {!b.done && isTutor && b.attempts.length > 0 && onCopyLink && (
+          <Action onClick={() => onCopyLink(b.attempts[b.attempts.length - 1].rec)} look="ghost" title="Copy the recording link">
+            Copy link
+          </Action>
+        )}
+
+        {!b.done && isTutor && onMarkDone && (
+          <Action onClick={() => onMarkDone(b.hw)} look="green" icon={ICON.tick}>Mark done</Action>
+        )}
+        {!b.done && isTutor && onMarkMissed && (
+          <Action onClick={() => onMarkMissed(b.hw)} look="red" icon={ICON.cross}>Wasn't done</Action>
+        )}
+        {!b.done && isTutor && onRemove && (
+          <Action onClick={() => onRemove(b.hw)} look="orange" icon={ICON.bin}>Remove</Action>
         )}
       </div>
 
@@ -340,7 +405,7 @@ const HomeworkTab: React.FC<{
           <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">{shortDate(b.hw.assignedAt)}</span>
           {b.hw.note && <span className="text-[13px] text-slate-600 dark:text-slate-300 flex-1 min-w-[10rem]">{b.hw.note}</span>}
           <span className="flex-grow" />
-          {pill(isTutor ? 'With the student' : 'To do', 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200')}
+          {!b.done && pill(isTutor ? 'With the student' : 'To do', 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200')}
         </div>
       ) : b.attempts.map(a => (
         <div key={a.rec.id}
@@ -357,31 +422,8 @@ const HomeworkTab: React.FC<{
     </section>
   );
 
-  const openMenuBlock = menu ? blocks.find(b => b.key === menu.key) : null;
-
   return (
     <div className="max-w-3xl mx-auto px-1 sm:px-0 py-2 flex flex-col gap-4">
-      {openMenuBlock && ReactDOM.createPortal(
-        <>
-          <div className="fixed inset-0 z-[300]" onClick={() => setMenu(null)} />
-          <div role="menu" className="fixed z-[301] w-48 py-1 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl flex flex-col"
-            style={{ top: menu!.top, right: menu!.right }}>
-            {openMenuBlock.attempts.length > 0 && onCopyLink && (
-              <button role="menuitem" onClick={() => { onCopyLink(openMenuBlock.attempts[openMenuBlock.attempts.length - 1].rec); setMenu(null); }}
-                className="px-4 py-2.5 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Copy the link</button>
-            )}
-            {onMarkDone && !openMenuBlock.done && (
-              <button role="menuitem" onClick={() => { onMarkDone(openMenuBlock.hw); setMenu(null); }}
-                className="px-4 py-2.5 text-start text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700">Mark done</button>
-            )}
-            {onRemove && (
-              <button role="menuitem" onClick={() => { onRemove(openMenuBlock.hw); setMenu(null); }}
-                className="px-4 py-2.5 text-start text-[13px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">Remove</button>
-            )}
-          </div>
-        </>,
-        document.body,
-      )}
       <div className="flex items-center gap-3 pb-4 border-b border-slate-200 dark:border-gray-700">
         <h1 className="text-2xl sm:text-3xl text-slate-900 dark:text-slate-100" style={{ fontFamily: SERIF, fontWeight: 600 }}>
           {isTutor ? 'Homework' : 'My homework'}
@@ -505,26 +547,41 @@ const HomeworkTab: React.FC<{
         </div>
       ) : openBlocks.map(blockCard)}
 
-      <div className="flex items-center gap-3">
-        <button onClick={() => setShowFinished(f => !f)}
-          className="py-2 flex items-center gap-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
-          <svg className={`w-4 h-4 transition-transform ${showFinished ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-          Finished <span className="text-slate-400 dark:text-slate-500">{doneBlocks.length}</span>
-        </button>
-        <span className="flex-grow" />
-        {isTutor && showFinished && doneBlocks.length > 0 && onClearFinished && (
-          <button onClick={onClearFinished} className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline">
-            Clear finished
-          </button>
-        )}
-      </div>
+      {/* History — everything that is closed, whatever became of it: done,
+          not done, and the ones the tutor took back. The last few are here
+          without asking, because the question is almost always "what did we do
+          last week"; the rest are a click away. */}
+      {history.length > 0 && (
+        <section className="flex flex-col gap-3 pt-2">
+          <div className="flex items-center gap-3 px-1">
+            <h2 className="text-xl text-slate-900 dark:text-slate-100" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+              History
+            </h2>
+            <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-slate-100 dark:bg-gray-700 text-[12px] font-bold text-slate-500 dark:text-slate-400">
+              {history.length}
+            </span>
+            <span className="flex-grow" />
+            {isTutor && onClearFinished && (
+              <button onClick={onClearFinished}
+                className="text-[12px] font-bold text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
+                title="Delete the stored recordings of reviewed homework. The homework itself stays here.">
+                Clear old recordings
+              </button>
+            )}
+          </div>
 
-      {/* Finished: the whole block as it played out — every try, and the
-          verses that were sent back. */}
-      {showFinished && doneBlocks.length > 0 && (
-        <div className="flex flex-col gap-4">
-          {doneBlocks.map(blockCard)}
-        </div>
+          <div className="flex flex-col gap-4">
+            {historyShown.map(blockCard)}
+          </div>
+
+          {history.length > HISTORY_SHOWN && (
+            <button onClick={() => setShowAllHistory(v => !v)}
+              className="self-start py-2 px-1 flex items-center gap-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              <svg className={`w-4 h-4 transition-transform ${showAllHistory ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+              {showAllHistory ? 'Show the last 5 only' : `Show all ${history.length}`}
+            </button>
+          )}
+        </section>
       )}
 
     </div>

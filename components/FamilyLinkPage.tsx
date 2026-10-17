@@ -10,6 +10,7 @@ const SITE_URL = 'https://www.lisanquran.com';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
+import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome } from '../utils/quranHomework';
 import { getSharedReport, getPageOfAyah, computeMistakesRate, calculateVersesAndPages } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import LottieIcon from './LottieIcon';
@@ -78,7 +79,7 @@ interface Metrics {
   achievedMilestoneIds: string[];
   tajweedLessonNames: string[];
   tafsirVerses: number;
-  homeworks: { range: string; note: string; isDone: boolean; date: string }[];
+  homeworks: { range: string; note: string; isDone: boolean; outcome: HomeworkOutcome; date: string }[];
 }
 
 function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
@@ -116,6 +117,7 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
     range: fmtHomework(hw),
     note: hw.note ?? '',
     isDone: !!hw.isDone,
+    outcome: outcomeOf(hw),
     date: hw.assignedAt ?? '',
   }));
 
@@ -381,7 +383,13 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                               <div key={i}>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <p className={`text-base font-semibold ${hw.isDone ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-violet-700 dark:text-violet-300'}`}>{hw.range}</p>
-                                  {hw.isDone && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">✓ Done</span>}
+                                  {/* Closed is not done: a family looking at this
+                                      should see which it was. */}
+                                  {hw.isDone && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OUTCOME_PILL[hw.outcome]}`}>
+                                      {hw.outcome === 'done' ? '✓ ' : ''}{OUTCOME_LABEL[hw.outcome]}
+                                    </span>
+                                  )}
                                   {hw.date && <span className="text-[10px] text-slate-400">{new Date(hw.date).toLocaleDateString()}</span>}
                                 </div>
                                 {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{hw.note}</p>}
