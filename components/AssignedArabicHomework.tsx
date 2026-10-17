@@ -15,14 +15,13 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [flipped, setFlipped] = useState(false);
-  const key = `arabicHomework:${hw.id}`;
-  const [results, setResults] = useState<HomeworkResult[]>(() => {
-    const remote = hw.progress?.results ?? [];
-    try { const local = JSON.parse(localStorage.getItem(key) ?? 'null');
-      if (Array.isArray(local) && local.length > remote.length && local.every((r, i) => r.wordId === hw.words[i]?.id && typeof r.correct === 'boolean')) return local;
-    } catch { /* use server progress */ }
-    return remote;
-  });
+  // The server row is the only record of how far he has got. There used to be
+  // a localStorage copy beside it, reconciled by comparing array lengths — but
+  // every answer is written through answer_arabic_flashcard before the next
+  // card is offered, and a failed write blocks the card and shows Retry. So
+  // the copy could only ever be one answer ahead, and in exchange it gave two
+  // sources of truth that could disagree.
+  const [results, setResults] = useState<HomeworkResult[]>(hw.progress?.results ?? []);
   const gate = useRef(false);
   const synced = useRef(hw.progress?.results?.length ?? 0);
   useEffect(() => {
@@ -48,7 +47,7 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
     }
     setHw(saved);
     if (saved.progress?.results) setResults(saved.progress.results);
-    if (saved.status === 'completed') { try { localStorage.removeItem(key); } catch { /* optional cache */ } }
+
   };
   const answer = async (correct?: boolean) => {
     if (gate.current || tutor !== false) return;
@@ -57,12 +56,10 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
     try {
       // Check cancellation and deadline before accepting another answer.
       const fresh = await getVocabHomework(hw.id);
-      if (fresh?.status === 'completed') { setHw(fresh); setResults(fresh.results ?? []); try { localStorage.removeItem(key); } catch {} return; }
+      if (fresh?.status === 'completed') { setHw(fresh); setResults(fresh.results ?? []); return; }
       if (!fresh || homeworkStatus(fresh) !== 'With student') { if (fresh) setHw(fresh); throw new Error('This assignment is no longer open.'); }
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* database is still available */ }
-      if (correct === false) {
-        try { const revisionKey = `arabicVocabRevisionAll:${hw.studentId}`; const ids = new Set(JSON.parse(localStorage.getItem(revisionKey) ?? '[]')); ids.add(hw.words[results.length].id); localStorage.setItem(revisionKey, JSON.stringify([...ids])); } catch { /* optional revision list */ }
-      }
+      // A wrong answer needs nothing kept here either: answer_arabic_flashcard
+      // writes the review row, and "Review later" is read back from that.
       setResults(next); setFlipped(false);
       await sync(next);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save. Please retry.'); }

@@ -139,44 +139,15 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const [assignmentMessage, setAssignmentMessage] = useState('');
 
 
-  // ── Unfinished flashcard run — survives leaving the tab (per student). ────
-  // Saved on every answer, cleared on completion; the idle screen offers a
-  // "continue where you left off" button while one exists.
-  const progressKey = `arabicVocabFlashProgress:${student.id}`;
-  interface SavedRun { wordIds: string[]; cardIndex: number; wrongIds: string[]; reviewingSaved: boolean }
-  const persistProgress = (deck: VocabWord[], idx: number, wrong: VocabWord[], savedRun: boolean) => {
-    try {
-      localStorage.setItem(progressKey, JSON.stringify({
-        wordIds: deck.map(w => w.id), cardIndex: idx,
-        wrongIds: wrong.map(w => w.id), reviewingSaved: savedRun,
-      } satisfies SavedRun));
-    } catch { /* quota */ }
-  };
-  const clearProgress = () => { try { localStorage.removeItem(progressKey); } catch { /* quota */ } };
-  const savedProgress = useMemo((): SavedRun | null => {
-    void phase;   // re-read whenever a run starts/ends
-    try {
-      const raw = localStorage.getItem(progressKey);
-      if (!raw) return null;
-      const pr = JSON.parse(raw) as SavedRun;
-      if (!Array.isArray(pr.wordIds) || typeof pr.cardIndex !== 'number') return null;
-      if (pr.cardIndex < 1 || pr.cardIndex >= pr.wordIds.length) return null;   // nothing meaningful to resume
-      return pr;
-    } catch { return null; }
-  }, [progressKey, phase]);
-
-  const resumeRun = () => {
-    if (!savedProgress) return;
-    const byId = new Map<string, VocabWord>(words.map(w => [w.id, w] as [string, VocabWord]));
-    const deck = savedProgress.wordIds.map(id => byId.get(id)).filter((w): w is VocabWord => !!w);
-    if (deck.length < 2 || savedProgress.cardIndex >= deck.length) { clearProgress(); return; }
-    setShuffled(deck);
-    setCardIndex(savedProgress.cardIndex);
-    setWrongWords(savedProgress.wrongIds.map(id => byId.get(id)).filter((w): w is VocabWord => !!w));
-    setReviewingSaved(!!savedProgress.reviewingSaved);
-    setFlipped(false);
-    setPhase('active');
-  };
+  // There is no saved "unfinished run" any more.
+  //
+  // It was a shuffled deck and a card index in this browser's localStorage, so
+  // a run begun on the tutor's laptop could not be carried on from the iPad —
+  // and resuming the exact shuffle at card 13 was never the point. Every answer
+  // is already written to arabic_vocab_reviews, so the words still to do are
+  // simply the ones not answered correctly: the "Needs practice" pool. Pressing
+  // it IS carrying on, and it drops the ones he got right in earlier sessions
+  // too, which a stored deck could not.
 
   // Lessons in course order, and the words that belong to each.
   const orderedLessons = useMemo(
@@ -306,19 +277,16 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     const deck: VocabWord[] = shuffleArray(pool) as VocabWord[];
     setShuffled(deck);
     setCardIndex(0); setWrongWords([]); setReviewingSaved(savedRun);
-    persistProgress(deck, 0, [], savedRun);
     setPhase('active');
   };
   const advance = (wrong: VocabWord[] = wrongWords) => {
     if (cardIndex + 1 >= shuffled.length) {
-      clearProgress();
       setPhase('complete');
       // Wrong words feed the existing mistakes-review flow (grouped per lesson).
       if (!reviewingSaved && wrong.length > 0) {
         saveVocabMistakes(student.id, wrong.map(w => ({ wordId: w.id, lessonId: w.lessonId }))).catch(console.error);
       }
     } else {
-      persistProgress(shuffled, cardIndex + 1, wrong, reviewingSaved);
       setCardIndex(i => i + 1);
     }
   };
@@ -383,8 +351,13 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-8 sm:p-12 text-center shadow-sm space-y-4">
           <div className="text-6xl">🎉</div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-slate-100">{t('arabicLessonDetail.challengeComplete')}</h2>
+          {/* The shared message claims every word was right, so it is only
+              shown when that is true — it was sitting above a list of the ones
+              he got wrong. */}
           <p className="text-base text-slate-500 dark:text-slate-400">
-            {t('arabicLessonDetail.challengeCompleteMsg', { count: shuffled.length })}
+            {wrongWords.length === 0
+              ? t('arabicLessonDetail.challengeCompleteMsg', { count: shuffled.length })
+              : `${shuffled.length - wrongWords.length} of ${shuffled.length} right.`}
           </p>
         </div>
         {wrongWords.length > 0 && (
@@ -401,9 +374,20 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             </div>
           </div>
         )}
-        <button onClick={() => setPhase('idle')} className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors">
-          {t('arabicLessonDetail.backToWordList')}
+        {/* Where "carry on" lives now: the ones he did not know are already in
+            the Needs practice pool, on every device. */}
+        <button onClick={() => { setPool('needs'); setPhase('idle'); }}
+          className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-colors">
+          {wrongWords.length
+            ? `Carry on with the ${wrongWords.length} he did not know`
+            : t('arabicLessonDetail.backToWordList')}
         </button>
+        {wrongWords.length > 0 && (
+          <button onClick={() => setPhase('idle')}
+            className="w-full py-2.5 text-sm font-semibold text-slate-500 dark:text-slate-400">
+            {t('arabicLessonDetail.backToWordList')}
+          </button>
+        )}
       </div>
     );
   }
@@ -502,19 +486,6 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             ? POOL_EMPTY[pool]
             : <>Everything below runs on <strong className="text-slate-700 dark:text-slate-200">{POOL_PHRASE[pool](practicePool.length, selected.size)}</strong>{studentMode ? '.' : ' — playing now or sent as homework.'}</>}
         </p>
-
-        {savedProgress && (
-          <button onClick={resumeRun}
-            className="w-full flex items-center gap-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-left hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all">
-            <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">▶️</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-emerald-800 dark:text-emerald-200 truncate">
-                {t('arabicLessonDetail.continueFlashcard', { n: savedProgress.cardIndex + 1, total: savedProgress.wordIds.length })}
-              </span>
-              <span className="block text-xs text-emerald-600/70 dark:text-emerald-300/60">{t('arabicLessonDetail.continueFlashcardHint')}</span>
-            </span>
-          </button>
-        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <GameTile art="flashcards" tone="amber" icon="🗂️"
