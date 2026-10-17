@@ -88,13 +88,17 @@ interface Block {
 }
 
 /**
- * One small action in a homework's header.
+ * One action in a homework's header: an icon, nothing more.
  *
- * Four tempers off one shape: a ghost for the ones that only navigate, and a
- * tinted fill for the three that CLOSE the homework — green for done, red for
+ * Four tempers off one shape — a ghost for the ones that only navigate, a
+ * tinted fill for the three that CLOSE the homework: green for done, red for
  * not done, orange for withdrawn. Tinted rather than solid because three solid
- * blocks of colour in a row shout at the tutor every time the tab opens, and
- * none of them is the thing he does most.
+ * blocks of colour would shout from every card, and none of them is the thing
+ * the tutor does most.
+ *
+ * Icons rather than labels so the row NEVER wraps: with words, four buttons
+ * and a surah name took three lines on a phone. Each carries its title and its
+ * aria-label, so the name is a hover away and a screen reader still reads it.
  */
 const LOOK: Record<string, string> = {
   ghost:  'border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700',
@@ -104,25 +108,24 @@ const LOOK: Record<string, string> = {
 };
 
 const ICON = {
-  tick:  <path d="m5 13 4 4L19 7" />,
-  cross: <path d="M6 6l12 12M18 6L6 18" />,
-  bin:   <><path d="M4 7h16" /><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" /><path d="M6.5 7.5 7.4 19a1.3 1.3 0 0 0 1.3 1.2h6.6a1.3 1.3 0 0 0 1.3-1.2l.9-11.5" /></>,
+  tick:   <path d="m5 13 4 4L19 7" />,
+  cross:  <path d="M6 6l12 12M18 6L6 18" />,
+  bin:    <><path d="M4 7h16" /><path d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" /><path d="M6.5 7.5 7.4 19a1.3 1.3 0 0 0 1.3 1.2h6.6a1.3 1.3 0 0 0 1.3-1.2l.9-11.5" /></>,
+  book:   <><path d="M12 6.5C10.6 5.2 8.8 4.5 6.5 4.5H4v13h2.5c2.3 0 4.1.7 5.5 2" /><path d="M12 6.5c1.4-1.3 3.2-2 5.5-2H20v13h-2.5c-2.3 0-4.1.7-5.5 2" /><path d="M12 6.5v15" /></>,
+  link:   <><path d="M9.5 14.5l5-5" /><path d="M12.8 7.2l1.9-1.9a3.4 3.4 0 0 1 4.8 4.8l-1.9 1.9" /><path d="M11.2 16.8l-1.9 1.9a3.4 3.4 0 0 1-4.8-4.8l1.9-1.9" /></>,
+  reopen: <><path d="M4 11a7.5 7.5 0 1 1 2.2 5.3" /><path d="M4 5.5V11h5.5" /></>,
 };
 
 const Action: React.FC<{
   onClick: () => void;
   look: keyof typeof LOOK;
-  icon?: React.ReactNode;
-  title?: string;
-  children: React.ReactNode;
-}> = ({ onClick, look, icon, title, children }) => (
-  <button onClick={onClick} title={title}
-    className={`flex-shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-bold transition-colors ${LOOK[look]}`}>
-    {icon && (
-      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6}
-        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
-    )}
-    {children}
+  icon: React.ReactNode;
+  label: string;
+}> = ({ onClick, look, icon, label }) => (
+  <button onClick={onClick} title={label} aria-label={label}
+    className={`flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors ${LOOK[look]}`}>
+    <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.3}
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
   </button>
 );
 
@@ -353,50 +356,44 @@ const HomeworkTab: React.FC<{
 
   const blockCard = (b: Block) => (
     <section key={b.key} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl overflow-hidden shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 px-4 sm:px-6 py-3 border-b border-slate-100 dark:border-gray-700">
-        <h2 className="min-w-0 truncate text-xl sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 700 }}>
+      <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-3 border-b border-slate-100 dark:border-gray-700">
+        <h2 className="min-w-0 flex-1 truncate text-lg sm:text-2xl text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 700 }}>
           {b.title}
         </h2>
         {b.kind && (
-          <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+          <span className={`flex-shrink-0 hidden sm:inline px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide ${
             b.kind === 'hifz'
               ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
               : 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'}`}>
             {b.kind === 'hifz' ? 'Hifz' : 'Reading'}
           </span>
         )}
-        <span dir="rtl" className="hidden sm:inline font-quranic text-lg text-slate-500 dark:text-slate-400">{b.arabic}</span>
-        <span className="flex-grow" />
+        <span dir="rtl" className="hidden lg:inline flex-shrink-0 font-quranic text-lg text-slate-500 dark:text-slate-400">{b.arabic}</span>
 
         {/* Closed: how it ended, and the way back if it was a mis-tap. */}
         {b.done && (
-          <span className={`flex-shrink-0 inline-flex items-center h-8 px-3 rounded-full text-[12.5px] font-bold ${OUTCOME_PILL[b.outcome]}`}>
+          <span className={`flex-shrink-0 inline-flex items-center h-7 px-2.5 rounded-full text-[11.5px] font-bold whitespace-nowrap ${OUTCOME_PILL[b.outcome]}`}>
             {OUTCOME_LABEL[b.outcome]}
           </span>
         )}
         {b.done && isTutor && onReopen && (
-          <button onClick={() => onReopen(b.hw)} title="Put it back on the list"
-            className="flex-shrink-0 h-8 px-3 rounded-full text-[12.5px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700">
-            Reopen
-          </button>
+          <Action onClick={() => onReopen(b.hw)} look="ghost" icon={ICON.reopen} label="Reopen — put it back on the list" />
         )}
 
-        {!b.done && <Action onClick={() => onOpenVerses(b.hw)} look="ghost">Open verses</Action>}
+        {!b.done && <Action onClick={() => onOpenVerses(b.hw)} look="ghost" icon={ICON.book} label="Open verses" />}
 
         {!b.done && isTutor && b.attempts.length > 0 && onCopyLink && (
-          <Action onClick={() => onCopyLink(b.attempts[b.attempts.length - 1].rec)} look="ghost" title="Copy the recording link">
-            Copy link
-          </Action>
+          <Action onClick={() => onCopyLink(b.attempts[b.attempts.length - 1].rec)} look="ghost" icon={ICON.link} label="Copy the recording link" />
         )}
 
         {!b.done && isTutor && onMarkDone && (
-          <Action onClick={() => onMarkDone(b.hw)} look="green" icon={ICON.tick}>Mark done</Action>
+          <Action onClick={() => onMarkDone(b.hw)} look="green" icon={ICON.tick} label="Mark done" />
         )}
         {!b.done && isTutor && onMarkMissed && (
-          <Action onClick={() => onMarkMissed(b.hw)} look="red" icon={ICON.cross}>Wasn't done</Action>
+          <Action onClick={() => onMarkMissed(b.hw)} look="red" icon={ICON.cross} label="Wasn't done" />
         )}
         {!b.done && isTutor && onRemove && (
-          <Action onClick={() => onRemove(b.hw)} look="orange" icon={ICON.bin}>Remove</Action>
+          <Action onClick={() => onRemove(b.hw)} look="orange" icon={ICON.bin} label="Remove" />
         )}
       </div>
 
