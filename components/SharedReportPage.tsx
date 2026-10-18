@@ -225,6 +225,23 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
     }).catch(() => {});
   }, [report?.student_id, activeTab, refreshNonce]);
 
+  // ?tab=<name>: a link the tutor sends that opens the portal straight on one
+  // page — the Tadabbur Lab today. Consumed once and removed from the address,
+  // so a refresh does not keep forcing the tab and the student can navigate
+  // away from it normally.
+  const tabParamDone = useRef(false);
+  useEffect(() => {
+    if (tabParamDone.current) return;
+    tabParamDone.current = true;
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    const allowed = ['progress', 'calendar', 'quran', 'homework', 'tadabburLab', 'tajweed', 'qaedah', 'alphabetTrainer'] as const;
+    if (!wanted || !(allowed as readonly string[]).includes(wanted)) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('tab');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    setActiveTab(wanted as typeof activeTab);
+  }, []);
+
   // ?hw=<homeworkId> (the "see my mistakes" notification): open the Quran page
   // on that homework, with its note, once the report has loaded.
   const hwParamDone = useRef(false);

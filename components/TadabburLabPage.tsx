@@ -15,10 +15,10 @@ import { loadWordMeanings, loadVerseNotes } from '../services/tadabburService';
 import {
   loadWordStrength, recordWordReview, withWordReview, WordStrength, isWeak,
   wordAudioUrl, wordKey, listWordHomework, assignWordHomework, completeWordHomework,
-  deleteWordHomework, WordHomework, DeckWord,
+  deleteWordHomework, tadabburLabUrl, WordHomework, DeckWord,
 } from '../services/tadabburLabService';
 import { fetchSurahWbw, alignWbw } from '../services/wordByWordService';
-import { getVersesForSurah } from '../services/dataService';
+import { getVersesForSurah, getStudentReportId } from '../services/dataService';
 import { splitVerseWords, renderWordWithMarks } from '../utils/quranicMarks';
 import { createNotification } from '../services/notificationService';
 import VocabStrengthBar from './VocabStrengthBar';
@@ -90,6 +90,33 @@ const TadabburLabPage: React.FC<{
   const [homework, setHomework] = useState<WordHomework[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+
+  /** The link that opens this page inside the student's own portal.
+   *  The portal IS the shared report, so the link is that report's address with
+   *  ?tab=tadabburLab — made on demand, because a student who has never been
+   *  given a link has no report row yet. */
+  const [linkState, setLinkState] = useState<'idle' | 'working' | 'copied'>('idle');
+  const [linkError, setLinkError] = useState('');
+  const copyStudentLink = async () => {
+    if (!teacherId) { setLinkError('Sign in again to make the link.'); return; }
+    setLinkState('working'); setLinkError('');
+    try {
+      const reportId = await getStudentReportId(teacherId, studentId);
+      if (!reportId) {
+        setLinkState('idle');
+        setLinkError('This student has no portal link yet — share his report once from the main page, then try again.');
+        return;
+      }
+      const url = tadabburLabUrl(reportId);
+      try { await navigator.clipboard.writeText(url); }
+      catch { window.prompt('Copy the link', url); }    // clipboard blocked
+      setLinkState('copied');
+      window.setTimeout(() => setLinkState('idle'), 2200);
+    } catch (e) {
+      setLinkState('idle');
+      setLinkError(e instanceof Error ? e.message : 'Could not make the link.');
+    }
+  };
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'weak' | 'new' | 'reflections'>('all');
@@ -406,7 +433,7 @@ const TadabburLabPage: React.FC<{
 
   const wordCard = (w: LabWord) => (
     <div key={w.key}
-      className={`w-[150px] px-2.5 pt-2 pb-2.5 rounded-2xl flex flex-col items-center gap-1 transition-colors ${
+      className={`px-2.5 pt-2 pb-2.5 rounded-2xl flex flex-col items-center gap-1 transition-colors ${
         picked.has(w.key)
           ? 'border-2 border-blue-700 bg-blue-50 dark:bg-blue-900/30'
           : 'border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800'}`}>
@@ -429,7 +456,7 @@ const TadabburLabPage: React.FC<{
     const wordAt = new Map(v.words.map(w => [w.wordIndex, w]));
     return (
       <article key={v.key} id={`tdb-${v.key.replace(':', '-')}`}
-        className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-5 space-y-4 scroll-mt-24">
+        className="rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 sm:p-5 space-y-3 sm:space-y-4 scroll-mt-24">
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onOpenVerse?.(v.key)}
@@ -513,7 +540,10 @@ const TadabburLabPage: React.FC<{
                 Flashcards
               </button>
             </div>
-            <div dir="rtl" className="flex flex-wrap gap-2.5">
+            {/* A grid, not a wrapping row: the row was dir="rtl" with fixed
+                150px cards, so on a phone two cards sat against the right edge
+                and the rest of the width was empty. */}
+            <div dir="rtl" className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
               {v.words.map(wordCard)}
             </div>
           </div>
@@ -528,20 +558,23 @@ const TadabburLabPage: React.FC<{
     const verse = verseText[`${card.surah}:${card.ayah}`];
     const pieces = verse ? splitVerseWords(verse) : [];
     return (
-      <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-5">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="max-w-4xl mx-auto p-3 sm:p-8 space-y-3 sm:space-y-5">
+        {/* One row on a phone: back, what this is, and where you are. */}
+        <div className="flex items-center gap-2.5">
           <button onClick={() => { setDeck(null); setDeckHomeworkId(null); }}
-            className="h-9 px-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-bold text-slate-600 dark:text-slate-300">
-            ← Back to the lab
+            aria-label="Back to the lab" title="Back to the lab"
+            className="flex-shrink-0 w-9 h-9 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5" /></svg>
           </button>
-          <div>
-            <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] sm:text-lg font-black text-slate-800 dark:text-slate-100 truncate">
               Flashcards · {deck.length} word{deck.length === 1 ? '' : 's'}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Say the meaning out loud, then turn the card.</p>
+            <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">Say the meaning out loud, then turn the card.</p>
           </div>
-          <span className="flex-grow" />
-          <span className="text-sm font-extrabold text-slate-600 dark:text-slate-300">Card {cardIndex + 1} of {deck.length}</span>
+          <span className="flex-shrink-0 text-[13px] sm:text-sm font-extrabold text-slate-600 dark:text-slate-300 tabular-nums">
+            {cardIndex + 1} / {deck.length}
+          </span>
         </div>
 
         <div className="h-2 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
@@ -549,7 +582,7 @@ const TadabburLabPage: React.FC<{
         </div>
 
         <button onClick={() => setFlipped(f => !f)}
-          className={`w-full rounded-3xl border p-8 sm:p-10 flex flex-col items-center justify-center gap-4 min-h-[300px] transition-colors ${
+          className={`w-full rounded-3xl border p-6 sm:p-10 flex flex-col items-center justify-center gap-4 min-h-[240px] sm:min-h-[300px] transition-colors ${
             flipped ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700'}`}>
           {!flipped ? (
             <>
@@ -638,51 +671,62 @@ const TadabburLabPage: React.FC<{
   const openDecks = homework.filter(h => h.status === 'assigned');
 
   return (
-    <div className="max-w-[1400px] mx-auto p-3 sm:p-6 space-y-4">
-      {/* header */}
-      <div className="flex flex-wrap items-center gap-4 p-5 sm:p-6 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">Tadabbur Lab</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {readOnly ? 'Every verse you reflected on, with its words to hear and revise.'
-              : <>Every verse <strong className="text-slate-800 dark:text-slate-100">{studentName}</strong> reflected on, with its words to hear and revise.</>}
-          </p>
+    <div className="max-w-[1400px] mx-auto p-2.5 sm:p-6 space-y-2.5 sm:space-y-4">
+      {/* Header and progress in ONE card.
+          They were two, and on a phone the five stat tiles fell into a 2+2+1
+          staircase that ate a third of the screen before a single verse. The
+          numbers are a sentence now, and the percentage keeps its bar. */}
+      <div className="p-3.5 sm:p-5 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl sm:rounded-3xl space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight">Tadabbur Lab</h1>
+            <p className="text-[13px] sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              {readOnly ? 'Every verse you reflected on, with its words to hear and revise.'
+                : <>Every verse <strong className="text-slate-800 dark:text-slate-100">{studentName}</strong> reflected on.</>}
+            </p>
+          </div>
+          {!readOnly && (
+            <button onClick={copyStudentLink} disabled={linkState === 'working'}
+              title="Copy a link that opens this page in the student's portal"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-bold transition-colors ${
+                linkState === 'copied'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800'
+                  : 'border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+              {linkState === 'copied' ? (
+                <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>Copied</>
+              ) : (
+                <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.5 14.5l5-5" /><path d="M12.8 7.2l1.9-1.9a3.4 3.4 0 0 1 4.8 4.8l-1.9 1.9" /><path d="M11.2 16.8l-1.9 1.9a3.4 3.4 0 0 1-4.8-4.8l1.9-1.9" /></svg>
+                {linkState === 'working' ? 'Making…' : 'His link'}</>
+              )}
+            </button>
+          )}
         </div>
-        <span className="flex-grow" />
-        <div className="flex flex-wrap gap-2">
-          {[
-            { v: String(surahCount), l: 'Surahs', c: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
-            { v: String(verseCount), l: 'Verses', c: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
-            { v: String(noteCount), l: 'Reflections', c: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
-            { v: String(words.length), l: 'Words', c: 'bg-slate-100 dark:bg-gray-700 text-slate-800 dark:text-slate-100' },
-            { v: knownPct === null ? '—' : `${knownPct}%`, l: 'Known', c: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
-          ].map(s => (
-            <div key={s.l} className={`min-w-[96px] px-4 py-2 rounded-2xl ${s.c}`}>
-              <div className="text-2xl font-black leading-tight">{s.v}</div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{s.l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* How much of the Quran this student has actually been through — the one number
-          the surah cards below add up to. Never narrowed by the filters. */}
-      <div className="p-5 sm:p-6 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl space-y-3">
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
-          <span className="text-3xl font-black text-violet-700 dark:text-violet-300 tabular-nums">
-            {stats.pct < 1 && stats.verses > 0 ? stats.pct.toFixed(1) : Math.round(stats.pct)}%
-          </span>
-          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">of the Quran</span>
-          <span className="flex-grow" />
-          <span className="text-[13px] text-slate-500 dark:text-slate-400 tabular-nums">
-            {stats.verses.toLocaleString()} of {stats.totalVerses.toLocaleString()} verses
-            {' · '}{stats.surahs} of 114 surahs
-            {stats.reflections > 0 && ` · ${stats.reflections} reflection${stats.reflections === 1 ? '' : 's'}`}
-          </span>
-        </div>
-        <div className="h-2.5 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
-          <div className="h-full rounded-full bg-violet-600 transition-[width] duration-500"
-            style={{ width: `${Math.max(stats.verses > 0 ? 0.6 : 0, Math.min(100, stats.pct))}%` }} />
+        {linkError && <p role="alert" className="text-[12.5px] font-semibold text-red-600 dark:text-red-400">{linkError}</p>}
+
+        <p className="text-[13px] text-slate-600 dark:text-slate-300 tabular-nums">
+          <strong className="text-slate-800 dark:text-slate-100">{verseCount}</strong> verse{verseCount === 1 ? '' : 's'}
+          {' in '}<strong className="text-slate-800 dark:text-slate-100">{surahCount}</strong> surah{surahCount === 1 ? '' : 's'}
+          {' · '}<strong className="text-slate-800 dark:text-slate-100">{noteCount}</strong> reflection{noteCount === 1 ? '' : 's'}
+          {' · '}<strong className="text-slate-800 dark:text-slate-100">{words.length}</strong> word{words.length === 1 ? '' : 's'}
+          {knownPct !== null && <> · <strong className="text-emerald-700 dark:text-emerald-300">{knownPct}%</strong> known</>}
+        </p>
+
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xl sm:text-2xl font-black text-violet-700 dark:text-violet-300 tabular-nums">
+              {stats.pct < 1 && stats.verses > 0 ? stats.pct.toFixed(1) : Math.round(stats.pct)}%
+            </span>
+            <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">of the Quran</span>
+            <span className="flex-grow" />
+            <span className="text-[11.5px] text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+              {stats.verses.toLocaleString()} / {stats.totalVerses.toLocaleString()}
+            </span>
+          </div>
+          <div className="mt-1.5 h-2 rounded-full bg-slate-100 dark:bg-gray-700 overflow-hidden">
+            <div className="h-full rounded-full bg-violet-600 transition-[width] duration-500"
+              style={{ width: `${Math.max(stats.verses > 0 ? 0.6 : 0, Math.min(100, stats.pct))}%` }} />
+          </div>
         </div>
       </div>
 
@@ -725,38 +769,46 @@ const TadabburLabPage: React.FC<{
         </div>
       ))}
 
-      {/* tools */}
-      <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl">
-        <input
-          type="search" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search a word or a meaning…" aria-label="Search words and meanings"
-          className="h-10 px-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-slate-800 dark:text-slate-100 w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <div role="group" aria-label="Filter" className="flex items-center gap-1 p-1 rounded-full bg-slate-100 dark:bg-gray-700">
-          {([
-            ['all', 'All'],
-            ['reflections', `Reflections ${noteCount}`],
-            ['weak', `Weak ${weakCount}`],
-            ['new', `Never revised ${freshCount}`],
-          ] as const).map(([id, label]) => (
-            <button key={id} onClick={() => setFilter(id)}
-              className={`h-8 px-3 rounded-full text-[13px] font-bold transition-colors ${
-                filter === id ? 'bg-blue-700 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-gray-600'}`}>
-              {label}
-            </button>
-          ))}
+      {/* tools — search, then the filters as ONE scrolling strip, then the two
+          actions side by side. The filter pills used to wrap their own text:
+          "Never revised 5" broke onto two lines INSIDE the pill. */}
+      <div className="p-2.5 sm:p-4 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+          <input
+            type="search" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search a word or a meaning…" aria-label="Search words and meanings"
+            className="h-9 px-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-[13px] text-slate-800 dark:text-slate-100 w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div role="group" aria-label="Filter"
+            className="flex items-center gap-1 p-1 rounded-full bg-slate-100 dark:bg-gray-700 overflow-x-auto sm:overflow-visible">
+            {([
+              ['all', 'All'],
+              ['reflections', `Reflections ${noteCount}`],
+              ['weak', `Weak ${weakCount}`],
+              ['new', `New ${freshCount}`],
+            ] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setFilter(id)}
+                className={`flex-shrink-0 h-7 px-2.5 rounded-full text-[12px] font-bold whitespace-nowrap transition-colors ${
+                  filter === id ? 'bg-blue-700 text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-gray-600'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="hidden sm:block flex-grow" />
         </div>
-        <span className="flex-grow" />
-        {weakCount > 0 && (
-          <button onClick={() => startDeck(words.filter(w => isWeak(strength.get(w.key))))}
-            className="h-10 px-4 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-red-700 dark:text-red-400 text-[13px] font-extrabold">
-            Revise the weak {weakCount}
+
+        <div className="flex items-center gap-2">
+          {weakCount > 0 && (
+            <button onClick={() => startDeck(words.filter(w => isWeak(strength.get(w.key))))}
+              className="flex-1 sm:flex-initial h-9 px-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-red-700 dark:text-red-400 text-[12.5px] font-extrabold whitespace-nowrap">
+              Revise the weak {weakCount}
+            </button>
+          )}
+          <button onClick={() => startDeck(words)} disabled={!words.length}
+            className="flex-1 sm:flex-initial h-9 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[12.5px] font-extrabold disabled:opacity-40 whitespace-nowrap">
+            Flashcards · all {words.length}
           </button>
-        )}
-        <button onClick={() => startDeck(words)} disabled={!words.length}
-          className="h-10 px-5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-extrabold disabled:opacity-40">
-          Flashcards · all {words.length}
-        </button>
+        </div>
       </div>
 
       {loading ? (
@@ -861,25 +913,30 @@ const TadabburLabPage: React.FC<{
 
       {/* the picked deck follows you down the page */}
       {pickedWords.length > 0 && (
-        <div className="sticky bottom-3 z-30 flex flex-wrap items-center gap-3 p-3 sm:px-5 rounded-2xl bg-slate-900 text-white shadow-2xl">
-          <span className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center font-black">{pickedWords.length}</span>
-          <span className="font-extrabold">word{pickedWords.length === 1 ? '' : 's'} picked</span>
-          <span dir="rtl" className="font-quranic text-lg text-slate-300 truncate max-w-[16rem] hidden sm:inline">
-            {pickedWords.slice(0, 4).map(w => w.wordText).join(' · ')}
-          </span>
-          <span className="flex-grow" />
-          <button onClick={() => setPicked(new Set())}
-            className="h-9 px-3 rounded-xl border border-slate-600 text-slate-300 text-[13px] font-bold">Clear</button>
-          {!readOnly && (
-            <button onClick={sendAsHomework} disabled={assigning}
-              className="h-9 px-4 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[13px] font-extrabold disabled:opacity-50">
-              {assigning ? 'Sending…' : 'Send as homework'}
+        <div className="sticky bottom-2 sm:bottom-3 z-30 p-2.5 sm:px-5 sm:py-3 rounded-2xl bg-slate-900 text-white shadow-2xl space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-700 flex items-center justify-center text-[13px] sm:text-base font-black">{pickedWords.length}</span>
+            <span className="text-[13px] sm:text-base font-extrabold">picked</span>
+            <span dir="rtl" className="font-quranic text-lg text-slate-300 truncate max-w-[16rem] hidden lg:inline">
+              {pickedWords.slice(0, 4).map(w => w.wordText).join(' · ')}
+            </span>
+            <span className="flex-grow" />
+            <button onClick={() => setPicked(new Set())}
+              className="h-8 px-2.5 rounded-lg border border-slate-600 text-slate-300 text-[12px] font-bold">Clear</button>
+          </div>
+          <span className="hidden sm:block flex-grow" />
+          <div className="flex items-center gap-2">
+            {!readOnly && (
+              <button onClick={sendAsHomework} disabled={assigning}
+                className="flex-1 sm:flex-initial h-9 px-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[12.5px] font-extrabold disabled:opacity-50 whitespace-nowrap">
+                {assigning ? 'Sending…' : 'Send as homework'}
+              </button>
+            )}
+            <button onClick={() => startDeck(pickedWords)}
+              className="flex-1 sm:flex-initial h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[12.5px] font-black whitespace-nowrap">
+              Flashcards · {pickedWords.length}
             </button>
-          )}
-          <button onClick={() => startDeck(pickedWords)}
-            className="h-9 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-black">
-            Flashcards with these {pickedWords.length}
-          </button>
+          </div>
         </div>
       )}
     </div>

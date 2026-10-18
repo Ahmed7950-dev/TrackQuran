@@ -15,6 +15,15 @@
 import { supabase } from '../lib/supabase';
 import { STRENGTH_SLOTS } from './vocabHomeworkService';
 
+/** The student's own portal, opened straight on this page.
+ *
+ *  `?tab=` is read by SharedReportPage and then stripped from the address, so
+ *  the link lands on the lab without leaving a parameter behind to confuse a
+ *  refresh. The student can still reach every other tab from there. */
+export const TADABBUR_SITE = 'https://www.lisanquran.com';
+export const tadabburLabUrl = (reportId: string): string =>
+  `${TADABBUR_SITE}/report/${reportId}?tab=tadabburLab`;
+
 /** "surah:ayah:wordIndex" — the same key shape as a word meaning. */
 export const wordKey = (surah: number, ayah: number, wordIndex: number) => `${surah}:${ayah}:${wordIndex}`;
 
