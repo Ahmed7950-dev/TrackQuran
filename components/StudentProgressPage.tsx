@@ -3732,10 +3732,21 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const handleVerseNumberPressEnd = (surahNum: number, ayahNum: number) => {
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
         }
         if (!longPressFired.current) {
             // This is a short click, handle regular range selection
             handleVerseClick(surahNum, ayahNum);
+        }
+    };
+
+    // The finger left the number without finishing: a page scroll that began on
+    // the circle, or the mouse dragged away. Drop the pending long-press and
+    // count nothing as a tap.
+    const cancelVerseNumberPress = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
         }
     };
     
@@ -3862,7 +3873,14 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         width: '2.35em',                        // em here = the line above
         height: '2.35em',
         margin: '0 0.45em',
-    };
+        // A hold on the circle is ours: without this the phone pops up the
+        // selection callout instead, which cancels the pointer and kills
+        // long-press-to-remove. `manipulation` also drops the double-tap delay.
+        touchAction: 'manipulation',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+    } as React.CSSProperties;
 
     const VerseMarker: React.FC<{ number: number; surah: number; isSelectedStart: boolean }> = ({ number, surah, isSelectedStart }) => {
         // Include ALL logs (first-time + revisions) so the table and live page stay in sync
@@ -3894,10 +3912,18 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
         return (
             <span
-                onMouseDown={() => handleVerseNumberPressStart(surah, number)}
-                onMouseUp={() => handleVerseNumberPressEnd(surah, number)}
-                onTouchStart={() => handleVerseNumberPressStart(surah, number)}
-                onTouchEnd={() => handleVerseNumberPressEnd(surah, number)}
+                // POINTER events, never mouse+touch together. A phone answers a
+                // tap with touchstart/touchend AND a synthesised mousedown/mouseup,
+                // so binding both ran the press twice: the first tap set the start
+                // verse and the echo closed the range on that same verse — the log
+                // panel opened before a second verse could be chosen, and progress
+                // could not be assigned from a phone at all. One pointer event per
+                // tap, whatever the finger or mouse.
+                onPointerDown={() => handleVerseNumberPressStart(surah, number)}
+                onPointerUp={() => handleVerseNumberPressEnd(surah, number)}
+                onPointerCancel={cancelVerseNumberPress}
+                onPointerLeave={cancelVerseNumberPress}
+                onContextMenu={(e) => e.preventDefault()}
                 className={`inline-flex items-center justify-center flex-shrink-0 font-mono font-bold text-slate-700 dark:text-slate-200 cursor-pointer relative transition-all rounded-full ${glowClass} ${longPressGlowClass}`}
                 style={verseMarkerStyle} role="button" aria-label={`Mark progress at verse ${number}`}
             >
