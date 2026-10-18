@@ -11,6 +11,7 @@ const SITE_URL = 'https://www.lisanquran.com';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FamilyLink, FamilyMember, getFamilyLinkById } from '../services/familyLinkService';
 import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome } from '../utils/quranHomework';
+import { compactPoints, exactPoints } from '../utils/points';
 import { getSharedReport, getPageOfAyah, computeMistakesRate, calculateVersesAndPages } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, QURAN_METADATA, POINTS_PER_WORD } from '../constants';
 import LottieIcon from './LottieIcon';
@@ -79,7 +80,11 @@ interface Metrics {
   achievedMilestoneIds: string[];
   tajweedLessonNames: string[];
   tafsirVerses: number;
-  homeworks: { range: string; note: string; isDone: boolean; outcome: HomeworkOutcome; date: string }[];
+  /** Two at most: what he is on now, and how the one before it went. */
+  homeworks: {
+    current: { range: string; note: string; isDone: boolean; outcome: HomeworkOutcome; date: string } | null;
+    previous: { range: string; note: string; isDone: boolean; outcome: HomeworkOutcome; date: string } | null;
+  };
 }
 
 function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
@@ -111,15 +116,22 @@ function computeMetrics(rd: any, tf: Timeframe, now: Date): Metrics {
   });
   const attended = explicitPresent + implicitDays.size;
 
-  // All assigned homework, newest first — independent of timeframe.
+  // TWO pieces of homework, not the whole history: what he is on now, and how
+  // the one before it went. A family wants to know whether there is something
+  // to do tonight, not to read a ledger.
   const allHw = [...(rd?.quranHomework ?? [])].sort((a, b) => new Date(b.assignedAt || 0).getTime() - new Date(a.assignedAt || 0).getTime());
-  const homeworks = allHw.map((hw: any) => ({
+  const asRow = (hw: any) => ({
     range: fmtHomework(hw),
     note: hw.note ?? '',
     isDone: !!hw.isDone,
     outcome: outcomeOf(hw),
     date: hw.assignedAt ?? '',
-  }));
+  });
+  // The newest still open, and the newest that was closed — withdrawn ones are
+  // not shown: the tutor took those back, so they are not news for the family.
+  const current = allHw.find((hw: any) => !hw.isDone);
+  const previous = allHw.find((hw: any) => hw.isDone && outcomeOf(hw) !== 'removed');
+  const homeworks = { current: current ? asRow(current) : null, previous: previous ? asRow(previous) : null };
 
   return {
     points: [...recTF, ...memTF].reduce((s: number, a: any) => s + (a.pointsEarned ?? ((a.versesCompleted ?? 0) * 15 * POINTS_PER_WORD)), 0),
@@ -378,23 +390,33 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                           <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{m.name}</span>
                         </span>
                         <div className="flex-1 min-w-0 space-y-2">
-                          {list.length > 0 ? (
-                            list.map((hw, i) => (
-                              <div key={i}>
+                          {list.current || list.previous ? (
+                            <>
+                              {list.current ? (
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 dark:text-violet-400">Now</span>
+                                    <p className="text-base font-semibold text-violet-700 dark:text-violet-300">{list.current.range}</p>
+                                    {list.current.date && <span className="text-[10px] text-slate-400">{new Date(list.current.date).toLocaleDateString()}</span>}
+                                  </div>
+                                  {list.current.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{list.current.note}</p>}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-400 italic">Nothing set right now.</p>
+                              )}
+
+                              {list.previous && (
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className={`text-base font-semibold ${hw.isDone ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-violet-700 dark:text-violet-300'}`}>{hw.range}</p>
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">Last</span>
+                                  <p className="text-sm font-semibold text-slate-400 dark:text-slate-500 line-through">{list.previous.range}</p>
                                   {/* Closed is not done: a family looking at this
                                       should see which it was. */}
-                                  {hw.isDone && (
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OUTCOME_PILL[hw.outcome]}`}>
-                                      {hw.outcome === 'done' ? '✓ ' : ''}{OUTCOME_LABEL[hw.outcome]}
-                                    </span>
-                                  )}
-                                  {hw.date && <span className="text-[10px] text-slate-400">{new Date(hw.date).toLocaleDateString()}</span>}
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${OUTCOME_PILL[list.previous.outcome]}`}>
+                                    {list.previous.outcome === 'done' ? '✓ ' : ''}{OUTCOME_LABEL[list.previous.outcome]}
+                                  </span>
                                 </div>
-                                {hw.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-wrap">{hw.note}</p>}
-                              </div>
-                            ))
+                              )}
+                            </>
                           ) : (
                             <p className="text-xs text-slate-400 italic">No homework assigned.</p>
                           )}
@@ -435,7 +457,10 @@ const FamilyLinkPage: React.FC<Props> = ({ linkId }) => {
                         <span className="font-bold text-slate-800 dark:text-slate-100 truncate">{m.name}</span>
                       </div>
                       <span className="flex items-baseline gap-1 flex-shrink-0">
-                        <span className="text-lg sm:text-3xl font-extrabold text-teal-600 dark:text-teal-400">{metricsByMember[m.id].points.toFixed(1)}</span>
+                        <span title={`${exactPoints(metricsByMember[m.id].points)} points`}
+                          className="text-lg sm:text-3xl font-extrabold text-teal-600 dark:text-teal-400">
+                          {compactPoints(metricsByMember[m.id].points)}
+                        </span>
                         <span className="text-xs font-semibold text-slate-400">pts</span>
                       </span>
                     </div>

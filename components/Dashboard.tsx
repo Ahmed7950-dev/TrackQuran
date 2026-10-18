@@ -4,6 +4,7 @@ import { getBirthdayStatus, safeCopy } from '../utils';
 import { getRecitedPagesSet, getMemorizedPagesSet, getPageOfAyah, createOrUpdateSharedReport, getStudentReportId } from '../services/dataService';
 import { MILESTONES, TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS } from '../constants';
 import { computeReportRanks } from '../services/rankingService';
+import { compactPoints, exactPoints } from '../utils/points';
 import StudentProfileIcon from './StudentProfileIcon';
 import { getSessionsListByGcalId, updateSessionMeetUrl, getLinkedStudentIds, getFamilyLinkIdForStudent, autoSyncGCalLinks, getUpcomingSessions } from '../services/lessonSessionService';
 import StudentsTable, { RosterRowData } from './StudentsTable';
@@ -434,7 +435,7 @@ const StudentCard: React.FC<{ student: Student; onSelect: () => void; quranMetad
                           </span>
                         )}
                         {viewMode === 'points' ? (
-                          <span className="text-[10px] font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{Math.round(score).toLocaleString()} pts</span>
+                          <span title={`${exactPoints(score)} points`} className="text-[10px] font-mono bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">{compactPoints(score)} pts</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 flex-wrap">
                             <span className="text-[10px] font-semibold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full whitespace-nowrap">{(readingRate + tajweedRate).toFixed(2)} err/pg · 30d</span>

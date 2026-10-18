@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Student } from '../types';
 import { useI18n } from '../context/I18nProvider';
+import { compactPoints, exactPoints } from '../utils/points';
 import { getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import StudentProfileIcon from './StudentProfileIcon';
 import { TOTAL_QURAN_PAGES, MISTAKE_PENALTY_POINTS, POINTS_PER_WORD } from '../constants';
@@ -131,7 +132,9 @@ const PodiumPlace: React.FC<{ student: { name: string; score: number; profileIco
                      )}
                 </div>
                 <h4 className="text-xl font-bold text-white text-center">{student.name}</h4>
-                <p className={`text-2xl font-black ${s.nameText}`}>{Math.round(student.score).toLocaleString()}</p>
+                <p className={`text-2xl font-black ${s.nameText}`} title={`${exactPoints(student.score)} points`}>
+                    {compactPoints(student.score)}
+                </p>
                  <p className="text-sm text-slate-400">{t('modals.honorBoard.points')}</p>
             </div>
             <div className={`w-full p-4 ${s.bgColor} rounded-t-lg shadow-2xl flex items-center justify-center`}>
