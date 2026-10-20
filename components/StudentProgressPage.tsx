@@ -63,6 +63,14 @@ interface StudentProgressPageProps {
    */
   jumpNonce?: number;
   /**
+   * Called once the jump above has been carried out, so the parent can forget
+   * it. A jump is a one-shot instruction: left standing, it is replayed by the
+   * next student's reader the moment it mounts — which sent the tutor to the
+   * PREVIOUS student's homework surah — and it also silences the resume to the
+   * last log, because an explicit jump outranks resuming.
+   */
+  onJumpHandled?: () => void;
+  /**
    * Extra content rendered inside the student name card, next to the student name.
    * Used by the shared report page to inject a homework badge.
    */
@@ -901,7 +909,7 @@ const ICON = {
     search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, onJumpHandled, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -1903,6 +1911,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             setSelectedSurahId(surahNum);
             setScrollToVerseKey(jumpToVerseKey);
         }
+        // Spent. The parent drops it, so the next student's reader doesn't mount
+        // onto this student's verse and skip resuming to their own last log.
+        onJumpHandled?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [jumpToVerseKey, jumpNonce]);
 
     // Navigate carousel to the first word of a given ayah
@@ -2570,7 +2582,19 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         return String(num).split('').map(digit => arabicNumerals[parseInt(digit, 10)]).join('');
     };
 
+    // The open surah's verses.
+    //
+    // Opening a student almost always asks for two surahs in a row — the reader
+    // mounts on their last log, then a homework jump (or the last log arriving
+    // late) moves it — and the two requests then run side by side. Nothing used
+    // to say which answer was still wanted, so the SLOWER one won: on a phone
+    // the page showed one surah's verses under another surah's name, with the
+    // surah bar, the heading and the homework panel all naming the surah that
+    // had been asked for last. Every run is cancelled when the surah changes,
+    // and a cancelled run is abandoned where it stands.
     useEffect(() => {
+        let cancelled = false;
+        const ac = new AbortController();
         const fetchSurah = async () => {
             if (!selectedSurahId) return;
             setIsLoading(true); setError(null);
@@ -2580,9 +2604,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
 
                 const response = await fetch(turkishSource
                     ? `/quran-tr/${selectedMeta.number}.json`
-                    : `https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedMeta.number}`);
+                    : `https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${selectedMeta.number}`,
+                    { signal: ac.signal });
                 if (!response.ok) throw new Error('Failed to fetch Surah data.');
                 const data = await response.json();
+                if (cancelled) return;
                 setVerses(data.verses);
 
                 // Set page range to cover the full surah. Derive the real page span
@@ -2604,38 +2630,48 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                   setCurrentPageRange({ start: firstPage, end: newEnd });
                 }
             } catch (err: any) {
+                if (cancelled) return;                 // superseded, not broken
                 setError(err.message); setVerses([]);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
         fetchSurah();
+        return () => { cancelled = true; ac.abort(); };
     }, [selectedSurahId, turkishSource]);
 
+    // Same race, same answer: a translation that arrives after the reader has
+    // moved on belongs to a surah nobody is looking at any more.
     useEffect(() => {
+        let cancelled = false;
+        const ac = new AbortController();
         const fetchTranslation = async () => {
             if (!selectedSurahId || !(showTranslation || guestInfoWanted)) { setTranslations({}); return; }
             setIsTranslationLoading(true); setTranslationError(null);
             try {
-                const response = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurahId}/en.sahih`);
+                const response = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurahId}/en.sahih`, { signal: ac.signal });
                 if (!response.ok) throw new Error('Failed to fetch translation data from the network.');
                 const data = await response.json();
+                if (cancelled) return;
                 if (data.code !== 200 || !data.data || !data.data.ayahs) throw new Error('Invalid or unexpected API response for translation.');
                 const translationMap = data.data.ayahs.reduce((acc: Record<string, string>, item: { numberInSurah: number, text: string }) => {
                     acc[`${selectedSurahId}:${item.numberInSurah}`] = item.text; return acc;
                 }, {});
                 setTranslations(translationMap);
             } catch (err: any) {
+                if (cancelled) return;                 // superseded, not broken
                 console.error("Failed to fetch Translation", err);
                 setTranslationError(t('liveSession.translationError'));
             } finally {
-                setIsTranslationLoading(false);
+                if (!cancelled) setIsTranslationLoading(false);
             }
         };
         fetchTranslation();
+        return () => { cancelled = true; ac.abort(); };
     }, [selectedSurahId, showTranslation, guestInfoWanted, t]);
 
     useEffect(() => {
+        let cancelled = false;
         const fetchTafsir = async () => {
             if (!selectedSurahId || !(showTranslation || guestInfoWanted) || verses.length === 0) { setTafsirs({}); return; }
             setIsTafsirLoading(true);
@@ -2666,6 +2702,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         });
                         
                         const results = await Promise.all(promises);
+                        if (cancelled) return;         // the reader has moved on
                         results.forEach(result => {
                             if (result && result.text) {
                                 tafsirMap[result.verseKey] = result.text;
@@ -2683,15 +2720,17 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     }
                 }
                 // If all sources failed, just don't show tafsir (silent failure)
-                setTafsirs({});
+                if (!cancelled) setTafsirs({});
             } catch (err: any) {
+                if (cancelled) return;
                 console.error("Failed to fetch Tafsir", err);
                 setTafsirs({});
             } finally {
-                setIsTafsirLoading(false);
+                if (!cancelled) setIsTafsirLoading(false);
             }
         };
         fetchTafsir();
+        return () => { cancelled = true; };
     }, [selectedSurahId, showTranslation, guestInfoWanted, verses]);
 
     // Resume to the last-log position once it's available. The initial useState

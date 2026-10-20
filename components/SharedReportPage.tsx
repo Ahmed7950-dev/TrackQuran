@@ -153,6 +153,9 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
   // the SAME verse twice still navigates — tapping one homework item, scrolling
   // away and tapping it again used to do nothing, because the key never changed.
   // Homework taps and tutor letter-focus both write here: last one wins.
+  // One-shot — the reader clears it once it has jumped, so a key from earlier
+  // in the visit can't send the student back there every time the reader
+  // remounts, nor stop it resuming to where they were reading.
   const [quranJump, setQuranJump] = useState<{ key: string; n: number } | null>(null);
   const jumpToVerse = useCallback((key: string) => {
     setQuranJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }));
@@ -959,6 +962,7 @@ const SharedReportPage: React.FC<{ reportId: string; switchPortal?: { label: str
                     onGoBack={noop}
                     jumpToVerseKey={quranJump?.key ?? null}
                     jumpNonce={quranJump?.n ?? 0}
+                    onJumpHandled={() => setQuranJump(null)}
                     nameCardExtra={homeworkBadge}
                     homeworkRanges={activeHwList}
                   />

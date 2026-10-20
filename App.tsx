@@ -555,6 +555,12 @@ const App: React.FC = () => {
   const [studentHomeworkUpdates, setStudentHomeworkUpdates] = useState<QuranHomework[] | null>(null);
   // Verse key the tutor's Quran view should jump to (homework "go to" button),
   // with a nonce so tapping the same homework twice still navigates.
+  //
+  // One-shot: the reader clears it through onJumpHandled the moment it has
+  // jumped. Held on to, it was replayed by the NEXT student's reader as it
+  // mounted — opening any student landed on the previous student's homework
+  // surah instead of their own last log, because a pending jump outranks
+  // resuming.
   const [quranHomeworkJump, setQuranHomeworkJump] = useState<{ key: string; n: number } | null>(null);
   // Recitation homework of the student in view (by id), and the one under review.
   const [recitations, setRecitations] = useState<Record<string, RecitationHomework>>({});
@@ -2488,6 +2494,7 @@ const App: React.FC = () => {
             onLogActivity={handleLogActivity}
             jumpToVerseKey={quranHomeworkJump?.key ?? null}
             jumpNonce={quranHomeworkJump?.n ?? 0}
+            onJumpHandled={() => setQuranHomeworkJump(null)}
             notesStudentId={sessionStudent.id}
             studentProgress={progress[sessionStudent.id]}
             studentMistakes={sessionStudent.mistakes || {}}
