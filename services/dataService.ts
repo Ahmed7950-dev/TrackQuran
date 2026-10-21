@@ -156,12 +156,16 @@ export const setStudentApprovalStatus = async (
  * Leaving the column out is safe both ways: it is NOT NULL DEFAULT '{}', so a
  * new row still gets an empty map, and an upsert that does not name a column
  * leaves the stored value alone.
+ *
+ * Returns false when the row did not land, so a caller can say so. A lesson's
+ * logged verses that exist only on screen are worse than ones never logged:
+ * the tutor moves on believing the work is kept.
  */
 export const saveStudent = async (
   teacherId: string,
   student: Student,
   opts: { withMistakes?: boolean } = {},
-): Promise<void> => {
+): Promise<boolean> => {
   const row = studentToRow(teacherId, student);
   if (!opts.withMistakes) delete (row as Record<string, unknown>).mistakes;
   const { error } = await supabase
@@ -169,7 +173,9 @@ export const saveStudent = async (
     .upsert(row, { onConflict: 'id' });
   if (error) {
     console.error('saveStudent failed:', error.message, '| id:', row.id);
+    return false;
   }
+  return true;
 };
 
 /**

@@ -9,6 +9,7 @@ import MissedLessonPrompt from './components/MissedLessonPrompt';
 import LetterHuntGame from './components/LetterHuntGame';
 import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
 import { withActivityLog } from './utils/activityLog';
+import { useRosterRefresh } from './hooks/useRosterRefresh';
 import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports , appendStudentActivity} from './services/dataService';
@@ -542,8 +543,18 @@ const App: React.FC = () => {
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
-  /** A mark that is only on screen is worse than one that never appeared. */
-  const [markSaveFailed, setMarkSaveFailed] = useState(false);
+  /** Work that is only on screen is worse than work never done: the tutor
+   *  carries on believing a page is being kept. Raised by a mark that would
+   *  not merge and by a student row that would not save. */
+  const [saveFailed, setSaveFailed] = useState(false);
+  /** How many of our own writes are still in the air. The roster refresh below
+   *  waits for them: a read issued while a write is uncommitted comes back with
+   *  the older row and puts the just-done work back off the screen. */
+  const pendingWrites = useRef(0);
+  const trackWrite = <T,>(p: Promise<T>): Promise<T> => {
+    pendingWrites.current++;
+    return p.finally(() => { pendingWrites.current--; });
+  };
   /** The latest roster, for handlers that run after an await. */
   const studentsRef = useRef<Student[]>([]);
   useEffect(() => { studentsRef.current = students; }, [students]);
@@ -1051,6 +1062,17 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, currentUserRole]);
   
+  // ── Keep the roster current ───────────────────────────────────────────────
+  // The fetch above runs once, at sign-in. Without this, a lesson marked on the
+  // phone was missing from the laptop that had been open since the morning —
+  // which reads as work that was lost. See the hook for what it must not do.
+  useRosterRefresh<Student>({
+    enabled: currentUserRole === 'teacher' && !!currentUserId,
+    load: () => getStudents(currentUserId!),
+    isWriting: () => pendingWrites.current > 0,
+    onRoster: setStudents,
+  });
+
   // Initialize the resume point ("where we left off") from the most recent log —
   // recitation OR memorization (a recited short surah is logged as hifz, so a
   // memorization log can be the true last position).
@@ -1239,7 +1261,12 @@ const App: React.FC = () => {
       // withMistakes only where changing the marks IS the point: every other
       // save would otherwise write this tab's snapshot over newer marks.
       if (opts?.rowSave !== false) {
-        saveStudent(currentUser.id, updatedStudent, { withMistakes: opts?.withMistakes }); // async, fire & forget
+        // Not fire-and-forget any more. This is the write that carries a logged
+        // recitation, a hifz log, an assigned homework, the attendance — all of
+        // which used to vanish without a word when the row did not save.
+        void trackWrite(saveStudent(currentUser.id, updatedStudent, { withMistakes: opts?.withMistakes }))
+          .then(ok => setSaveFailed(prev => (ok ? prev : true)))
+          .catch(() => setSaveFailed(true));
       }
       // One subscription per family — see propagateRenewalDate.
       if (updatedStudent.subscriptionRenewalDate !== before) {
@@ -1365,9 +1392,9 @@ const App: React.FC = () => {
    */
   const persistMistakes = (studentId: string, patch: Record<string, Mistake>, remove: string[] = []) => {
     if (currentUser?.role !== 'teacher') return;
-    mergeStudentMistakes(studentId, patch, remove)
-      .then(() => setMarkSaveFailed(false))
-      .catch(() => setMarkSaveFailed(true));
+    trackWrite(mergeStudentMistakes(studentId, patch, remove))
+      .then(() => setSaveFailed(false))
+      .catch(() => setSaveFailed(true));
   };
 
   const handleCycleMistakeLevel = (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => {
@@ -2008,16 +2035,16 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
-      {/* A mark that did not reach the database — said out loud, because the
-          tutor would otherwise carry on marking a page that is not being kept. */}
-      {markSaveFailed && (
+      {/* Work that did not reach the database — said out loud, because the tutor
+          would otherwise carry on with a page that is not being kept. */}
+      {saveFailed && (
         <div role="alert" className="fixed inset-x-0 bottom-0 z-[400] no-print"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="mx-auto max-w-2xl m-3 px-4 py-3 rounded-2xl bg-red-600 text-white shadow-2xl flex items-center gap-3">
             <span className="text-sm font-semibold flex-1">
-              That mark did not save. Check the connection — the marks on screen are not being kept until this clears.
+              That did not save. Check the connection — the marks and logs on screen are not being kept until this clears.
             </span>
-            <button onClick={() => setMarkSaveFailed(false)}
+            <button onClick={() => setSaveFailed(false)}
               className="flex-shrink-0 h-8 px-3 rounded-lg bg-white/20 hover:bg-white/30 text-[13px] font-bold">
               Dismiss
             </button>
