@@ -18,7 +18,10 @@
 // one child of a family is the lesson happening, so the prompt never goes on to
 // ask whether their brother was absent.
 // Answering writes that day's attendance; dismissing with ✕ only silences the
-// occurrence (kept in localStorage, so it never nags twice for the same lesson).
+// occurrence. Either way the occurrence is settled for the TUTOR, not for this
+// browser: it goes to missed_lesson_dismissals as well as to localStorage, so a
+// lesson marked absent on the laptop is not asked about again on the phone.
+// localStorage is kept alongside because it answers instantly and offline.
 //
 // It sits in the bottom-LEFT corner rather than over the page: the tutor can
 // carry on working, and a queue of several misses is answered one card at a
@@ -30,6 +33,7 @@ import { Student, AttendanceRecord, AttendanceStatus } from '../types';
 import { fetchGCalEvents, getStoredToken } from '../services/googleCalendarService';
 import { getSessionsListByGcalId } from '../services/lessonSessionService';
 import { listQaedahCompletionDays } from '../services/qaedahService';
+import { listMissedLessonDismissals, dismissMissedLesson, type MissedOutcome } from '../services/missedLessonService';
 
 /** How far back to look. Older misses are water under the bridge. */
 const LOOKBACK_DAYS = 14;
@@ -54,6 +58,14 @@ const rememberDismissed = (key: string) => {
     // keep the list from growing without bound
     localStorage.setItem(DISMISS_KEY, JSON.stringify([...all].slice(-300)));
   } catch { /* private mode — it will just ask again next session */ }
+};
+
+/** Here and everywhere else the tutor is signed in. */
+const settle = (teacherId: string | undefined, key: string, outcome: MissedOutcome) => {
+  rememberDismissed(key);                       // this device, now
+  // The other devices. A failure only means this card can come back there;
+  // the card is gone here either way, so it must not block the answer.
+  if (teacherId) void dismissMissedLesson(teacherId, key, outcome);
 };
 
 /** Did this student have anything logged on that calendar day? */
@@ -176,14 +188,16 @@ const MissedLessonPrompt: React.FC<Props> = ({ teacherId, students, onUpdateStud
       try {
         const now = new Date();
         const from = new Date(now.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-        const [events, sessionMap] = await Promise.all([
+        const [events, sessionMap, settled] = await Promise.all([
           fetchGCalEvents(token, from, now),
           getSessionsListByGcalId(teacherId),
+          listMissedLessonDismissals(teacherId),
         ]);
         if (cancelled) return;
         const calEvents = events as unknown as CalEventLike[];
         const sessions  = sessionMap as unknown as Record<string, SessionLike[]>;
-        const dismissed = readDismissed();
+        // What this device has answered, plus what any other device has.
+        const dismissed = new Set([...readDismissed(), ...settled]);
 
         // First pass with what the Student objects already carry. Only if that
         // leaves candidates do we go and ask about Qaedah — usually it doesn't,
@@ -225,14 +239,15 @@ const MissedLessonPrompt: React.FC<Props> = ({ teacherId, students, onUpdateStud
     const sameDay = day.toDateString();
     const kept = (current.student.attendance ?? []).filter(a => new Date(a.date).toDateString() !== sameDay);
     onUpdateStudent({ ...current.student, attendance: [...kept, rec] });
-    rememberDismissed(current.key);            // answered → never ask again
+    // Answered → never ask again, on any device.
+    settle(teacherId, current.key, status === AttendanceStatus.Absent ? 'absent' : 'rescheduled');
     setBusy(false);
     next();
   };
 
   const ignore = () => {
     if (!current) return;
-    rememberDismissed(current.key);
+    settle(teacherId, current.key, 'ignored');
     next();
   };
 

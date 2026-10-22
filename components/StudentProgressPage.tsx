@@ -1388,11 +1388,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
      *  switching students inside the same mount resumes again for the new one. */
     const resumedForRef = useRef<string | null>(null);
     const [showScrollTop, setShowScrollTop] = useState(false); // floating "back to surah start" button
-    // Default to text-7xl on desktop (≥768 px), text-4xl on mobile
-    // Desktop opens large (text-7xl); phones open at 1rem (text-base, fontSize 1)
-    // so the verses + mistake annotations fit without overlapping.
+    // Desktop opens at text-7xl. Phones open at text-3xl: they used to open at
+    // 1rem (fontSize 1) so the verses and their mistake annotations could not
+    // overlap, but that is smaller than anyone reads the Quran at — the first
+    // thing done on a phone was to press + twice, every time. This is where
+    // those two presses land.
     const [fontSize, setFontSize] = useState(() =>
-        typeof window !== 'undefined' && window.innerWidth >= 768 ? 7 : 1
+        typeof window !== 'undefined' && window.innerWidth >= 768 ? 7 : 3
     );
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [showTranslation, setShowTranslation] = useState(false);
@@ -3430,8 +3432,37 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setScrollToVerseKey(verseKey); setIsSearchResultsModalOpen(false); setSearchResults([]);
     };
 
-    const handleIncreaseFontSize = () => setFontSize(prev => Math.min(prev + 1, 8));
-    const handleDecreaseFontSize = () => setFontSize(prev => Math.max(prev - 1, 1));
+    /** Keep the reader's place across a change of text size.
+     *
+     *  The window keeps its scroll offset while the text grows around it, so
+     *  the verses below the fold are pushed down and the one being read slides
+     *  off the top: a single tap on + threw the reader five verses backwards,
+     *  and a few taps landed them somewhere else entirely. The verse under the
+     *  toolbar is noted before the change and put back in the same spot after
+     *  the text has reflowed. */
+    const fontAnchor = useRef<{ id: string; top: number } | null>(null);
+    const takeFontAnchor = () => {
+        fontAnchor.current = null;
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>('[id^="verse-container-"]'))) {
+            // The first verse still below the sticky toolbar — the same verse
+            // the reading spot is saved from.
+            const r = el.getBoundingClientRect();
+            if (r.bottom > 160) { fontAnchor.current = { id: el.id, top: r.top }; return; }
+        }
+    };
+    // Before paint, so the text is never seen in its new size at the wrong place.
+    useLayoutEffect(() => {
+        const anchor = fontAnchor.current;
+        if (!anchor) return;
+        fontAnchor.current = null;
+        const el = document.getElementById(anchor.id);
+        if (!el) return;
+        const moved = el.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+    }, [fontSize]);
+
+    const handleIncreaseFontSize = () => { takeFontAnchor(); setFontSize(prev => Math.min(prev + 1, 8)); };
+    const handleDecreaseFontSize = () => { takeFontAnchor(); setFontSize(prev => Math.max(prev - 1, 1)); };
 
     const selectedSurahInfo = QURAN_METADATA.find(s => s.number === selectedSurahId);
 
