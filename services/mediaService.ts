@@ -35,6 +35,11 @@ export interface MediaItem {
   /** A playlist's still: its first video's, fetched once from oEmbed. Null on a
    *  single video, which builds its own from the id. */
   thumbUrl: string | null;
+  /** What the playlist held when YouTube was last asked. */
+  latestVideoIds: string[] | null;
+  /** What the tutor has already been shown. Null until the first check. */
+  seenVideoIds: string[] | null;
+  checkedAt: string | null;
   createdAt: string;
 }
 
@@ -169,14 +174,18 @@ type ItemRow = {
   id: string; category_id: string | null; title: string; kind: MediaKind;
   youtube_id: string; url: string; item_count: number | null;
   thumb_url: string | null; created_at: string;
+  latest_video_ids: string[] | null; seen_video_ids: string[] | null; checked_at: string | null;
 };
 const toItem = (r: ItemRow): MediaItem => ({
   id: r.id, categoryId: r.category_id, title: r.title, kind: r.kind,
   youtubeId: r.youtube_id, url: r.url, itemCount: r.item_count,
-  thumbUrl: r.thumb_url ?? null, createdAt: r.created_at,
+  thumbUrl: r.thumb_url ?? null,
+  latestVideoIds: r.latest_video_ids ?? null, seenVideoIds: r.seen_video_ids ?? null,
+  checkedAt: r.checked_at ?? null,
+  createdAt: r.created_at,
 });
 
-const ITEM_COLS = 'id, category_id, title, kind, youtube_id, url, item_count, thumb_url, created_at';
+const ITEM_COLS = 'id, category_id, title, kind, youtube_id, url, item_count, thumb_url, created_at, latest_video_ids, seen_video_ids, checked_at';
 
 export async function listMedia(): Promise<MediaItem[]> {
   const { data, error } = await supabase.from('media_items')
@@ -314,6 +323,80 @@ export function watchedFraction(item: MediaItem, p?: MediaProgress): number {
 
 /** Watched to within a few seconds of the end counts as watched: players stop
  *  short, and nobody wants to chase the last two seconds to turn a reel green. */
+/* ── What is new on the shelf ─────────────────────────────────────────── */
+
+/** How long an answer about a playlist is trusted before asking again. */
+const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The videos added to this playlist since the tutor last looked.
+ *
+ * Empty until a playlist has been checked twice: the first check only writes
+ * down what is there, so a list that has sat on the shelf for months does not
+ * announce all of itself as new.
+ */
+export function newVideoIds(item: MediaItem): string[] {
+  if (item.kind !== 'playlist' || !item.latestVideoIds || !item.seenVideoIds) return [];
+  const seen = new Set(item.seenVideoIds);
+  return item.latestVideoIds.filter(id => !seen.has(id));
+}
+
+export const hasNewVideos = (item: MediaItem): boolean => newVideoIds(item).length > 0;
+
+/** Everything new across the shelf — what the tab badge counts. */
+export const totalNewVideos = (items: MediaItem[]): number =>
+  items.reduce((n, it) => n + newVideoIds(it).length, 0);
+
+/**
+ * Ask YouTube what the tutor's playlists hold now, and write it down.
+ *
+ * Only playlists that have not been asked about in CHECK_EVERY_MS, so the
+ * ordinary case costs one database read and no network at all. Returns the
+ * items it changed; an empty array means nothing moved.
+ */
+export async function refreshPlaylistNews(items: MediaItem[]): Promise<MediaItem[]> {
+  const now = Date.now();
+  const due = items.filter(it =>
+    it.kind === 'playlist' &&
+    (!it.checkedAt || now - new Date(it.checkedAt).getTime() > CHECK_EVERY_MS));
+  if (!due.length) return [];
+
+  let answer: Record<string, { videoIds?: string[]; error?: string }>;
+  try {
+    const res = await fetch(`/api/youtube-playlist?ids=${due.map(d => encodeURIComponent(d.youtubeId)).join(',')}`);
+    if (!res.ok) return [];
+    answer = await res.json();
+  } catch {
+    return [];                      // offline, or the route is not deployed yet
+  }
+
+  const changed: MediaItem[] = [];
+  for (const it of due) {
+    const got = answer?.[it.youtubeId];
+    if (!got || !Array.isArray(got.videoIds) || !got.videoIds.length) continue;
+    const latest = got.videoIds;
+    // First sight of this playlist: write both lists, so nothing reads as new.
+    const seen = it.seenVideoIds ?? latest;
+    const checkedAt = new Date().toISOString();
+    const { error } = await supabase.from('media_items')
+      .update({ latest_video_ids: latest, seen_video_ids: seen, checked_at: checkedAt })
+      .eq('id', it.id);
+    if (error) { console.error('refreshPlaylistNews:', error.message); continue; }
+    changed.push({ ...it, latestVideoIds: latest, seenVideoIds: seen, checkedAt });
+  }
+  return changed;
+}
+
+/** The tutor has looked: what is on the list now is what they have been shown. */
+export async function markPlaylistSeen(item: MediaItem): Promise<boolean> {
+  if (item.kind !== 'playlist' || !item.latestVideoIds) return true;
+  const { error } = await supabase.from('media_items')
+    .update({ seen_video_ids: item.latestVideoIds })
+    .eq('id', item.id);
+  if (error) { console.error('markPlaylistSeen:', error.message); return false; }
+  return true;
+}
+
 export const NEAR_END_SECONDS = 15;
 export const isAtEnd = (position: number, duration: number | null | undefined): boolean =>
   !!duration && duration > 0 && position >= duration - NEAR_END_SECONDS;

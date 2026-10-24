@@ -10,6 +10,7 @@ import LetterHuntGame from './components/LetterHuntGame';
 import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
 import { withActivityLog } from './utils/activityLog';
 import { useRosterRefresh } from './hooks/useRosterRefresh';
+import { listMedia, refreshPlaylistNews, totalNewVideos } from './services/mediaService';
 import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports , appendStudentActivity} from './services/dataService';
@@ -1062,6 +1063,39 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, currentUserRole]);
   
+  // ── Anything new on the Media shelf? ──────────────────────────────────────
+  // The badge has to be right on the Media TAB, which is drawn on every student
+  // page — so the question cannot wait until the tab is opened. The reading is
+  // cheap: one small select, and a round trip to YouTube only for a playlist
+  // that has not been asked about in six hours (the service decides).
+  const [mediaNewCount, setMediaNewCount] = useState(0);
+  const mediaCheckedAt = useRef(0);
+  useEffect(() => {
+    if (currentUserRole !== 'teacher' || !currentUserId) { setMediaNewCount(0); return; }
+    let stopped = false;
+    const look = () => {
+      if (stopped || document.visibilityState !== 'visible') return;
+      if (Date.now() - mediaCheckedAt.current < 10 * 60 * 1000) return;
+      mediaCheckedAt.current = Date.now();
+      void (async () => {
+        const items = await listMedia();
+        if (stopped) return;
+        const changed = await refreshPlaylistNews(items);
+        if (stopped) return;
+        const byId = new Map(changed.map(x => [x.id, x]));
+        setMediaNewCount(totalNewVideos(items.map(x => byId.get(x.id) ?? x)));
+      })();
+    };
+    look();
+    document.addEventListener('visibilitychange', look);
+    window.addEventListener('focus', look);
+    return () => {
+      stopped = true;
+      document.removeEventListener('visibilitychange', look);
+      window.removeEventListener('focus', look);
+    };
+  }, [currentUserId, currentUserRole]);
+
   // ── Keep the roster current ───────────────────────────────────────────────
   // The fetch above runs once, at sign-in. Without this, a lesson marked on the
   // phone was missing from the laptop that had been open since the morning —
@@ -2249,7 +2283,7 @@ const App: React.FC = () => {
           { id: 'mistakesStudy',   label: 'Mistakes Study',             icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" /></svg> },
           { id: 'tadabburLab',     label: 'Tadabbur Lab',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" /></svg> },
           // Tutor-only: the student's share link renders none of this bar.
-          { id: 'media',           label: 'Media',                      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><rect x="2.25" y="6.75" width="13.5" height="10.5" rx="2.25" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 11.4l5.25-2.65v6.5l-5.25-2.65z" /></svg> },
+          { id: 'media',           label: 'Media',                      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><rect x="2.25" y="6.75" width="13.5" height="10.5" rx="2.25" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 11.4l5.25-2.65v6.5l-5.25-2.65z" /></svg>, badge: mediaNewCount },
           { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
           // Bill tab — platform students only (tutor-issued invoice; not for Preply).
           { id: 'bill',            label: t('bill.tab'),                icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l2.25 2.25L15 9.75M9 8.25V6a2.25 2.25 0 0 1 4.5 0v2.25" /></svg> },
@@ -2424,6 +2458,7 @@ const App: React.FC = () => {
             teacherId={currentUser!.id}
             studentId={(sessionStudent ?? selectedStudent)?.id}
             studentName={(sessionStudent ?? selectedStudent)?.name}
+            onNewsChange={setMediaNewCount}
           />
         ) : activeTab === 'homework' && (sessionStudent ?? selectedStudent) ? (() => {
           const hw_student = sessionStudent ?? selectedStudent!;

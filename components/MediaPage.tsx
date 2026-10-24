@@ -23,6 +23,7 @@ import {
   MediaCategory, MediaItem, MediaProgress, ParsedLink,
   listCategories, createCategory, deleteCategory,
   listMedia, addMedia, updateMedia, deleteMedia,
+  refreshPlaylistNews, markPlaylistSeen, newVideoIds, totalNewVideos,
   loadProgress, saveProgress, clearProgress,
   parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, timecode, watchedFraction,
 } from '../services/mediaService';
@@ -628,9 +629,12 @@ interface MediaPageProps {
   teacherId: string;
   studentId?: string;
   studentName?: string;
+  /** How many unwatched-by-the-tutor new videos the shelf holds, as it changes,
+   *  so the Media tab's badge follows along without reloading the shelf. */
+  onNewsChange?: (count: number) => void;
 }
 
-const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName }) => {
+const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName, onNewsChange }) => {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [cats, setCats] = useState<MediaCategory[]>([]);
   const [marks, setMarks] = useState<Map<string, MediaProgress>>(new Map());
@@ -647,11 +651,29 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
 
   useEffect(() => {
     let dead = false;
-    void Promise.all([listMedia(), listCategories()]).then(([i, c]) => {
+    void Promise.all([listMedia(), listCategories()]).then(async ([i, c]) => {
       if (dead) return;
       setItems(i); setCats(c); setLoading(false);
+      // Ask YouTube what the playlists hold now. Throttled in the service, so
+      // opening the tab twice in a morning costs one round trip, not two.
+      const changed = await refreshPlaylistNews(i);
+      if (dead || !changed.length) return;
+      const byId = new Map(changed.map(x => [x.id, x]));
+      setItems(prev => prev.map(x => byId.get(x.id) ?? x));
     });
     return () => { dead = true; };
+  }, []);
+
+  // One number for the tab badge, recomputed whenever the shelf changes.
+  useEffect(() => { onNewsChange?.(totalNewVideos(items)); }, [items, onNewsChange]);
+
+  /** Opening a playlist is the tutor looking at it: nothing in it is new now. */
+  const openItem = useCallback((it: MediaItem) => {
+    setOpen(it);
+    if (!newVideoIds(it).length) return;
+    const seen = it.latestVideoIds;
+    setItems(prev => prev.map(x => (x.id === it.id ? { ...x, seenVideoIds: seen } : x)));
+    void markPlaylistSeen(it);
   }, []);
 
   useEffect(() => {
@@ -948,7 +970,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                 <h2 className="m-0 mb-3" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: '0.12em', color: C.amber }}>
                   PICK UP WHERE WE STOPPED
                 </h2>
-                <button type="button" onClick={() => setOpen(resume.item)}
+                <button type="button" onClick={() => openItem(resume.item)}
                   className="flex flex-wrap items-stretch w-full text-left rounded-[14px] overflow-hidden"
                   style={{ background: C.card, border: `1px solid ${C.edge}` }}>
                   <span className="relative flex-[1_1_300px] min-w-0 flex items-center justify-center" style={{ background: C.well, minHeight: 170 }}>
@@ -1033,6 +1055,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   const done = !!p?.finished;
                   const frac = watchedFraction(it, p);
                   const started = !!p && (p.positionSeconds > 5 || p.watchedIndexes.length > 0);
+                  const fresh = newVideoIds(it).length;
                   const edge = done ? C.green : started ? C.amber : C.track;
                   const total = it.itemCount ?? 0;
 
@@ -1049,7 +1072,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                       style={{ padding: '14px 14px 14px 20px', borderRadius: 12, background: C.card, border: `1px solid ${done ? C.greenLine : C.line}` }}>
                       <span className="absolute left-0" style={{ top: 14, bottom: 14, width: 3, borderRadius: '0 3px 3px 0', background: edge }} />
 
-                      <button type="button" onClick={() => setOpen(it)} disabled={!studentId}
+                      <button type="button" onClick={() => openItem(it)} disabled={!studentId}
                         aria-label={`Play ${it.title}`}
                         className="relative flex-shrink-0 flex items-center justify-center disabled:opacity-60"
                         style={{ width: 130, height: 74, borderRadius: 9, background: C.well, border: `1px solid ${C.line}`, overflow: 'hidden' }}>
@@ -1077,6 +1100,13 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                               </>)}
                             </p>
                           </div>
+                          {fresh > 0 && (
+                            <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded"
+                              title={`${fresh} video${fresh === 1 ? '' : 's'} added to this playlist on YouTube since you last opened it`}
+                              style={{ border: `1px solid ${C.amber}`, background: C.chip, color: C.amber, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em' }}>
+                              NEW {fresh}
+                            </span>
+                          )}
                           {done && (
                             <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded"
                               style={{ border: `1px solid ${C.greenLine}`, background: C.greenBg, color: C.green, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em' }}>
