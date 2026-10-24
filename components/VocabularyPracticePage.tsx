@@ -402,10 +402,36 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
 
   // ─── practice ─────────────────────────────────────────────────────────────
 
-  const startPractice = useCallback(() => {
-    const source = practiceMode === 'words' ? playWordsRef.current : playPhrasesRef.current;
-    const filtered = source.filter(i => i.translation);
-    if (!filtered.length) { showToast('Add translations first!'); return; }
+  /**
+   * Start a round.
+   *
+   * `wanted` is the tab Practice was pressed from, and it decides what is
+   * practised. Without it the mode was whatever the pills inside the Practice
+   * tab last said — and those pills start on "words" and live BEHIND this
+   * check, so a student with 15 phrases and no words was told to "add
+   * translations first" and had no way through: the one control that would
+   * have fixed it was on the page the toast refused to open.
+   *
+   * If the side asked for is empty, the other side is used rather than
+   * refusing — pressing Practice with only phrases on the shelf means practise
+   * the phrases.
+   */
+  const startPractice = useCallback((wanted?: 'words' | 'phrases') => {
+    const ready = (m: 'words' | 'phrases') =>
+      (m === 'words' ? playWordsRef.current : playPhrasesRef.current).filter(i => i.translation);
+
+    const first = wanted ?? practiceMode;
+    const other: 'words' | 'phrases' = first === 'words' ? 'phrases' : 'words';
+    let mode = first;
+    let filtered = ready(first);
+    if (!filtered.length) { mode = other; filtered = ready(other); }
+
+    if (!filtered.length) {
+      const anything = playWordsRef.current.length + playPhrasesRef.current.length > 0;
+      showToast(anything ? 'Add translations first!' : 'Add some words or phrases first!');
+      return;
+    }
+    if (mode !== practiceMode) setPracticeMode(mode);
     const q = buildQueue(filtered);
     setPracticeQueue(q);
     setPracticeTotal(q.length);
@@ -878,7 +904,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
         {(['words', 'phrases', 'practice'] as const).map((t, i) => (
           <button
             key={t}
-            onClick={() => t === 'practice' ? startPractice() : setTab(t)}
+            onClick={() => t === 'practice' ? startPractice(tab === 'practice' ? undefined : tab) : setTab(t)}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${
               i > 0 ? 'border-l border-slate-100 dark:border-gray-700' : ''
             } ${
@@ -1314,7 +1340,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
               </button>
             ))}
             <button
-              onClick={startPractice}
+              onClick={() => startPractice()}
               className="ml-auto flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
@@ -1330,7 +1356,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">أحسنت!</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">You completed all {practiceTotal} cards.</p>
               <button
-                onClick={startPractice}
+                onClick={() => startPractice()}
                 className="px-8 py-3 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
               >
                 Practice again
@@ -1347,7 +1373,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                 Add {practiceMode} with translations, then start practicing.
               </p>
               <button
-                onClick={startPractice}
+                onClick={() => startPractice()}
                 className="px-6 py-2.5 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold text-sm hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"
               >
                 Start
