@@ -105,16 +105,20 @@ const CLOSE  = 'M6 6l12 12M18 6L6 18';
 
 /** One tick per video in a playlist — the same small-segment language the
  *  Qaedah words and the Tadabbur verses already speak. */
-const Ticks: React.FC<{ total: number; done: number[]; current?: number; all?: boolean }> =
-  ({ total, done, current, all }) => (
+const Ticks: React.FC<{ total: number; done: number[]; current?: number; all?: boolean; fresh?: number[] }> =
+  ({ total, done, current, all, fresh }) => (
     <div className="flex flex-wrap gap-[3px]">
       {Array.from({ length: Math.max(total, 1) }, (_, i) => {
         const seen = all || done.includes(i);
+        const isNew = !!fresh?.includes(i);
         return (
-          <span key={i} title={`Video ${i + 1}${seen ? ' — watched' : ''}`}
+          <span key={i} title={`Video ${i + 1}${seen ? ' — watched' : ''}${isNew ? ' — new' : ''}`}
             style={{
               width: 20, height: 7, borderRadius: 2,
               background: seen ? C.green : i === current ? C.amber : C.track,
+              // A new one that has not been watched yet is ringed rather than
+              // filled: the fill already means "playing".
+              boxShadow: isNew && !seen && i !== current ? `inset 0 0 0 1.5px ${C.amber}` : undefined,
             }} />
         );
       })}
@@ -128,13 +132,16 @@ interface BoothProps {
   studentId: string;
   studentName: string;
   progress?: MediaProgress;
+  /** Videos added to the playlist since the tutor last opened it. Caught at
+   *  the moment of opening, because opening is what marks them seen. */
+  newIds?: string[];
   onProgress: (p: MediaProgress) => void;
   onItemCount: (n: number) => void;
   onClose: () => void;
 }
 
 const Booth: React.FC<BoothProps> = ({
-  item, studentId, studentName, progress, onProgress, onItemCount, onClose,
+  item, studentId, studentName, progress, newIds, onProgress, onItemCount, onClose,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -290,6 +297,21 @@ const Booth: React.FC<BoothProps> = ({
   }, []);
 
   const total = item.itemCount ?? titles.length ?? 0;
+
+  /** Which position each new video sits at.
+   *
+   *  The player's own `getPlaylist()` is the truth about the order — it is the
+   *  very list being played. Until it answers, the ids read off the playlist
+   *  page stand in, so the marks are right from the first paint rather than
+   *  appearing a second later. */
+  const freshAt = useMemo(() => {
+    if (!newIds?.length) return [] as number[];
+    const order: string[] = titles.length ? titles : (item.latestVideoIds ?? []);
+    const want = new Set(newIds);
+    const out: number[] = [];
+    order.forEach((id, i) => { if (want.has(id)) out.push(i); });
+    return out;
+  }, [newIds, titles, item.latestVideoIds]);
   const pct = duration && duration > 0 ? Math.min(100, (now / duration) * 100) : 0;
   const resumePct = duration && duration > 0 ? Math.min(100, (resumeAt / duration) * 100) : 0;
 
@@ -436,13 +458,19 @@ const Booth: React.FC<BoothProps> = ({
                       of {total || '?'} watched with {studentName}
                     </span>
                   </div>
-                  <div className="mt-3"><Ticks total={total} done={watched} current={index} /></div>
+                  {freshAt.length > 0 && (
+                    <p className="m-0 mt-2" style={{ fontFamily: MONO, fontSize: 11, color: C.amber }}>
+                      {freshAt.length} NEW SINCE YOU LAST OPENED IT
+                    </p>
+                  )}
+                  <div className="mt-3"><Ticks total={total} done={watched} current={index} fresh={freshAt} /></div>
                 </div>
 
                 <div style={{ maxHeight: 440, overflowY: 'auto' }}>
                   {Array.from({ length: total }, (_, i) => {
                     const on = i === index;
                     const seen = watched.includes(i);
+                    const isNew = freshAt.includes(i);
                     return (
                       <button key={i} type="button"
                         onClick={() => { try { playerRef.current?.playVideoAt?.(i); setIndex(i); } catch { /* not ready */ } }}
@@ -453,11 +481,18 @@ const Booth: React.FC<BoothProps> = ({
                           {i + 1}
                         </span>
                         <span className="flex-grow min-w-0">
-                          <span className="block text-sm font-medium" style={{ color: on ? C.ink : seen ? C.muted : C.body }}>
+                          <span className="flex items-center gap-2 text-sm font-medium" style={{ color: on ? C.ink : seen ? C.muted : C.body }}>
                             Video {i + 1}
+                            {isNew && (
+                              <span style={{
+                                fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', lineHeight: 1,
+                                padding: '3px 6px', borderRadius: 4,
+                                border: `1px solid ${C.amber}`, color: C.amber, background: C.chip,
+                              }}>NEW</span>
+                            )}
                           </span>
-                          <span className="block mt-1" style={{ fontFamily: MONO, fontSize: 11, color: C.dim }}>
-                            {on ? `PLAYING · ${timecode(now)}` : seen ? 'WATCHED' : '—'}
+                          <span className="block mt-1" style={{ fontFamily: MONO, fontSize: 11, color: isNew && !on && !seen ? C.amber : C.dim }}>
+                            {on ? `PLAYING · ${timecode(now)}` : seen ? 'WATCHED' : isNew ? 'JUST ADDED TO THE LIST' : '—'}
                           </span>
                         </span>
                         {seen && <span style={{ color: C.green, flexShrink: 0 }}><Icon d={CHECK} size={16} stroke={2.6} /></span>}
@@ -644,6 +679,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'finished'>('all');
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<MediaItem | null>(null);
+  /** What was new in the reel being opened, kept for as long as it is open. */
+  const [freshIds, setFreshIds] = useState<string[]>([]);
   const [newCat, setNewCat] = useState('');
   const [catForm, setCatForm] = useState(false);
 
@@ -667,10 +704,16 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   // One number for the tab badge, recomputed whenever the shelf changes.
   useEffect(() => { onNewsChange?.(totalNewVideos(items)); }, [items, onNewsChange]);
 
-  /** Opening a playlist is the tutor looking at it: nothing in it is new now. */
+  /** Opening a playlist is the tutor looking at it: nothing in it is new now.
+   *
+   *  The ids are caught on the way in, because this is the moment they stop
+   *  counting as new — without that the booth would open with no idea which
+   *  video had just arrived, which is the one thing the tutor wants to see. */
   const openItem = useCallback((it: MediaItem) => {
+    const fresh = newVideoIds(it);
+    setFreshIds(fresh);
     setOpen(it);
-    if (!newVideoIds(it).length) return;
+    if (!fresh.length) return;
     const seen = it.latestVideoIds;
     setItems(prev => prev.map(x => (x.id === it.id ? { ...x, seenVideoIds: seen } : x)));
     void markPlaylistSeen(it);
@@ -805,6 +848,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
         studentId={studentId}
         studentName={who || 'this student'}
         progress={marks.get(current.id)}
+        newIds={freshIds}
         onProgress={noteProgress}
         onItemCount={n => noteCount(current.id, n)}
         onClose={() => setOpen(null)}
