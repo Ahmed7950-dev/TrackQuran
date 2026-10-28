@@ -74,7 +74,9 @@ type View = 'list' | 'words' | 'challenge' | 'win';
  */
 const WalkWord: React.FC<{
   word: string; at: number | null; style?: React.CSSProperties; className?: string;
-}> = ({ word, at, style, className }) => {
+  /** Stretch to the card around it, so the trail can reach its edges. */
+  fill?: boolean;
+}> = ({ word, at, style, className, fill }) => {
   const steps = useMemo(() => walkSteps(word), [word]);
   const family = String(style?.fontFamily ?? "'Hafs', serif");
   // Measuring before the Arabic font has loaded reads the fallback's shapes,
@@ -89,12 +91,15 @@ const WalkWord: React.FC<{
   }, [fontsIn, family]);
   const boxes = useMemo(() => measureMarks(word, family), [word, family, fontsIn]);
 
+  const outerRef = useRef<HTMLSpanElement>(null);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
   const markRef = useRef<HTMLSpanElement>(null);
   const [geom, setGeom] = useState<{
     baseline: number; right: number; size: number; w: number; h: number;
     baselineU: number; rightU: number; cssSize: number;
+    outerW: number; wrapX: number; wrapR: number;
+    bleed: { t: number; b: number; r: number };
   } | null>(null);
 
   // Measured again on every step, and everything in ONE space. The word card
@@ -116,9 +121,21 @@ const WalkWord: React.FC<{
       // CSS pixels, so the scale is divided back out.
       const css = parseFloat(getComputedStyle(text).fontSize) || 16;
       const scale = m.height / css || 1;
+      // The trail is drawn on the OUTER box — the card — so it needs the
+      // word's offset inside it.
+      const outer = outerRef.current ?? wrap;
+      const o = outer.getBoundingClientRect();
+      // The card pads its word; the trail is supposed to reach the border, so
+      // it is told how far past the content box that is.
+      const card = outer.parentElement?.getBoundingClientRect();
+      const bleed = fill && card
+        ? { t: o.top - card.top, b: card.bottom - o.bottom, r: card.right - o.right }
+        : { t: 0, b: 0, r: 0 };
       setGeom({
+        bleed,
         baseline: m.bottom - w.top, right: t.right - w.left, size: m.height, w: w.width, h: w.height,
         baselineU: (m.bottom - w.top) / scale, rightU: (t.right - w.left) / scale, cssSize: css,
+        outerW: o.width || w.width, wrapX: w.left - o.left, wrapR: o.right - w.right,
       });
     };
     measure();
@@ -201,37 +218,26 @@ const WalkWord: React.FC<{
 
   const lit = cluster && at !== null;
 
-  // The trail: everything already sounded out, washed in a pale version of the
-  // same red. It starts at the word's right edge — where the reading starts —
-  // and reaches left as far as the piece being pointed at, which it includes.
+  // The trail: everything already sounded out. Measured on the word but drawn
+  // on the CARD, top to bottom and out to its right edge — a band across the
+  // whole box reads as ground covered, where a patch hugging the letters read
+  // as a smudge behind them.
   const sweep = (() => {
     if (!lit || !geom || !cluster) return null;
-    const { right, w } = geom;
+    const { w, outerW, wrapX, wrapR } = geom;
     // To the LETTER's edge, not the piece's: a vowel is narrower than the
     // letter it sits on, so following the piece would make the trail shrink
     // when the step moved from a letter onto its own vowel.
     const edge = charLeft(cluster.base);
-    if (edge === null || !w) return null;
-    const left = Math.max(0, edge);
-    return { left: `${(left / w) * 100}%`, width: `${((Math.min(w, right) - left) / w) * 100}%` };
+    if (edge === null || !outerW) return null;
+    const left = Math.max(0, Math.min(w, edge) + wrapX);
+    // Out to the card's edge when it fills one; otherwise just past the word.
+    const width = outerW - left - (fill ? 0 : Math.max(0, wrapR));
+    return { left: `${(left / outerW) * 100}%`, width: `${(Math.max(0, width) / outerW) * 100}%` };
   })();
 
-  return (
-    <span ref={wrapRef} className={className} style={{ ...style, position: 'relative', display: 'inline-block' }}>
-      {sweep && parseFloat(sweep.width) > 0 && (
-        <span aria-hidden="true"
-          // Pale yellow on a white card; on a dark one the same yellow at a
-          // tenth, which reads as light falling on the word rather than the
-          // mud a saturated amber turns into over navy.
-          className="bg-amber-200/70 dark:bg-amber-200/10"
-          style={{
-            position: 'absolute', top: 0, bottom: 0,
-            left: sweep.left, width: sweep.width,
-            borderRadius: 6,
-            transition: 'left 120ms ease, width 120ms ease',
-            pointerEvents: 'none', zIndex: 0,
-          }} />
-      )}
+  const body = (
+    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
       <span ref={baseRef} style={{ position: 'relative', zIndex: 1 }}>{word}</span>
       {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
       <span ref={markRef} style={MARKER} />
@@ -245,6 +251,31 @@ const WalkWord: React.FC<{
           seam, and the letter step kept a red hairline along it. */}
       {lit && !onMark && cluster.marks.length > 0 &&
         copy(cluster.base, 'currentColor', maskOf(cluster.base), 'restore')}
+    </span>
+  );
+
+  return (
+    <span ref={outerRef} className={className} style={{
+      ...style, position: 'relative',
+      ...(fill
+        ? { display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', flex: '1 1 auto' }
+        : { display: 'inline-block' }),
+    }}>
+      {sweep && parseFloat(sweep.width) > 0 && (
+        <span aria-hidden="true"
+          // Pale yellow on a white card; on a dark one the same yellow at a
+          // tenth, which reads as light falling on the word rather than the
+          // mud a saturated amber turns into over navy.
+          className="bg-amber-200/70 dark:bg-amber-200/10"
+          style={{
+            position: 'absolute',
+            top: -(geom?.bleed.t ?? 0), bottom: -(geom?.bleed.b ?? 0),
+            left: sweep.left, right: -(geom?.bleed.r ?? 0), width: 'auto',
+            transition: 'left 120ms ease',
+            pointerEvents: 'none', zIndex: 0,
+          }} />
+      )}
+      {body}
     </span>
   );
 };
@@ -995,7 +1026,7 @@ const QaedahPage: React.FC<{
             >
               <div
                 key={`${pos}-${word}`}
-                className={`flex items-center justify-center rounded-3xl qd-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'qd-shake' : ''}`}
+                className={`flex items-center justify-center overflow-hidden rounded-3xl qd-card-kid border-4 border-indigo-200 shadow-xl ${shaking ? 'qd-shake' : ''}`}
                 style={{
                   width: 'min(420px, 76vw)', height: 'min(150px, 34vw)',
                   minHeight: 100,
@@ -1005,6 +1036,7 @@ const QaedahPage: React.FC<{
                 }}
               >
                 <WalkWord
+                  fill
                   word={word}
                   at={walking ? walkAt : null}
                   style={{
@@ -1055,10 +1087,11 @@ const QaedahPage: React.FC<{
           <div className="flex justify-center mb-8">
             <div
               key={`${pos}-${word}`}
-              className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
+              className={`flex items-center justify-center overflow-hidden bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
               style={{ width: 'min(900px, 94vw)', height: 'min(56vh, 540px)', minHeight: 220, padding: '0 20px' }}
             >
               <WalkWord
+                fill
                 word={word}
                 at={walking ? walkAt : null}
                 style={{
