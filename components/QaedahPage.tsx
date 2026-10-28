@@ -149,12 +149,19 @@ const WalkWord: React.FC<{
     return `inset(${pc(top, h)} ${pc(w - r, w)} ${pc(h - bottom, h)} ${pc(l, w)})`;
   };
 
+  // A box one em tall sitting ON the baseline. It is in EVERY layer, not just
+  // the measured one: it is part of the line box, so a layer without it puts
+  // its text a little higher — which drew the red copy above the black word,
+  // one letter apparently twice.
+  const MARKER: React.CSSProperties = { display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' };
+
   /** One copy of the word: `red` is the index whose cluster paints, the rest vanish. */
   const copy = (redBase: number | null, colour: string, clip?: string, key?: string) => (
     <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, clipPath: clip, pointerEvents: 'none', zIndex: 2 }}>
       {[...word].map((ch, i) => (
         <span key={i} style={{ color: i === redBase ? colour : 'transparent' }}>{ch}</span>
       ))}
+      <span style={MARKER} />
     </span>
   );
 
@@ -178,17 +185,22 @@ const WalkWord: React.FC<{
   return (
     <span ref={wrapRef} className={className} style={{ ...style, position: 'relative', display: 'inline-block' }}>
       {sweep && parseFloat(sweep.width) > 0 && (
-        <span aria-hidden="true" style={{
-          position: 'absolute', top: 0, bottom: 0,
-          left: sweep.left, width: sweep.width,
-          background: 'rgba(225, 29, 72, 0.11)', borderRadius: 6,
-          transition: 'left 120ms ease, width 120ms ease',
-          pointerEvents: 'none', zIndex: 0,
-        }} />
+        <span aria-hidden="true"
+          // Pale yellow on a white card; on a dark one the same yellow at a
+          // tenth, which reads as light falling on the word rather than the
+          // mud a saturated amber turns into over navy.
+          className="bg-amber-200/70 dark:bg-amber-200/10"
+          style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: sweep.left, width: sweep.width,
+            borderRadius: 6,
+            transition: 'left 120ms ease, width 120ms ease',
+            pointerEvents: 'none', zIndex: 0,
+          }} />
       )}
       <span ref={baseRef} style={{ position: 'relative', zIndex: 1 }}>{word}</span>
       {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
-      <span ref={markRef} style={{ display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' }} />
+      <span ref={markRef} style={MARKER} />
       {lit && copy(cluster.base, '#e11d48', onMark ? clipFor([head!]) : undefined, 'red')}
       {/* On a letter, put the cluster's marks back in the normal colour. */}
       {lit && !onMark && cluster.marks.length > 0 &&
