@@ -84,24 +84,28 @@ const WalkWord: React.FC<{
   const markRef = useRef<HTMLSpanElement>(null);
   const [geom, setGeom] = useState<{ baseline: number; right: number; size: number; w: number; h: number } | null>(null);
 
+  // Measured again on every step, and everything in ONE space. The word card
+  // scales as it arrives, so a rect read mid-animation is smaller than the
+  // computed font size says — mixing the two put the first band in the wrong
+  // place. The marker is a zero-width box one em tall sitting ON the baseline,
+  // so its rect gives both the baseline and the em, scaled exactly as the text
+  // on screen is.
   useLayoutEffect(() => {
     const wrap = wrapRef.current, text = baseRef.current, mark = markRef.current;
     if (!wrap || !text || !mark) return;
     const measure = () => {
       const w = wrap.getBoundingClientRect();
       const t = text.getBoundingClientRect();
-      setGeom({
-        baseline: mark.getBoundingClientRect().top - w.top,   // a zero-height inline box sits ON the baseline
-        right: t.right - w.left,
-        size: parseFloat(getComputedStyle(text).fontSize) || 16,
-        w: w.width, h: w.height,
-      });
+      const m = mark.getBoundingClientRect();
+      if (!w.width || !m.height) return;
+      setGeom({ baseline: m.bottom - w.top, right: t.right - w.left, size: m.height, w: w.width, h: w.height });
     };
     measure();
+    const id = requestAnimationFrame(measure);        // again once the card has settled
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     ro?.observe(wrap);
-    return () => ro?.disconnect();
-  }, [word, style?.fontSize]);
+    return () => { cancelAnimationFrame(id); ro?.disconnect(); };
+  }, [word, at, style?.fontSize]);
 
   const step = at === null ? null : steps[clampStep(at, steps.length)];
   const head = step?.[0];
@@ -119,6 +123,15 @@ const WalkWord: React.FC<{
     return { base, marks };
   }, [word, head]);
 
+  /** Where one character sits in the wrapper, measured off the drawn text. */
+  const charLeft = (i: number): number | null => {
+    const node = baseRef.current?.firstChild, wrap = wrapRef.current;
+    if (!node || !wrap) return null;
+    const r = document.createRange();
+    try { r.setStart(node, i); r.setEnd(node, i + 1); } catch { return null; }
+    return r.getBoundingClientRect().left - wrap.getBoundingClientRect().left;
+  };
+
   /** clip-path for a set of measured boxes, in the wrapper's own pixels. */
   const clipFor = (idxs: number[]): string | undefined => {
     if (!geom) return 'inset(0 0 100% 0)';          // not measured yet: show nothing
@@ -129,12 +142,16 @@ const WalkWord: React.FC<{
     const bottom = baseline + Math.max(...bs.map(b => b.bottom)) * size;
     const r      = right - Math.min(...bs.map(b => b.right)) * size;
     const l      = right - Math.max(...bs.map(b => b.left)) * size;
-    return `inset(${top}px ${w - r}px ${h - bottom}px ${l}px)`;
+    // In PER CENT, not pixels: the card scales as it arrives, and every length
+    // here was measured in that same scaled space, so the ratios hold while the
+    // pixels do not.
+    const pc = (v: number, of: number) => `${(v / of) * 100}%`;
+    return `inset(${pc(top, h)} ${pc(w - r, w)} ${pc(h - bottom, h)} ${pc(l, w)})`;
   };
 
   /** One copy of the word: `red` is the index whose cluster paints, the rest vanish. */
   const copy = (redBase: number | null, colour: string, clip?: string, key?: string) => (
-    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, clipPath: clip, pointerEvents: 'none' }}>
+    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, clipPath: clip, pointerEvents: 'none', zIndex: 2 }}>
       {[...word].map((ch, i) => (
         <span key={i} style={{ color: i === redBase ? colour : 'transparent' }}>{ch}</span>
       ))}
@@ -142,11 +159,36 @@ const WalkWord: React.FC<{
   );
 
   const lit = cluster && at !== null;
+
+  // The trail: everything already sounded out, washed in a pale version of the
+  // same red. It starts at the word's right edge — where the reading starts —
+  // and reaches left as far as the piece being pointed at, which it includes.
+  const sweep = (() => {
+    if (!lit || !geom || !cluster) return null;
+    const { right, w } = geom;
+    // To the LETTER's edge, not the piece's: a vowel is narrower than the
+    // letter it sits on, so following the piece would make the trail shrink
+    // when the step moved from a letter onto its own vowel.
+    const edge = charLeft(cluster.base);
+    if (edge === null || !w) return null;
+    const left = Math.max(0, edge);
+    return { left: `${(left / w) * 100}%`, width: `${((Math.min(w, right) - left) / w) * 100}%` };
+  })();
+
   return (
     <span ref={wrapRef} className={className} style={{ ...style, position: 'relative', display: 'inline-block' }}>
-      <span ref={baseRef}>{word}</span>
+      {sweep && parseFloat(sweep.width) > 0 && (
+        <span aria-hidden="true" style={{
+          position: 'absolute', top: 0, bottom: 0,
+          left: sweep.left, width: sweep.width,
+          background: 'rgba(225, 29, 72, 0.11)', borderRadius: 6,
+          transition: 'left 120ms ease, width 120ms ease',
+          pointerEvents: 'none', zIndex: 0,
+        }} />
+      )}
+      <span ref={baseRef} style={{ position: 'relative', zIndex: 1 }}>{word}</span>
       {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
-      <span ref={markRef} style={{ display: 'inline-block', width: 0, height: 0, verticalAlign: 'baseline' }} />
+      <span ref={markRef} style={{ display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' }} />
       {lit && copy(cluster.base, '#e11d48', onMark ? clipFor([head!]) : undefined, 'red')}
       {/* On a letter, put the cluster's marks back in the normal colour. */}
       {lit && !onMark && cluster.marks.length > 0 &&
