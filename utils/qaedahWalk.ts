@@ -92,12 +92,26 @@ export const clampStep = (at: number, total: number): number =>
 export interface Box {
   /** All four, in em, from the baseline (y) and the word's right edge (x). */
   top: number; bottom: number; right: number; left: number;
+  /**
+   * The mark's own pixels, cropped to the box, as a mask.
+   *
+   * The box alone is not enough: a fatha on a shadda'd letter is drawn INSIDE
+   * the shadda's curve, so their boxes nest and pointing at one catches the
+   * other. The mask is the pixels that belong to this mark and nothing else.
+   */
+  mask: string;
 }
 
 const MEASURE_PX = 120;
 const CW = 1000, CH = 420;
-const PAD = 0.04;                       // a hair of room so antialiasing is not clipped
 const cache = new Map<string, Map<number, Box>>();
+
+/** Has this family actually loaded? */
+export function fontReady(fontFamily: string): boolean {
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+  if (!fonts?.check) return true;                 // no way to ask: assume yes
+  try { return fonts.check(`${MEASURE_PX}px ${fontFamily}`); } catch { return true; }
+}
 
 let ctx: CanvasRenderingContext2D | null | undefined;
 function canvas(): CanvasRenderingContext2D | null {
@@ -137,6 +151,13 @@ export function measureMarks(word: string, fontFamily: string): Map<number, Box>
   const c = canvas();
   if (!c) { cache.set(key, out); return out; }
 
+  // Not until the Arabic font is actually here. A canvas asked for a font it
+  // does not have falls back to the system serif without a word, and the boxes
+  // measured from THAT are wrong for the text on screen — wrong, and cached
+  // for good. Answer empty instead, and do not remember it: the caller asks
+  // again when the font arrives.
+  if (!fontReady(fontFamily)) return out;
+
   // A long word must still fit the canvas, or the marks past the edge are
   // never seen. Shrink to fit and convert with the size actually drawn.
   c.font = `${MEASURE_PX}px ${fontFamily}`;
@@ -147,9 +168,9 @@ export function measureMarks(word: string, fontFamily: string): Map<number, Box>
   const full = inkOf(c, word, font);
   const W = CW;
 
-  for (let i = 0; i < chars.length; i++) {
-    if (!isMark(chars[i])) continue;
-    const without = inkOf(c, chars.slice(0, i).join('') + chars.slice(i + 1).join(''), font);
+  /** The pixels the word gains from `drop`, as a box plus a mask image. */
+  const diffOf = (drop: number[]): Box | null => {
+    const without = inkOf(c, chars.filter((_, k) => !drop.includes(k)).join(''), font);
     let top = -1, bottom = -1, left = -1, right = -1;
     for (let y = 0; y < CH; y++) {
       for (let x = 0; x < W; x++) {
@@ -162,13 +183,62 @@ export function measureMarks(word: string, fontFamily: string): Map<number, Box>
         }
       }
     }
-    if (top < 0) continue;              // the mark changed nothing we can see
-    out.set(i, {
-      top:    (top - ORIGIN_Y) / px - PAD,
-      bottom: (bottom - ORIGIN_Y) / px + PAD,
-      right:  (ORIGIN_X - right) / px - PAD,
-      left:   (ORIGIN_X - left) / px + PAD,
-    });
+    if (top < 0) return null;           // nothing we can see changed
+
+    // Cut the mark's own pixels out as a mask image, cropped to its box.
+    //
+    // Solid, and grown by a pixel. The mask is cut at MEASURE_PX and stretched
+    // to whatever size the word is drawn at, so soft edges arrive softer still
+    // — and a mask that does not quite cover leaves a red rim around a mark
+    // that was supposed to go back to black. A pixel of margin costs nothing:
+    // above and below a letter there is nothing else to cover.
+    const GROW = 1;
+    const mw = right - left + 1 + GROW * 2, mh = bottom - top + 1 + GROW * 2;
+    const hit = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= W || y >= CH) return false;
+      const k = (y * W + x) * 4 + 3;
+      return full[k] > 40 && without[k] <= 40;
+    };
+    const cut = c.createImageData(mw, mh);
+    for (let y = 0; y < mh; y++) {
+      for (let x = 0; x < mw; x++) {
+        const sx = left - GROW + x, sy = top - GROW + y;
+        let on = false;
+        for (let dy = -GROW; dy <= GROW && !on; dy++)
+          for (let dx = -GROW; dx <= GROW && !on; dx++) on = hit(sx + dx, sy + dy);
+        const dst = (y * mw + x) * 4;
+        cut.data[dst] = cut.data[dst + 1] = cut.data[dst + 2] = 255;
+        cut.data[dst + 3] = on ? 255 : 0;
+      }
+    }
+    const cutCv = document.createElement('canvas');
+    cutCv.width = mw; cutCv.height = mh;
+    cutCv.getContext('2d')?.putImageData(cut, 0, 0);
+
+    return {
+      mask: cutCv.toDataURL(),
+      // The box IS the mask image's bounds, grown pixel included.
+      top:    (top - GROW - ORIGIN_Y) / px,
+      bottom: (bottom + GROW - ORIGIN_Y) / px,
+      right:  (ORIGIN_X - (right + GROW)) / px,
+      left:   (ORIGIN_X - (left - GROW)) / px,
+    };
+  };
+
+  // One entry per mark, and one per LETTER holding all of its marks together.
+  //
+  // The whole cluster has to be measured in one go rather than added up from
+  // the marks: where a shadda and the fatha tucked inside it overlap, neither
+  // one's own diff claims those pixels — each is still drawn by the other's
+  // "without" — and a letter restored mark by mark kept a red hairline along
+  // the seam.
+  for (let i = 0; i < chars.length; i++) {
+    if (isMark(chars[i]) || !isLetter(chars[i])) continue;
+    const marks: number[] = [];
+    for (let k = i + 1; k < chars.length && isMark(chars[k]); k++) marks.push(k);
+    for (const m of marks) { const b = diffOf([m]); if (b) out.set(m, b); }
+    if (marks.length > 1) { const b = diffOf(marks); if (b) out.set(i, b); }
+    else if (marks.length === 1) { const b = out.get(marks[0]); if (b) out.set(i, b); }
   }
   cache.set(key, out);
   return out;

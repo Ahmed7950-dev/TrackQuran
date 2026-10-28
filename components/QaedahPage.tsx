@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
-import { walkSteps, clampStep, isMark, measureMarks, type Box } from '../utils/qaedahWalk';
+import { walkSteps, clampStep, isMark, measureMarks, fontReady, type Box } from '../utils/qaedahWalk';
 import CraneBuilderGame from './CraneBuilderGame';
 import LetterSoundsChallenge, { LetterSoundsSetup } from './LetterSoundsChallenge';
 import { vowelForTopic, VOWEL_LABEL, FORM_LABEL, glyphFor, type LetterForm } from '../services/letterSoundsService';
@@ -77,12 +77,25 @@ const WalkWord: React.FC<{
 }> = ({ word, at, style, className }) => {
   const steps = useMemo(() => walkSteps(word), [word]);
   const family = String(style?.fontFamily ?? "'Hafs', serif");
-  const boxes = useMemo(() => measureMarks(word, family), [word, family]);
+  // Measuring before the Arabic font has loaded reads the fallback's shapes,
+  // so the marks are asked for again once it is here.
+  const [fontsIn, setFontsIn] = useState(() => fontReady(family));
+  useEffect(() => {
+    if (fontsIn) return;
+    let dead = false;
+    (document as Document & { fonts?: FontFaceSet }).fonts?.ready
+      .then(() => { if (!dead) setFontsIn(true); }).catch(() => {});
+    return () => { dead = true; };
+  }, [fontsIn, family]);
+  const boxes = useMemo(() => measureMarks(word, family), [word, family, fontsIn]);
 
   const wrapRef = useRef<HTMLSpanElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
   const markRef = useRef<HTMLSpanElement>(null);
-  const [geom, setGeom] = useState<{ baseline: number; right: number; size: number; w: number; h: number } | null>(null);
+  const [geom, setGeom] = useState<{
+    baseline: number; right: number; size: number; w: number; h: number;
+    baselineU: number; rightU: number; cssSize: number;
+  } | null>(null);
 
   // Measured again on every step, and everything in ONE space. The word card
   // scales as it arrives, so a rect read mid-animation is smaller than the
@@ -98,10 +111,21 @@ const WalkWord: React.FC<{
       const t = text.getBoundingClientRect();
       const m = mark.getBoundingClientRect();
       if (!w.width || !m.height) return;
-      setGeom({ baseline: m.bottom - w.top, right: t.right - w.left, size: m.height, w: w.width, h: w.height });
+      // The card scales as it arrives, so rects come back smaller than the CSS
+      // says. Ratios survive that (the trail uses them); the masks need real
+      // CSS pixels, so the scale is divided back out.
+      const css = parseFloat(getComputedStyle(text).fontSize) || 16;
+      const scale = m.height / css || 1;
+      setGeom({
+        baseline: m.bottom - w.top, right: t.right - w.left, size: m.height, w: w.width, h: w.height,
+        baselineU: (m.bottom - w.top) / scale, rightU: (t.right - w.left) / scale, cssSize: css,
+      });
     };
     measure();
     const id = requestAnimationFrame(measure);        // again once the card has settled
+    // And again when the Arabic font arrives: until it does the word is laid
+    // out in the fallback, and every number here is a little off.
+    (document as Document & { fonts?: FontFaceSet }).fonts?.ready.then(measure).catch(() => {});
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     ro?.observe(wrap);
     return () => { cancelAnimationFrame(id); ro?.disconnect(); };
@@ -132,21 +156,31 @@ const WalkWord: React.FC<{
     return r.getBoundingClientRect().left - wrap.getBoundingClientRect().left;
   };
 
-  /** clip-path for a set of measured boxes, in the wrapper's own pixels. */
-  const clipFor = (idxs: number[]): string | undefined => {
-    if (!geom) return 'inset(0 0 100% 0)';          // not measured yet: show nothing
-    const bs = idxs.map(i => boxes.get(i)).filter(Boolean) as Box[];
-    if (!bs.length) return 'inset(0 0 100% 0)';
-    const { baseline, right, size, w, h } = geom;
-    const top    = baseline + Math.min(...bs.map(b => b.top)) * size;
-    const bottom = baseline + Math.max(...bs.map(b => b.bottom)) * size;
-    const r      = right - Math.min(...bs.map(b => b.right)) * size;
-    const l      = right - Math.max(...bs.map(b => b.left)) * size;
-    // In PER CENT, not pixels: the card scales as it arrives, and every length
-    // here was measured in that same scaled space, so the ratios hold while the
-    // pixels do not.
-    const pc = (v: number, of: number) => `${(v / of) * 100}%`;
-    return `inset(${pc(top, h)} ${pc(w - r, w)} ${pc(h - bottom, h)} ${pc(l, w)})`;
+  /**
+   * Show only one mark's own pixels.
+   *
+   * A box is not enough to tell two marks apart: a fatha on a shadda'd letter
+   * is drawn inside the shadda's curve, so one rectangle holds both and
+   * pointing at either lit them together. The mask is cut from the mark
+   * itself — the pixels the word gains when that mark is added.
+   */
+  const maskOf = (i: number): React.CSSProperties => {
+    const b = boxes.get(i);
+    if (!b || !geom) return { display: 'none' };
+    const { baselineU, cssSize } = geom;
+    const url = `url(${b.mask})`;
+    const size = `${(b.left - b.right) * cssSize}px ${(b.bottom - b.top) * cssSize}px`;
+    // Anchored from the RIGHT edge, where an Arabic word begins and where the
+    // boxes were measured from. Anchoring from the left needed the word's
+    // width, and that measurement is taken before the webfont has swapped in —
+    // a few pixels narrower, which slid every mask off its mark.
+    const pos = `right ${b.right * cssSize}px top ${baselineU + b.top * cssSize}px`;
+    return {
+      WebkitMaskImage: url, maskImage: url,
+      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+      WebkitMaskSize: size, maskSize: size,
+      WebkitMaskPosition: pos, maskPosition: pos,
+    };
   };
 
   // A box one em tall sitting ON the baseline. It is in EVERY layer, not just
@@ -156,8 +190,8 @@ const WalkWord: React.FC<{
   const MARKER: React.CSSProperties = { display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' };
 
   /** One copy of the word: `red` is the index whose cluster paints, the rest vanish. */
-  const copy = (redBase: number | null, colour: string, clip?: string, key?: string) => (
-    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, clipPath: clip, pointerEvents: 'none', zIndex: 2 }}>
+  const copy = (redBase: number | null, colour: string, extra?: React.CSSProperties, key?: string) => (
+    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2, ...extra }}>
       {[...word].map((ch, i) => (
         <span key={i} style={{ color: i === redBase ? colour : 'transparent' }}>{ch}</span>
       ))}
@@ -201,10 +235,16 @@ const WalkWord: React.FC<{
       <span ref={baseRef} style={{ position: 'relative', zIndex: 1 }}>{word}</span>
       {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
       <span ref={markRef} style={MARKER} />
-      {lit && copy(cluster.base, '#e11d48', onMark ? clipFor([head!]) : undefined, 'red')}
-      {/* On a letter, put the cluster's marks back in the normal colour. */}
+      {/* On a MARK only that mark's pixels are red. On a LETTER the whole
+          cluster goes red and each of its marks is then painted back in the
+          normal colour, one mask at a time — so the letter keeps every pixel
+          of itself, even where a mark overlaps it. */}
+      {lit && copy(cluster.base, '#e11d48', onMark ? maskOf(head!) : undefined, 'red')}
+      {/* One mask for ALL of the letter's marks, not one each: where a shadda
+          and the fatha inside it overlap, neither mark's own mask claims the
+          seam, and the letter step kept a red hairline along it. */}
       {lit && !onMark && cluster.marks.length > 0 &&
-        copy(cluster.base, 'currentColor', clipFor(cluster.marks), 'restore')}
+        copy(cluster.base, 'currentColor', maskOf(cluster.base), 'restore')}
     </span>
   );
 };
