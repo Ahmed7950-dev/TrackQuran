@@ -1630,7 +1630,7 @@ const App: React.FC = () => {
 
   const handleLogHomework = async (
     studentId: string, range: { start: Progress; end: Progress }, note: string,
-    opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz' },
+    opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz'; dueAt?: string | null },
   ) => {
     const student = students.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
@@ -1644,6 +1644,7 @@ const App: React.FC = () => {
       note:       note || undefined,
       assignedAt: new Date().toISOString(),
       isDone:     false,
+      dueAt:      opts?.dueAt ?? undefined,
     };
     // Recitation homework: the recordings row, and a notification with the link.
     if (opts?.recite) {

@@ -21,6 +21,8 @@ import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
+import DeadlinePicker from './DeadlinePicker';
+import { dueLabel } from '../utils/quranHomework';
 declare var confetti: any;
 
 type LogType = 'reading' | 'reading-revision' | 'hifz' | 'hifz-revision' | 'tafseer' | 'homework';
@@ -50,7 +52,7 @@ interface StudentProgressPageProps {
   onRemoveMemorizationAchievement: (studentId: string, achievementId: string) => void;
   onLogTafseerRange: (studentId: string, range: { start: Progress, end: Progress }) => void;
   onRemoveTafseerRange: (studentId: string, reviewId: string) => void;
-  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string, opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz' }) => void;
+  onLogHomework?: (studentId: string, range: { start: Progress, end: Progress }, note: string, opts?: { recite?: boolean; reciteKind?: 'reading' | 'hifz'; dueAt?: string | null }) => void;
   /**
    * When set, immediately navigates the Quran view to this verse key ("surah:ayah").
    * Useful for jumping to homework verses from outside the component.
@@ -1325,6 +1327,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const [homeworkRecite, setHomeworkRecite] = useState(false);
     /** Reading: hear each verse and record it. Hifz: verses hidden, one take. */
     const [homeworkReciteKind, setHomeworkReciteKind] = useState<'reading' | 'hifz'>('reading');
+    /** When it is due. Null unless the tutor opens the picker and chooses. */
+    const [homeworkDue, setHomeworkDue] = useState<string | null>(null);
+    const [deadlineOpen, setDeadlineOpen] = useState(false);
     // true when the popup was opened by clicking an already-logged verse (shows only revision/tafseer)
     const [errorType, setErrorType] = useState<'tajweed' | 'reading'>('reading');
     // Where this tutor/student was last reading. Restored ahead of the
@@ -3711,7 +3716,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             onLogTafseerRange(student.id, pendingLogRange);
             showToast('Tafseer logged');
         } else if (selectedLogType === 'homework') {
-            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim(), { recite: homeworkRecite, reciteKind: homeworkReciteKind });
+            if (onLogHomework) onLogHomework(student.id, pendingLogRange, homeworkNote.trim(), { recite: homeworkRecite, reciteKind: homeworkReciteKind, dueAt: homeworkDue });
             showToast(!homeworkRecite ? 'Homework assigned 📝'
                 : homeworkReciteKind === 'hifz' ? 'Hifz homework assigned 🎙' : 'Recitation homework assigned 🎙');
         }
@@ -3719,6 +3724,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setLogTypeStep(null);
         setSelectedLogType(null);
         setHomeworkNote('');
+        setHomeworkDue(null);
     };
 
     const cancelLogModal = () => {
@@ -3726,6 +3732,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         setLogTypeStep(null);
         setSelectedLogType(null);
         setHomeworkNote('');
+        setHomeworkDue(null);
     };
 
     const handleVerseNumberPressStart = (surahNum: number, ayahNum: number) => {
@@ -5633,7 +5640,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     {/* ── Homework ── */}
                                     {onLogHomework && (
                                         <LogOption src="/animations/homework.json" label="Homework" color="purple"
-                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setHomeworkRecite(false); setHomeworkReciteKind('reading'); setLogTypeStep('homework-note'); }} />
+                                            onClick={() => { setSelectedLogType('homework'); setHomeworkNote(''); setHomeworkRecite(false); setHomeworkReciteKind('reading'); setHomeworkDue(null); setLogTypeStep('homework-note'); }} />
                                     )}
                                 </div>
                                 <button onClick={cancelLogModal} className="mt-4 w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">Cancel</button>
@@ -5707,10 +5714,47 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                         ))}
                                     </div>
                                 )}
+                                {/* A deadline is opt-in: nothing is set unless this is opened. */}
+                                <button type="button" onClick={() => setDeadlineOpen(true)}
+                                    className={`w-full flex items-center gap-3 rounded-xl border-2 px-3 py-2.5 mb-4 text-start transition-colors ${
+                                        homeworkDue
+                                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/30'
+                                            : 'border-dashed border-slate-300 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/20'}`}>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9}
+                                        strokeLinecap="round" strokeLinejoin="round"
+                                        className={homeworkDue ? 'text-violet-600 dark:text-violet-300' : 'text-slate-400'}>
+                                        <rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" />
+                                    </svg>
+                                    <span className="min-w-0 flex-grow">
+                                        <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">
+                                            {homeworkDue ? `Due ${dueLabel(homeworkDue)}` : 'Set a deadline'}
+                                        </span>
+                                        <span className="block text-xs text-slate-500 dark:text-slate-400">
+                                            {homeworkDue ? 'Tap to change it' : 'Optional — leave it and the homework has no end date'}
+                                        </span>
+                                    </span>
+                                    {homeworkDue && (
+                                        <span role="button" tabIndex={0} aria-label="Clear the deadline"
+                                            onClick={e => { e.stopPropagation(); setHomeworkDue(null); }}
+                                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setHomeworkDue(null); } }}
+                                            className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-white/70 dark:hover:bg-gray-700">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                        </span>
+                                    )}
+                                </button>
                                 <div className="flex gap-3">
                                     <button onClick={() => setLogTypeStep('type')} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-gray-600 transition-colors">Back</button>
                                     <button onClick={() => confirmLog()} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors">Assign</button>
                                 </div>
+                                {deadlineOpen && (
+                                    <DeadlinePicker
+                                        studentId={student.id}
+                                        studentName={student.name.split(' ')[0] || student.name}
+                                        value={homeworkDue}
+                                        onPick={iso => { setHomeworkDue(iso); setDeadlineOpen(false); }}
+                                        onClose={() => setDeadlineOpen(false)}
+                                    />
+                                )}
                             </>
                         ) : (
                             <>

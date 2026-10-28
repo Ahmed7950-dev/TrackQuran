@@ -17,7 +17,8 @@ import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
 import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
 import { dueLabel, hunterMark, type HunterHomework } from '../services/lettersHunterHomeworkService';
-import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome } from '../utils/quranHomework';
+import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome,
+  dueStateOf, dueLabel as quranDueLabel, timeLeft, DUE_PILL } from '../utils/quranHomework';
 
 const SERIF = "'Cormorant Garamond', Georgia, serif";
 
@@ -34,6 +35,34 @@ export const homeworkRange = (hw: Pick<QuranHomework, 'startSurah' | 'startAyah'
 
 const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+/**
+ * The deadline, said twice over: when it is, and how long that leaves. While
+ * the homework is still open the second half is what anyone actually reads —
+ * "2 days 3 hours left" lands where a date has to be worked out.
+ */
+const DueChip: React.FC<{ hw: QuranHomework; closed: boolean }> = ({ hw, closed }) => {
+  if (!hw.dueAt) return null;
+  const state = dueStateOf(hw);
+  if (state === 'none') return null;
+  const left = Date.parse(hw.dueAt) - Date.now();
+  const hours = Math.floor(left / 3_600_000);
+  const short = hours < 1 ? '<1h' : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  const face = closed ? `Due ${quranDueLabel(hw.dueAt)}`
+    : state === 'overdue' ? `Overdue · ${quranDueLabel(hw.dueAt)}`
+      : `Due ${quranDueLabel(hw.dueAt)} · ${short} left`;
+  return (
+    <span title={state === 'overdue'
+      ? `Was due ${quranDueLabel(hw.dueAt)}`
+      : `Due ${quranDueLabel(hw.dueAt)}${closed ? '' : ` — ${timeLeft(left)} left`}`}
+      className={`flex-shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px] font-bold whitespace-nowrap ${DUE_PILL[closed ? 'later' : state]}`}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3 2" />
+      </svg>
+      {face}
+    </span>
+  );
+};
 
 /** A segment: one verse of the first try, as this try left it. */
 type CellState = 'pass' | 'fail' | 'open' | 'done' | 'gone';
@@ -369,6 +398,9 @@ const HomeworkTab: React.FC<{
           </span>
         )}
         <span dir="rtl" className="hidden lg:inline flex-shrink-0 font-quranic text-lg text-slate-500 dark:text-slate-400">{b.arabic}</span>
+
+        {/* The deadline, whatever kind of homework this is. */}
+        <DueChip hw={b.hw} closed={b.done} />
 
         {/* Closed: how it ended, and the way back if it was a mis-tap. */}
         {b.done && (

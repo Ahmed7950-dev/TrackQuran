@@ -148,12 +148,16 @@ Deno.serve(async (req: Request) => {
   let skippedNearLesson = 0;
 
   for (const studentId of candidates) {
-    const { items, reciteId } = homeworkFor(studentId);
+    const { items, reciteId, dueAt } = homeworkFor(studentId);
     if (!items.length) { skippedNoHomework++; continue; }
 
     const startAt = nextLesson.get(studentId);
     const msLeft = startAt ? Date.parse(startAt) - nowMs : null;
-    if (msLeft !== null && msLeft < QUIET_HOURS_BEFORE * 3_600_000) { skippedNearLesson++; continue; }
+    // The lesson-reminder covers the last hours before a lesson, so the daily
+    // nudge stays quiet then — unless a deadline falls before that lesson, in
+    // which case the clock the tutor set is the one that matters.
+    const dueBeatsLesson = !!dueAt && msLeft !== null && Date.parse(dueAt) <= nowMs + msLeft;
+    if (msLeft !== null && msLeft < QUIET_HOURS_BEFORE * 3_600_000 && !dueBeatsLesson) { skippedNearLesson++; continue; }
 
     const pushId = pushIdOf(studentId);
     if (!pushId) continue;
@@ -161,10 +165,24 @@ Deno.serve(async (req: Request) => {
     if (!subs.length) continue;
 
     const isQuran = quranById.has(studentId);
-    const title = 'Your homework is still waiting';
-    const body = msLeft !== null
-      ? `You still haven't done your homework: ${list(items)}. ${untilLabel(msLeft)} left until your next lesson — do it now.`
-      : `You still haven't done your homework: ${list(items)}. Do it now, before your next lesson.`;
+
+    // A deadline beats the next lesson: it is the thing that actually runs out,
+    // and the tutor set it on purpose. "You have 2 days 3 hours" is a clock the
+    // student can feel, where "before your next lesson" is a date they have to
+    // go and look up.
+    const dueIn = dueAt ? Date.parse(dueAt) - nowMs : null;
+    const title = dueIn !== null && dueIn < 0
+      ? 'Your homework is late'
+      : dueIn !== null && dueIn < 86_400_000
+        ? 'Your homework is due today'
+        : 'Your homework is still waiting';
+    const body = dueIn !== null
+      ? dueIn < 0
+        ? `Your homework was due ${untilLabel(-dueIn)} ago and is still not done: ${list(items)}. Do it now.`
+        : `You have ${untilLabel(dueIn)} before your homework is due: ${list(items)}. Do it now, while there is time.`
+      : msLeft !== null
+        ? `You still haven't done your homework: ${list(items)}. ${untilLabel(msLeft)} left until your next lesson — do it now.`
+        : `You still haven't done your homework: ${list(items)}. Do it now, before your next lesson.`;
     const url = pushUrl({ isQuran, reciteId, reportId: reportOf.get(studentId), pushId });
     // One a day per phone: a later send replaces the one on screen.
     const tag = `hw-daily:${pushId}`;
@@ -188,7 +206,9 @@ Deno.serve(async (req: Request) => {
     }
     report.push({
       student: studentId, devices: subs.length, delivered,
-      hoursToLesson: msLeft === null ? null : Math.round(msLeft / 3_600_000), title, body, url,
+      hoursToLesson: msLeft === null ? null : Math.round(msLeft / 3_600_000),
+      dueAt: dueAt ?? null,
+      hoursToDue: dueIn === null ? null : Math.round(dueIn / 3_600_000), title, body, url,
     });
   }
 

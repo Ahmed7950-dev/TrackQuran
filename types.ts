@@ -143,6 +143,9 @@ export interface QuranHomework {
   outcome?: 'done' | 'missed' | 'removed';
   /** Set when the student records each verse (quran_recitation_homework.id). */
   recitationId?: string;
+  /** When it has to be done by, if the tutor set one. Absent = no deadline,
+   *  which is the default: the picker has to be opened on purpose. */
+  dueAt?: string;
 }
 
 // ── Tajweed lesson ──────────────────────────────────────────────────────────

@@ -18,7 +18,12 @@ export const rangeLabel = (h: { startSurah: number; startAyah: number; endSurah:
 export const list = (items: string[]) =>
   items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-export interface OpenHomework { items: string[]; reciteId?: string }
+export interface OpenHomework {
+  items: string[];
+  reciteId?: string;
+  /** The soonest deadline among what is still open, if any carries one. */
+  dueAt?: string;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -82,6 +87,12 @@ export async function loadOpenHomework(
   const homeworkFor = (studentId: string): OpenHomework => {
     const items: string[] = [];
     let reciteId: string | undefined;
+    let dueAt: string | undefined;
+    // The one that runs out first is the one worth saying out loud.
+    const noteDue = (iso?: string | null) => {
+      if (!iso) return;
+      if (!dueAt || Date.parse(iso) < Date.parse(dueAt)) dueAt = iso;
+    };
 
     const q = quranById.get(studentId);
     if (q) {
@@ -95,6 +106,7 @@ export async function loadOpenHomework(
         } else {
           items.push(`prepare ${rangeLabel(h)}`);
         }
+        noteDue(h.dueAt);
       }
     }
 
@@ -115,7 +127,7 @@ export async function loadOpenHomework(
       if (h.due_at && Date.parse(h.due_at) < Date.now()) continue;
       items.push(`your letters hunt (${(h.letters ?? []).join(' ')})`);
     }
-    return { items, reciteId };
+    return { items, reciteId, dueAt };
   };
 
   return { homeworkFor, reportOf };
