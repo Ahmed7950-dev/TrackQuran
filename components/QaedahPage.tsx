@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
+import { walkSteps, clampStep } from '../utils/qaedahWalk';
 import CraneBuilderGame from './CraneBuilderGame';
 import LetterSoundsChallenge, { LetterSoundsSetup } from './LetterSoundsChallenge';
 import { vowelForTopic, VOWEL_LABEL, FORM_LABEL, glyphFor, type LetterForm } from '../services/letterSoundsService';
@@ -51,6 +52,25 @@ function shuffle<T>(arr: T[]): T[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 type View = 'list' | 'words' | 'challenge' | 'win';
+
+/**
+ * The word, drawn one character to a span so a single letter — or the vowel on
+ * it — can be lit on its own while the tutor sounds it out. Arabic still joins
+ * across the spans; the tajweed renderer in the Quran page works the same way.
+ */
+const WalkWord: React.FC<{
+  word: string; at: number | null; style?: React.CSSProperties; className?: string;
+}> = ({ word, at, style, className }) => {
+  const steps = useMemo(() => walkSteps(word), [word]);
+  const lit = at === null ? null : new Set(steps[clampStep(at, steps.length)] ?? []);
+  return (
+    <span style={style} className={className}>
+      {[...word].map((ch, i) => (
+        <span key={i} style={lit?.has(i) ? { color: '#e11d48' } : undefined}>{ch}</span>
+      ))}
+    </span>
+  );
+};
 
 /** Arabic letter count — drives the per-word font size so any word fits one line. */
 const letterCount = (w: string): number =>
@@ -355,6 +375,28 @@ const QaedahPage: React.FC<{
 
   const pct    = queue.length > 0 ? Math.round((pos / queue.length) * 100) : 0;
   const word   = queue[pos]?.word ?? '';
+
+  // ── Sounding the word out ────────────────────────────────────────────────
+  // Left walks forward through the word (Arabic reads right to left, so the
+  // left arrow is the one that moves on), right walks back. The tutor's side
+  // only: on the student's own device nobody is pressing anything, and a red
+  // letter sitting there would just be a mark they cannot explain.
+  const walking = !isStudentView;
+  const [walkAt, setWalkAt] = useState(0);
+  useEffect(() => { setWalkAt(0); }, [word, pos]);
+  useEffect(() => {
+    if (!walking || view !== 'challenge' || !word) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      const total = walkSteps(word).length;
+      setWalkAt(a => clampStep(a + (e.key === 'ArrowLeft' ? 1 : -1), total));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [walking, view, word]);
 
   // ── Praise popup overlay ──────────────────────────────────────────────────
   const praiseOverlay = popup.phase !== 'hidden' && (
@@ -785,7 +827,9 @@ const QaedahPage: React.FC<{
                   padding: '0 16px',
                 }}
               >
-                <span
+                <WalkWord
+                  word={word}
+                  at={walking ? walkAt : null}
                   style={{
                     ...HAFS,
                     fontSize: 'clamp(3.6rem, 11vw, 6rem)',
@@ -794,7 +838,7 @@ const QaedahPage: React.FC<{
                     color: '#3c4a8a',
                     whiteSpace: 'nowrap',
                   }}
-                >{word}</span>
+                />
               </div>
             </div>
           </div>
@@ -837,7 +881,9 @@ const QaedahPage: React.FC<{
               className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
               style={{ width: 'min(900px, 94vw)', height: 'min(56vh, 540px)', minHeight: 220, padding: '0 20px' }}
             >
-              <span
+              <WalkWord
+                word={word}
+                at={walking ? walkAt : null}
                 style={{
                   ...HAFS,
                   fontSize: bigWordFont,
@@ -846,7 +892,7 @@ const QaedahPage: React.FC<{
                   whiteSpace: 'nowrap',
                 }}
                 className="text-slate-700 dark:text-slate-200"
-              >{word}</span>
+              />
             </div>
           </div>
 
