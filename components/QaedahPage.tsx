@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
+import { walkSteps, clampStep, isMark, measureMarks, type Box } from '../utils/qaedahWalk';
 import CraneBuilderGame from './CraneBuilderGame';
 import LetterSoundsChallenge, { LetterSoundsSetup } from './LetterSoundsChallenge';
 import { vowelForTopic, VOWEL_LABEL, FORM_LABEL, glyphFor, type LetterForm } from '../services/letterSoundsService';
@@ -51,6 +52,108 @@ function shuffle<T>(arr: T[]): T[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 type View = 'list' | 'words' | 'challenge' | 'win';
+
+/**
+ * The word, with one piece of it lit.
+ *
+ * A letter and the marks on it are one grapheme cluster, and a browser paints
+ * a cluster in the colour of its FIRST character — so a fatha in its own span,
+ * coloured red, stays black. (Checked in Hafs, Amiri, UthmanTN and the system
+ * serif: colouring the mark does nothing, colouring the letter reddens the
+ * marks with it.)
+ *
+ * So the word is drawn more than once, stacked exactly, and the coloured copy
+ * is clipped to the piece being pointed at:
+ *
+ *   on a LETTER   the whole cluster is drawn red, then its marks are painted
+ *                 back in the normal colour, leaving the letter alone in red;
+ *   on a MARK     the whole cluster is drawn red but clipped to that mark's
+ *                 own box, so nothing else of it shows.
+ *
+ * The boxes are measured, not tabulated — see measureMarks.
+ */
+const WalkWord: React.FC<{
+  word: string; at: number | null; style?: React.CSSProperties; className?: string;
+}> = ({ word, at, style, className }) => {
+  const steps = useMemo(() => walkSteps(word), [word]);
+  const family = String(style?.fontFamily ?? "'Hafs', serif");
+  const boxes = useMemo(() => measureMarks(word, family), [word, family]);
+
+  const wrapRef = useRef<HTMLSpanElement>(null);
+  const baseRef = useRef<HTMLSpanElement>(null);
+  const markRef = useRef<HTMLSpanElement>(null);
+  const [geom, setGeom] = useState<{ baseline: number; right: number; size: number; w: number; h: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current, text = baseRef.current, mark = markRef.current;
+    if (!wrap || !text || !mark) return;
+    const measure = () => {
+      const w = wrap.getBoundingClientRect();
+      const t = text.getBoundingClientRect();
+      setGeom({
+        baseline: mark.getBoundingClientRect().top - w.top,   // a zero-height inline box sits ON the baseline
+        right: t.right - w.left,
+        size: parseFloat(getComputedStyle(text).fontSize) || 16,
+        w: w.width, h: w.height,
+      });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(wrap);
+    return () => ro?.disconnect();
+  }, [word, style?.fontSize]);
+
+  const step = at === null ? null : steps[clampStep(at, steps.length)];
+  const head = step?.[0];
+  const onMark = head !== undefined && isMark([...word][head]);
+
+  /** The cluster the active step belongs to: its base index, and its marks. */
+  const cluster = useMemo(() => {
+    if (head === undefined) return null;
+    const chars = [...word];
+    let base = head;
+    while (base >= 0 && isMark(chars[base])) base--;
+    if (base < 0) return null;
+    const marks: number[] = [];
+    for (let i = base + 1; i < chars.length && isMark(chars[i]); i++) marks.push(i);
+    return { base, marks };
+  }, [word, head]);
+
+  /** clip-path for a set of measured boxes, in the wrapper's own pixels. */
+  const clipFor = (idxs: number[]): string | undefined => {
+    if (!geom) return 'inset(0 0 100% 0)';          // not measured yet: show nothing
+    const bs = idxs.map(i => boxes.get(i)).filter(Boolean) as Box[];
+    if (!bs.length) return 'inset(0 0 100% 0)';
+    const { baseline, right, size, w, h } = geom;
+    const top    = baseline + Math.min(...bs.map(b => b.top)) * size;
+    const bottom = baseline + Math.max(...bs.map(b => b.bottom)) * size;
+    const r      = right - Math.min(...bs.map(b => b.right)) * size;
+    const l      = right - Math.max(...bs.map(b => b.left)) * size;
+    return `inset(${top}px ${w - r}px ${h - bottom}px ${l}px)`;
+  };
+
+  /** One copy of the word: `red` is the index whose cluster paints, the rest vanish. */
+  const copy = (redBase: number | null, colour: string, clip?: string, key?: string) => (
+    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, clipPath: clip, pointerEvents: 'none' }}>
+      {[...word].map((ch, i) => (
+        <span key={i} style={{ color: i === redBase ? colour : 'transparent' }}>{ch}</span>
+      ))}
+    </span>
+  );
+
+  const lit = cluster && at !== null;
+  return (
+    <span ref={wrapRef} className={className} style={{ ...style, position: 'relative', display: 'inline-block' }}>
+      <span ref={baseRef}>{word}</span>
+      {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
+      <span ref={markRef} style={{ display: 'inline-block', width: 0, height: 0, verticalAlign: 'baseline' }} />
+      {lit && copy(cluster.base, '#e11d48', onMark ? clipFor([head!]) : undefined, 'red')}
+      {/* On a letter, put the cluster's marks back in the normal colour. */}
+      {lit && !onMark && cluster.marks.length > 0 &&
+        copy(cluster.base, 'currentColor', clipFor(cluster.marks), 'restore')}
+    </span>
+  );
+};
 
 /** Arabic letter count — drives the per-word font size so any word fits one line. */
 const letterCount = (w: string): number =>
@@ -355,6 +458,28 @@ const QaedahPage: React.FC<{
 
   const pct    = queue.length > 0 ? Math.round((pos / queue.length) * 100) : 0;
   const word   = queue[pos]?.word ?? '';
+
+  // ── Sounding the word out ────────────────────────────────────────────────
+  // Left walks forward through the word (Arabic reads right to left, so the
+  // left arrow is the one that moves on), right walks back. The tutor's side
+  // only: on the student's own device nobody is pressing anything, and a red
+  // letter sitting there would just be a mark they cannot explain.
+  const walking = !isStudentView;
+  const [walkAt, setWalkAt] = useState(0);
+  useEffect(() => { setWalkAt(0); }, [word, pos]);
+  useEffect(() => {
+    if (!walking || view !== 'challenge' || !word) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      const total = walkSteps(word).length;
+      setWalkAt(a => clampStep(a + (e.key === 'ArrowLeft' ? 1 : -1), total));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [walking, view, word]);
 
   // ── Praise popup overlay ──────────────────────────────────────────────────
   const praiseOverlay = popup.phase !== 'hidden' && (
@@ -785,7 +910,9 @@ const QaedahPage: React.FC<{
                   padding: '0 16px',
                 }}
               >
-                <span
+                <WalkWord
+                  word={word}
+                  at={walking ? walkAt : null}
                   style={{
                     ...HAFS,
                     fontSize: 'clamp(3.6rem, 11vw, 6rem)',
@@ -794,7 +921,7 @@ const QaedahPage: React.FC<{
                     color: '#3c4a8a',
                     whiteSpace: 'nowrap',
                   }}
-                >{word}</span>
+                />
               </div>
             </div>
           </div>
@@ -837,7 +964,9 @@ const QaedahPage: React.FC<{
               className={`flex items-center justify-center bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
               style={{ width: 'min(900px, 94vw)', height: 'min(56vh, 540px)', minHeight: 220, padding: '0 20px' }}
             >
-              <span
+              <WalkWord
+                word={word}
+                at={walking ? walkAt : null}
                 style={{
                   ...HAFS,
                   fontSize: bigWordFont,
@@ -846,7 +975,7 @@ const QaedahPage: React.FC<{
                   whiteSpace: 'nowrap',
                 }}
                 className="text-slate-700 dark:text-slate-200"
-              >{word}</span>
+              />
             </div>
           </div>
 
