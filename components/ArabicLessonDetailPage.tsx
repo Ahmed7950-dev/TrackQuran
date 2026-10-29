@@ -43,6 +43,13 @@ import ArabicFlashcard from './ArabicFlashcard';
 import { recordVocabReview } from '../services/vocabHomeworkService';
 import { PictureEditor, PictureAnswer, PictureReview, parseOverlay, blanksOf } from './HomeworkPictureItem';
 import { createNotification } from '../services/notificationService';
+import {
+  listLessonExercises, createLessonExercise, latestByExercise,
+  type LessonExercise, type ExerciseSubmission,
+} from '../services/lessonExerciseService';
+import {
+  PronounPicturesEditor, PronounPicturesRunner, PronounPicturesReview, ExerciseInbox,
+} from './PronounPicturesExercise';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -429,13 +436,14 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         )}
         {activeTab === 'homework' && (
           <div className="h-full overflow-y-auto">
-            <HomeworkTab
+            <HomeworkArea
               lessonId={lesson.id}
               lessonTitle={lesson.title}
               isAdmin={isAdmin}
               studentMode={studentMode}
               studentId={preSelectedStudentId}
               studentName={students.find(s => s.id === preSelectedStudentId)?.name}
+              nameOf={(id) => students.find(s => s.id === id)?.name ?? 'Student'}
               teacherId={teacherId}
               onHomeworkComplete={onHomeworkComplete}
             />
@@ -2159,6 +2167,177 @@ export const HomeworkTab: React.FC<{
             );
           })}
         </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════
+// HOMEWORK AREA — the writing homework, plus whatever else the lesson has
+// ═══════════════════════════════════════════════════════
+
+/**
+ * The Homework tab used to be one thing: the written homework. A lesson can
+ * now carry other exercises beside it, so the tab opens on a short list of
+ * cards — the writing, and one card per exercise the admin has published.
+ *
+ * A lesson with no extra exercises looks exactly as it always did: no list, no
+ * extra tap, the written homework straight away. The list only appears when
+ * there is a choice to make.
+ */
+const HomeworkArea: React.FC<{
+  lessonId: string;
+  lessonTitle: string;
+  isAdmin: boolean;
+  studentMode: boolean;
+  studentId?: string;
+  studentName?: string;
+  nameOf: (id: string) => string;
+  teacherId: string;
+  onHomeworkComplete?: (lessonId: string) => void;
+}> = ({ lessonId, lessonTitle, isAdmin, studentMode, studentId, studentName, nameOf, teacherId, onHomeworkComplete }) => {
+  const [exercises, setExercises] = useState<LessonExercise[] | null>(null);
+  const [latest, setLatest] = useState<Map<string, ExerciseSubmission>>(new Map());
+  /** null = the list · 'writing' = the written homework · otherwise an id. */
+  const [open, setOpen] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    // The admin sees the unpublished ones too — that is where they are built.
+    const rows = await listLessonExercises(lessonId, isAdmin);
+    setExercises(rows);
+    if (studentId) setLatest(await latestByExercise(rows.map(r => r.id), studentId));
+  }, [lessonId, isAdmin, studentId]);
+  useEffect(() => { void load(); }, [load]);
+
+  // A different lesson is a different list; never open on the last one's card.
+  useEffect(() => { setOpen(null); }, [lessonId]);
+
+  if (exercises === null) return <LoadingSpinner />;
+
+  const writing = (
+    <HomeworkTab
+      lessonId={lessonId} lessonTitle={lessonTitle}
+      isAdmin={isAdmin} studentMode={studentMode}
+      studentId={studentId} studentName={studentName}
+      teacherId={teacherId} onHomeworkComplete={onHomeworkComplete}
+    />
+  );
+
+  // Nothing else on this lesson, and nothing to add: it is just the homework.
+  if (!exercises.length && !isAdmin) return writing;
+
+  const addExercise = async () => {
+    setCreating(true);
+    const ex = await createLessonExercise(lessonId, 'Who did it? — pronouns');
+    setCreating(false);
+    if (!ex) { window.alert('Could not create the exercise.'); return; }
+    setExercises(prev => [...(prev ?? []), ex]);
+    setOpen(ex.id);
+  };
+
+  const back = (label: string) => (
+    <div className="sticky top-0 z-10 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-slate-200 dark:border-gray-700 px-4 sm:px-6 py-2.5 flex items-center gap-3">
+      <button onClick={() => { setOpen(null); void load(); }}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors">
+        ‹ Homework
+      </button>
+      <span className="text-sm font-bold text-slate-800 dark:text-white truncate">{label}</span>
+    </div>
+  );
+
+  if (open === 'writing') {
+    return <div>{back('Writing homework')}{writing}</div>;
+  }
+
+  const current = exercises.find(e => e.id === open);
+  if (current) {
+    return (
+      <div>
+        {back(current.title)}
+        {isAdmin ? (
+          <>
+            <PronounPicturesEditor
+              exercise={current}
+              onChanged={ex => setExercises(prev => (prev ?? []).map(e => e.id === ex.id ? ex : e))}
+              onDeleted={() => { setExercises(prev => (prev ?? []).filter(e => e.id !== current.id)); setOpen(null); }}
+            />
+            <ExerciseInbox exercise={current} nameOf={nameOf} />
+          </>
+        ) : studentMode ? (
+          <PronounPicturesRunner
+            exercise={current} studentId={studentId} studentName={studentName} studentMode
+            teacherId={teacherId} lessonTitle={lessonTitle}
+            onSubmitted={() => { void load(); }}
+          />
+        ) : studentId ? (
+          <PronounPicturesReview exercise={current} studentId={studentId} studentName={studentName} />
+        ) : (
+          <PronounPicturesRunner exercise={current} studentMode={false} />
+        )}
+      </div>
+    );
+  }
+
+  /* ── The list ── */
+  const card = (
+    key: string, icon: string, title: string, sub: React.ReactNode,
+    onClick: () => void, badge?: React.ReactNode,
+  ) => (
+    <button key={key} onClick={onClick}
+      className="group text-left rounded-3xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 p-5 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600 hover:-translate-y-0.5 transition-all">
+      <div className="flex items-start gap-4">
+        <span className="flex-shrink-0 w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center text-2xl">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-bold text-slate-800 dark:text-white leading-snug">{title}</h3>
+            {badge}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{sub}</p>
+        </div>
+        <span className="flex-shrink-0 self-center text-slate-300 dark:text-gray-600 group-hover:text-amber-500 transition-colors text-xl">›</span>
+      </div>
+    </button>
+  );
+
+  const scorePill = (sub: ExerciseSubmission | undefined) => {
+    if (!sub) return null;
+    const full = sub.total > 0 && sub.score === sub.total;
+    return (
+      <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+        full ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+             : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+        {sub.score}/{sub.total}
+      </span>
+    );
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-3">
+      <h2 className="text-lg font-bold text-slate-800 dark:text-white">Homework</h2>
+      <div className="grid gap-3">
+        {card('writing', '✍️', 'Writing homework',
+          studentMode ? 'The questions your tutor wrote for this lesson' : 'The written questions for this lesson',
+          () => setOpen('writing'))}
+
+        {exercises.map(ex => card(
+          ex.id, '🧩', ex.title,
+          <>
+            {ex.rounds.length} {ex.rounds.length === 1 ? 'round' : 'rounds'}
+            {!ex.published && <span className="ml-2 text-amber-600 dark:text-amber-400 font-bold">· not published</span>}
+            {latest.get(ex.id)?.status === 'returned' && <span className="ml-2 text-emerald-600 dark:text-emerald-400 font-bold">· checked</span>}
+            {latest.get(ex.id)?.status === 'submitted' && <span className="ml-2 text-sky-600 dark:text-sky-400 font-bold">· sent in</span>}
+          </>,
+          () => setOpen(ex.id),
+          scorePill(latest.get(ex.id)),
+        ))}
+      </div>
+
+      {isAdmin && (
+        <button onClick={addExercise} disabled={creating}
+          className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-500 dark:text-slate-400 hover:border-amber-400 hover:text-amber-600 transition-colors disabled:opacity-50">
+          {creating ? 'Creating…' : '＋ Add a special exercise'}
+        </button>
       )}
     </div>
   );
