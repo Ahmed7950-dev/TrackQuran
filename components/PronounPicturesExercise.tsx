@@ -86,27 +86,38 @@ const PictureTile: React.FC<{
           <span className="absolute inset-0 flex items-center justify-center text-3xl text-slate-300 dark:text-gray-600">🖼</span>
         )}
         {(audioUrl || pic?.hoverUrl) && (
-          <span className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/45 backdrop-blur text-white text-xs flex items-center justify-center opacity-80 group-hover:opacity-100">
+          <span className="absolute top-2 right-2 w-9 h-9 rounded-full bg-black/45 backdrop-blur text-white text-base flex items-center justify-center opacity-80 group-hover:opacity-100">
             {audioUrl ? '🔊' : '👀'}
           </span>
         )}
         {state === 'right' && (
-          <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold shadow">✓</span>
+          <span className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-emerald-500 text-white text-sm font-bold shadow">✓</span>
         )}
       </button>
       {label && (
         <div className="text-center leading-tight">
-          <div dir="rtl" className="text-lg font-bold text-slate-800 dark:text-slate-100">{label.arabic || '—'}</div>
-          {label.translit && <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">{label.translit}</div>}
+          <div dir="rtl" className="text-2xl font-bold text-slate-800 dark:text-slate-100">{label.arabic || '—'}</div>
+          {label.translit && <div className="text-sm text-slate-500 dark:text-slate-400 italic">{label.translit}</div>}
         </div>
       )}
     </div>
   );
 };
 
-/** The four, across on a screen with room and two-by-two on a phone. */
+/**
+ * The four, across on a screen with room and two-by-two on a phone.
+ *
+ * They take the whole width they are given — but a square that fills a wide
+ * screen is TALLER than the screen, and the question underneath would be
+ * pushed off the bottom. So the row is also capped by the height left over:
+ * four tiles plus three gaps can never be wider than four times the space
+ * there is to be tall in. Whichever runs out first decides.
+ */
 const TileRow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">{children}</div>
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5 w-full mx-auto"
+    style={{ maxWidth: 'calc((100dvh - 23rem) * 4 + 3.75rem)' }}>
+    {children}
+  </div>
 );
 
 const Pill: React.FC<{ tone: 'ok' | 'bad' | 'wait'; children: React.ReactNode }> = ({ tone, children }) => (
@@ -212,16 +223,16 @@ export const PronounPicturesRunner: React.FC<{
   }
 
   return (
-    <div ref={topRef} className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div ref={topRef} className="max-w-[1700px] mx-auto px-4 sm:px-8 py-5 space-y-5">
       {/* ── The score, once it has been handed in ── */}
       {done && (
         <div className={`rounded-2xl p-5 text-center border-2 ${
           done.score === done.total
             ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700'
             : 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'}`}>
-          <div className="text-4xl mb-1">{done.score === done.total ? '🌟' : '💪'}</div>
-          <div className="text-3xl font-extrabold text-slate-800 dark:text-white">{done.score} / {done.total}</div>
-          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+          <div className="text-5xl mb-1">{done.score === done.total ? '🌟' : '💪'}</div>
+          <div className="text-5xl font-extrabold text-slate-800 dark:text-white">{done.score} / {done.total}</div>
+          <p className="text-base text-slate-600 dark:text-slate-300 mt-1">
             {done.status === 'returned'
               ? 'Your tutor has checked this.'
               : 'Sent to your tutor. The right answers are below.'}
@@ -234,7 +245,7 @@ export const PronounPicturesRunner: React.FC<{
           {studentMode && (
             <div className="mt-4">
               <button onClick={again}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold shadow-sm active:scale-95 transition-all">
+                className="px-7 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-base font-bold shadow-sm active:scale-95 transition-all">
                 Try it again
               </button>
             </div>
@@ -243,7 +254,7 @@ export const PronounPicturesRunner: React.FC<{
       )}
 
       {!done && (
-        <div className="rounded-2xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 px-4 py-3 text-sm text-sky-800 dark:text-sky-200">
+        <div className="rounded-2xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 px-5 py-3.5 text-base sm:text-lg text-sky-800 dark:text-sky-200 text-center">
           Point at a picture to hear who it is, then write the pronoun that answers the question.
         </div>
       )}
@@ -258,14 +269,14 @@ export const PronounPicturesRunner: React.FC<{
             className={`rounded-3xl bg-white dark:bg-gray-800 border shadow-sm overflow-hidden ${
               mark ? (mark.correct ? 'border-emerald-300 dark:border-emerald-700' : 'border-red-300 dark:border-red-700')
                    : 'border-slate-200 dark:border-gray-700'}`}>
-            <header className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-50 dark:bg-gray-700/40 border-b border-slate-200 dark:border-gray-700">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <header className="flex items-center justify-between gap-3 px-6 py-3.5 bg-slate-50 dark:bg-gray-700/40 border-b border-slate-200 dark:border-gray-700">
+              <span className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Round {ri + 1} <span className="text-slate-300 dark:text-gray-600">/ {rounds.length}</span>
               </span>
               {mark && (mark.correct ? <Pill tone="ok">✓ Correct</Pill> : <Pill tone="bad">✗ Not right</Pill>)}
             </header>
 
-            <div className="p-5 space-y-5">
+            <div className="p-4 sm:p-6 space-y-5">
               <TileRow>
                 {SLOTS.map((s, i) => (
                   <PictureTile key={s.key}
@@ -280,26 +291,26 @@ export const PronounPicturesRunner: React.FC<{
                 ))}
               </TileRow>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <p dir="auto" className="flex-1 text-lg sm:text-xl font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">
-                  {round.question || <span className="text-slate-400 italic text-base">No question written yet</span>}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-center gap-4 sm:gap-6 max-w-4xl mx-auto w-full">
+                <p dir="auto" className="flex-1 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">
+                  {round.question || <span className="text-slate-400 italic text-lg">No question written yet</span>}
                 </p>
-                <div className="sm:w-56 flex-shrink-0">
+                <div className="sm:w-64 flex-shrink-0">
                   <input
                     dir="auto"
                     value={typed}
                     readOnly={!!done || !studentMode}
                     onChange={e => setAnswers(p => ({ ...p, [round.id]: e.target.value }))}
                     placeholder="write the pronoun"
-                    className={`w-full px-4 py-3 rounded-xl border-2 text-center text-xl font-bold bg-white dark:bg-gray-700 dark:text-white focus:outline-none transition-colors ${
+                    className={`w-full px-4 py-4 rounded-2xl border-2 text-center text-2xl font-bold bg-white dark:bg-gray-700 dark:text-white focus:outline-none transition-colors ${
                       mark ? (mark.correct ? 'border-emerald-400 text-emerald-700 dark:text-emerald-300'
                                            : 'border-red-400 text-red-600 dark:text-red-300')
                            : 'border-slate-300 dark:border-gray-600 focus:border-amber-500 focus:ring-2 focus:ring-amber-200'}`}
                   />
                   {mark && !mark.correct && right && (
-                    <p dir="rtl" className="mt-1.5 text-center text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    <p dir="rtl" className="mt-2 text-center text-lg font-bold text-emerald-600 dark:text-emerald-400">
                       {right.arabic}
-                      {right.translit && <span dir="ltr" className="block text-[11px] italic font-medium text-slate-500">{right.translit}</span>}
+                      {right.translit && <span dir="ltr" className="block text-sm italic font-medium text-slate-500">{right.translit}</span>}
                     </p>
                   )}
                 </div>
@@ -311,12 +322,12 @@ export const PronounPicturesRunner: React.FC<{
 
       {/* ── Hand it in ── */}
       {studentMode && !done && (
-        <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-gradient-to-t from-white via-white dark:from-gray-900 dark:via-gray-900 to-transparent">
+        <div className="sticky bottom-0 -mx-4 sm:-mx-8 px-4 sm:px-8 py-4 bg-gradient-to-t from-white via-white dark:from-gray-900 dark:via-gray-900 to-transparent">
           {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400 text-center">{error}</p>}
           <button
             onClick={submit}
             disabled={unanswered > 0 || sending}
-            className="w-full py-3.5 rounded-2xl text-white text-base font-bold shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600">
+            className="w-full max-w-4xl mx-auto block py-4 rounded-2xl text-white text-lg font-bold shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600">
             {sending ? 'Sending…'
               : unanswered > 0 ? `Answer all ${rounds.length} rounds to send (${unanswered} left)`
               : 'Send my answers to my tutor'}
@@ -396,7 +407,7 @@ export const PronounPicturesReview: React.FC<{
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+    <div className="max-w-[1700px] mx-auto px-4 sm:px-8 py-5 space-y-5">
       <div className="rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 p-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="font-bold text-slate-800 dark:text-white">{studentName ?? 'Student'}’s answers</h3>
@@ -430,7 +441,7 @@ export const PronounPicturesReview: React.FC<{
                 </button>
               </div>
             </header>
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <TileRow>
                 {SLOTS.map((s, i) => (
                   <PictureTile key={s.key} pic={round.pics?.[i]} audioUrl={exercise.slots[i]?.audioUrl} onPlay={play}
@@ -599,7 +610,7 @@ export const PronounPicturesEditor: React.FC<{
   const inp = 'w-full px-3 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white';
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
 
       {/* ── Title · publish · delete ── */}
