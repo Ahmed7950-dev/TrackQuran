@@ -79,7 +79,7 @@ const PictureTile: React.FC<{
         onFocus={show}
         onBlur={hide}
         style={{ touchAction: 'manipulation' }}
-        className={`group relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-100 dark:bg-gray-700 ${ring} transition-all duration-150 ${on ? 'scale-[1.03] shadow-lg' : 'shadow-sm'} ${state === 'muted' ? 'opacity-60' : ''}`}>
+        className={`group relative w-full aspect-[1/2] rounded-2xl overflow-hidden bg-slate-100 dark:bg-gray-700 ${ring} transition-all duration-150 ${on ? 'scale-[1.03] shadow-lg' : 'shadow-sm'} ${state === 'muted' ? 'opacity-60' : ''}`}>
         {url ? (
           <img src={url} alt="" draggable={false} className="w-full h-full object-cover" />
         ) : (
@@ -107,15 +107,17 @@ const PictureTile: React.FC<{
 /**
  * The four, across on a screen with room and two-by-two on a phone.
  *
- * They take the whole width they are given — but a square that fills a wide
- * screen is TALLER than the screen, and the question underneath would be
- * pushed off the bottom. So the row is also capped by the height left over:
- * four tiles plus three gaps can never be wider than four times the space
- * there is to be tall in. Whichever runs out first decides.
+ * They take the whole width they are given — but the pictures are portrait,
+ * twice as tall as they are wide, so a row that fills a wide screen is far
+ * TALLER than the screen and the question underneath is pushed off the bottom.
+ * So the row is also capped by the height left over: a tile can be no wider
+ * than half the space there is to be tall in. Whichever runs out first decides.
  */
-const TileRow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5 w-full mx-auto"
-    style={{ maxWidth: 'calc((100dvh - 23rem) * 4 + 3.75rem)' }}>
+const TileRow: React.FC<{ children: React.ReactNode; beside?: boolean }> = ({ children, beside }) => (
+  <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5 w-full mx-auto max-w-[calc((100dvh_-_23rem)_*_2_+_3.75rem)] ${
+    // With the question beside them rather than under them there is more
+    // height to play with, so the pictures may be wider.
+    beside ? 'xl:max-w-[calc((100dvh_-_19rem)_*_2_+_3.75rem)]' : ''}`}>
     {children}
   </div>
 );
@@ -276,8 +278,8 @@ export const PronounPicturesRunner: React.FC<{
               {mark && (mark.correct ? <Pill tone="ok">✓ Correct</Pill> : <Pill tone="bad">✗ Not right</Pill>)}
             </header>
 
-            <div className="p-4 sm:p-6 space-y-5">
-              <TileRow>
+            <div className="p-4 sm:p-6 flex flex-col xl:flex-row xl:items-center gap-5 xl:gap-8">
+              <TileRow beside>
                 {SLOTS.map((s, i) => (
                   <PictureTile key={s.key}
                     pic={round.pics?.[i]}
@@ -291,11 +293,11 @@ export const PronounPicturesRunner: React.FC<{
                 ))}
               </TileRow>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-center gap-4 sm:gap-6 max-w-4xl mx-auto w-full">
-                <p dir="auto" className="flex-1 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800 dark:text-slate-100 leading-relaxed">
+              <div className="flex flex-col sm:flex-row sm:items-center xl:flex-col xl:items-stretch justify-center gap-4 sm:gap-6 max-w-4xl xl:max-w-none mx-auto w-full xl:w-[22rem] xl:flex-shrink-0">
+                <p dir="auto" className="flex-1 xl:flex-none text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-800 dark:text-slate-100 leading-relaxed xl:text-center">
                   {round.question || <span className="text-slate-400 italic text-lg">No question written yet</span>}
                 </p>
-                <div className="sm:w-64 flex-shrink-0">
+                <div className="sm:w-64 xl:w-full flex-shrink-0">
                   <input
                     dir="auto"
                     value={typed}
@@ -728,7 +730,7 @@ export const PronounPicturesEditor: React.FC<{
 
                     {/* The picture the student sees first */}
                     <button onClick={() => pickPic(ri, si, 'url')}
-                      className="relative w-full aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-gray-700 hover:ring-2 hover:ring-amber-400 transition-all">
+                      className="relative w-full aspect-[1/2] rounded-xl overflow-hidden bg-slate-100 dark:bg-gray-700 hover:ring-2 hover:ring-amber-400 transition-all">
                       {pic.url
                         ? <img src={pic.url} alt="" className="w-full h-full object-cover" />
                         : <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
@@ -739,10 +741,10 @@ export const PronounPicturesEditor: React.FC<{
 
                     {/* The one it swaps to while being pointed at */}
                     <button onClick={() => pickPic(ri, si, 'hoverUrl')}
-                      className="relative w-full h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-gray-700 hover:ring-2 hover:ring-amber-400 transition-all">
+                      className="relative w-1/2 mx-auto aspect-[1/2] rounded-xl overflow-hidden bg-slate-100 dark:bg-gray-700 hover:ring-2 hover:ring-amber-400 transition-all">
                       {pic.hoverUrl
                         ? <img src={pic.hoverUrl} alt="" className="w-full h-full object-cover" />
-                        : <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-400">＋ hover picture</span>}
+                        : <span className="absolute inset-0 flex flex-col items-center justify-center text-[10px] font-semibold text-slate-400 leading-tight">＋<br />hover</span>}
                       {busyPic === `${ri}:${si}:hoverUrl` && <span className="absolute inset-0 bg-black/40 text-white text-xs flex items-center justify-center">uploading…</span>}
                     </button>
 
