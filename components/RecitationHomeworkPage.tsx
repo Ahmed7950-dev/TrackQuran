@@ -16,7 +16,7 @@
 // Each take is uploaded as soon as it stops — so leaving the page loses
 // nothing — and replaces the previous one (see saveVerseRecording).
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getVersesForSurah } from '../services/dataService';
 import {
   splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT,
@@ -95,11 +95,30 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [prevPlaying, setPrevPlaying] = useState(false);
   // Viewport width — the verse and the comment pills scale with it (see LH).
   const [vw, setVw] = useState(() => window.innerWidth);
+  const [vh, setVh] = useState(() => window.innerHeight);
   useEffect(() => {
-    const on = () => setVw(window.innerWidth);
+    const on = () => { setVw(window.innerWidth); setVh(window.innerHeight); };
     window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
+    window.addEventListener('orientationchange', on);
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on); };
   }, []);
+
+  // ── The verse is drawn at the size the room allows ───────────────────────
+  //
+  // An iPad held sideways leaves about four hundred pixels for the verse, and
+  // a long one — Al-Ahzab 4 — wants eleven hundred. It used to simply run on
+  // underneath the record button, which floated over it; now that the controls
+  // keep their own space, it would instead be a five-line verse read through a
+  // one-line window. Neither is a way to recite.
+  //
+  // So: draw it at the size the clamp asks for, measure what did not fit, and
+  // come down by exactly that much. Smaller words wrap into fewer lines than
+  // the arithmetic assumes, so the second pass lands inside with a little to
+  // spare rather than needing a third — and `fit` is only ever measured on a
+  // full-size pass, so the two effects cannot chase each other.
+  const [fit, setFit] = useState(1);
+  const stageRef = useRef<HTMLElement>(null);
+  const verseRef = useRef<HTMLParagraphElement>(null);
   /** Takes recorded in this visit, playable instantly before the upload's URL. */
   const localUrls = useRef<Record<string, string>>({});
   /** Hifz: the verses the student has opened, and whether even the first words are hidden. */
@@ -199,6 +218,22 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   }, [teacherId]);
 
   const [liveMistakes, setLiveMistakes] = useState<Record<string, Mistake> | null>(null);
+
+  /** Anything that changes what is on the page starts again at full size. */
+  useLayoutEffect(() => { setFit(1); }, [texts, idx, vw, vh, liveMistakes, rec]);
+  useLayoutEffect(() => {
+    if (fit !== 1) return;                       // already measured and sized
+    const box = stageRef.current, p = verseRef.current;
+    if (!box || !p) return;
+    const over = box.scrollHeight - box.clientHeight;
+    if (over <= 1) return;                       // it fits; leave it alone
+    const h = p.getBoundingClientRect().height;
+    if (h <= 0) return;
+    // Never below 45%: past that a verse is too small to read, and scrolling
+    // the card is the better answer.
+    setFit(Math.max(0.45, (h - over - 6) / h));
+  }, [fit, texts, idx, vw, vh, liveMistakes, rec]);
+
   /** Quran.com's own word list per surah, for the word-by-word recitation. Only
    *  fetched for a homework that carries mistakes — a fresh one has none. */
   const [wbw, setWbw] = useState<Record<number, Map<string, WbwWord[]>>>({});
@@ -456,8 +491,11 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const DISPLAY = "'Fraunces', Georgia, serif";
   const BODY = "'Figtree', system-ui, sans-serif";
 
-  const shell = (children: React.ReactNode) => (
-    <div className="min-h-[100dvh]"
+  const shell = (children: React.ReactNode, fill = false) => (
+    // `fill`: the page IS the screen and never scrolls as a whole — the verse
+    // scrolls inside its own card instead, so the controls below it can never
+    // end up on top of the words being recorded.
+    <div className={fill ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh]'}
       style={{
         background: P.page, color: P.ink, fontFamily: BODY,
         // Installed on a home screen there is no browser chrome, so without
@@ -544,7 +582,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // so it is worked out in px and turned back into a line-height ratio. The
   // numbers mirror the two clamp()s below: verse clamp(2.4rem, 6.2vw, 6.5rem),
   // pill clamp(11px, 1.6vw, 15px); a pill is ~1.25 lines + padding + border.
-  const versePx = Math.min(104, Math.max(38.4, vw * 0.062));
+  // `fit` is the shrink the measurement asked for; the pills are a fixed px
+  // size, so the gap they need is worked out from the size ACTUALLY drawn.
+  const versePx = Math.min(104, Math.max(38.4, vw * 0.062)) * fit;
   const pillPx = Math.min(15, Math.max(11, vw * 0.016));
   const LH = verseHasComments ? Math.round((2.1 + (pillPx * 1.25 + 22) / versePx) * 100) / 100 : 2.1;
   const verseMistakeCount = Object.entries(mistakes)
@@ -809,7 +849,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     : null;
 
   return shell(
-    <div className="w-full px-3 sm:px-8 lg:px-14 py-4 sm:py-8 flex flex-col gap-3 sm:gap-6 min-h-[100dvh]">
+    <div className="w-full h-full px-3 sm:px-8 lg:px-14 py-4 sm:py-8 flex flex-col gap-3 sm:gap-6">
       <style>{`
         @keyframes rh-bar { 0%,100% { height: 30% } 50% { height: 100% } }
         .rh-bar { animation: rh-bar .8s ease-in-out infinite; }
@@ -948,7 +988,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       </header>
 
       {/* ── The verse — tap to hear Al-Minshawi ── */}
-      <main className="flex-grow flex flex-col rounded-[24px] sm:rounded-[32px] p-2.5 sm:p-3.5" style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
+      <main ref={stageRef} className="flex-grow min-h-0 overflow-y-auto overscroll-contain flex flex-col rounded-[24px] sm:rounded-[32px] p-2.5 sm:p-3.5" style={{ background: P.card, border: `1px solid ${P.cardBorder}` }}>
         {/* Reassigned homework: the take the teacher listened to and marked */}
         {prevTake && (
           <button onClick={playPrev} disabled={take === 'recording'}
@@ -967,7 +1007,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         {isHifz ? hifzStage : (
         <button onClick={playMinshawi} disabled={take === 'recording' || !text}
           aria-label={`Play Al-Minshawi reciting ${surahName?.transliteratedName} verse ${a}`}
-          className="flex-grow flex flex-col items-center justify-center gap-4 sm:gap-6 rounded-[18px] sm:rounded-[22px] px-3 sm:px-10 py-6 sm:py-10 transition-colors"
+          className="flex-grow flex flex-col items-center justify-center gap-4 sm:gap-6 rounded-[18px] sm:rounded-[22px] px-3 sm:px-10 py-6 sm:py-10 transition-colors [@media(max-height:880px)]:py-3 [@media(max-height:880px)]:gap-3"
           style={{ background: P.stage, border: `${theme === 'morning' ? 2 : 1}px solid ${minshawiPlaying ? P.primary : P.stageBorder}` }}>
           <span className="flex items-center gap-3 text-[12px] sm:text-[14px] font-semibold tracking-[0.06em]" style={{ color: P.goldInk }}>
             <span className="hidden sm:block w-10 h-px" style={{ background: P.gold }} />
@@ -982,8 +1022,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             </span>
           )}
           {text ? (
-            <p dir="rtl" lang="ar" className="font-quranic m-0 text-center break-words"
-              style={{ color: P.verseInk, fontSize: 'clamp(2.4rem, 6.2vw, 6.5rem)', lineHeight: LH }}>
+            <p ref={verseRef} dir="rtl" lang="ar" className="font-quranic m-0 text-center break-words"
+              style={{ color: P.verseInk, fontSize: `${versePx}px`, lineHeight: LH }}>
               {splitVerseWords(text).map((w, i, arr) => (
                 <React.Fragment key={i}>{markedWord(w, i)}{i < arr.length - 1 ? ' ' : ''}</React.Fragment>
               ))}
@@ -1008,9 +1048,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       {/* ── The one-off word-audio tip ── */}
       {tip && (
         <div role="status"
-          className="sticky z-40 mx-auto mb-2 flex items-start gap-3 rounded-2xl px-4 py-3 max-w-xl"
+          className="flex-shrink-0 mx-auto flex items-start gap-3 rounded-2xl px-4 py-3 max-w-xl"
           style={{
-            bottom: 'calc(6.5rem + env(safe-area-inset-bottom))',
             background: theme === 'night' ? 'rgba(20,83,45,.92)' : '#ECFDF5',
             border: `1.5px solid ${theme === 'night' ? '#15803D' : '#6EE7B7'}`,
             color: theme === 'night' ? '#D1FAE5' : '#065F46',
@@ -1028,9 +1067,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       )}
 
       {/* ── Controls — pinned to the bottom while a long verse scrolls ── */}
-      <footer className="sticky z-30 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
+      <footer className="flex-shrink-0 rounded-[24px] px-3 sm:px-6 py-3 sm:py-4 flex flex-col items-center gap-2.5"
         style={{
-          bottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
           background: P.card,
           border: `1px solid ${take === 'recording' ? P.recordingSoft : P.cardBorder}`,
           boxShadow: theme === 'night' ? '0 18px 40px -20px rgba(0,0,0,.8)' : '0 18px 40px -22px rgba(120,90,40,.45)',
@@ -1090,6 +1128,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         {error && <p className="text-center text-[14px] font-semibold" style={{ color: P.recording }}>{error}</p>}
       </footer>
     </div>,
+    true,
   );
 };
 
