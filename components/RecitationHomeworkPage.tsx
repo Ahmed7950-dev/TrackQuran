@@ -47,6 +47,13 @@ const MAX_TAKE_MS = 5 * 60 * 1000;
  * child whispering across the room clears it by a factor of ten.
  */
 const SILENT_PEAK = 0.01;
+/**
+ * Below this a take was heard, but barely — a microphone across the room, a
+ * hand over it, a child who turned away from the tablet. It is kept, because
+ * it may well be good enough and only the student can judge that, but it is
+ * worth a word before the teacher is the one who discovers it.
+ */
+const FAINT_PEAK = 0.05;
 
 const toArabicDigits = (n: number): string => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 const fmtSecs = (ms: number): string => {
@@ -198,6 +205,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const meterOkRef = useRef(false);
   const meterRef = useRef<HTMLDivElement>(null);
   const [quiet, setQuiet] = useState(false);
+  /** Not a failure — a take that saved but came in faint. */
+  const [faint, setFaint] = useState('');
 
   useEffect(() => {
     document.title = 'Recitation homework';
@@ -478,6 +487,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     if (!rec || (!verses[idx] && rec.kind !== 'hifz')) return;
     const whole = rec.kind === 'hifz';
     setError('');
+    setFaint('');
     stopAudio();
     // Retire any recorder still alive from an earlier take before opening a new one.
     const stale = recorderRef.current;
@@ -533,8 +543,11 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         ? await saveWholeRecording(rec.id, blob, ms)
         : await saveVerseRecording(rec.id, s, a, blob, ms);
       setTake('idle');
-      if (saved) setRec(saved);
-      else setError('Your recording could not be saved — check your connection and record again.');
+      if (!saved) { setError('Your recording could not be saved — check your connection and record again.'); return; }
+      setRec(saved);
+      if (meterOkRef.current && peakRef.current < FAINT_PEAK) {
+        setFaint('Saved — but that one came out very quiet. Hold the microphone closer and record again if you can.');
+      }
     };
     recorderRef.current = r;
     startedAtRef.current = Date.now();
@@ -1221,6 +1234,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             </button>)}
         </div>
         {error && <p className="text-center text-[14px] font-semibold" style={{ color: P.recording }}>{error}</p>}
+        {!error && faint && (
+          <p className="text-center text-[14px] font-semibold" style={{ color: P.goldInk }}>{faint}</p>
+        )}
       </footer>
     </div>,
     true,
