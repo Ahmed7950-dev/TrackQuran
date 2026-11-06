@@ -37,6 +37,16 @@ import {
 } from '../services/recitationHomeworkService';
 
 const MAX_TAKE_MS = 5 * 60 * 1000;
+/**
+ * The loudest sample a take must reach to count as having heard anything.
+ *
+ * A microphone the browser hands over but the machine never feeds — muted in
+ * the system settings, held by another app, a headset whose mic is not the
+ * input — records a perfectly valid file of nothing. One came in at a peak of
+ * 0.003 where a real recitation peaks near 0.9, so 0.01 is a wide moat: a
+ * child whispering across the room clears it by a factor of ten.
+ */
+const SILENT_PEAK = 0.01;
 
 const toArabicDigits = (n: number): string => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[Number(d)]);
 const fmtSecs = (ms: number): string => {
@@ -178,6 +188,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const minshawiRef = useRef<HTMLAudioElement | null>(null);
   const mineRef = useRef<HTMLAudioElement | null>(null);
   const prevRef = useRef<HTMLAudioElement | null>(null);
+  // Listening to the microphone while it records, so silence is visible as it
+  // happens rather than discovered by the teacher days later.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const micSrcRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const levelRafRef = useRef<number | null>(null);
+  const peakRef = useRef(0);
+  /** False if the meter could not be set up — then nothing may be judged by it. */
+  const meterOkRef = useRef(false);
+  const meterRef = useRef<HTMLDivElement>(null);
+  const [quiet, setQuiet] = useState(false);
 
   useEffect(() => {
     document.title = 'Recitation homework';
@@ -320,12 +340,61 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
   useEffect(() => { stopAudio(); }, [idx]);
 
+  const stopLevelWatch = () => {
+    if (levelRafRef.current) { cancelAnimationFrame(levelRafRef.current); levelRafRef.current = null; }
+    try { micSrcRef.current?.disconnect(); } catch { /* already gone */ }
+    micSrcRef.current = null;
+  };
+
+  /** Tap the live stream and drive the meter from it. */
+  const watchLevel = (stream: MediaStream) => {
+    peakRef.current = 0;
+    meterOkRef.current = false;
+    setQuiet(false);
+    try {
+      const Ctx: typeof AudioContext | undefined =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = audioCtxRef.current ?? (audioCtxRef.current = new Ctx());
+      void ctx.resume().catch(() => { /* a gesture already opened it */ });
+      const src = ctx.createMediaStreamSource(stream);
+      const an = ctx.createAnalyser();
+      an.fftSize = 1024;
+      src.connect(an);              // analyser only — nothing reaches the speakers
+      micSrcRef.current = src;
+      meterOkRef.current = true;
+      const buf = new Float32Array(an.fftSize);
+      const tick = () => {
+        levelRafRef.current = requestAnimationFrame(tick);
+        an.getFloatTimeDomainData(buf);
+        let p = 0;
+        for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > p) p = v; }
+        if (p > peakRef.current) peakRef.current = p;
+        // Decibels, not amplitude: a voice fills most of the bar instead of
+        // flicking along the bottom of it.
+        const m = meterRef.current;
+        if (m) m.style.transform = `scaleX(${Math.min(1, Math.max(0, (20 * Math.log10(p || 1e-9) + 60) / 60))})`;
+        // Give them a couple of seconds to begin before saying anything.
+        if (Date.now() - startedAtRef.current > 2500) setQuiet(peakRef.current < SILENT_PEAK);
+      };
+      tick();
+    } catch {
+      // No meter. The take is then saved unjudged — better than refusing a
+      // recitation we simply could not measure.
+      meterOkRef.current = false;
+    }
+  };
+
   const releaseMic = () => {
+    stopLevelWatch();
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
     if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
   };
-  useEffect(() => () => { releaseMic(); stopAudio(); wordAudioRef.current?.pause(); }, []);
+  useEffect(() => () => {
+    releaseMic(); stopAudio(); wordAudioRef.current?.pause();
+    void audioCtxRef.current?.close().catch(() => { /* already closed */ });
+  }, []);
 
   const editable = !!rec && !rec.purgedAt && !followUp
     && (rec.status === 'assigned' || rec.status === 'needs_revision');
@@ -449,6 +518,13 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       const ms = Date.now() - startedAtRef.current;
       const blob = new Blob(chunks, { type: r.mimeType || mime || 'audio/webm' });
       if (blob.size === 0 || ms < 400) { setTake('idle'); setError('That recording was empty — hold on a moment longer and try again.'); return; }
+      // A take with nothing in it is worth less than no take at all: it looks
+      // finished to the student and arrives silent to the teacher.
+      if (meterOkRef.current && peakRef.current < SILENT_PEAK) {
+        setTake('idle');
+        setError('Nothing was heard — that recording is silent. Check that the microphone is not muted and that no other app is using it, then record again.');
+        return;
+      }
       const k = whole ? WHOLE_TAKE : `${s}:${a}`;
       if (localUrls.current[k]) URL.revokeObjectURL(localUrls.current[k]);
       localUrls.current[k] = URL.createObjectURL(blob);
@@ -463,6 +539,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     recorderRef.current = r;
     startedAtRef.current = Date.now();
     setElapsed(0);
+    watchLevel(stream);
     r.start(1000);
     setTake('recording');
     tickRef.current = window.setInterval(() => {
@@ -855,6 +932,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         .rh-bar { animation: rh-bar .8s ease-in-out infinite; }
         @keyframes rh-halo { 0% { transform: scale(1); opacity: .45 } 100% { transform: scale(1.55); opacity: 0 } }
         .rh-halo { animation: rh-halo 1.3s ease-out infinite; }
+        .rh-meter { transform: scaleX(0); transform-origin: left; will-change: transform; }
       `}</style>
 
       {/* ── Header: progress, title, tools, submit, verse chips ── */}
@@ -1078,6 +1156,23 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
             {take === 'recording' && <span className="w-2.5 h-2.5 rounded-full" style={{ background: P.recording }} />}
             {liveLine.text}
             {(take === 'recording' || minePlaying) && bars(liveLine.color, true)}
+          </div>
+        )}
+
+        {/* What the microphone is actually hearing — a flat bar means nothing
+            is going in, which no child would otherwise notice until it is
+            too late. */}
+        {take === 'recording' && (
+          <div className="w-full max-w-[18rem] flex flex-col items-center gap-1.5">
+            <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: P.hint }}>
+              <div ref={meterRef} className="rh-meter w-full h-full rounded-full"
+                style={{ background: quiet ? P.recording : P.primary }} />
+            </div>
+            <span className="text-[12px] font-semibold text-center" style={{ color: quiet ? P.recording : P.faint }}>
+              {quiet
+                ? 'Nothing is reaching the microphone — check it is not muted'
+                : 'The bar moves when it hears you'}
+            </span>
           </div>
         )}
         <div className="flex items-center justify-center gap-4 sm:gap-7">
