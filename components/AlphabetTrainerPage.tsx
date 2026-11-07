@@ -1145,6 +1145,7 @@ const AlphabetTrainerPage: React.FC<{
         <LettersHunterChallenge
           letters={selectedLetters}
           student={logTarget}
+          form={letterForm}
           onExit={() => setView('select')}
           onFinish={(title, detail, sourceId) => {
             if (!logTarget || !onLogActivity) return;

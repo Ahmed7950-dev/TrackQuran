@@ -20,10 +20,10 @@ import { letterAudioUrl, speakLetter, warmSpeech, SET_MARK } from '../services/l
 import {
   SUBS, subMeta, defaultPlan, playOrder, buildRow, targetsOf, sameCell, cellText, cellAudioSet,
   tally, logTitle, logDetail, dotsOf, introLine, enoughLetters, scoreOf,
-  buildSayItem, buildSyllable, loadWords, loadVerses, pickItems, foldChar, refLabel,
-  MIN_ROUNDS, MAX_ROUNDS, MIN_LETTERS, MAX_LETTERS,
+  buildSayItem, buildSyllable, buildShowRun, loadWords, loadVerses, pickItems, foldChar, refLabel,
+  inPosition, MIN_ROUNDS, MAX_ROUNDS, MIN_LETTERS, MAX_LETTERS,
   type HunterPlan, type SubId, type SubScore, type HunterRow, type HunterResult, type ShowItem,
-  type RoundResult, type SubMeta,
+  type RoundResult, type SubMeta, type HunterForm,
 } from '../services/lettersHunterService';
 import { segmentWord } from '../services/tajweedColorService';
 import {
@@ -84,13 +84,21 @@ export const Cross: React.FC<{ size?: number }> = ({ size = 15 }) => (
 
 /* ── Setting it up ───────────────────────────────────────────────────────── */
 
+/** How the hunt names the position, for the one line that says which it is. */
+const FORM_WORD: Record<HunterForm, string> = {
+  isolated: 'on their own', initial: 'at the beginning of a word',
+  medial: 'in the middle of a word', final: 'at the end of a word',
+};
+
 export const LettersHunterSetup: React.FC<{
   letters: string[];
   /** Absent when no student is open — then it can only be run, not set. */
   student?: { id: string; name: string } | null;
+  /** The position picked on the alphabet table, carried through every round. */
+  form?: HunterForm;
   onStart: (plan: HunterPlan) => void;
   onClose: () => void;
-}> = ({ letters, student, onStart, onClose }) => {
+}> = ({ letters, student, form = 'isolated', onStart, onClose }) => {
   const [plan, setPlan] = useState<HunterPlan>(defaultPlan);
   const [setting, setSetting] = useState(false);
   const [due, setDue] = useState<'open' | '3' | '7' | 'date'>('7');
@@ -157,12 +165,17 @@ export const LettersHunterSetup: React.FC<{
             <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: C.body }}>
               Turn off what you do not want today. The rounds run one after the other.
             </p>
+            {form !== 'isolated' && (
+              <p className="m-0 mt-1.5 text-[13px] font-bold" style={{ color: C.coral }}>
+                Shown {FORM_WORD[form]} — the shape chosen on the table.
+              </p>
+            )}
           </div>
           <div className="flex-shrink-0 flex items-center gap-2.5">
             {letters.map(l => (
               <span key={l} lang="ar" dir="rtl" className="flex items-center justify-center w-[62px] h-[62px] rounded-[17px]"
                 style={{ background: C.raised, border: `1px solid ${C.coral}`, fontFamily: ARABIC, fontSize: 38, color: C.cream }}>
-                {l}
+                {inPosition(l, form)}
               </span>
             ))}
           </div>
@@ -405,10 +418,13 @@ export const RowRound: React.FC<{
   rounds: number;
   showNumbers: boolean;
   lastLabel: string;
+  /** The shape every cell is drawn in. The SOUND never changes with it: ـحـ
+   *  and ح are the same letter said the same way. */
+  form?: HunterForm;
   onDone: (results: RoundResult[]) => void;
   /** Where the trail at the top is told what to draw. */
   onProgress?: (done: RoundResult[], pos: number) => void;
-}> = ({ letters, withVowels, rounds, showNumbers, lastLabel, onDone, onProgress }) => {
+}> = ({ letters, withVowels, rounds, showNumbers, lastLabel, form = 'isolated', onDone, onProgress }) => {
   const [round, setRound] = useState(0);
   const [row, setRow] = useState<HunterRow | null>(null);
   const [marks, setMarks] = useState<Record<number, Mark>>({});
@@ -420,13 +436,19 @@ export const RowRound: React.FC<{
      last one down, which is what `row == null` means */
   useEffect(() => {
     if (row) return;
-    const r = buildRow(letters, withVowels);
-    setRow(r);
+    setRow(buildRow(letters, withVowels));
     setMarks({});
-    // The sound is the question, so it comes without being asked for.
-    const t = window.setTimeout(() => play(r.target.letter, cellAudioSet(r.target)), 260);
+  }, [round, row, letters, withVowels]);
+
+  /* The sound is the question, so it comes without being asked for — every
+     round, not just the first. It waits for its OWN effect: asked for in the
+     effect above, the wait was cut short by that effect's cleanup the moment
+     setRow re-rendered, and no round ever said anything by itself. */
+  useEffect(() => {
+    if (!row) return;
+    const t = window.setTimeout(() => play(row.target.letter, cellAudioSet(row.target)), 260);
     return () => window.clearTimeout(t);
-  }, [round, row, letters, withVowels, play]);
+  }, [row, play]);
 
   useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
 
@@ -504,12 +526,24 @@ export const RowRound: React.FC<{
                 background: bg, border: `${mark ? 2 : 1}px solid ${bd}`,
                 color: ink, padding: 0, cursor: mark || roundOver ? 'default' : 'pointer',
               }}>
+              {/* The number is how the student answers out loud — "three and
+                  seven" — so it is a chip he can read across the room, not a
+                  faint corner note. It keeps its own box when the cell is
+                  marked, taking the mark's colour. */}
               {showNumbers && (
-                <span className="absolute top-1.5 left-2 text-[13px]" style={{ fontFamily: 'ui-monospace, monospace', color: mark ? ink : C.muted }}>{i + 1}</span>
+                <span className="absolute top-1.5 left-1.5 flex items-center justify-center font-extrabold"
+                  style={{
+                    minWidth: 'clamp(26px, 3.4vw, 40px)', height: 'clamp(26px, 3.4vw, 40px)',
+                    padding: '0 6px', borderRadius: 'clamp(9px, 1.1vw, 13px)',
+                    fontFamily: 'ui-monospace, monospace', fontSize: 'clamp(15px, 2vw, 23px)', lineHeight: 1,
+                    background: mark ? 'transparent' : C.raised,
+                    border: `1.5px solid ${mark ? bd : C.line}`,
+                    color: mark ? ink : C.cream,
+                  }}>{i + 1}</span>
               )}
               {mark && <span className="absolute top-1.5 right-2">{mark === 'right' ? <Tick /> : <Cross />}</span>}
               <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 'clamp(38px, 5.2vw, 72px)', lineHeight: 1 }}>
-                {cellText(cell)}
+                {inPosition(cellText(cell), form)}
               </span>
               {nearMiss && (
                 <span className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] font-bold leading-tight" style={{ color: C.rose }}>
@@ -618,9 +652,12 @@ const ShowAndMark: React.FC<{
   sub: ReturnType<typeof subMeta>;
   letters: string[];
   items: ShowItem[] | null;
+  /** Only the made-up rounds take a position: a word and a verse are written
+   *  the way the muṣḥaf writes them, and nothing may bend their shapes. */
+  form?: HunterForm;
   onDone: (results: RoundResult[]) => void;
   onProgress?: (done: RoundResult[], pos: number) => void;
-}> = ({ sub, letters, items, onDone, onProgress }) => {
+}> = ({ sub, letters, items, form = 'isolated', onDone, onProgress }) => {
   const [pos, setPos] = useState(0);
   const [marks, setMarks] = useState<Record<number, Mark>>({});
 
@@ -698,7 +735,7 @@ const ShowAndMark: React.FC<{
               Those two are also not Qur'anic text, so they keep the plain
               alphabet font and none of the muṣḥaf mark handling. */}
           <Picked
-            text={item.text}
+            text={pickOut ? item.text : inPosition(item.text, form)}
             letters={pickOut ? letters : []}
             quranic={pickOut}
             lineHeight={sub.id === 'ayat' ? 2.1 : 1.9}
@@ -753,10 +790,11 @@ const WriteRound: React.FC<{
   letters: string[];
   rounds: number;
   roomId: string;
+  form?: HunterForm;
   play: (letter: string, set: 'plain') => void;
   onDone: (results: RoundResult[]) => void;
   onProgress?: (done: RoundResult[], pos: number) => void;
-}> = ({ letters, rounds, roomId, play, onDone, onProgress }) => {
+}> = ({ letters, rounds, roomId, form = 'isolated', play, onDone, onProgress }) => {
   const [pos, setPos] = useState(0);
   const [verdicts, setVerdicts] = useState<Verdict[]>([]);
   const [peers, setPeers] = useState(0);
@@ -849,7 +887,7 @@ const WriteRound: React.FC<{
             {letters.map(l => (
               <span key={l} lang="ar" dir="rtl" className="font-quranic"
                 style={{ fontSize: 'clamp(44px, 9vh, 120px)', lineHeight: 1.15, color: l === letter ? C.coral : C.body }}>
-                {l}
+                {inPosition(l, form)}
               </span>
             ))}
           </span>
@@ -893,9 +931,10 @@ type Phase = 'intro' | 'play' | 'done';
 const LettersHunterRun: React.FC<{
   letters: string[];
   plan: HunterPlan;
+  form: HunterForm;
   onFinish: (r: HunterResult) => void;
   onExit: () => void;
-}> = ({ letters, plan, onFinish, onExit }) => {
+}> = ({ letters, plan, form, onFinish, onExit }) => {
   const order = useMemo(() => playOrder(plan), [plan]);
 
   const [phase, setPhase] = useState<Phase>('intro');
@@ -942,7 +981,7 @@ const LettersHunterRun: React.FC<{
     let alive = true;
     if (sub.id === 'say' || sub.id === 'syllables') {
       const make = sub.id === 'say' ? buildSayItem : buildSyllable;
-      setItems(Array.from({ length: rounds }, () => make(letters)));
+      setItems(buildShowRun(make, letters, rounds));
       return;
     }
     (sub.id === 'words' ? loadWords() : loadVerses())
@@ -974,7 +1013,7 @@ const LettersHunterRun: React.FC<{
           {letters.map(l => (
             <div key={l} className="w-[320px] max-w-full flex flex-col items-center gap-3 px-6 pt-6 pb-5 rounded-[24px]"
               style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-              <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 'clamp(110px, 20vw, 170px)', lineHeight: 1.1, color: C.cream }}>{l}</span>
+              <span lang="ar" dir="rtl" style={{ fontFamily: ARABIC, fontSize: 'clamp(110px, 20vw, 170px)', lineHeight: 1.1, color: C.cream }}>{inPosition(l, form)}</span>
               <p className="m-0 text-[15px] font-bold" style={{ color: dotsOf(l) === 'no dots' ? C.body : C.coral }}>{dotsOf(l) || 'look at the shape'}</p>
               <button type="button" onClick={() => play(l, 'plain')}
                 className="h-11 px-5 rounded-xl text-sm font-bold flex items-center gap-2.5"
@@ -1098,7 +1137,7 @@ const LettersHunterRun: React.FC<{
   if (isWrite) {
     return shell(<>
       <Trail order={order} plan={plan} at={at} scores={scores} live={live} onExit={onExit} />
-      <WriteRound letters={letters} rounds={rounds} roomId={roomId} play={play}
+      <WriteRound letters={letters} rounds={rounds} roomId={roomId} form={form} play={play}
         onProgress={progress}
         onDone={results => { betterRef.current += results.filter(r => r === 'better').length; bank('write', results); }} />
     </>);
@@ -1110,7 +1149,7 @@ const LettersHunterRun: React.FC<{
       <Trail order={order} plan={plan} at={at} scores={scores} live={live} onExit={onExit} />
       {/* Keyed by the challenge: without it the position carried over from the
           round before, so the first word of the next one finished it. */}
-      <ShowAndMark key={sub.id} sub={sub} letters={letters} items={items}
+      <ShowAndMark key={sub.id} sub={sub} letters={letters} items={items} form={form}
         onProgress={progress} onDone={results => bank(sub.id, results)} />
     </>);
   }
@@ -1124,6 +1163,7 @@ const LettersHunterRun: React.FC<{
       withVowels={withVowels}
       rounds={rounds}
       showNumbers
+      form={form}
       lastLabel={at + 1 < order.length ? 'Next challenge' : 'See the mark'}
       onProgress={progress}
       onDone={results => bank(sub.id, results)}
@@ -1137,10 +1177,13 @@ const LettersHunterChallenge: React.FC<{
   letters: string[];
   /** The student the work is for — needed to set it as homework. */
   student?: { id: string; name: string } | null;
+  /** The position chosen at the top of the alphabet table. Whatever shape is
+   *  on the table is the shape the whole hunt is run in. */
+  form?: HunterForm;
   /** Fired once, when the tutor leaves the mark screen by Done. */
   onFinish?: (title: string, detail: string, sourceId: string) => void;
   onExit: () => void;
-}> = ({ letters, student, onFinish, onExit }) => {
+}> = ({ letters, student, form = 'isolated', onFinish, onExit }) => {
   const [plan, setPlan] = useState<HunterPlan | null>(null);
 
   if (!enoughLetters(letters)) {
@@ -1155,12 +1198,13 @@ const LettersHunterChallenge: React.FC<{
     );
   }
 
-  if (!plan) return <LettersHunterSetup letters={letters} student={student} onStart={setPlan} onClose={onExit} />;
+  if (!plan) return <LettersHunterSetup letters={letters} student={student} form={form} onStart={setPlan} onClose={onExit} />;
 
   return (
     <LettersHunterRun
       letters={letters}
       plan={plan}
+      form={form}
       onExit={onExit}
       onFinish={r => {
         onFinish?.(logTitle(r.letters), logDetail(r), `LettersHunter:${r.letters.join('')}:${Date.now()}`);

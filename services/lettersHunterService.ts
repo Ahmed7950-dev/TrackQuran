@@ -104,6 +104,37 @@ export const cellText = (c: HunterCell): string =>
 export const sameCell = (a: HunterCell, b: HunterCell): boolean =>
   a.letter === b.letter && a.vowel === b.vowel;
 
+/* ── Where in a word the letters are being shown ─────────────────────────── */
+
+/** The alphabet table's own four positions; 'isolated' is a letter standing
+ *  alone, which is what the hunt showed before the table could ask otherwise. */
+export type HunterForm = 'isolated' | 'initial' | 'medial' | 'final';
+
+const ZWJ = '\u200D';
+
+/**
+ * The same text, drawn as it would sit at that point in a word.
+ *
+ * A zero-width joiner on a side tells the shaper there is a letter there, so
+ * ح becomes ـحـ in the middle without an imaginary neighbour being printed
+ * beside it. Two things make this safe to apply to WHOLE items and not just
+ * to bare letters:
+ *
+ *   A haraka is transparent to joining, so a joiner after the vowel still
+ *   shapes the letter under it — حَ in the middle comes out ـحَـ.
+ *   A letter that cannot join leftward (د ر ز و ا) simply ignores a trailing
+ *   joiner, so asking for a beginning shape gives its honest standing one
+ *   rather than a fake.
+ *
+ * So a syllable takes its position at the two ends and keeps the join it
+ * already has in the middle.
+ */
+export const inPosition = (text: string, form: HunterForm): string =>
+  form === 'initial' ? text + ZWJ
+  : form === 'medial' ? ZWJ + text + ZWJ
+  : form === 'final' ? ZWJ + text
+  : text;
+
 /** Which recording says this cell out loud. */
 export const cellAudioSet = (c: HunterCell): LetterAudioSet => c.vowel ?? 'plain';
 
@@ -297,6 +328,33 @@ export const buildSyllable = (letters: string[]): ShowItem => {
   const rest = letters.filter(l => l !== a);
   const b = rest.length && Math.random() < 0.8 ? pick(rest) : pick(letters);
   return { text: a + SET_MARK[pick(HUNTER_VOWELS)] + b + SET_MARK[pick(HUNTER_VOWELS)] };
+};
+
+/**
+ * A whole run of them, drawn so that nothing follows ITSELF.
+ *
+ * حَ may well come up twice in a hunt — there are only nine of these with
+ * three letters, and meeting one again is part of it. What is worth nothing is
+ * حَ straight after حَ: the eye is still on the last one, the mouth repeats
+ * what it just said, and a round goes by without being read. So each draw is
+ * taken again while it matches the one before it; everything further back is
+ * fair game.
+ *
+ * The guard matters for the smallest case — two letters, so only six `say`
+ * items — where a handful of draws can all come back the same.
+ */
+export const buildShowRun = (
+  make: (letters: string[]) => ShowItem, letters: string[], n: number,
+): ShowItem[] => {
+  const run: ShowItem[] = [];
+  for (let i = 0; i < n; i++) {
+    let item = make(letters);
+    for (let guard = 0; guard < 60 && run.length && item.text === run[run.length - 1].text; guard++) {
+      item = make(letters);
+    }
+    run.push(item);
+  }
+  return run;
 };
 
 /* ── Rounds 6 and 7: the Qur'an ──────────────────────────────────────────── */
