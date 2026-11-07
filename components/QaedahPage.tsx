@@ -95,6 +95,56 @@ const WalkWord: React.FC<{
   const wrapRef = useRef<HTMLSpanElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
   const markRef = useRef<HTMLSpanElement>(null);
+
+  // ── The word is drawn at the size the card can hold ──────────────────────
+  //
+  // The size was a guess from the letter count, and a guess is fine while a
+  // word that overruns merely hangs over the edge. The card clips now, so the
+  // trail can reach its corners — and the same guess cuts the word in half.
+  // "أَسَـٰطِيرُ ٱلۡأَوَّلِينَ" counts twelve letters and asked for 166px, which
+  // is 773px of word in a card that holds 502.
+  //
+  // So it is measured: draw it at the size asked for, and if it is too wide,
+  // come down by exactly the ratio. One pass — a word on one line scales its
+  // width with its font size, with no wrapping to upset the arithmetic.
+  const [fitPx, setFitPx] = useState<number | null>(null);
+  /** The box the word has to fit inside: the card when it fills one. */
+  const hostOf = useCallback(
+    () => (fill ? outerRef.current?.parentElement : outerRef.current) ?? outerRef.current,
+    [fill],
+  );
+  useLayoutEffect(() => { setFitPx(null); }, [word, style?.fontSize, fontsIn, fill]);
+  // A card that changes size — the window turned, the pane resized — asks the
+  // question again. The card's own size never follows from the font, so this
+  // cannot chase itself.
+  useLayoutEffect(() => {
+    const host = hostOf();
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setFitPx(null));
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [hostOf, word]);
+  useLayoutEffect(() => {
+    if (fitPx !== null) return;                     // already measured
+    const host = hostOf(), text = baseRef.current, mark = markRef.current;
+    if (!host || !text || !mark) return;
+    const base = parseFloat(getComputedStyle(text).fontSize) || 0;
+    if (base <= 0) return;
+    // The card animates in, so a rect read mid-flight is smaller than the
+    // layout says — and clientWidth, which a transform does not touch, is
+    // not. Measured in two spaces, the sum came out short and the word was
+    // still clipped. The marker is one em tall, so its rect against the
+    // computed size gives the scale to divide back out.
+    const scale = mark.getBoundingClientRect().height / base || 1;
+    const want = text.getBoundingClientRect().width / scale;
+    const cs = getComputedStyle(host);
+    const room = host.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+    if (room <= 0 || want <= 0) return;
+    // Two pixels of margin: a width rounded up must not clip the last letter.
+    // Never under a third of the asked-for size — below that the word is too
+    // small to sound out, and a card that cannot hold it is the real problem.
+    setFitPx(want <= room ? base : Math.max(base / 3, base * ((room - 2) / want)));
+  }, [fitPx, hostOf, word, style?.fontSize, fontsIn]);
   const [geom, setGeom] = useState<{
     baseline: number; right: number; size: number; w: number; h: number;
     baselineU: number; rightU: number; cssSize: number;
@@ -146,7 +196,7 @@ const WalkWord: React.FC<{
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     ro?.observe(wrap);
     return () => { cancelAnimationFrame(id); ro?.disconnect(); };
-  }, [word, at, style?.fontSize]);
+  }, [word, at, style?.fontSize, fitPx]);
 
   const step = at === null ? null : steps[clampStep(at, steps.length)];
   const head = step?.[0];
@@ -257,6 +307,7 @@ const WalkWord: React.FC<{
   return (
     <span ref={outerRef} className={className} style={{
       ...style, position: 'relative',
+      ...(fitPx !== null ? { fontSize: `${fitPx}px` } : null),
       ...(fill
         ? { display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', flex: '1 1 auto' }
         : { display: 'inline-block' }),
