@@ -4,6 +4,9 @@ import { getStudentUnifiedLessons } from './lessonSessionService';
 import { homeworkFromRow, getVocabHomework, homeworkUrl, type HomeworkKind, type HomeworkWord, type HomeworkStatus, type VocabHomework } from './vocabHomeworkService';
 
 export function homeworkStatus(hw: Pick<VocabHomework, 'status' | 'deadline'>, now = Date.now()): string {
+  // A draft was never handed over, so it is not with the student and never
+  // counts as open homework. (Old rows were created straight into 'draft'.)
+  if (hw.status === 'draft') return 'Draft';
   if (hw.status === 'completed') return 'Done';
   if (hw.status === 'cancelled') return 'Cancelled';
   if (hw.status === 'missed' || (hw.status === 'assigned' && hw.deadline && Date.parse(hw.deadline) < now)) return "Wasn’t done";

@@ -36,7 +36,7 @@ beforeEach(() => { calls.length=0; responses.length=0; notices.length=0; globalT
 
 test('status prioritizes explicit results over deadlines', () => {
   const past = '2020-01-01', future = '2099-01-01';
-  for (const [status, deadline, expected] of [ ['assigned',null,'With student'],['assigned',future,'With student'],['assigned',past,'Wasn’t done'],['completed',past,'Done'],['cancelled',past,'Cancelled'],['missed',null,'Wasn’t done'] ]) {
+  for (const [status, deadline, expected] of [ ['assigned',null,'With student'],['assigned',future,'With student'],['assigned',past,'Wasn’t done'],['completed',past,'Done'],['cancelled',past,'Cancelled'],['missed',null,'Wasn’t done'],['draft',null,'Draft'],['draft',future,'Draft'] ]) {
     assert.equal(service.homeworkStatus({status,deadline}),expected);
   }
 });
