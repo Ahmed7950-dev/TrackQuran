@@ -16,8 +16,7 @@ import ExportReportModal from './ExportReportModal';
 import AddAttendanceModal from './AddAttendanceModal';
 import { ACTIVITY_STYLE, withoutAttendanceRecord, withEditedActivity } from '../utils/activityLog';
 import { listFluencyResults, FluencyResult } from '../services/fluencyService';
-import ProgressChart from './ProgressChart';
-import MistakeRatioChart from './MistakeRatioChart';
+import ProgressTimelineChart from './ProgressTimelineChart';
 import { useI18n } from '../context/I18nProvider';
 import StudentHeader from './StudentHeader';
 import { createGoogleMeetLink } from '../services/googleCalendarService';
@@ -248,7 +247,6 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
     const [calendarDate, setCalendarDate] = useState(new Date());
 
     // Fix: Replaced 'a.useState' with 'useState'.
-    const [chartView, setChartView] = useState<'reading' | 'memorization' | 'mistakes'>('reading');
     const [tajweedCompletions, setTajweedCompletions] = useState<TajweedCompletion[]>([]);
 
     useEffect(() => {
@@ -1181,21 +1179,13 @@ const StudentDetailPage: React.FC<StudentDetailPageProps> = ({ student, students
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-slate-700 dark:text-slate-200">{t('studentDetail.progressOverTime')}</h3>
-                    <ModernToggle value={chartView} onChange={setChartView} labelOne={t('studentDetail.reading')} labelTwo={t('studentDetail.hifdh')} labelThree="Mistakes ratio" />
-                </div>
-                {chartView === 'reading' ? (
-                     <ProgressChart achievements={student.recitationAchievements} type="reading" />
-                ) : chartView === 'memorization' ? (
-                    <ProgressChart achievements={student.memorizationAchievements} type="memorization" />
-                ) : (
-                    <MistakeRatioChart
-                        recitationAchievements={student.recitationAchievements}
-                        memorizationAchievements={student.memorizationAchievements}
-                        mistakes={student.mistakes || {}}
-                    />
-                )}
+                <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-3">{t('studentDetail.progressOverTime')}</h3>
+                <ProgressTimelineChart
+                    recitationAchievements={student.recitationAchievements}
+                    memorizationAchievements={student.memorizationAchievements}
+                    mistakes={student.mistakes || {}}
+                    homework={student.quranHomework}
+                />
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">

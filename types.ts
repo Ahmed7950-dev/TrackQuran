@@ -141,6 +141,9 @@ export interface QuranHomework {
   /** Which kind of closed. Absent on anything closed before this existed, and
    *  that reads as 'done' — see utils/quranHomework. */
   outcome?: 'done' | 'missed' | 'removed';
+  /** When it was closed. Absent on anything closed before this existed, where
+   *  the deadline or the day it was given is the nearest date there is. */
+  closedAt?: string;
   /** Set when the student records each verse (quran_recitation_homework.id). */
   recitationId?: string;
   /** When it has to be done by, if the tutor set one. Absent = no deadline,

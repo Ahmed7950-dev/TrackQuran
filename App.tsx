@@ -1746,8 +1746,9 @@ const App: React.FC = () => {
     const student = studentsRef.current.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
     const ids = new Set(Array.isArray(homeworkId) ? homeworkId : [homeworkId]);
+    const closedAt = new Date().toISOString();
     const updatedHomework = (student.quranHomework || []).map(hw =>
-      ids.has(hw.id) ? { ...hw, isDone: true, outcome } : hw);
+      ids.has(hw.id) ? { ...hw, isDone: true, outcome, closedAt } : hw);
     handleUpdateStudent({ ...student, quranHomework: updatedHomework });
     const reportId = await getStudentReportId(currentUser.id, studentId);
     if (reportId) {
@@ -1763,7 +1764,7 @@ const App: React.FC = () => {
     const student = studentsRef.current.find(s => s.id === studentId);
     if (!student || currentUser?.role !== 'teacher') return;
     const updatedHomework = (student.quranHomework || []).map(hw =>
-      hw.id === homeworkId ? { ...hw, isDone: false, outcome: undefined } : hw);
+      hw.id === homeworkId ? { ...hw, isDone: false, outcome: undefined, closedAt: undefined } : hw);
     handleUpdateStudent({ ...student, quranHomework: updatedHomework });
     const reportId = await getStudentReportId(currentUser.id, studentId);
     if (reportId) {
