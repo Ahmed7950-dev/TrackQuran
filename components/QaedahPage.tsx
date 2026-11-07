@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import TowerDefenseGame, { TowerDefenseRef } from './TowerDefenseGame';
-import { walkSteps, clampStep, isMark, measureMarks, fontReady, type Box } from '../utils/qaedahWalk';
 import CraneBuilderGame from './CraneBuilderGame';
 import LetterSoundsChallenge, { LetterSoundsSetup } from './LetterSoundsChallenge';
 import { vowelForTopic, VOWEL_LABEL, FORM_LABEL, glyphFor, type LetterForm } from '../services/letterSoundsService';
@@ -54,34 +53,32 @@ function shuffle<T>(arr: T[]): T[] {
 type View = 'list' | 'words' | 'challenge' | 'win';
 
 /**
- * The word, with one piece of it lit.
+ * The word, drawn at the size its card can hold.
  *
- * A letter and the marks on it are one grapheme cluster, and a browser paints
- * a cluster in the colour of its FIRST character — so a fatha in its own span,
- * coloured red, stays black. (Checked in Hafs, Amiri, UthmanTN and the system
- * serif: colouring the mark does nothing, colouring the letter reddens the
- * marks with it.)
- *
- * So the word is drawn more than once, stacked exactly, and the coloured copy
- * is clipped to the piece being pointed at:
- *
- *   on a LETTER   the whole cluster is drawn red, then its marks are painted
- *                 back in the normal colour, leaving the letter alone in red;
- *   on a MARK     the whole cluster is drawn red but clipped to that mark's
- *                 own box, so nothing else of it shows.
- *
- * The boxes are measured, not tabulated — see measureMarks.
+ * The size the caller asks for is a guess from the letter count, which is
+ * fair for one word and badly wrong for two: "أَسَـٰطِيرُ ٱلۡأَوَّلِينَ" counts
+ * twelve letters, asks for 166px and comes out 773px wide in a card that
+ * holds 502. So it is measured — drawn at the size asked for, then brought
+ * down by exactly the ratio it overran by. One line of text scales its width
+ * with its font size and nothing wraps, so a single pass lands it.
  */
-const WalkWord: React.FC<{
-  word: string; at: number | null; style?: React.CSSProperties; className?: string;
-  /** Stretch to the card around it, so the trail can reach its edges. */
+const FitWord: React.FC<{
+  word: string; style?: React.CSSProperties; className?: string;
+  /** Stretch to the card around it, so the word is centred in the whole card. */
   fill?: boolean;
-}> = ({ word, at, style, className, fill }) => {
-  const steps = useMemo(() => walkSteps(word), [word]);
+}> = ({ word, style, className, fill }) => {
+  const outerRef = useRef<HTMLSpanElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const markRef = useRef<HTMLSpanElement>(null);
+
+  // Measuring before the Arabic font has loaded reads the fallback's widths,
+  // so the question is asked again once it is here.
   const family = String(style?.fontFamily ?? "'Hafs', serif");
-  // Measuring before the Arabic font has loaded reads the fallback's shapes,
-  // so the marks are asked for again once it is here.
-  const [fontsIn, setFontsIn] = useState(() => fontReady(family));
+  const [fontsIn, setFontsIn] = useState(() => {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+    if (!fonts?.check) return true;
+    try { return fonts.check(`100px ${family}`); } catch { return true; }
+  });
   useEffect(() => {
     if (fontsIn) return;
     let dead = false;
@@ -89,24 +86,7 @@ const WalkWord: React.FC<{
       .then(() => { if (!dead) setFontsIn(true); }).catch(() => {});
     return () => { dead = true; };
   }, [fontsIn, family]);
-  const boxes = useMemo(() => measureMarks(word, family), [word, family, fontsIn]);
 
-  const outerRef = useRef<HTMLSpanElement>(null);
-  const wrapRef = useRef<HTMLSpanElement>(null);
-  const baseRef = useRef<HTMLSpanElement>(null);
-  const markRef = useRef<HTMLSpanElement>(null);
-
-  // ── The word is drawn at the size the card can hold ──────────────────────
-  //
-  // The size was a guess from the letter count, and a guess is fine while a
-  // word that overruns merely hangs over the edge. The card clips now, so the
-  // trail can reach its corners — and the same guess cuts the word in half.
-  // "أَسَـٰطِيرُ ٱلۡأَوَّلِينَ" counts twelve letters and asked for 166px, which
-  // is 773px of word in a card that holds 502.
-  //
-  // So it is measured: draw it at the size asked for, and if it is too wide,
-  // come down by exactly the ratio. One pass — a word on one line scales its
-  // width with its font size, with no wrapping to upset the arithmetic.
   const [fitPx, setFitPx] = useState<number | null>(null);
   /** The box the word has to fit inside: the card when it fills one. */
   const hostOf = useCallback(
@@ -126,13 +106,13 @@ const WalkWord: React.FC<{
   }, [hostOf, word]);
   useLayoutEffect(() => {
     if (fitPx !== null) return;                     // already measured
-    const host = hostOf(), text = baseRef.current, mark = markRef.current;
+    const host = hostOf(), text = textRef.current, mark = markRef.current;
     if (!host || !text || !mark) return;
     const base = parseFloat(getComputedStyle(text).fontSize) || 0;
     if (base <= 0) return;
     // The card animates in, so a rect read mid-flight is smaller than the
     // layout says — and clientWidth, which a transform does not touch, is
-    // not. Measured in two spaces, the sum came out short and the word was
+    // not. Measured in two spaces the sum came out short and the word was
     // still clipped. The marker is one em tall, so its rect against the
     // computed size gives the scale to divide back out.
     const scale = mark.getBoundingClientRect().height / base || 1;
@@ -145,191 +125,23 @@ const WalkWord: React.FC<{
     // small to sound out, and a card that cannot hold it is the real problem.
     setFitPx(want <= room ? base : Math.max(base / 3, base * ((room - 2) / want)));
   }, [fitPx, hostOf, word, style?.fontSize, fontsIn]);
-  const [geom, setGeom] = useState<{
-    baseline: number; right: number; size: number; w: number; h: number;
-    baselineU: number; rightU: number; cssSize: number;
-    outerW: number; wrapX: number; wrapR: number;
-    bleed: { t: number; b: number; r: number };
-  } | null>(null);
-
-  // Measured again on every step, and everything in ONE space. The word card
-  // scales as it arrives, so a rect read mid-animation is smaller than the
-  // computed font size says — mixing the two put the first band in the wrong
-  // place. The marker is a zero-width box one em tall sitting ON the baseline,
-  // so its rect gives both the baseline and the em, scaled exactly as the text
-  // on screen is.
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current, text = baseRef.current, mark = markRef.current;
-    if (!wrap || !text || !mark) return;
-    const measure = () => {
-      const w = wrap.getBoundingClientRect();
-      const t = text.getBoundingClientRect();
-      const m = mark.getBoundingClientRect();
-      if (!w.width || !m.height) return;
-      // The card scales as it arrives, so rects come back smaller than the CSS
-      // says. Ratios survive that (the trail uses them); the masks need real
-      // CSS pixels, so the scale is divided back out.
-      const css = parseFloat(getComputedStyle(text).fontSize) || 16;
-      const scale = m.height / css || 1;
-      // The trail is drawn on the OUTER box — the card — so it needs the
-      // word's offset inside it.
-      const outer = outerRef.current ?? wrap;
-      const o = outer.getBoundingClientRect();
-      // The card pads its word; the trail is supposed to reach the border, so
-      // it is told how far past the content box that is.
-      const card = outer.parentElement?.getBoundingClientRect();
-      const bleed = fill && card
-        ? { t: o.top - card.top, b: card.bottom - o.bottom, r: card.right - o.right }
-        : { t: 0, b: 0, r: 0 };
-      setGeom({
-        bleed,
-        baseline: m.bottom - w.top, right: t.right - w.left, size: m.height, w: w.width, h: w.height,
-        baselineU: (m.bottom - w.top) / scale, rightU: (t.right - w.left) / scale, cssSize: css,
-        outerW: o.width || w.width, wrapX: w.left - o.left, wrapR: o.right - w.right,
-      });
-    };
-    measure();
-    const id = requestAnimationFrame(measure);        // again once the card has settled
-    // And again when the Arabic font arrives: until it does the word is laid
-    // out in the fallback, and every number here is a little off.
-    (document as Document & { fonts?: FontFaceSet }).fonts?.ready.then(measure).catch(() => {});
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
-    ro?.observe(wrap);
-    return () => { cancelAnimationFrame(id); ro?.disconnect(); };
-  }, [word, at, style?.fontSize, fitPx]);
-
-  const step = at === null ? null : steps[clampStep(at, steps.length)];
-  const head = step?.[0];
-  const onMark = head !== undefined && isMark([...word][head]);
-
-  /** The cluster the active step belongs to: its base index, and its marks. */
-  const cluster = useMemo(() => {
-    if (head === undefined) return null;
-    const chars = [...word];
-    let base = head;
-    while (base >= 0 && isMark(chars[base])) base--;
-    if (base < 0) return null;
-    const marks: number[] = [];
-    for (let i = base + 1; i < chars.length && isMark(chars[i]); i++) marks.push(i);
-    return { base, marks };
-  }, [word, head]);
-
-  /** Where one character sits in the wrapper, measured off the drawn text. */
-  const charLeft = (i: number): number | null => {
-    const node = baseRef.current?.firstChild, wrap = wrapRef.current;
-    if (!node || !wrap) return null;
-    const r = document.createRange();
-    try { r.setStart(node, i); r.setEnd(node, i + 1); } catch { return null; }
-    return r.getBoundingClientRect().left - wrap.getBoundingClientRect().left;
-  };
-
-  /**
-   * Show only one mark's own pixels.
-   *
-   * A box is not enough to tell two marks apart: a fatha on a shadda'd letter
-   * is drawn inside the shadda's curve, so one rectangle holds both and
-   * pointing at either lit them together. The mask is cut from the mark
-   * itself — the pixels the word gains when that mark is added.
-   */
-  const maskOf = (i: number): React.CSSProperties => {
-    const b = boxes.get(i);
-    if (!b || !geom) return { display: 'none' };
-    const { baselineU, cssSize } = geom;
-    const url = `url(${b.mask})`;
-    const size = `${(b.left - b.right) * cssSize}px ${(b.bottom - b.top) * cssSize}px`;
-    // Anchored from the RIGHT edge, where an Arabic word begins and where the
-    // boxes were measured from. Anchoring from the left needed the word's
-    // width, and that measurement is taken before the webfont has swapped in —
-    // a few pixels narrower, which slid every mask off its mark.
-    const pos = `right ${b.right * cssSize}px top ${baselineU + b.top * cssSize}px`;
-    return {
-      WebkitMaskImage: url, maskImage: url,
-      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
-      WebkitMaskSize: size, maskSize: size,
-      WebkitMaskPosition: pos, maskPosition: pos,
-    };
-  };
-
-  // A box one em tall sitting ON the baseline. It is in EVERY layer, not just
-  // the measured one: it is part of the line box, so a layer without it puts
-  // its text a little higher — which drew the red copy above the black word,
-  // one letter apparently twice.
-  const MARKER: React.CSSProperties = { display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' };
-
-  /** One copy of the word: `red` is the index whose cluster paints, the rest vanish. */
-  const copy = (redBase: number | null, colour: string, extra?: React.CSSProperties, key?: string) => (
-    <span key={key} aria-hidden="true" style={{ ...style, position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2, ...extra }}>
-      {[...word].map((ch, i) => (
-        <span key={i} style={{ color: i === redBase ? colour : 'transparent' }}>{ch}</span>
-      ))}
-      <span style={MARKER} />
-    </span>
-  );
-
-  const lit = cluster && at !== null;
-
-  // The trail: everything already sounded out. Measured on the word but drawn
-  // on the CARD, top to bottom and out to its right edge — a band across the
-  // whole box reads as ground covered, where a patch hugging the letters read
-  // as a smudge behind them.
-  const sweep = (() => {
-    if (!lit || !geom || !cluster) return null;
-    const { w, outerW, wrapX, wrapR } = geom;
-    // To the LETTER's edge, not the piece's: a vowel is narrower than the
-    // letter it sits on, so following the piece would make the trail shrink
-    // when the step moved from a letter onto its own vowel.
-    const edge = charLeft(cluster.base);
-    if (edge === null || !outerW) return null;
-    const left = Math.max(0, Math.min(w, edge) + wrapX);
-    // Out to the card's edge when it fills one; otherwise just past the word.
-    const width = outerW - left - (fill ? 0 : Math.max(0, wrapR));
-    return { left: `${(left / outerW) * 100}%`, width: `${(Math.max(0, width) / outerW) * 100}%` };
-  })();
-
-  const body = (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
-      <span ref={baseRef} style={{ position: 'relative', zIndex: 1 }}>{word}</span>
-      {/* A zero-sized inline box sits on the baseline — the one reliable way to find it. */}
-      <span ref={markRef} style={MARKER} />
-      {/* On a MARK only that mark's pixels are red. On a LETTER the whole
-          cluster goes red and each of its marks is then painted back in the
-          normal colour, one mask at a time — so the letter keeps every pixel
-          of itself, even where a mark overlaps it. */}
-      {lit && copy(cluster.base, '#e11d48', onMark ? maskOf(head!) : undefined, 'red')}
-      {/* One mask for ALL of the letter's marks, not one each: where a shadda
-          and the fatha inside it overlap, neither mark's own mask claims the
-          seam, and the letter step kept a red hairline along it. */}
-      {lit && !onMark && cluster.marks.length > 0 &&
-        copy(cluster.base, 'currentColor', maskOf(cluster.base), 'restore')}
-    </span>
-  );
 
   return (
     <span ref={outerRef} className={className} style={{
-      ...style, position: 'relative',
+      ...style,
       ...(fitPx !== null ? { fontSize: `${fitPx}px` } : null),
       ...(fill
         ? { display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', flex: '1 1 auto' }
         : { display: 'inline-block' }),
     }}>
-      {sweep && parseFloat(sweep.width) > 0 && (
-        <span aria-hidden="true"
-          // Pale yellow on a white card; on a dark one the same yellow at a
-          // tenth, which reads as light falling on the word rather than the
-          // mud a saturated amber turns into over navy.
-          className="bg-amber-200/70 dark:bg-amber-200/10"
-          style={{
-            position: 'absolute',
-            top: -(geom?.bleed.t ?? 0), bottom: -(geom?.bleed.b ?? 0),
-            left: sweep.left, right: -(geom?.bleed.r ?? 0), width: 'auto',
-            transition: 'left 120ms ease',
-            pointerEvents: 'none', zIndex: 0,
-          }} />
-      )}
-      {body}
+      <span ref={textRef}>{word}</span>
+      {/* A zero-width box one em tall: the honest way to read the drawn size
+          back out of a card that is still animating in. */}
+      <span ref={markRef} style={{ display: 'inline-block', width: 0, height: '1em', verticalAlign: 'baseline' }} />
     </span>
   );
 };
+
 
 /** Arabic letter count — drives the per-word font size so any word fits one line. */
 const letterCount = (w: string): number =>
@@ -634,28 +446,6 @@ const QaedahPage: React.FC<{
 
   const pct    = queue.length > 0 ? Math.round((pos / queue.length) * 100) : 0;
   const word   = queue[pos]?.word ?? '';
-
-  // ── Sounding the word out ────────────────────────────────────────────────
-  // Left walks forward through the word (Arabic reads right to left, so the
-  // left arrow is the one that moves on), right walks back. The tutor's side
-  // only: on the student's own device nobody is pressing anything, and a red
-  // letter sitting there would just be a mark they cannot explain.
-  const walking = !isStudentView;
-  const [walkAt, setWalkAt] = useState(0);
-  useEffect(() => { setWalkAt(0); }, [word, pos]);
-  useEffect(() => {
-    if (!walking || view !== 'challenge' || !word) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      e.preventDefault();
-      const total = walkSteps(word).length;
-      setWalkAt(a => clampStep(a + (e.key === 'ArrowLeft' ? 1 : -1), total));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [walking, view, word]);
 
   // ── Praise popup overlay ──────────────────────────────────────────────────
   const praiseOverlay = popup.phase !== 'hidden' && (
@@ -1086,10 +876,9 @@ const QaedahPage: React.FC<{
                   padding: '0 16px',
                 }}
               >
-                <WalkWord
+                <FitWord
                   fill
                   word={word}
-                  at={walking ? walkAt : null}
                   style={{
                     ...HAFS,
                     fontSize: 'clamp(3.6rem, 11vw, 6rem)',
@@ -1141,10 +930,9 @@ const QaedahPage: React.FC<{
               className={`flex items-center justify-center overflow-hidden bg-white dark:bg-gray-800 rounded-3xl qd-card-in border border-amber-200/60 dark:border-gray-600 shadow-md ${shaking ? 'qd-shake' : ''}`}
               style={{ width: 'min(900px, 94vw)', height: 'min(56vh, 540px)', minHeight: 220, padding: '0 20px' }}
             >
-              <WalkWord
+              <FitWord
                 fill
                 word={word}
-                at={walking ? walkAt : null}
                 style={{
                   ...HAFS,
                   fontSize: bigWordFont,
