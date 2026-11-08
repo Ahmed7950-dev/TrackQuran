@@ -3,6 +3,7 @@ import { Student, Progress, RecitationAchievement, MemorizationAchievement, Tafs
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage, { markQuranOpenedFresh } from './components/StudentProgressPage';
+import StudentToolsBar, { type ToolsTab } from './components/StudentToolsBar';
 import MistakesStudyPage from './components/MistakesStudyPage';
 import FluencyTestPage from './components/FluencyTestPage';
 import MissedLessonPrompt from './components/MissedLessonPrompt';
@@ -2272,118 +2273,57 @@ const App: React.FC = () => {
           </div>
         )}
       </header>
-      {/* ── Thin student-tools bar — visible on all student pages (detail + session) ── */}
+      {/* ── Student tools bar — visible on all student pages (detail + session) ── */}
       {isDetailedView && ['main', 'alphabetTrainer', 'qaedah', 'tajweed', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab', 'media'].includes(activeTab) && (() => {
-        const activeHwCount = (sessionStudent ?? selectedStudent)?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
-        const tabs = [
-          { id: 'main',            label: 'Main page',                  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.5a.75.75 0 0 0 .75.75H9.75v-6a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v6h4.5a.75.75 0 0 0 .75-.75V9.75M8.25 21h8.25" /></svg> },
-          { id: 'tajweed',         label: t('header.tajweed'),          icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
-          { id: 'qaedah',          label: 'Qaedah',                     icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
-          { id: 'alphabetTrainer', label: t('header.alphabetTrainer'),  icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" /></svg> },
-          { id: 'quran',           label: 'Quran',                      icon: <LottieIcon src="/al-quran.json" size={20} /> },
-          { id: 'fluencyTest',     label: 'Fluency Test',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg> },
-          { id: 'mistakesStudy',   label: 'Mistakes Study',             icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" /></svg> },
-          { id: 'tadabburLab',     label: 'Tadabbur Lab',               icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" /></svg> },
+        const barStudent = sessionStudent ?? selectedStudent;
+        const activeHwCount = barStudent?.quranHomework?.filter(hw => !hw.isDone).length ?? 0;
+        const tabs: ToolsTab[] = [
+          { id: 'main', label: 'Main page', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.5a.75.75 0 0 0 .75.75H9.75v-6a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v6h4.5a.75.75 0 0 0 .75-.75V9.75M8.25 21h8.25" /></svg> },
+          { id: 'tajweed', label: t('header.tajweed'), icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg> },
+          { id: 'qaedah', label: 'Qaedah', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg> },
+          { id: 'alphabetTrainer', label: t('header.alphabetTrainer'), icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4.745 3A23.933 23.933 0 0 0 3 12c0 3.183.62 6.22 1.745 9M19.255 3A23.933 23.933 0 0 1 21 12c0 3.183-.62 6.22-1.745 9M8.25 8.885l1.444-.89a.75.75 0 0 1 1.105.402l2.402 7.206a.75.75 0 0 0 1.104.401l1.445-.89M8.25 8.885l-1.993.007a.75.75 0 0 0-.75.75v0a.75.75 0 0 0 .75.75H8.25" /></svg> },
+          { id: 'quran', label: 'Quran', icon: <LottieIcon src="/al-quran.json" size={20} />, tone: 'primary' },
+          { id: 'fluencyTest', label: 'Fluency Test', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" /></svg> },
+          { id: 'mistakesStudy', label: 'Mistakes Study', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" /></svg> },
+          { id: 'tadabburLab', label: 'Tadabbur Lab', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 3v6.5L4.6 17a2.5 2.5 0 0 0 2.2 3.75h10.4A2.5 2.5 0 0 0 19.4 17L15 9.5V3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 3h8M7.5 14h9" /></svg> },
           // Tutor-only: the student's share link renders none of this bar.
-          { id: 'media',           label: 'Media',                      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><rect x="2.25" y="6.75" width="13.5" height="10.5" rx="2.25" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 11.4l5.25-2.65v6.5l-5.25-2.65z" /></svg>, badge: mediaNewCount },
-          { id: 'homework',        label: 'Homework',                   icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount },
+          { id: 'media', label: 'Media', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><rect x="2.25" y="6.75" width="13.5" height="10.5" rx="2.25" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 11.4l5.25-2.65v6.5l-5.25-2.65z" /></svg>, badge: mediaNewCount },
+          { id: 'homework', label: 'Homework', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>, badge: activeHwCount, tone: 'homework' },
           // Bill tab — platform students only (tutor-issued invoice; not for Preply).
-          { id: 'bill',            label: t('bill.tab'),                icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l2.25 2.25L15 9.75M9 8.25V6a2.25 2.25 0 0 1 4.5 0v2.25" /></svg> },
-        ] as const;
+          { id: 'bill', label: t('bill.tab'), icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l2.25 2.25L15 9.75M9 8.25V6a2.25 2.25 0 0 1 4.5 0v2.25" /></svg> },
+        ];
         return (
-          <div
-            ref={thinBarRef}
-            className="sticky z-[35] bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 shadow-sm no-print"
-            style={{ top: headerHeight }}
-          >
-            <div className="flex items-center justify-center overflow-x-auto scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-              {tabs.filter(tab => tab.id !== 'bill' || (sessionStudent ?? selectedStudent)?.studentType === 'platform').map(tab => {
-                // "Main page" returns to the student's detail page (closes any open
-                // Quran session). It's a normal destination tab — click to go there.
-                if (tab.id === 'main') {
-                  const mainActive = activeTab === 'main' && !sessionStudentId;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
-                        setCurrentStudentView('details');
-                        if (sid) setSelectedStudentId(sid);
-                        setSessionStudentId(null);
-                        setActiveTab('main');
-                      }}
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                        mainActive
-                          ? 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
-                          : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      {tab.icon}
-                      {tab.label}
-                    </button>
-                  );
-                }
-                // The "Quran" tab opens the live logging session (what the old green
-                // button did) rather than switching activeTab. It's the primary action,
-                // so it gets a distinct highlighted pill — active while the session is open.
-                if (tab.id === 'quran') {
-                  const quranActive = !!sessionStudentId;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
-                        if (!sid) return;
-                        setCurrentStudentView('details');
-                        setActiveTab('main');
-                        markQuranOpenedFresh();
-                        setSessionStudentId(sid);
-                      }}
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 my-1.5 mx-1 rounded-none text-sm font-bold transition-all whitespace-nowrap ${
-                        quranActive
-                          ? 'bg-green-500 text-white'
-                          : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50'
-                      }`}
-                    >
-                      {tab.icon}
-                      {tab.label}
-                    </button>
-                  );
-                }
-                return (
-                <button
-                  key={tab.id}
-                  // Carry the student over the way the "Main page" tab does: a
-                  // session opened straight from a recitation review has no
-                  // selectedStudent, so clearing the session alone dropped the
-                  // tutor back to the whole student list.
-                  onClick={() => {
-                    const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
-                    setCurrentStudentView('details');
-                    if (sid) setSelectedStudentId(sid);
-                    setSessionStudentId(null);
-                    setActiveTab(tab.id);
-                  }}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? tab.id === 'homework'
-                        ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
-                        : 'border-teal-600 text-teal-600 dark:border-orange-500 dark:text-orange-400'
-                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                  }`}
-                >
-                  {tab.icon}
-                  {tab.label}
-                  {'badge' in tab && tab.badge > 0 && (
-                    <span className="bg-violet-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-                );
-              })}
-            </div>
-          </div>
+          <StudentToolsBar
+            barRef={thinBarRef}
+            stickyTop={headerHeight}
+            studentName={barStudent?.name ?? ''}
+            profileIcon={barStudent?.profileIcon}
+            inSession={!!sessionStudentId}
+            tabs={tabs.filter(tab => tab.id !== 'bill' || barStudent?.studentType === 'platform')}
+            // Quran opens the live session instead of switching tab, so it is
+            // the one that reads as open while the session runs — activeTab
+            // still says 'main' underneath it.
+            activeId={sessionStudentId ? 'quran' : activeTab}
+            onSelect={id => {
+              // Carry the student over the way the "Main page" tab does: a
+              // session opened straight from a recitation review has no
+              // selectedStudent, so clearing the session alone dropped the
+              // tutor back to the whole student list.
+              const sid = (selectedStudent ?? sessionStudent)?.id ?? null;
+              if (id === 'quran') {
+                if (!sid) return;
+                setCurrentStudentView('details');
+                setActiveTab('main');
+                markQuranOpenedFresh();
+                setSessionStudentId(sid);
+                return;
+              }
+              setCurrentStudentView('details');
+              if (sid) setSelectedStudentId(sid);
+              setSessionStudentId(null);
+              setActiveTab(id as ActiveTab);
+            }}
+          />
         );
       })()}
       {/* Media takes the whole width, like an open Quran session: it is a page
