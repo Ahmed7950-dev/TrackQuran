@@ -3,13 +3,14 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import lottie from 'lottie-web';
 import StudentProfileIcon from './StudentProfileIcon';
 import { QURAN_METADATA } from '../constants';
-import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake, ActivityLog } from '../types';
+import { RecitationAchievement, QuranVerse, Student, Progress, MemorizationAchievement, Mistake, MistakeVoice, ActivityLog } from '../types';
 import MilestoneTracker from './MilestoneTracker';
 import { audioUrl, versesInSurah } from './VerseAudioPlayer';
 import { loadVerseNotes, saveVerseNote, loadWordMeanings, saveWordMeaning, loadTutorVerseNotes, saveTutorVerseNote, loadMyMeaningsForWord, subscribeToTadabbur, loadSharedVerseNotes, SharedVerseNote, WordMeaning } from '../services/tadabburService';
 import { loadRevealedNotes, NotesLang, revealedNotesHaveLang, SurahNotes } from '../data/revealedNotes';
 import { fetchSurahWbw, alignWbw, WbwWord } from '../services/wordByWordService';
 import { listRecitationHomework, versesOf } from '../services/recitationHomeworkService';
+import { uploadMistakeVoice } from '../services/mistakeVoiceService';
 import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
@@ -42,6 +43,9 @@ interface StudentProgressPageProps {
   onUpdateProgress: (studentId: string, surah: number, ayah: number) => void;
   onCycleMistakeLevel: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number, errorType?: 'tajweed' | 'reading', errorText?: string) => void;
   onClearMistake: (studentId: string, surah: number, ayah: number, wordIndex: number, letterIndex?: number) => void;
+  /** Attach the tutor's recorded correction to a marked letter, or clear it.
+   *  Absent on the read-only renders, which is what hides the recorder. */
+  onSetMistakeVoice?: (studentId: string, key: string, voice: MistakeVoice | null) => void;
   /** Persists the student's permanent habit flags (outer ring toggles). */
   onSetPermanentFlags?: (studentId: string, flags: string[]) => void;
   /** Rewrites history: folds custom mistake notes into a fixed ring label. */
@@ -310,6 +314,10 @@ const LetterWithError: React.FC<{
     /** 'reading' (r key) draws the reading ring, 'tajweed' (t key) the tajweed one. */
     ringMode?: 'reading' | 'tajweed';
     onToggleFlag?: (flag: string) => void;
+    /** Recording a correction on this letter. Given together or not at all —
+     *  without the saver the ring shows no Note button. */
+    onVoiceSave?: (key: string, blob: Blob, ms: number) => Promise<boolean>;
+    onVoiceDelete?: (key: string) => void;
 }> = ({
     letter,
     letterKey,
@@ -335,6 +343,8 @@ const LetterWithError: React.FC<{
     ringPermFlags = [],
     ringMode = 'reading',
     onToggleFlag,
+    onVoiceSave,
+    onVoiceDelete,
 }) => {
     const longPressTimer = React.useRef<number | null>(null);
     const isLongPressActive = React.useRef(false);
@@ -410,6 +420,9 @@ const LetterWithError: React.FC<{
                         onToggleFlag={(f) => onToggleFlag?.(f)}
                         onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
                         onCancel={onTextCancel}
+                        voice={mistake?.voice}
+                        onVoiceSave={onVoiceSave ? (blob, ms) => onVoiceSave(letterKey, blob, ms) : undefined}
+                        onVoiceDelete={onVoiceDelete ? () => onVoiceDelete(letterKey) : undefined}
                     />
                 </div>,
                 document.body
@@ -911,7 +924,7 @@ const ICON = {
     search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, onJumpHandled, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetMistakeVoice, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, onJumpHandled, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -3891,14 +3904,37 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, errorType, text);
     }, [errorType, student.id, onCycleMistakeLevel, studentMistakes, keepScroll]);
 
+    /** Attach a recorded correction to the letter the ring is open on. The mark
+     *  itself already exists — the click that opened the ring made it — so this
+     *  only uploads the take and hands the pointer up. The ring stays open:
+     *  a note and a label are two things the tutor may want on one letter. */
+    const saveLetterVoice = useCallback(async (letterKey: string, blob: Blob, ms: number): Promise<boolean> => {
+        if (readOnly || !onSetMistakeVoice) return false;
+        const voice = await uploadMistakeVoice(student.id, letterKey, blob, ms);
+        if (!voice) return false;
+        onSetMistakeVoice(student.id, letterKey, voice);
+        return true;
+    }, [readOnly, onSetMistakeVoice, student.id]);
+
+    const deleteLetterVoice = useCallback((letterKey: string) => {
+        if (readOnly || !onSetMistakeVoice) return;
+        onSetMistakeVoice(student.id, letterKey, null);
+    }, [readOnly, onSetMistakeVoice, student.id]);
+
+    /** No recorder at all on the read-only renders (the family portal, the
+     *  public page) — a button that cannot save is worse than none. */
+    const canVoice = !readOnly && !!onSetMistakeVoice;
+
     const handleLetterTextCancel = useCallback(() => {
         keepScroll();
         if (editingLetterKey) {
             letterClickStates.current[editingLetterKey] = 0;
             // The first click pre-marks the letter before the ring opens; a
-            // cancel with nothing logged should leave no trace behind.
+            // cancel with nothing logged should leave no trace behind. A
+            // recorded note counts as something logged — the mark is what the
+            // student taps to hear it.
             const m = studentMistakes[editingLetterKey];
-            if (m && !m.errorText) {
+            if (m && !m.errorText && !m.voice) {
                 const [surah, ayah, wordIndex, letterIndex] = editingLetterKey.split(':').map(Number);
                 onClearMistake(student.id, surah, ayah, wordIndex, letterIndex);
             }
@@ -4400,6 +4436,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     ringPermFlags={ringPermFlags}
                                     ringMode={errorType}
                                     onToggleFlag={handleToggleFlag}
+                                    onVoiceSave={canVoice ? saveLetterVoice : undefined}
+                                    onVoiceDelete={canVoice ? deleteLetterVoice : undefined}
                                     onTextCancel={handleLetterTextCancel}
                                     tajweedClass={(() => { const r = verseTajweedMaps.get(verse.verse_key)?.get(`${wordIndex}:${letterIndex}`); return r ? `tj-${r}` : undefined; })()}
                                     markLineHeight={showTranslation ? 2.8 : 2.6}
@@ -5335,6 +5373,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             ringPermFlags={ringPermFlags}
                                                                             ringMode={errorType}
                                                                             onToggleFlag={handleToggleFlag}
+                                                                            onVoiceSave={canVoice ? saveLetterVoice : undefined}
+                                                                            onVoiceDelete={canVoice ? deleteLetterVoice : undefined}
                                                                             onTextCancel={handleLetterTextCancel}
                                                                             tajweedClass={(() => { const r = verseTajweedMaps.get(`${item.surah}:${item.ayah}`)?.get(`${item.wordIdx}:${li}`); return r ? `tj-${r}` : undefined; })()}
                                                                             markLineHeight={2.2}

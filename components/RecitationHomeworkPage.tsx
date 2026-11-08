@@ -268,6 +268,11 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [wbw, setWbw] = useState<Record<number, Map<string, WbwWord[]>>>({});
   const [playingWord, setPlayingWord] = useState<string | null>(null);
   const wordAudioRef = useRef<HTMLAudioElement | null>(null);
+  // The teacher's own voice, recorded on a letter while he was marking it. It
+  // takes the tap that would otherwise play the word-by-word recitation —
+  // hearing him say it is the whole point of the note.
+  const [playingNote, setPlayingNote] = useState<string | null>(null);
+  const noteAudioRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     let live = true;
     const load = () => {
@@ -346,6 +351,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     minshawiRef.current?.pause(); setMinshawiPlaying(false);
     mineRef.current?.pause(); setMinePlaying(false);
     prevRef.current?.pause(); setPrevPlaying(false);
+    noteAudioRef.current?.pause(); setPlayingNote(null);
   };
   useEffect(() => { stopAudio(); }, [idx]);
 
@@ -401,7 +407,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
   };
   useEffect(() => () => {
-    releaseMic(); stopAudio(); wordAudioRef.current?.pause();
+    releaseMic(); stopAudio(); wordAudioRef.current?.pause(); noteAudioRef.current?.pause();
     void audioCtxRef.current?.close().catch(() => { /* already closed */ });
   }, []);
 
@@ -429,6 +435,22 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     a.onended = () => setPlayingWord(null);
     a.onerror = () => { setPlayingWord(null); playMinshawi(); };
     a.play().then(() => setPlayingWord(key)).catch(() => setPlayingWord(null));
+  };
+
+  /** The teacher saying this bit himself. Replaces the word's recitation on a
+   *  letter he recorded, and silences everything else first. */
+  const playNote = (key: string, url: string) => {
+    if (take === 'recording') return;
+    const a = noteAudioRef.current ?? (noteAudioRef.current = new Audio());
+    if (playingNote === key) { a.pause(); setPlayingNote(null); return; }
+    wordAudioRef.current?.pause(); setPlayingWord(null);
+    minshawiRef.current?.pause(); setMinshawiPlaying(false);
+    mineRef.current?.pause(); setMinePlaying(false);
+    prevRef.current?.pause(); setPrevPlaying(false);
+    a.src = url;
+    a.onended = () => setPlayingNote(null);
+    a.onerror = () => { setPlayingNote(null); setError('Your teacher\u2019s note could not be played.'); };
+    a.play().then(() => setPlayingNote(key)).catch(() => setPlayingNote(null));
   };
 
   const playMinshawi = () => {
@@ -667,7 +689,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   // overlays are positioned from the line height, so it is passed to them too.
   // The take the teacher reviewed, for this verse (gone once audio is purged).
   const prevTake = prevRec && !prevRec.purgedAt ? prevRec.recordings[takeKey] : undefined;
-  const verseHasComments = Object.entries(mistakes).some(([k, m]) => k.startsWith(`${s}:${a}:`) && m?.errorText);
+  const verseHasComments = Object.entries(mistakes)
+    .some(([k, m]) => k.startsWith(`${s}:${a}:`) && (m?.errorText || m?.voice));
   // The gap has to fit one comment pill (fixed px) under a verse sized in vw,
   // so it is worked out in px and turned back into a line-height ratio. The
   // numbers mirror the two clamp()s below: verse clamp(2.4rem, 6.2vw, 6.5rem),
@@ -690,7 +713,17 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const wordLevelBg = (level: number) =>
     level === 3 ? 'rgba(254,202,202,0.70)' : level === 2 || level === 4 ? 'rgba(254,215,170,0.70)' : 'rgba(254,240,138,0.70)';
   const night = theme === 'night';
-  const bubble = (m: Mistake) => m.errorText ? (
+  /** Shown on a mark the teacher recorded, inside its comment pill — or alone
+   *  in one, when he recorded instead of writing. It is the only thing telling
+   *  the student that this word answers with a voice and not a recitation. */
+  const speaker = (gap: boolean) => (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"
+      style={{ display: 'inline-block', verticalAlign: '-0.12em', marginInlineEnd: gap ? 4 : 0 }}>
+      <path d="M4 10v4h3l4 4V6L7 10H4Zm12.5 2a4.5 4.5 0 0 0-2-3.74v7.48A4.5 4.5 0 0 0 16.5 12ZM14 4v2.1a6 6 0 0 1 0 11.8V20a8 8 0 0 0 0-16Z" />
+    </svg>
+  );
+
+  const bubble = (m: Mistake) => (m.errorText || m.voice) ? (
     <span aria-hidden="true" className="absolute left-1/2 pointer-events-none"
       style={{
         bottom: '100%', transform: 'translateX(-50%)', marginBottom: 4, zIndex: 20,
@@ -702,6 +735,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           : night ? { background: 'rgba(127,29,29,.75)', color: '#FECACA', border: '2px solid #B91C1C' }
                   : { background: '#FEE2E2', color: '#991B1B', border: '2px solid #FCA5A5' }),
       }}>
+      {m.voice && speaker(!!m.errorText)}
       {m.errorText}
     </span>
   ) : null;
@@ -711,20 +745,26 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     const letters = parseWordIntoLetters(word);
     const hasLetterMistake = letters.some(l => mistakes[`${wordKey}:${l.index}`]);
     const wordMistake = mistakes[wordKey];
+    // Did the teacher record on this word? A recording on any of its letters
+    // takes the whole word's tap: the word read on its own is no use once he
+    // has said it himself. First one in reading order wins.
+    const noted = wordMistake?.voice
+      ?? letters.map(l => mistakes[`${wordKey}:${l.index}`]?.voice).find(Boolean);
 
-    /** A marked word answers a tap with its own recitation; every other word
-     *  lets the tap through to the verse. */
+    /** A marked word answers a tap — with the teacher's note where there is
+     *  one, otherwise with its own recitation. Every other word lets the tap
+     *  through to the verse. */
     const listenable = (node: React.ReactNode): React.ReactNode => {
       if (!hasLetterMistake && !wordMistake) return node;
-      const sounding = playingWord === `${vs}:${va}:${wi}`;
+      const sounding = noted ? playingNote === wordKey : playingWord === wordKey;
       return (
         <span
           role="button"
           tabIndex={-1}
-          title="Listen to this word on its own"
-          onClick={e => { e.stopPropagation(); playWord(vs, va, wi); }}
+          title={noted ? "Listen to what your teacher said about this word" : 'Listen to this word on its own'}
+          onClick={e => { e.stopPropagation(); if (noted) playNote(wordKey, noted.url); else playWord(vs, va, wi); }}
           className="relative inline cursor-pointer"
-          style={sounding ? { textShadow: `0 0 0.35em ${P.gold}` } : undefined}
+          style={sounding ? { textShadow: `0 0 0.35em ${noted ? P.primary : P.gold}` } : undefined}
         >
           {node}
         </span>
@@ -1150,7 +1190,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           <span className="text-xl leading-none mt-0.5" aria-hidden="true">🔊</span>
           <span className="flex-1 text-[13px] sm:text-[14px] font-semibold leading-snug">
             New — tap a word your teacher marked to hear that word on its own.
-            Tapping anywhere else on the verse still plays Al-Minshawi.
+            {Object.values(mistakes).some(m => m?.voice) && <> A word with a {speaker(false)} plays
+            your teacher saying it himself.</>}
+            {' '}Tapping anywhere else on the verse still plays Al-Minshawi.
           </span>
           <button onClick={() => setTip(false)} aria-label="Close"
             className="flex-shrink-0 w-7 h-7 rounded-full text-lg leading-none opacity-70 hover:opacity-100">×</button>

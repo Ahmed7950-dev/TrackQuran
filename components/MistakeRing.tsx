@@ -1,7 +1,8 @@
 import React from 'react';
-import { Mistake } from '../types';
+import { Mistake, MistakeVoice } from '../types';
 import { PERM_MISTAKE_FLAGS_KEY, isLetterMistakeKey } from '../constants';
 import { useI18n } from '../context/I18nProvider';
+import VoiceNoteButton from './VoiceNoteButton';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MistakeRing — the letter-click mistake logger as a two-ring donut chart.
@@ -355,6 +356,12 @@ interface MistakeRingProps {
   onToggleFlag?: (flag: string) => void;
   onSubmitText?: () => void;
   onCancel?: () => void;
+  /** The spoken correction already attached to this letter, if any. */
+  voice?: MistakeVoice | null;
+  /** Given a recorder, the centre grows a Note button. Returns false when the
+   *  take did not land, which the button reports in place. */
+  onVoiceSave?: (blob: Blob, ms: number) => Promise<boolean>;
+  onVoiceDelete?: () => void;
 }
 
 const GAP = 1.4;   // degrees between slices
@@ -363,6 +370,7 @@ const RGAP = 2;    // radial gap between stacked layers
 const MistakeRing: React.FC<MistakeRingProps> = ({
   counts, permFlags, areas = MISTAKE_AREAS, mode = 'reading', translit = '',
   errorText = '', readOnly = false, onTextChange, onPick, onToggleFlag, onSubmitText, onCancel,
+  voice, onVoiceSave, onVoiceDelete,
 }) => {
   const { language } = useI18n();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -493,6 +501,13 @@ const MistakeRing: React.FC<MistakeRingProps> = ({
                 className={`w-full text-center text-[11px] bg-transparent text-slate-900 placeholder-slate-400 focus:outline-none border-b border-slate-200 pb-0.5 ${isTajweed ? 'focus:border-emerald-400' : 'focus:border-teal-400'}`}
               />
               <div className="flex items-center gap-1 mt-0.5 flex-wrap justify-center">
+                {onVoiceSave && (
+                  <VoiceNoteButton
+                    voice={voice}
+                    onSave={onVoiceSave}
+                    onDelete={() => onVoiceDelete?.()}
+                  />
+                )}
                 {errorText.trim() && (
                   <button type="button" onClick={() => onSubmitText?.()}
                     className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500 text-white hover:bg-teal-600">Log</button>

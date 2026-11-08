@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework, Mistake } from './types';
+import { Student, Progress, RecitationAchievement, MemorizationAchievement, TafsirReview, ArabicStudent, QuranHomework, Mistake, MistakeVoice } from './types';
 import Dashboard from './components/Dashboard';
 import StudentDetailPage from './components/StudentDetailPage';
 import StudentProgressPage, { markQuranOpenedFresh } from './components/StudentProgressPage';
@@ -85,6 +85,7 @@ import {
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
   closeFollowUps, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
 } from './services/recitationHomeworkService';
+import { deleteMistakeVoice } from './services/mistakeVoiceService';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
 import BillPage from './components/BillPage';
 import FamilyLinkModal from './components/FamilyLinkModal';
@@ -1446,6 +1447,11 @@ const App: React.FC = () => {
     if (letterIndex !== undefined) {
       // Letter-based mistake (new format)
       const newStudentMistakes = { ...studentMistakes };
+      // Both branches below rebuild the entry from nothing, so a voice note
+      // already recorded on this letter has to be carried across by hand. The
+      // rule the tutor sees: the note lives as long as the mark does — picking
+      // a label after recording keeps it, clearing the mark deletes it.
+      const keepVoice = studentMistakes[key]?.voice ? { voice: studentMistakes[key].voice } : {};
       if (errorType) {
         // Colored mistake: red (reading) or green (tajweed), comment optional
         newStudentMistakes[key] = {
@@ -1453,10 +1459,11 @@ const App: React.FC = () => {
           date: new Date().toISOString(),
           errorType,
           ...(errorText?.trim() ? { errorText: errorText.trim() } : {}),
+          ...keepVoice,
         };
       } else {
         // No errorType = yellow acknowledged marker (persists across page reloads)
-        newStudentMistakes[key] = { level: 1, date: new Date().toISOString() };
+        newStudentMistakes[key] = { level: 1, date: new Date().toISOString(), ...keepVoice };
       }
       const updatedStudent = { ...student, mistakes: newStudentMistakes };
       handleUpdateStudent(updatedStudent, { rowSave: false });
@@ -1492,11 +1499,33 @@ const App: React.FC = () => {
     if (!studentMistakes[key]) return;
 
     const newStudentMistakes = { ...studentMistakes };
+    // The mark is going; its recording has nothing left to point at it.
+    void deleteMistakeVoice(studentMistakes[key].voice);
     delete newStudentMistakes[key];
 
     const updatedStudent = { ...student, mistakes: newStudentMistakes };
     handleUpdateStudent(updatedStudent, { rowSave: false });
     persistMistakes(studentId, {}, [key]);
+  };
+
+  /**
+   * Attach a recorded correction to one marked letter, or take it away.
+   *
+   * The pointer is merged INTO the existing entry rather than replacing it, so
+   * a note and a label can be logged in either order. There has to be a mark
+   * already — the first click on a letter makes one — otherwise the audio
+   * would have nothing to hang off and the student would never see it.
+   */
+  const handleSetMistakeVoice = (studentId: string, key: string, voice: MistakeVoice | null) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    const existing = student.mistakes?.[key];
+    if (!existing) return;
+    if (existing.voice && existing.voice.path !== voice?.path) void deleteMistakeVoice(existing.voice);
+    const entry: Mistake = { ...existing };
+    if (voice) entry.voice = voice; else delete entry.voice;
+    handleUpdateStudent({ ...student, mistakes: { ...student.mistakes, [key]: entry } }, { rowSave: false });
+    persistMistakes(studentId, { [key]: entry });
   };
 
   const handleLogRecitationRange = (studentId: string, range: { start: Progress; end: Progress }, quality: number = 8, isRevision: boolean = false) => {
@@ -2506,6 +2535,7 @@ const App: React.FC = () => {
             memorizationAchievements={sessionStudent.memorizationAchievements || []}
             onUpdateProgress={handleUpdateProgress}
             onCycleMistakeLevel={handleCycleMistakeLevel}
+            onSetMistakeVoice={handleSetMistakeVoice}
             onSetPermanentFlags={handleSetPermanentFlags}
             onReassignMistakes={handleReassignMistakes}
             onClearMistake={handleClearMistake}

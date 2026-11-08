@@ -78,11 +78,23 @@ export interface TafsirMemorizationReview {
   reviewQuality: number; // 1-10
 }
 
+/** A tutor's spoken correction attached to one marked letter. The file lives
+ *  in the `mistake-notes` bucket; see services/mistakeVoiceService. */
+export interface MistakeVoice {
+  path: string;   // storage path, for replacing and deleting
+  url: string;    // public URL the student's page plays
+  ms: number;     // length, so the pill can say "4s" before it loads
+  at: string;     // ISO — when it was recorded
+}
+
 export interface Mistake {
   level: number;
   date: string; // ISO string
   errorType?: 'tajweed' | 'reading'; // Type of error
   errorText?: string; // Text description of the error
+  /** Ten seconds of the tutor saying it properly. Survives as long as the mark
+   *  does: re-logging the letter keeps it, clearing the mark deletes it. */
+  voice?: MistakeVoice;
 }
 
 export type AgeCategory = 'young_gems' | 'aspiring_scholars' | 'devoted_learners';
