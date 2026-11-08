@@ -270,11 +270,11 @@ const ProgressTimelineChart: React.FC<Props> = ({
 
   // Four steps of a round size, so the gridlines read 0 2 4 6 8 instead of
   // 0 1 3 4 5 — a quarter of an odd maximum is nobody's idea of a page.
-  const pageStep = Math.max(1, Math.ceil(Math.max(1, ...view.reading.map(p => p.v), ...view.hifdh.map(p => p.v)) * 1.2 / 4));
-  const maxPages = pageStep * 4;
-  const topRatio = Math.max(0.5, ...view.mistakes.map(p => p.v)) * 1.2;
-  const ratioStep = topRatio <= 2 ? 0.5 : topRatio <= 4 ? 1 : Math.ceil(topRatio / 4);
-  const maxRatio = ratioStep * 4;
+  const pageStep = Math.max(1, Math.ceil(Math.max(1, ...view.reading.map(p => p.v), ...view.hifdh.map(p => p.v)) * 1.15 / 2));
+  const maxPages = pageStep * 2;
+  const topRatio = Math.max(0.5, ...view.mistakes.map(p => p.v)) * 1.15;
+  const ratioStep = topRatio <= 1 ? 0.5 : topRatio <= 2 ? 1 : Math.ceil(topRatio / 2);
+  const maxRatio = ratioStep * 2;
   const yPages = (v: number) => PH - (v / maxPages) * PH;
   const yRatio = (v: number) => PH - (v / maxRatio) * PH;
 
@@ -366,8 +366,8 @@ const ProgressTimelineChart: React.FC<Props> = ({
     );
   }
 
-  const pageTicks = [0, 1, 2, 3, 4].map(i => ({ v: i * pageStep, y: yPages(i * pageStep) }));
-  const ratioTicks = [0, 1, 2, 3, 4].map(i => ({
+  const pageTicks = [0, 1, 2].map(i => ({ v: i * pageStep, y: yPages(i * pageStep) }));
+  const ratioTicks = [0, 1, 2].map(i => ({
     v: Math.round(i * ratioStep * 10) / 10, y: yRatio(i * ratioStep),
   }));
   const tickCount = Math.min(7, Math.max(2, Math.round(span / DAY) + 1));
@@ -422,9 +422,6 @@ const ProgressTimelineChart: React.FC<Props> = ({
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {ORDER.map(id => {
           const pts = view[id];
-          const last = pts[pts.length - 1];
-          const prev = pts[pts.length - 2];
-          const delta = last && prev ? last.v - prev.v : 0;
           const off = !!focus && focus !== id;
           return (
             <button key={id} type="button"
@@ -446,16 +443,7 @@ const ProgressTimelineChart: React.FC<Props> = ({
               }}>
               <span className="w-5 h-[3px] rounded-full" style={{ background: `var(${META[id].cssVar})` }} />
               <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{META[id].name}</span>
-              {last ? (
-                <span className="text-[13px] font-extrabold tabular-nums" style={{ color: `var(${META[id].cssVar})` }}>
-                  {META[id].fmt(last.v)}
-                  {prev && delta !== 0 && (
-                    <span className="ms-1 text-[10px] font-bold align-middle" style={{ color: 'var(--pt-dim)' }}>
-                      {delta > 0 ? '▲' : '▼'}{META[id].fmt(Math.abs(delta))}
-                    </span>
-                  )}
-                </span>
-              ) : <span className="text-[12px]" style={{ color: 'var(--pt-dim)' }}>—</span>}
+              {!pts.length && <span className="text-[12px]" style={{ color: 'var(--pt-dim)' }}>—</span>}
             </button>
           );
         })}
@@ -499,14 +487,6 @@ const ProgressTimelineChart: React.FC<Props> = ({
               {pageTicks.map(tk => <line key={`g${tk.y}`} x1="0" x2={PW} y1={tk.y} y2={tk.y} />)}
             </g>
 
-            {/* A homework date is marked in the plot too, very faintly, so the
-                eye can carry a chip up to the lines above it. */}
-            {chips.map((c, i) => (
-              <line key={`riser-${i}`} x1={x(c.t)} x2={x(c.t)} y1={PH} y2={PH + 12 + c.row * ROW_H}
-                stroke={c.outcome === 'done' ? 'var(--pt-done)' : 'var(--pt-undone)'}
-                strokeWidth="1.5" strokeOpacity="0.45" strokeDasharray="2,2" />
-            ))}
-
             {/* The day under the mouse — or under a homework chip */}
             {column !== null && (
               <g>
@@ -530,22 +510,11 @@ const ProgressTimelineChart: React.FC<Props> = ({
                   )}
                   <path d={d} fill="none" stroke={`var(${META[id].cssVar})`} strokeWidth={lineW(id)}
                     strokeLinecap="round" strokeLinejoin="round"
-                    style={{
-                      transition: 'stroke-width 160ms ease',
-                      filter: isFocus ? `drop-shadow(0 2px 7px color-mix(in srgb, var(${META[id].cssVar}) 55%, transparent))` : undefined,
-                    }} />
-                  {(isFocus || (!focus && pts.length <= 45)) && pts.map((s, i) => (
+                    style={{ transition: 'stroke-width 160ms ease' }} />
+                  {isFocus && pts.length <= 45 && pts.map((s, i) => (
                     <circle key={i} cx={s.x} cy={s.y} r={isFocus ? 4 : 3.1}
                       fill={`var(${META[id].cssVar})`} stroke="var(--pt-paper)" strokeWidth="1.3" />
                   ))}
-                  {/* Brought forward and few enough to read: print the
-                      numbers. Pinning a line is how the tutor reads it off,
-                      and a dot you have to hover is no help at all. */}
-                  {isFocus && pts.length <= 14 && pts.map((s, i) => (
-                    <text key={`v${i}`} x={clamp(s.x, 9, PW - 9)} y={Math.max(11, s.y - 11)} textAnchor="middle"
-                      fontSize="12.5" fontWeight="800" fill={`var(${META[id].cssVar})`}>{META[id].fmt(s.p.v)}</text>
-                  ))}
-
                   {/* the value on the day being pointed at */}
                   {hovered && (() => {
                     const s = pts.find(p => p.p.t === hovered.t);
@@ -558,26 +527,27 @@ const ProgressTimelineChart: React.FC<Props> = ({
 
             {/* ── Axes ── */}
             <line x1="0" y1={PH} x2={PW} y2={PH} stroke="var(--pt-axis)" />
-            <line x1="0" y1="0" x2="0" y2={PH} stroke="var(--pt-axis)" />
-            <line x1={PW} y1="0" x2={PW} y2={PH} stroke="var(--pt-axis)" />
 
-            <g fontSize="11.5" opacity={focus === 'mistakes' ? 0.35 : 1} style={{ transition: 'opacity 160ms ease' }}>
+            {/* Each axis says what it counts in words, upright and above the
+                numbers. Two captions on their sides was the chart looking
+                harder than the thing it draws. */}
+            <g fontSize="11.5" opacity={focus === 'mistakes' ? 0.4 : 1} style={{ transition: 'opacity 160ms ease' }}>
               {pageTicks.map(tk => (
                 <text key={`p${tk.y}`} x="-9" y={tk.y} dy="0.32em" textAnchor="end" fill="var(--pt-dim)">{tk.v}</text>
               ))}
-              <text transform={`translate(-38, ${PH / 2}) rotate(-90)`} textAnchor="middle" fontSize="11"
-                fontWeight="700" letterSpacing="0.08em" fill="var(--pt-ink)">
-                {t('chartLabels.pages').toUpperCase()}
+              <text x="-9" y="-9" textAnchor="end" fontSize="11" fontWeight="700" fill="var(--pt-dim)">
+                {t('chartLabels.pages').toLowerCase()}
               </text>
             </g>
 
-            <g fontSize="11.5" opacity={focus && focus !== 'mistakes' ? 0.35 : 1} style={{ transition: 'opacity 160ms ease' }}>
+            <g fontSize="11.5" opacity={focus && focus !== 'mistakes' ? 0.4 : 1} style={{ transition: 'opacity 160ms ease' }}>
               {ratioTicks.map(tk => (
                 <text key={`r${tk.y}`} x={PW + 9} y={tk.y} dy="0.32em" textAnchor="start" fill="var(--pt-dim)">{tk.v}</text>
               ))}
-              <text transform={`translate(${PW + 44}, ${PH / 2}) rotate(90)`} textAnchor="middle" fontSize="11"
-                fontWeight="700" letterSpacing="0.08em" fill="var(--pt-slip)">
-                MISTAKES / PAGE
+              {/* Right-aligned to the edge: anchored at the axis it ran off
+                  the side of the picture and read "mistakes". */}
+              <text x={PW + M.right - 6} y="-9" textAnchor="end" fontSize="11" fontWeight="700" fill="var(--pt-dim)">
+                mistakes / page
               </text>
             </g>
 
@@ -675,8 +645,8 @@ const ProgressTimelineChart: React.FC<Props> = ({
       </div>
 
       <p className="mt-2 text-[11.5px] text-slate-400 dark:text-slate-500">
-        Point at a line to bring it forward · click a name to pin it · the rail under the chart is homework,
-        <span className="font-bold" style={{ color: 'var(--pt-done)' }}> ✓ done</span> and
+        Point at a line to bring it forward. Homework runs underneath:
+        <span className="font-bold" style={{ color: 'var(--pt-done)' }}> ✓ done</span>,
         <span className="font-bold" style={{ color: 'var(--pt-undone)' }}> ✕ not done</span>.
       </p>
     </div>
