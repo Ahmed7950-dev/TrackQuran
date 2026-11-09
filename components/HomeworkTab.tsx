@@ -331,7 +331,16 @@ const HomeworkTab: React.FC<{
     };
   };
 
-  /** Only the last row offers it, and it plays the whole homework. */
+  /**
+   * Only the last row offers it, and it plays the whole homework.
+   *
+   * It has to be offered on a row that is still WITH THE STUDENT too. The
+   * moment a homework is sent back, the last row becomes the new try — which
+   * has no recording yet — and the takes the tutor was listening to sit on the
+   * row above, which is not the last one. Without this the audio is still
+   * there and there is no button anywhere that reaches it, which is exactly
+   * what happens after a reassign pressed by mistake.
+   */
   const canListen = (b: Block, a: Attempt) =>
     isTutor && !!onListen && a === b.attempts[b.attempts.length - 1]
     && b.attempts.some(x => !x.rec.purgedAt && Object.keys(x.rec.recordings).length > 0);
@@ -374,7 +383,12 @@ const HomeworkTab: React.FC<{
         : pill('Sent', 'bg-teal-50 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300');
     }
     return isTutor
-      ? pill('With the student', 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200')
+      ? (
+        <span className="inline-flex items-center gap-2">
+          {pill('With the student', 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200')}
+          {canListen(b, a) && listenGhost(b)}
+        </span>
+      )
       : (
         <button onClick={() => onRecord?.(a.hw, a.rec)}
           className="h-9 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-[13px] font-bold">
