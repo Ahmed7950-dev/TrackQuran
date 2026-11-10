@@ -2,9 +2,11 @@
 // RecitationReviewPanel — a bar across the BOTTOM of the tutor's live-logging
 // Quran page while reviewing a recitation homework (the page itself is
 // untouched). Each verse's recording plays from here (one by one, or all in
-// order), and playing a verse scrolls the page to it — so mistakes are logged
-// exactly as in a live lesson, into the student's normal mistakes map. Then
-// Passed / Needs revision notifies the student.
+// order), and the verse being played LIGHTS UP on the page — it is never
+// scrolled to, because on a phone that snatched the page away from the tutor
+// mid-tap. "Show it" moves the page when, and only when, he asks. Mistakes are
+// logged exactly as in a live lesson, into the student's normal mistakes map.
+// Then Passed / Needs revision notifies the student.
 //
 // Two lines when open, one slim strip when minimised, so the verses being
 // marked stay visible; the page gets bottom padding to match.
@@ -27,12 +29,16 @@ const RecitationReviewPanel: React.FC<{
   /** The student's mistakes map — verses with logged mistakes turn red here. */
   mistakes: Record<string, Mistake>;
   onJumpToVerse: (key: string) => void;
+  /** The verse to light up on the page: the one playing, or — once it has
+   *  finished — the last one opened, so the tutor can still see where he is.
+   *  `live` is true only while a recording is actually running. */
+  onSpotlight?: (spot: { key: string; live: boolean } | null) => void;
   onReviewed: (rec: RecitationHomework) => void;
   /** Send the marked verses back as a new homework; the caller adds it to the
    *  student's homework list and returns once it is saved. */
   onReassign: (rec: RecitationHomework, wrongVerses: string[]) => Promise<boolean>;
   onClose: () => void;
-}> = ({ rec, mistakes, onJumpToVerse, onReviewed, onReassign, onClose }) => {
+}> = ({ rec, mistakes, onJumpToVerse, onSpotlight, onReviewed, onReassign, onClose }) => {
   const verses = versesOf(rec);
   const [playing, setPlaying] = useState<string | null>(null);
   /** The verse last opened from this bar. `playing` clears itself the moment a
@@ -57,6 +63,20 @@ const RecitationReviewPanel: React.FC<{
   loadedRef.current = loadedKey;
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  // Which verse the page should light up. While something is playing it is that
+  // verse; after it ends the last one opened stays marked, quietly, so the
+  // tutor can still find it among the others to log a mistake on.
+  const spotlightRef = useRef(onSpotlight);
+  spotlightRef.current = onSpotlight;
+  const spotKey = (playing && playing !== WHOLE_TAKE) ? playing
+    : (lastOpened && lastOpened !== WHOLE_TAKE) ? lastOpened
+    : null;
+  useEffect(() => {
+    spotlightRef.current?.(spotKey ? { key: spotKey, live: !!playing } : null);
+  }, [spotKey, playing]);
+  // Leaving the review takes the light off the page with it.
+  useEffect(() => () => { spotlightRef.current?.(null); }, []);
 
   // Keep the page clear of the bar — it is fixed, so the last verses would sit
   // under it otherwise.
@@ -118,7 +138,9 @@ const RecitationReviewPanel: React.FC<{
     if (!keepChain) setChain(false);
     setLoadedKey(key);
     loadedRef.current = key;
-    if (key !== WHOLE_TAKE) onJumpToVerse(key);
+    // Deliberately NOT a jump. The page stays where the tutor put it and the
+    // verse lights up instead; "Show it" is there when he wants to go to it.
+    setLastOpened(key);
     a.src = r.url;
     a.onended = () => {
       setPlaying(null);
@@ -205,6 +227,7 @@ const RecitationReviewPanel: React.FC<{
     up: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>,
     close: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" className="w-4 h-4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>,
     back5: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true"><path d="M11 5 6.5 9.5 11 14" /><path d="M6.5 9.5H13a6 6 0 1 1-6 6" /></svg>,
+    locate: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="7.6" /><path d="M12 1.6v2.6M12 19.8v2.6M22.4 12h-2.6M4.2 12H1.6" /></svg>,
     fwd5: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true"><path d="m13 5 4.5 4.5L13 14" /><path d="M17.5 9.5H11a6 6 0 1 0 6 6" /></svg>,
   };
 
@@ -219,6 +242,19 @@ const RecitationReviewPanel: React.FC<{
         </button>
       ))}
     </div>
+  );
+  /** Go to the lit-up verse. The page never moves on its own any more, so this
+   *  is the one way the bar is allowed to move it. */
+  const showItButton = (small = false) => (
+    <button onClick={() => spotKey && onJumpToVerse(spotKey)} disabled={!spotKey}
+      title="Go to this verse on the page" aria-label="Go to this verse on the page"
+      className={`${small ? 'w-9 h-9 rounded-lg' : 'h-12 sm:h-[52px] px-2.5 sm:px-3 rounded-xl'} flex items-center justify-center gap-1.5 border flex-shrink-0 transition-colors ${
+        spotKey
+          ? 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/50'
+          : 'border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-200 opacity-40 cursor-not-allowed'}`}>
+      {icon.locate}
+      {!small && <span className="hidden lg:inline text-[13px] font-black">Show it</span>}
+    </button>
   );
   const bars = (
     <span aria-hidden="true" className="inline-flex items-end gap-[3px] h-4">
@@ -283,6 +319,7 @@ const RecitationReviewPanel: React.FC<{
         <span className="flex-grow" />
         {loadedKey && (
           <span className="flex items-center gap-1 flex-shrink-0">
+            {showItButton(true)}
             {seekButtons(true)}
             <button onClick={() => play(playing ?? loadedKey)} aria-label={playing ? 'Pause' : 'Play'}
               className={`${iconBtn} rounded-full text-teal-700 dark:text-teal-300 flex-shrink-0`}>{playing ? icon.pause : icon.play}</button>
@@ -331,7 +368,7 @@ const RecitationReviewPanel: React.FC<{
           {wrongVerses.length
             ? `${wrongVerses.length} verse${wrongVerses.length === 1 ? '' : 's'} marked — Reassign sends just those back`
             : loadedKey ? '← and → jump 5 seconds in the recording'
-            : 'Log mistakes on the page as usual — playing a verse scrolls to it'}
+            : 'Log mistakes on the page as usual — the verse playing lights up where it stands'}
         </span>
         <span className="hidden sm:flex items-center gap-2 flex-shrink-0">{windowControls}</span>
       </div>
@@ -353,6 +390,7 @@ const RecitationReviewPanel: React.FC<{
               </span>
             </button>
             {seekButtons()}
+            {showItButton()}
 
             <div role="group" aria-label="Verses" className="min-w-0 flex-grow flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
               {verses.map(([s, v], i) => {

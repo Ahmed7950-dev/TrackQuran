@@ -577,6 +577,9 @@ const App: React.FC = () => {
   // surah instead of their own last log, because a pending jump outranks
   // resuming.
   const [quranHomeworkJump, setQuranHomeworkJump] = useState<{ key: string; n: number } | null>(null);
+  /** The verse lit up on the Quran page while a recitation is being reviewed —
+   *  the one playing, or the last one played. The page is never scrolled to it. */
+  const [reviewSpotlight, setReviewSpotlight] = useState<{ key: string; live: boolean } | null>(null);
   // Recitation homework of the student in view (by id), and the one under review.
   const [recitations, setRecitations] = useState<Record<string, RecitationHomework>>({});
   const [reviewRec, setReviewRec] = useState<RecitationHomework | null>(null);
@@ -2517,6 +2520,7 @@ const App: React.FC = () => {
               mistakes={sessionStudent.mistakes ?? {}}
               onReassign={handleReassignRecitation}
               onJumpToVerse={key => setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }))}
+              onSpotlight={setReviewSpotlight}
               onClose={() => setReviewRec(null)}
               onReviewed={async done => {
                 setRecitations(prev => ({ ...prev, [done.id]: done }));
@@ -2544,6 +2548,8 @@ const App: React.FC = () => {
             jumpToVerseKey={quranHomeworkJump?.key ?? null}
             jumpNonce={quranHomeworkJump?.n ?? 0}
             onJumpHandled={() => setQuranHomeworkJump(null)}
+            spotlightVerseKey={reviewRec ? reviewSpotlight?.key ?? null : null}
+            spotlightLive={!!reviewSpotlight?.live}
             notesStudentId={sessionStudent.id}
             studentProgress={progress[sessionStudent.id]}
             studentMistakes={sessionStudent.mistakes || {}}

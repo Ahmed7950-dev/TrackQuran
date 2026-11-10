@@ -63,6 +63,15 @@ interface StudentProgressPageProps {
    */
   jumpToVerseKey?: string | null;
   /**
+   * The verse to light up where it stands — the recitation being reviewed. The
+   * page is NOT moved to it: on a phone that snatched the page away from the
+   * tutor while he was logging. `spotlightLive` is true while the recording is
+   * actually playing (a breathing glow) and false once it has finished (a
+   * quiet mark that keeps his place).
+   */
+  spotlightVerseKey?: string | null;
+  spotlightLive?: boolean;
+  /**
    * Bumped every time the parent asks for a jump, so asking for the SAME verse
    * twice still navigates. Without it, tapping one homework item, scrolling
    * away, then tapping it again did nothing (the key never changed).
@@ -924,7 +933,7 @@ const ICON = {
     search: 'M17.5 11a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0zM20 20l-3.6-3.6',
 };
 
-const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetMistakeVoice, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, onJumpHandled, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
+const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, students, studentProgress, studentMistakes, recitationAchievements, memorizationAchievements, onUpdateProgress, onCycleMistakeLevel, onClearMistake, onSetMistakeVoice, onSetPermanentFlags, onReassignMistakes, onLogRecitationRange, onRemoveRecitationAchievement, onLogMemorizationRange, onRemoveMemorizationAchievement, onLogTafseerRange, onRemoveTafseerRange, onLogHomework, onGoBack, readOnly = false, guest = false, toolbarStickyTop = 100, notesStudentId, onLogActivity, jumpToVerseKey, jumpNonce = 0, onJumpHandled, spotlightVerseKey = null, spotlightLive = false, nameCardExtra, homeworkRanges = [], onMistakeBuzz, externalBuzzTrigger, onLetterFocus, focusedLetterKey, onCursorMove, cursorLetterKey }) => {
     // ── Log-type modal state ──────────────────────────────────────────────────
     const [pendingLogRange, setPendingLogRange] = useState<{ start: Progress; end: Progress } | null>(null);
     const [readOnlyAudioVerse, setReadOnlyAudioVerse] = useState<{ surah: number; ayah: number } | null>(null);
@@ -4457,6 +4466,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             const isSelectedStart = selectionStart?.surah === surahNum && selectionStart?.ayah === ayahNum;
             const verseMarker = (<VerseMarker key={`marker-${verse.verse_key}`} number={ayahNum} surah={surahNum} isSelectedStart={isSelectedStart}/>);
             const isVerseNowPlaying = listenActive && readOnlyAudioVerse?.surah === surahNum && readOnlyAudioVerse?.ayah === ayahNum;
+            // The verse whose recording the tutor is listening to in a review.
+            // A ring around the words, NOT a background: the log colour under
+            // them (green hifz, purple homework, mint passed) still has to read.
+            const spotClass = spotlightVerseKey !== verse.verse_key ? ''
+                : spotlightLive ? ' verse-playing-glow' : ' verse-played-mark';
             const verseTextNode = (
                 <span
                     key={`text-${verse.verse_key}`}
@@ -4464,7 +4478,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         ${VERSE_BG[vColor.base]} ${vColor.underline ? VERSE_UNDERLINE : ''}
                         ${isVerseHidden && !hifzMode ? 'opacity-0' : 'opacity-100'}
                         ${listenActive || hifzMode ? 'cursor-pointer' : ''}
-                        ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}`}
+                        ${isVerseNowPlaying ? 'ring-2 ring-teal-500 dark:ring-teal-400' : ''}${spotClass}`}
                     // readOnly: use CAPTURE phase so LetterWithError's stopPropagation() (bubble phase) can't block us
                     // Skip audio if the click originated inside the Tadabbur note section
                     // Hifz mode wins over everything: capture the tap before any letter sees it.
@@ -4818,6 +4832,49 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 .cursor-pointer-glow {
                     border-radius: 5px;
                     animation: cursorGlow 1.1s ease-in-out infinite;
+                }
+                /* The verse being listened to in a recitation review. It
+                   breathes while the recording runs, then settles into a quiet
+                   mark so the tutor keeps his place among the others. */
+                @keyframes versePlaying {
+                    0%, 100% { box-shadow: 0 0 0 2.5px rgba(13,148,136,0.55), 0 0 0 0 rgba(13,148,136,0.35); }
+                    50%      { box-shadow: 0 0 0 2.5px rgba(13,148,136,0.95), 0 0 16px 5px rgba(13,148,136,0.45); }
+                }
+                /* The verse runs over two or three lines; clone gives each
+                   line its own rounded box instead of one shadow stretched
+                   around the lot. */
+                .verse-playing-glow, .verse-played-mark {
+                    border-radius: 10px;
+                    -webkit-box-decoration-break: clone;
+                    box-decoration-break: clone;
+                }
+                .verse-playing-glow {
+                    animation: versePlaying 1.8s ease-in-out infinite;
+                }
+                .verse-played-mark {
+                    box-shadow: 0 0 0 2px rgba(13,148,136,0.45);
+                }
+                /* .dark only — data-theme="reading" is a LIGHT look. */
+                .dark .verse-playing-glow { animation-name: versePlayingDark; }
+                @keyframes versePlayingDark {
+                    0%, 100% { box-shadow: 0 0 0 2.5px rgba(45,212,191,0.60), 0 0 0 0 rgba(45,212,191,0.35); }
+                    50%      { box-shadow: 0 0 0 2.5px rgba(45,212,191,1), 0 0 18px 6px rgba(45,212,191,0.5); }
+                }
+                .dark .verse-played-mark {
+                    box-shadow: 0 0 0 2px rgba(45,212,191,0.5);
+                }
+                /* Amber has no teal in it anywhere else; the glow follows. */
+                [data-theme="amber"] .verse-playing-glow { animation-name: versePlayingAmber; }
+                @keyframes versePlayingAmber {
+                    0%, 100% { box-shadow: 0 0 0 2.5px rgba(251,146,60,0.60), 0 0 0 0 rgba(251,146,60,0.35); }
+                    50%      { box-shadow: 0 0 0 2.5px rgba(251,146,60,1), 0 0 18px 6px rgba(251,146,60,0.5); }
+                }
+                [data-theme="amber"] .verse-played-mark {
+                    box-shadow: 0 0 0 2px rgba(251,146,60,0.5);
+                }
+                /* Someone who asked for less movement gets the mark, not the breath. */
+                @media (prefers-reduced-motion: reduce) {
+                    .verse-playing-glow { animation: none; box-shadow: 0 0 0 2.5px rgba(13,148,136,0.9), 0 0 12px 4px rgba(13,148,136,0.35); }
                 }
                 @keyframes shake {
                     0%, 100% {
