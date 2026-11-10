@@ -386,7 +386,8 @@ export async function reassignRecitationVerses(input: {
 }): Promise<RecitationHomework | null> {
   const { rec, wrongVerses } = input;
   if (wrongVerses.length === 0) return null;
-  const total = versesOf(rec).length;
+  const allVerses = versesOf(rec).map(verseKey);
+  const total = allVerses.length;
   const parsed = wrongVerses.map(k => k.split(':').map(Number) as [number, number]);
   const first = parsed[0], last = parsed[parsed.length - 1];
 
@@ -408,7 +409,7 @@ export async function reassignRecitationVerses(input: {
     teacherId: rec.teacherId, studentId: rec.studentId, recipient: 'student', bookingId: null,
     type: 'quran_recitation_reviewed',
     title: '🔁 Homework reassigned',
-    body: `Your teacher checked your homework and reassigned ${wrongVerses.length} of ${total} verse${total === 1 ? '' : 's'}. Tap to see the mistakes, then record them again.`,
+    body: `${railLine(rec.kind === 'hifz' ? '' : verseRail(allVerses, wrongVerses))}Your teacher checked your homework and reassigned ${wrongVerses.length} of ${total} verse${total === 1 ? '' : 's'}. Tap to see the mistakes, then record them again.`,
     metadata: {
       recitationId: child.id, homeworkId: child.homeworkId,
       verse: wrongVerses[0],
@@ -419,6 +420,43 @@ export async function reassignRecitationVerses(input: {
 }
 
 /** Tell the student a new recitation homework is waiting. */
+/** Past this a rail is longer than the sentence it illustrates, and a lock
+ *  screen truncates it anyway. The wording already carries the counts. */
+const RAIL_MAX = 12;
+
+/**
+ * One coloured circle per verse, to open a notification with.
+ *
+ * A lock-screen notification is text and nothing else: on an iPhone a web app
+ * gets a title, a body and its icon — no picture, no buttons, whatever the
+ * notification says. Emoji are coloured everywhere, though, so a row of them
+ * travels as plain characters and still reads as a progress rail.
+ *
+ *   assigned   ○○○○○      nothing recorded yet
+ *   reassigned 🟢🟢🔴🟢🔴   green where he was right, red where it goes back
+ *
+ * The empty one is a plain ring, not the white-circle emoji: emoji carry their
+ * own colour, and a white disc on the frosted white banner iOS draws is
+ * invisible. A ring takes the body text's colour, so it is as legible as the
+ * sentence under it on any background. The two kinds never share a rail, so
+ * nothing looks mismatched.
+ *
+ * It is drawn FIRST in the body on purpose — a phone cuts the end off a long
+ * notification, and the rail is the part worth seeing.
+ *
+ * Empty when there is nothing honest to draw: a hifz homework is one recording
+ * however many verses it covers, so a row of circles would misdescribe it.
+ */
+/** The rail as the body's first line, or nothing at all. */
+const railLine = (rail: string): string => (rail ? `${rail}\n` : '');
+
+export function verseRail(verses: string[], wrong?: string[]): string {
+  if (verses.length === 0 || verses.length > RAIL_MAX) return '';
+  if (!wrong) return '○'.repeat(verses.length);
+  const redo = new Set(wrong);
+  return verses.map(v => (redo.has(v) ? '🔴' : '🟢')).join('');
+}
+
 export async function notifyRecitationAssigned(rec: RecitationHomework): Promise<void> {
   await createNotification({
     teacherId: rec.teacherId, studentId: rec.studentId, recipient: 'student', bookingId: null,
@@ -426,7 +464,7 @@ export async function notifyRecitationAssigned(rec: RecitationHomework): Promise
     title: rec.kind === 'hifz' ? '🎙 New hifz homework' : '🎙 New recitation homework',
     body: rec.kind === 'hifz'
       ? `Recite ${rangeLabel(rec)} from memory — one recording for all of it.`
-      : `Record your recitation of ${rangeLabel(rec)}, one verse at a time.`,
+      : `${railLine(verseRail(versesOf(rec).map(verseKey)))}Record your recitation of ${rangeLabel(rec)}, one verse at a time.`,
     metadata: { recitationId: rec.id, homeworkId: rec.homeworkId, url: recitationUrl(rec.id) },
   });
 }
