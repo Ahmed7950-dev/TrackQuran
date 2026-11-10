@@ -424,37 +424,41 @@ export async function reassignRecitationVerses(input: {
  *  screen truncates it anyway. The wording already carries the counts. */
 const RAIL_MAX = 12;
 
+/** The rail as the body's first line, or nothing at all. */
+const railLine = (rail: string): string => (rail ? `${rail}\n` : '');
+
 /**
- * One coloured circle per verse, to open a notification with.
+ * One circle per verse, to open a notification with.
  *
- * A lock-screen notification is text and nothing else: on an iPhone a web app
- * gets a title, a body and its icon — no picture, no buttons, whatever the
- * notification says. Emoji are coloured everywhere, though, so a row of them
- * travels as plain characters and still reads as a progress rail.
+ * A lock-screen notification from a web app is text and nothing else: on an
+ * iPhone there is a title, a body and the app icon, and no picture or buttons
+ * to be had. A row of circles travels as plain characters and still reads as
+ * a progress rail.
  *
- *   assigned   ○○○○○      nothing recorded yet
- *   reassigned 🟢🟢🔴🟢🔴   green where he was right, red where it goes back
+ *   assigned   ○○○○○   nothing recorded yet
+ *   reassigned ●●○●○   filled where he read it correctly, empty where it goes back
  *
- * The empty one is a plain ring, not the white-circle emoji: emoji carry their
- * own colour, and a white disc on the frosted white banner iOS draws is
- * invisible. A ring takes the body text's colour, so it is as legible as the
- * sentence under it on any background. The two kinds never share a rail, so
- * nothing looks mismatched.
+ * One rule across both: a circle is filled once that verse is behind him, and
+ * empty while it is still owed. So a new homework is simply a rail with
+ * nothing filled in yet.
  *
- * It is drawn FIRST in the body on purpose — a phone cuts the end off a long
+ * Both glyphs are plain text, not emoji. Emoji carry their own colour, which
+ * cannot be told to suit the banner — a white disc on the frosted white one
+ * iOS draws is invisible — while these take the body text's colour and are
+ * legible wherever the sentence under them is. They are also the same width,
+ * so the rail lines up.
+ *
+ * It is drawn FIRST in the body on purpose: a phone cuts the end off a long
  * notification, and the rail is the part worth seeing.
  *
  * Empty when there is nothing honest to draw: a hifz homework is one recording
  * however many verses it covers, so a row of circles would misdescribe it.
  */
-/** The rail as the body's first line, or nothing at all. */
-const railLine = (rail: string): string => (rail ? `${rail}\n` : '');
-
 export function verseRail(verses: string[], wrong?: string[]): string {
   if (verses.length === 0 || verses.length > RAIL_MAX) return '';
   if (!wrong) return '○'.repeat(verses.length);
   const redo = new Set(wrong);
-  return verses.map(v => (redo.has(v) ? '🔴' : '🟢')).join('');
+  return verses.map(v => (redo.has(v) ? '○' : '●')).join('');
 }
 
 export async function notifyRecitationAssigned(rec: RecitationHomework): Promise<void> {
