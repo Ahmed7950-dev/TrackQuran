@@ -77,6 +77,7 @@ import RecitationHomeworkPage from './components/RecitationHomeworkPage';
 import RecitationReviewPanel from './components/RecitationReviewPanel';
 import TadabburLabPage from './components/TadabburLabPage';
 import HomeworkTab from './components/HomeworkTab';
+import { TutorHomeworkBoard } from './components/HomeworkBoard';
 import {
   LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
 } from './services/letterCardsService';
@@ -2464,24 +2465,39 @@ const App: React.FC = () => {
             listRecitationHomework(hw_student.id).then(l => setRecitations(Object.fromEntries(l.map(r => [r.id, r]))));
           };
           return (
-            <HomeworkTab
-              side="tutor"
-              homework={hw_all}
-              recitations={recitations}
-              onOpenVerses={goToHomework}
-              onListen={openRecitationReview}
-              onCopyLink={rec => navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {})}
-              onMarkDone={hw => handleMarkHomeworkDone(hw_student.id, hw.id)}
-              onMarkMissed={hw => handleMarkHomeworkDone(hw_student.id, hw.id, 'missed')}
-              onReopen={hw => handleReopenHomework(hw_student.id, hw.id)}
-              onRemove={removeHomework}
-              onClearFinished={clearFinished}
-              cardGames={cardGames}
-              cardAttempts={cardAttempts}
-              hunts={hunts}
-              onOpenHunt={setMarkingHunt}
-              onCopyHuntLink={h => navigator.clipboard?.writeText(hunterHomeworkUrl(h.id)).catch(() => {})}
-            />
+            /* The tab is split: his homework on the left, the month's board on
+               the right. They stack on a narrow screen, board underneath. */
+            <div className="max-w-6xl mx-auto flex flex-wrap items-start gap-5 lg:gap-7">
+              <div className="flex-[999_1_30rem] min-w-0">
+                <HomeworkTab
+                  side="tutor"
+                  homework={hw_all}
+                  recitations={recitations}
+                  onOpenVerses={goToHomework}
+                  onListen={openRecitationReview}
+                  onCopyLink={rec => navigator.clipboard?.writeText(recitationUrl(rec.id)).catch(() => {})}
+                  onMarkDone={hw => handleMarkHomeworkDone(hw_student.id, hw.id)}
+                  onMarkMissed={hw => handleMarkHomeworkDone(hw_student.id, hw.id, 'missed')}
+                  onReopen={hw => handleReopenHomework(hw_student.id, hw.id)}
+                  onRemove={removeHomework}
+                  onClearFinished={clearFinished}
+                  cardGames={cardGames}
+                  cardAttempts={cardAttempts}
+                  hunts={hunts}
+                  onOpenHunt={setMarkingHunt}
+                  onCopyHuntLink={h => navigator.clipboard?.writeText(hunterHomeworkUrl(h.id)).catch(() => {})}
+                />
+              </div>
+              <aside className="w-full flex-[1_1_19rem] min-w-[17.5rem] lg:sticky lg:top-4">
+                <TutorHomeworkBoard
+                  teacherId={currentUser!.id}
+                  roster={students
+                    .filter(st => !archive.quran.includes(st.id))
+                    .map(st => ({ id: st.id, name: st.name }))}
+                  highlightStudentId={hw_student.id}
+                />
+              </aside>
+            </div>
           );
         })() : activeTab === 'bill' && currentUser?.role === 'teacher' && (sessionStudent ?? selectedStudent)?.studentType === 'platform' ? (
           <BillPage

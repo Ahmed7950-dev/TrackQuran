@@ -35,6 +35,8 @@ import {
   portalHomeworkUrl, rangeLabel, saveVerseRecording, saveWholeRecording, submitRecitationHomework,
   versesOf, WHOLE_TAKE,
 } from '../services/recitationHomeworkService';
+import { StudentHomeworkBoard, studentStanding } from './HomeworkBoard';
+import type { Standing } from '../services/homeworkBoardService';
 
 const MAX_TAKE_MS = 5 * 60 * 1000;
 /**
@@ -103,6 +105,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  /** Shown over everything once he has just handed this homework in. */
+  const [board, setBoard] = useState<Standing | null>(null);
   const [minshawiPlaying, setMinshawiPlaying] = useState(false);
   const [minePlaying, setMinePlaying] = useState(false);
   /** On a reassigned homework: the one the tutor checked — its takes can be replayed. */
@@ -594,8 +598,11 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     setSubmitting(true);
     const done = await submitRecitationHomework(rec);
     setSubmitting(false);
-    if (done) setRec(done);
-    else setError('Could not submit — check your connection and try again.');
+    if (!done) { setError('Could not submit — check your connection and try again.'); return; }
+    setRec(done);
+    // The month's board, with this hand-in already counted. A tutor opening the
+    // link is only looking at the homework, so he is not shown a student screen.
+    if (!isTutor) studentStanding(done.teacherId, done.studentId).then(st => { if (st) setBoard(st); });
   };
 
   // ── Screens ───────────────────────────────────────────────────────────────
@@ -672,6 +679,20 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     window.location.href = isTutor ? '/' : rec.reportId ? `/report/${rec.reportId}` : '/';
   };
   const multiSurah = rec.startSurah !== rec.endSurah;
+
+  // Just handed in: the month's board, his place on it, and what this one did
+  // to that place. The homework itself is still behind it.
+  if (board) return shell(
+    <StudentHomeworkBoard
+      palette={P}
+      standing={board}
+      month={new Date()}
+      display={DISPLAY}
+      body={BODY}
+      onBack={goBack}
+      onStay={() => setBoard(null)}
+    />,
+  );
 
   // A reassigned homework carries the tutor's logged mistakes. Keys are the
   // live page's: surah:ayah:word[:letter], word counted by splitVerseWords and

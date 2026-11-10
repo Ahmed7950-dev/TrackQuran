@@ -17,6 +17,7 @@
 // -----------------------------------------------------------------------------
 import { supabase } from '../lib/supabase';
 import { createNotification } from './notificationService';
+import { logHomeworkSubmission } from './homeworkBoardService';
 import type { SubId, SubScore, HunterPlan } from './lettersHunterService';
 import type { Stroke } from './hunterBoardService';
 
@@ -136,6 +137,10 @@ export async function submitHunterHomework(
   if (error) { console.error('submitHunterHomework:', error.message); return false; }
   if (data !== true) return false;      // someone got there first
 
+  await logHomeworkSubmission({
+    teacherId: hw.teacherId, studentId: hw.studentId, studentName: hw.studentName,
+    kind: 'hunt', ref: hw.id, items: hw.letters.length,
+  });
   await createNotification({
     teacherId: hw.teacherId,
     studentId: hw.studentId,

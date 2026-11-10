@@ -17,6 +17,7 @@
 
 import { supabase } from '../lib/supabase';
 import { createNotification } from './notificationService';
+import { logHomeworkSubmission } from './homeworkBoardService';
 import { QURAN_METADATA, isLetterMistakeKey, isTurkishMistakeKey } from '../constants';
 import type { Mistake } from '../types';
 
@@ -281,6 +282,12 @@ export async function submitRecitationHomework(rec: RecitationHomework): Promise
   if (error) { console.error('submitRecitationHomework:', error.message); return null; }
   const done = fromRow(data as Row);
   const verses = versesOf(done).length;
+  // One hand-in on the month's board. Keyed by this row's id, so resubmitting
+  // the same homework after "needs revision" moves it, it does not count twice.
+  await logHomeworkSubmission({
+    teacherId: done.teacherId, studentId: done.studentId, studentName: done.studentName,
+    kind: 'recitation', ref: done.id, items: verses,
+  });
   await createNotification({
     teacherId: done.teacherId, studentId: done.studentId, recipient: 'tutor', bookingId: null,
     type: 'quran_recitation_submitted',
