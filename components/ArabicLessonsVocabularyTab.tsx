@@ -4,13 +4,13 @@
 // One table of every lesson's words grouped by lesson, words from completed
 // lessons highlighted green, a search box that matches Arabic, transliteration
 // or English, and a lesson picker that feeds the SAME flashcard flow and games
-// the per-lesson Vocabulary tab uses (including the "review later" group).
+// the per-lesson Vocabulary tab uses.
 //
 // Rendered for BOTH sides: the tutor's student page and the student portal
 // (ArabicStudentDetailPage backs both). The tutor additionally gets the
 // word selection and assignment choices; assigned work lives in Homework.
 //
-// Every flashcard answer is recorded ("I know" = correct, "Review later" =
+// Every flashcard answer is recorded ("I know" = correct, "I don't know" =
 // wrong) and the last ten draw the red/green strength bar beside each word.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -51,29 +51,23 @@ type Phase = 'idle' | 'active' | 'complete';
  * was a Lessons/Selected toggle to referee them. One pool at a time, named on
  * screen, and the toggle is not needed.
  */
-type Pool = 'needs' | 'taught' | 'saved' | 'lessons' | 'picked';
+type Pool = 'needs' | 'lessons' | 'picked';
 
 const POOLS: { id: Pool; label: string; hint: string }[] = [
-  { id: 'needs',   label: 'Needs practice', hint: 'Never asked, or wrong last time' },
-  { id: 'taught',  label: 'Taught · needs practice',
-    hint: 'Never asked, or wrong last time — only in lessons marked done' },
-  { id: 'saved',   label: 'Review later',   hint: 'The ones he pressed "Review later" on' },
+  { id: 'needs',   label: 'Needs practice',
+    hint: 'Never asked, or wrong last time — in lessons marked done' },
   { id: 'lessons', label: 'Lessons',        hint: 'Tick lessons in the table below' },
   { id: 'picked',  label: 'Picked',         hint: 'Tap words in the table to pick them' },
 ];
 
 const POOL_EMPTY: Record<Pool, string> = {
-  needs:   'Every word has been answered correctly — nothing needs practice.',
-  taught:  'Nothing to revise from the finished lessons — mark lessons done, or he knows them all already.',
-  saved:   'He has not put anything aside to review.',
+  needs:   'Nothing to revise from the finished lessons — mark lessons done, or he knows them all already.',
   lessons: 'No words in these lessons yet.',
   picked:  'Tap words in the table to pick them.',
 };
 
 const POOL_PHRASE: Record<Pool, (n: number, lessons: number) => string> = {
-  needs:   n => `the ${n} that need practice`,
-  taught:  n => `the ${n} from finished lessons that need practice`,
-  saved:   n => `the ${n} he put aside`,
+  needs:   n => `the ${n} from finished lessons that need practice`,
   lessons: (n, lessons) => `${lessons ? `${lessons} lesson${lessons === 1 ? '' : 's'}` : 'every lesson'} · ${n} words`,
   picked:  n => `the ${n} you picked`,
 };
@@ -102,8 +96,6 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const [cardIndex, setCardIndex]   = useState(0);
   const [wrongWords, setWrongWords] = useState<VocabWord[]>([]);
   const [flipped, setFlipped]       = useState(false);
-  const [reviewingSaved, setReviewingSaved] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
 
   // Last ten flashcard answers per word → the strength bar.
   const [strength, setStrength] = useState<StrengthMap>(new Map());
@@ -231,41 +223,28 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     return a?.length ? a[a.length - 1] : undefined;
   }, [strength]);
 
-  /** Worth drilling: never asked, or got it wrong last time. */
+  /**
+   * Worth drilling: never asked, or got it wrong last time — and only from
+   * lessons marked done, because a word from a lesson he has not reached yet
+   * is a cold test, not revision. Those are still a tick away under Lessons.
+   *
+   * This used to be three chips. "Needs practice" over the whole course was
+   * mostly vocabulary he had never been taught, and "Review later" was the
+   * wrong-answer half of the very same set — a strict subset, and a name left
+   * over from when the student really did save words to a list. One pile now:
+   * what he has been taught and still does not know.
+   */
   const needsPracticeWords = useMemo(
-    () => words.filter(w => lastAnswer(w.id) !== true), [words, lastAnswer]);
-
-  /**
-   * The same, but only from lessons marked done — the words he has actually
-   * been taught and still does not know. This is the honest homework pile:
-   * `needs` counts every word in the course, so most of it is vocabulary from
-   * lessons he has not reached yet, which is not something to send him.
-   */
-  const taughtNeedsWords = useMemo(
-    () => needsPracticeWords.filter(w => completedSet.has(w.lessonId)),
-    [needsPracticeWords, completedSet]);
-
-  /**
-   * What the student pressed "Review later" on — read from his ANSWERS, not
-   * from a bookmark list in this browser's localStorage. That list was per
-   * device, so the tutor's "saved words" were the ones saved on the tutor's
-   * own laptop and never the student's. Pressing "I know" later flips the last
-   * answer and the word leaves this set by itself.
-   */
-  const savedWords = useMemo(
-    () => words.filter(w => lastAnswer(w.id) === false), [words, lastAnswer]);
+    () => words.filter(w => completedSet.has(w.lessonId) && lastAnswer(w.id) !== true),
+    [words, completedSet, lastAnswer]);
 
   const poolCount = (id: Pool): number =>
     id === 'picked' ? selectedWords.length
     : id === 'needs' ? needsPracticeWords.length
-    : id === 'taught' ? taughtNeedsWords.length
-    : id === 'saved' ? savedWords.length
     : lessonPool.length;
 
   const practicePool = pool === 'picked' ? selectedWords
     : pool === 'needs' ? needsPracticeWords
-    : pool === 'taught' ? taughtNeedsWords
-    : pool === 'saved' ? savedWords
     : lessonPool;
   /** A card needs both halves of the word. However many are selected all go
    *  on the pile: the hands hold five a side whatever its size. */
@@ -288,18 +267,18 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     setSelected(new Set(orderedLessons.filter(l => l.level === lvl && (wordsByLesson.get(l.id)?.length ?? 0) > 0).map(l => l.id)));
 
   // ── Flashcard controls ────────────────────────────────────────────────────
-  const startChallenge = (pool: VocabWord[], savedRun = false) => {
+  const startChallenge = (pool: VocabWord[]) => {
     if (!pool.length) return;
     const deck: VocabWord[] = shuffleArray(pool) as VocabWord[];
     setShuffled(deck);
-    setCardIndex(0); setWrongWords([]); setReviewingSaved(savedRun);
+    setCardIndex(0); setWrongWords([]);
     setPhase('active');
   };
   const advance = (wrong: VocabWord[] = wrongWords) => {
     if (cardIndex + 1 >= shuffled.length) {
       setPhase('complete');
       // Wrong words feed the existing mistakes-review flow (grouped per lesson).
-      if (!reviewingSaved && wrong.length > 0) {
+      if (wrong.length > 0) {
         saveVocabMistakes(student.id, wrong.map(w => ({ wordId: w.id, lessonId: w.lessonId }))).catch(console.error);
       }
     } else {
@@ -308,14 +287,14 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   };
   const handleKnow = () => {
     const w = shuffled[cardIndex];
-    // "I know" IS how a word leaves the saved list now: the set is derived from
-    // the last answer, so nothing has to be removed from anywhere.
+    // "I know" IS how a word leaves the pile: it is derived from the last
+    // answer, so nothing has to be removed from anywhere.
     if (w) recordAnswer(w, true);
     advance();
   };
-  // "Review later" is the student NOT knowing the word: it counts as a wrong
-  // answer on the strength bar and lands in the "need more practice" list.
-  const handleSaveForRevision = () => {
+  // "I don't know" is a wrong answer: it shows red on the strength bar and the
+  // word stays in the needs-practice pile until he gets it right.
+  const handleDontKnow = () => {
     const w = shuffled[cardIndex];
     let wrong = wrongWords;
     if (w) {
@@ -323,8 +302,6 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
       if (!wrong.some(x => x.id === w.id)) wrong = [...wrong, w];
     }
     setWrongWords(wrong);
-    setSavedFlash(true);
-    window.setTimeout(() => setSavedFlash(false), 900);
     advance(wrong);
   };
 
@@ -344,18 +321,16 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
       <div className="max-w-3xl mx-auto p-4 sm:p-10 space-y-6 sm:space-y-8">
         <div className="flex items-center justify-between">
           <span className="text-sm sm:text-base text-slate-500 dark:text-slate-400">
-            {reviewingSaved && <span className="mr-2 inline-block px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-bold align-middle">🔖 {t('arabicLessonDetail.revisionSession')}</span>}
             {t('arabicLessonDetail.cardOf', { n: cardIndex + 1, total: shuffled.length })}
           </span>
-          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">{t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
         <ArabicFlashcard word={word} flipped={flipped} onFlip={() => setFlipped(f => !f)}
-          onKnow={handleKnow} onReview={handleSaveForRevision}
-          reviewLabel={lastAnswer(word.id) === false ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')} />
+          onKnow={handleKnow} onReview={handleDontKnow} />
       </div>
     );
   }
@@ -508,7 +483,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             name={t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
             hint="Flip · memorise · repeat"
             disabled={practicePool.length === 0}
-            onClick={() => studentMode ? startChallenge(practicePool, pool === 'saved') : setChoice({ kind: 'flashcards' })} />
+            onClick={() => studentMode ? startChallenge(practicePool) : setChoice({ kind: 'flashcards' })} />
 
           <GameTile art="wordflight" tone="sky" icon="✈️"
             name="Word Flight Game" hint="Catch the falling words"
@@ -647,7 +622,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             count={practicePool.length} nextLessonAt={nextLessonAt}
             onClose={() => setChoice(null)}
             onPlay={() => {
-              if (choice.kind === 'flashcards') startChallenge(practicePool, pool === 'saved');
+              if (choice.kind === 'flashcards') startChallenge(practicePool);
               else { setCardsAssignment(null); setCardsOpen(true); }
               setChoice(null);
             }}

@@ -1039,8 +1039,6 @@
     "errSelectTrueFalse": "Doğru veya Yanlış'ı doğru cevap olarak seçin.",
     "cancel": "İptal",
     "errAddBlank": "\"+ Boşluk\" düğmesiyle en az bir boşluk (___) ekleyin.",
-    "reviewLater": "🔖 Sonra tekrar",
-    "savedAlready": "🔖 Kaydedildi",
     "savedForRevision": "Kaydedildi!",
     "revisionSession": "Tekrar",
     "reviseSaved": "Kaydedilen kelimeleri çalış ({{count}})",

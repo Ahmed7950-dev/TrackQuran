@@ -1,9 +1,13 @@
 import React from 'react';
 
-/** Shared presentation; the caller still owns scoring, revision and progress. */
-export default function ArabicFlashcard({ word, flipped, onFlip, onKnow, onReview, disabled = false, reviewLabel = 'Review later' }: {
+/** Shared presentation; the caller still owns scoring, revision and progress.
+ *
+ *  The two buttons are a pair — "I know" and "I don't know" — and nothing
+ *  else. The left one used to say "Review later", which promised a list to
+ *  come back to; what it does is answer the card wrongly. */
+export default function ArabicFlashcard({ word, flipped, onFlip, onKnow, onReview, disabled = false }: {
   word: { english: string; arabic: string; transliteration?: string }; flipped: boolean;
-  onFlip: () => void; onKnow: () => void; onReview: () => void; disabled?: boolean; reviewLabel?: string;
+  onFlip: () => void; onKnow: () => void; onReview: () => void; disabled?: boolean;
 }) {
   return <div className="space-y-5">
     <button type="button" aria-label={flipped ? 'Show English word' : 'Reveal Arabic word'} aria-pressed={flipped} onClick={onFlip}
@@ -15,7 +19,7 @@ export default function ArabicFlashcard({ word, flipped, onFlip, onKnow, onRevie
       <span className="text-sm text-slate-500 dark:text-slate-400">{flipped ? 'Tap to flip back' : 'Tap to reveal'}</span>
     </button>
     <div className="grid grid-cols-2 gap-3 sm:gap-5">
-      <button disabled={disabled} onClick={onReview} className="min-h-20 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 font-bold text-base sm:text-lg hover:bg-rose-100 dark:hover:bg-rose-900/50 disabled:opacity-50 transition-colors"><span aria-hidden="true" className="block mb-1 text-2xl">↺</span>{reviewLabel}</button>
+      <button disabled={disabled} onClick={onReview} className="min-h-20 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 font-bold text-base sm:text-lg hover:bg-rose-100 dark:hover:bg-rose-900/50 disabled:opacity-50 transition-colors"><span aria-hidden="true" className="block mb-1 text-2xl">✗</span>I don&apos;t know</button>
       <button disabled={disabled} onClick={onKnow} className="min-h-20 p-4 rounded-2xl bg-emerald-700 text-white font-bold text-base sm:text-lg hover:bg-emerald-800 disabled:opacity-50 shadow-sm transition-colors"><span aria-hidden="true" className="block mb-1 text-2xl">✓</span>I know</button>
     </div>
   </div>;

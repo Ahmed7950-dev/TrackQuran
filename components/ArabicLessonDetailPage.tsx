@@ -2808,14 +2808,14 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
             {reviewingSaved && <span className="mr-2 inline-block px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-bold align-middle">🔖 {t('arabicLessonDetail.revisionSession')}</span>}
             {t('arabicLessonDetail.cardOf', { n: cardIndex + 1, total: shuffled.length })}
           </span>
-          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">× {t('arabicLessonDetail.exit')}</button>
+          <button onClick={() => setPhase('idle')} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">{t('arabicLessonDetail.exit')}</button>
         </div>
         <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full bg-amber-400 rounded-full transition-all duration-300" style={{ width: `${(cardIndex / shuffled.length) * 100}%` }} />
         </div>
 
         <ArabicFlashcard word={word} flipped={flipped} onFlip={() => setFlipped(f => !f)} onKnow={handleKnow} onReview={handleSaveForRevision}
-          reviewLabel={revisionIds.has(word.id) ? t('arabicLessonDetail.savedAlready') : t('arabicLessonDetail.reviewLater')} />
+ />
       </div>
     );
   }
