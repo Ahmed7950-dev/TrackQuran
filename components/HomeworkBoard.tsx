@@ -1,10 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // HomeworkBoard — the monthly board, in its two readings.
 //
-//   StudentHomeworkBoard  the screen a student is shown the moment he hands
-//                         homework in: the best five, his own place among
-//                         them, what that hand-in just did to it, and one
-//                         sentence that tells him where to aim next.
+//   StudentHomeworkBoard  the best five, his own place among them, and one
+//                         sentence telling him where to aim next. He sees it
+//                         twice over a piece of homework: when he hands it in
+//                         (`scored` false — it is with his teacher and has not
+//                         counted yet) and when the teacher passes it, which
+//                         is the moment it counts and the one that may claim a
+//                         climb.
 //   TutorHomeworkBoard    the same month in the tutor's Homework tab, beside
 //                         the student's own homework: every student, the ones
 //                         who have sent nothing included, and a month he can
@@ -35,15 +38,15 @@ const ctxOf = (s: Standing): CheerCtx => ({
   rank: s.me?.rank ?? 0,
   sent: s.me?.sent ?? 0,
   total: s.all.length,
-  movedUp: s.movedUp,
-  passed: s.passed[0] ? firstName(s.passed[0].name) : null,
+  movedUp: s.scored ? s.movedUp : 0,
+  passed: s.scored && s.passed[0] ? firstName(s.passed[0].name) : null,
   aheadName: s.ahead ? firstName(s.ahead.name) : null,
   toNext: s.toNext,
   behindName: s.behind ? firstName(s.behind.name) : null,
   behindGap: s.me && s.behind ? s.me.sent - s.behind.sent : 0,
   fifthName: s.all[TOP_N - 1] ? firstName(s.all[TOP_N - 1].name) : null,
   toTop5: s.toTop5,
-  firstEver: s.rankBefore === null,
+  firstEver: s.scored && s.rankBefore === null,
 });
 
 const arrowUp = (size: number) => (
@@ -56,6 +59,13 @@ const arrowUp = (size: number) => (
 const star = (size: number) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M12 2.6l2.7 5.9 6.3.7-4.7 4.3 1.3 6.2L12 16.6l-5.6 3.1 1.3-6.2L3 9.2l6.3-.7z" />
+  </svg>
+);
+
+const clock = (size: number) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3 2" />
   </svg>
 );
 
@@ -95,11 +105,30 @@ export const StudentHomeworkBoard: React.FC<{
   /** Below the five, his own row is shown under them, after a gap. */
   const below = me && me.rank > TOP_N ? me : null;
 
-  const moveChip = {
-    up: { bg: P.hint, ink: P.hintInk, icon: arrowUp(14) },
-    held: { bg: P.goldHalo, ink: P.goldInk, icon: me?.rank === 1 ? star(14) : dot(12) },
-    new: { bg: P.goldHalo, ink: P.goldInk, icon: star(14) },
-  }[move];
+  /** Nothing finished this month yet — he is not on the board at all. */
+  const fifth = standing.all[TOP_N - 1] ?? null;
+  const toJoin = fifth ? fifth.sent + 1 : 1;
+
+  const moveChip = !me
+    ? { bg: P.goldHalo, ink: P.goldInk, icon: dot(12), label: 'Not on the board yet' }
+    : !standing.scored
+    ? { bg: P.goldHalo, ink: P.goldInk, icon: clock(13), label: 'With your teacher' }
+    : {
+        up: { bg: P.hint, ink: P.hintInk, icon: arrowUp(14), label: MOVE_LABEL.up(c) },
+        held: { bg: P.goldHalo, ink: P.goldInk, icon: me.rank === 1 ? star(14) : dot(12), label: MOVE_LABEL.held(c) },
+        new: { bg: P.goldHalo, ink: P.goldInk, icon: star(14), label: MOVE_LABEL.new(c) },
+      }[move];
+
+  // What the hero says. Only the scored reading may claim a climb; the other
+  // two say where he stands and what the next step is, and nothing more.
+  const headline = !me
+    ? 'The board is waiting for you.'
+    : cheer.headline;
+  const line = !me
+    ? (fifth
+      ? `Finish ${toJoin} this month and you are in the five.`
+      : 'Finish one this month and the board is yours to open.')
+    : cheer.line;
 
   const row = (r: RankedEntry, mine: boolean) => (
     <div key={r.studentId}
@@ -167,11 +196,11 @@ export const StudentHomeworkBoard: React.FC<{
               <span style={{ background: moveChip.bg, color: moveChip.ink }}
                 className="self-start inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-3 py-1 text-[12.5px] font-extrabold">
                 {moveChip.icon}
-                {MOVE_LABEL[move](c)}
+                {moveChip.label}
               </span>
               <p style={{ color: P.muted }} className="m-0 text-[13.5px] font-semibold">
-                {c.sent} sent this month
-                {standing.rankBefore && standing.rankBefore !== c.rank
+                {c.sent} finished this month
+                {standing.scored && standing.rankBefore && standing.rankBefore !== c.rank
                   ? ` · ${ordinal(standing.rankBefore)} before this one`
                   : ''}
               </p>
@@ -180,10 +209,17 @@ export const StudentHomeworkBoard: React.FC<{
           <div>
             <p style={{ fontFamily: display, color: P.ink }}
               className="m-0 mb-1.5 text-[25px] leading-[1.18] font-semibold">
-              {cheer.headline}
+              {headline}
             </p>
-            <p style={{ color: P.muted }} className="m-0 text-[14.5px] leading-[1.45]">{cheer.line}</p>
+            <p style={{ color: P.muted }} className="m-0 text-[14.5px] leading-[1.45]">{line}</p>
           </div>
+          {!standing.scored && (
+            <p style={{ background: P.goldHalo, color: P.goldInk }}
+              className="m-0 rounded-2xl px-3.5 py-2.5 text-[13.5px] font-semibold leading-[1.4]">
+              The one you have just sent is with your teacher. It joins the board the moment he
+              marks it right.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5">
@@ -207,7 +243,8 @@ export const StudentHomeworkBoard: React.FC<{
             )}
           </div>
           <p style={{ color: P.muted }} className="m-0 text-[12.5px] leading-[1.4]">
-            Counted from the 1st of the month. Everyone starts level again on the 1st of {nextMonthName(month)}.
+            A homework counts once, when your teacher marks it right — however many times it goes
+            back and forth. Everyone starts level again on the 1st of {nextMonthName(month)}.
           </p>
         </div>
 
@@ -229,7 +266,7 @@ export const StudentHomeworkBoard: React.FC<{
             <button onClick={onStay} type="button"
               style={{ color: P.muted }}
               className="w-full min-h-[44px] text-[14px] font-bold">
-              See the homework I just sent
+              {standing.scored ? 'See the homework' : 'See the homework I just sent'}
             </button>
           )}
         </div>
@@ -314,7 +351,7 @@ export const TutorHomeworkBoard: React.FC<{
       <p className="text-[13px] font-semibold text-slate-500 dark:text-slate-400">
         {loading ? 'Counting…'
           : rows === null ? 'The board could not be read just now.'
-          : `${all.length} student${all.length === 1 ? '' : 's'} · ${total} sent · ${doers} with something in`}
+          : `${all.length} student${all.length === 1 ? '' : 's'} · ${total} finished · ${doers} on the board`}
       </p>
 
       {!loading && rows !== null && (
@@ -368,8 +405,10 @@ export const TutorHomeworkBoard: React.FC<{
       )}
 
       <p className="text-[12.5px] leading-snug text-slate-500 dark:text-slate-400">
-        Students see the top five and their own place, right after they hand homework in. Every
-        recitation and letter hunt sent in counts once, from the 1st of the month.
+        Students see the top five and their own place when they hand homework in, and again when
+        you pass it. A recitation counts when you mark it Passed — once for the whole homework,
+        however many times you send it back; a letter hunt counts when it is handed in. From the
+        1st of the month.
       </p>
     </section>
   );
@@ -377,10 +416,21 @@ export const TutorHomeworkBoard: React.FC<{
 
 /* ── What the recitation page needs to show the student's screen ───────── */
 
-/** The standing for one student, or null when there is nothing to show him. */
-export async function studentStanding(teacherId: string, studentId: string): Promise<Standing | null> {
+/**
+ * The standing for one student, or null when the board could not be read.
+ *
+ * `scored` is true when the homework in hand has already counted — the tutor
+ * has just passed it — and the screen may say what it did to his place. It is
+ * false the moment he hands one in, when the board is simply where he stands
+ * while his teacher looks at it; he is shown that even with nothing finished
+ * this month yet, because it tells him what the board is and what it takes.
+ */
+export async function studentStanding(
+  teacherId: string, studentId: string, opts: { scored?: boolean } = {},
+): Promise<Standing | null> {
   const rows = await fetchBoard(teacherId, new Date());
   if (!rows) return null;
-  const s = standingOf(rows, studentId);
-  return s.me ? s : null;
+  const scored = opts.scored !== false;
+  const s = standingOf(rows, studentId, scored);
+  return scored && !s.me ? null : s;
 }

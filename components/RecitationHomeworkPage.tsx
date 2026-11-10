@@ -600,10 +600,33 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     setSubmitting(false);
     if (!done) { setError('Could not submit — check your connection and try again.'); return; }
     setRec(done);
-    // The month's board, with this hand-in already counted. A tutor opening the
-    // link is only looking at the homework, so he is not shown a student screen.
-    if (!isTutor) studentStanding(done.teacherId, done.studentId).then(st => { if (st) setBoard(st); });
+    // The month's board as it stands — NOT counting this one, which is with the
+    // teacher until he marks it right. A tutor opening the link is only looking
+    // at the homework, so he is not shown a student screen.
+    if (!isTutor) {
+      studentStanding(done.teacherId, done.studentId, { scored: false })
+        .then(st => { if (st) setBoard(st); });
+    }
   };
+
+  // The homework has been passed, which is the moment it goes on the board —
+  // so the board is what he is shown, once, the first time he opens it after
+  // that. (Once: he can come back to the homework afterwards without the
+  // celebration landing on him again. A browser with no storage shows it
+  // every time, which is the harmless way round.)
+  const boardShownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (isTutor || !rec || rec.status !== 'passed') return;
+    if (boardShownFor.current === rec.id) return;
+    boardShownFor.current = rec.id;
+    const seenKey = `hwBoardSeen:${rec.id}`;
+    try { if (localStorage.getItem(seenKey)) return; } catch { /* no storage */ }
+    studentStanding(rec.teacherId, rec.studentId, { scored: true }).then(st => {
+      if (!st) return;
+      try { localStorage.setItem(seenKey, '1'); } catch { /* no storage */ }
+      setBoard(st);
+    });
+  }, [isTutor, rec?.id, rec?.status]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Screens ───────────────────────────────────────────────────────────────
   const P = PALETTES[theme];
@@ -680,8 +703,8 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
   const multiSurah = rec.startSurah !== rec.endSurah;
 
-  // Just handed in: the month's board, his place on it, and what this one did
-  // to that place. The homework itself is still behind it.
+  // The month's board — his place on it, and, when the homework has just been
+  // passed, what it did to that place. The homework itself is still behind it.
   if (board) return shell(
     <StudentHomeworkBoard
       palette={P}

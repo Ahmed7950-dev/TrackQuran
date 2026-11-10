@@ -1,19 +1,24 @@
 // services/homeworkBoardService.ts
 // -----------------------------------------------------------------------------
-// The homework board — who handed in the most homework this calendar month.
+// The homework board — who FINISHED the most homework this calendar month.
 //
 // A month is the 1st to the last day, in the viewer's own clock, and it starts
-// level again on the 1st. Counting lives in `homework_submissions`, one row per
-// hand-in, written by log_homework_submission and read back ALREADY COUNTED by
-// the homework_board function — so a student's browser can show the board
-// without being able to read another student's homework.
+// level again on the 1st. Counting lives in `homework_handins`, one row per
+// piece of homework FINISHED, and read back ALREADY COUNTED by the
+// homework_board function — so a student's browser can show the board without
+// being able to read another student's homework.
+//
+// A recitation is finished when the tutor passes it (log_recitation_pass, one
+// row per chain of reassignments, so going back and forth over one homework is
+// still one homework). A letter hunt is finished when it is handed in
+// (log_homework_submission) — there is nothing to send back.
 // Migration: supabase/migrations/20261110_homework_board.sql
 //
 // ── The order ────────────────────────────────────────────────────────────────
 // More homework is ahead. Level on homework, whoever got there FIRST is ahead.
 // Two rules, both sayable out loud, and together they order the board strictly
 // — no two students share a place. It also means a student who has just handed
-// one in sits at the BOTTOM of his new count (his last hand-in is the most
+// one finished sits at the BOTTOM of his new count (his last one is the most
 // recent there is), so he only ever climbs by doing MORE than the student above
 // him, never by drawing level. That is what makes "you passed Zakaria" true.
 // -----------------------------------------------------------------------------
@@ -23,15 +28,15 @@ import { supabase } from '../lib/supabase';
 /** How many the students themselves see. The tutor sees everyone. */
 export const TOP_N = 5;
 
-/** Which homework a hand-in was. One count, whatever kind it was. */
+/** Which kind of homework it was. One count, whatever kind. */
 export type SubmissionKind = 'recitation' | 'hunt';
 
 export interface BoardEntry {
   studentId: string;
-  /** As it was stored when he handed in; '' when the row never carried one. */
+  /** As it was stored when it counted; '' when the row never carried one. */
   name: string;
   sent: number;
-  /** Verses / letters across those hand-ins — detail, never part of the order. */
+  /** Verses / letters across them — detail, never part of the order. */
   items: number;
   lastAt: string;
 }
@@ -90,9 +95,9 @@ export async function fetchBoard(teacherId: string, month: Date): Promise<BoardE
 }
 
 /**
- * A hand-in. Idempotent per (kind, ref): handing the same homework in again
- * after "needs revision" moves the time, it does not add to the count.
- * Never throws and never blocks the hand-in it belongs to.
+ * A letter hunt handed in. Idempotent per (kind, ref). Never throws and never
+ * blocks the hand-in it belongs to. Recitations do NOT come through here —
+ * they count when they are passed, via logRecitationPass.
  */
 export async function logHomeworkSubmission(input: {
   teacherId: string; studentId: string; studentName?: string | null;
@@ -113,6 +118,21 @@ export async function logHomeworkSubmission(input: {
   }
 }
 
+/**
+ * A recitation homework the tutor has just passed. The server walks up the
+ * chain of reassignments and writes ONE row against the homework it started
+ * as, so a homework sent back three times and finally right is one point, not
+ * four — and a homework still being revised is none.
+ */
+export async function logRecitationPass(recitationId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('log_recitation_pass', { p_rec: recitationId });
+    if (error) console.error('logRecitationPass:', error.message);
+  } catch (e) {
+    console.error('logRecitationPass:', e);
+  }
+}
+
 /* ── The order ──────────────────────────────────────────────────────────── */
 
 const cmp = (a: BoardEntry, b: BoardEntry): number =>
@@ -125,11 +145,11 @@ export const rankBoard = (rows: BoardEntry[]): RankedEntry[] =>
   [...rows].sort(cmp).map((e, i) => ({ ...e, rank: i + 1 }));
 
 /**
- * The board as it stood the moment before this student's latest hand-in: the
- * same rows with one taken off his count. He drops off it altogether when that
- * hand-in was his first of the month.
+ * The board as it stood the moment before this student's latest homework was
+ * marked right: the same rows with one taken off his count. He drops off it
+ * altogether when that one was his first of the month.
  *
- * His last-hand-in time is left as it is. It is only a tie-break, and leaving
+ * His last time is left as it is. It is only a tie-break, and leaving
  * it puts him at the bottom of the count he had — exactly where he was before,
  * since every student at that count got there before he did.
  */
@@ -139,30 +159,40 @@ export const boardBefore = (rows: BoardEntry[], studentId: string): BoardEntry[]
     .filter(r => r.sent > 0);
 
 export interface Standing {
-  /** Every student who handed something in, in order. */
+  /** Every student with homework finished this month, in order. */
   all: RankedEntry[];
+  /** False while the homework in hand is still waiting to be marked: these
+   *  numbers do not include it yet, so nothing may claim that they do. */
+  scored: boolean;
   /** The first TOP_N of them — what a student is shown. */
   top: RankedEntry[];
   me: RankedEntry | null;
-  /** Where he was before his latest hand-in; null when it was his first. */
+  /** Where he was before this one counted; null when it was his first. */
   rankBefore: number | null;
-  /** How many places that hand-in won him. 0 when it won none. */
+  /** How many places it won him. 0 when it won none. */
   movedUp: number;
   /** The students he went past with it, nearest first. */
   passed: RankedEntry[];
   /** The student one place above him, and one place below. */
   ahead: RankedEntry | null;
   behind: RankedEntry | null;
-  /** Hand-ins between him and the student above / the fifth place. */
+  /** How many more he must finish to pass the student above / reach fifth. */
   toNext: number;
   toTop5: number;
 }
 
-export function standingOf(rows: BoardEntry[], studentId: string): Standing {
+/**
+ * `scored` says whether the homework the student has in hand is already in
+ * these numbers. It is, when he is being shown the board because the tutor
+ * has just passed one; it is not, when he has only handed one in and it is
+ * waiting to be marked — and then there is no climb to claim, so the before /
+ * after comparison is not made at all.
+ */
+export function standingOf(rows: BoardEntry[], studentId: string, scored = true): Standing {
   const all = rankBoard(rows);
   const me = all.find(r => r.studentId === studentId) ?? null;
-  const before = rankBoard(boardBefore(rows, studentId));
-  const meBefore = before.find(r => r.studentId === studentId) ?? null;
+  const before = scored ? rankBoard(boardBefore(rows, studentId)) : [];
+  const meBefore = scored ? before.find(r => r.studentId === studentId) ?? null : null;
 
   const ahead = me && me.rank > 1 ? all[me.rank - 2] : null;
   const behind = me && me.rank < all.length ? all[me.rank] : null;
@@ -182,6 +212,7 @@ export function standingOf(rows: BoardEntry[], studentId: string): Standing {
 
   return {
     all,
+    scored,
     top: all.slice(0, TOP_N),
     me,
     rankBefore: meBefore?.rank ?? null,

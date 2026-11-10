@@ -1,6 +1,7 @@
 // utils/leaderboardCheer.ts
 // -----------------------------------------------------------------------------
-// What the board SAYS to a student when he has just handed homework in.
+// What the board SAYS to a student about his place on it — on the screen he
+// gets when he hands homework in, and again when his teacher marks it right.
 //
 // One headline and one line under it, chosen from a pool per place — several
 // for every one of the five, several for outside them, and a pool of their own
@@ -21,24 +22,24 @@ import { ordinal } from '../services/homeworkBoardService';
 
 export interface CheerCtx {
   rank: number;
-  /** How many he has handed in this month. */
+  /** How many pieces of homework he has FINISHED this month. */
   sent: number;
   /** How many students are on the board at all. */
   total: number;
-  /** Places won by the hand-in just made. 0 when it won none. */
+  /** Places won by the homework just marked right. 0 when it won none. */
   movedUp: number;
   /** The nearest student he went past, if he went past anybody. */
   passed: string | null;
   aheadName: string | null;
-  /** Hand-ins needed to go past the student above him. */
+  /** How many more he must finish to go past the student above him. */
   toNext: number;
   behindName: string | null;
   /** How far ahead of the student below him he is. */
   behindGap: number;
   fifthName: string | null;
-  /** Hand-ins needed to reach fifth place, when he is below it. */
+  /** How many more he must finish to reach fifth place, when he is below it. */
   toTop5: number;
-  /** His first hand-in of the month. */
+  /** His first finished homework of the month. */
   firstEver: boolean;
 }
 
@@ -104,7 +105,7 @@ const HEAD: Record<number, Candidate[]> = {
   ],
   0: [
     c => `${ordinal(c.rank)} this month.`,
-    c => `${c.sent} handed in this month.`,
+    c => `${c.sent} finished this month.`,
     () => 'Every one of them counts.',
   ],
 };
@@ -127,7 +128,7 @@ const PASSED_LINE: Candidate[] = [
 const LINE: Record<number, Candidate[]> = {
   1: [
     c => (c.behindName && c.behindGap > 0 ? `${c.behindName} is ${c.behindGap} behind. Be the first always.` : null),
-    c => `${c.sent} handed in this month. Keep the habit and keep the top.`,
+    c => `${c.sent} finished this month. Keep the habit and keep the top.`,
     c => (c.behindName ? `Staying first is harder than getting there — and you are staying. Keep ${c.behindName} behind you.` : null),
     () => 'Be the first always. Nobody has caught you yet.',
   ],
@@ -184,7 +185,7 @@ export function cheerFor(c: CheerCtx): Cheer {
   };
 }
 
-/** The chip beside his place: what the hand-in just did to it. */
+/** The chip beside his place: what the finished homework just did to it. */
 export type Move = 'up' | 'held' | 'new';
 
 export const moveOf = (c: { firstEver: boolean; movedUp: number }): Move =>
