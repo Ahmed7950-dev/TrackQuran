@@ -1,7 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // VocabStrengthBar — how well the student knows a word: ten segments, one per
-// of the last ten FLASHCARD answers, oldest on the left. Green = knew it,
-// red = didn't ("Review later"), grey = not answered that many times yet.
+// of the last ten answers, oldest on the left. Green = knew it, red = didn't
+// ("Review later"), grey = not answered that many times yet.
+//
+// The answers fill from the LEFT and the empty slots trail off to the right,
+// so a word's record reads as a bar that grows as it is practised. The whole
+// document flips to RTL in the Arabic interface, which mirrored this and put
+// the first answer on the right, so the direction is pinned here.
 // ─────────────────────────────────────────────────────────────────────────────
 import React from 'react';
 import { STRENGTH_SLOTS } from '../services/vocabHomeworkService';
@@ -12,13 +17,14 @@ const VocabStrengthBar: React.FC<{ answers: boolean[] }> = ({ answers }) => {
   const label = recent.length
     ? `${right} of the last ${recent.length} flashcard answer${recent.length === 1 ? '' : 's'} correct`
     : 'Not practised with flashcards yet';
-  // Pad on the LEFT so the newest answer always sits at the right end.
+  // Pad on the RIGHT: the oldest answer sits at the left end and the unused
+  // slots wait beyond the newest one.
   const slots: Array<boolean | null> = [
-    ...Array<null>(STRENGTH_SLOTS - recent.length).fill(null),
     ...recent,
+    ...Array<null>(STRENGTH_SLOTS - recent.length).fill(null),
   ];
   return (
-    <div role="img" aria-label={label} title={label}
+    <div role="img" aria-label={label} title={label} dir="ltr"
       className="flex items-center justify-center gap-[2px] sm:gap-[3px] pt-1">
       {slots.map((s, i) => (
         <span key={i}

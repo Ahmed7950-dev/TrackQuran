@@ -51,10 +51,12 @@ type Phase = 'idle' | 'active' | 'complete';
  * was a Lessons/Selected toggle to referee them. One pool at a time, named on
  * screen, and the toggle is not needed.
  */
-type Pool = 'needs' | 'saved' | 'lessons' | 'picked';
+type Pool = 'needs' | 'taught' | 'saved' | 'lessons' | 'picked';
 
 const POOLS: { id: Pool; label: string; hint: string }[] = [
   { id: 'needs',   label: 'Needs practice', hint: 'Never asked, or wrong last time' },
+  { id: 'taught',  label: 'Taught · needs practice',
+    hint: 'Never asked, or wrong last time — only in lessons marked done' },
   { id: 'saved',   label: 'Review later',   hint: 'The ones he pressed "Review later" on' },
   { id: 'lessons', label: 'Lessons',        hint: 'Tick lessons in the table below' },
   { id: 'picked',  label: 'Picked',         hint: 'Tap words in the table to pick them' },
@@ -62,6 +64,7 @@ const POOLS: { id: Pool; label: string; hint: string }[] = [
 
 const POOL_EMPTY: Record<Pool, string> = {
   needs:   'Every word has been answered correctly — nothing needs practice.',
+  taught:  'Nothing to revise from the finished lessons — mark lessons done, or he knows them all already.',
   saved:   'He has not put anything aside to review.',
   lessons: 'No words in these lessons yet.',
   picked:  'Tap words in the table to pick them.',
@@ -69,6 +72,7 @@ const POOL_EMPTY: Record<Pool, string> = {
 
 const POOL_PHRASE: Record<Pool, (n: number, lessons: number) => string> = {
   needs:   n => `the ${n} that need practice`,
+  taught:  n => `the ${n} from finished lessons that need practice`,
   saved:   n => `the ${n} he put aside`,
   lessons: (n, lessons) => `${lessons ? `${lessons} lesson${lessons === 1 ? '' : 's'}` : 'every lesson'} · ${n} words`,
   picked:  n => `the ${n} you picked`,
@@ -232,6 +236,16 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
     () => words.filter(w => lastAnswer(w.id) !== true), [words, lastAnswer]);
 
   /**
+   * The same, but only from lessons marked done — the words he has actually
+   * been taught and still does not know. This is the honest homework pile:
+   * `needs` counts every word in the course, so most of it is vocabulary from
+   * lessons he has not reached yet, which is not something to send him.
+   */
+  const taughtNeedsWords = useMemo(
+    () => needsPracticeWords.filter(w => completedSet.has(w.lessonId)),
+    [needsPracticeWords, completedSet]);
+
+  /**
    * What the student pressed "Review later" on — read from his ANSWERS, not
    * from a bookmark list in this browser's localStorage. That list was per
    * device, so the tutor's "saved words" were the ones saved on the tutor's
@@ -244,11 +258,13 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const poolCount = (id: Pool): number =>
     id === 'picked' ? selectedWords.length
     : id === 'needs' ? needsPracticeWords.length
+    : id === 'taught' ? taughtNeedsWords.length
     : id === 'saved' ? savedWords.length
     : lessonPool.length;
 
   const practicePool = pool === 'picked' ? selectedWords
     : pool === 'needs' ? needsPracticeWords
+    : pool === 'taught' ? taughtNeedsWords
     : pool === 'saved' ? savedWords
     : lessonPool;
   /** A card needs both halves of the word. However many are selected all go
