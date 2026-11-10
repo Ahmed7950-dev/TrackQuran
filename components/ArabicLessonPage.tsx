@@ -17,8 +17,6 @@ import {
   deleteArabicLesson as deleteLessonSvc,
   reorderArabicLessons,
   uploadArabicLessonPdf,
-  getHomeworkCountsByLesson,
-  getHomeworkCompletionsForStudent,
   getLessonProgressForStudent,
   getVocabWordCountsByLesson,
   getLevelPlans,
@@ -355,8 +353,6 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   const [studentAttempts, setStudentAttempts] = useState<ArabicExamAttempt[]>([]);
 
   // Per-lesson stats for student badges
-  const [hwCounts,    setHwCounts]    = useState<Record<string, number>>({});
-  const [hwDone,      setHwDone]      = useState<string[]>([]);
   const [wordCounts,  setWordCounts]  = useState<Record<string, number>>({});
   const [lessonProgress, setLessonProgress] = useState<Awaited<ReturnType<typeof getLessonProgressForStudent>>>(new Map());
 
@@ -388,7 +384,6 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 
   useEffect(() => {
     getArabicLessons().then(data => { setLessons(data); setLoading(false); });
-    getHomeworkCountsByLesson().then(setHwCounts);
     getVocabWordCountsByLesson().then(setWordCounts);
     getLevelPlans().then(plans => {
       const map: Record<string, string> = {};
@@ -398,8 +393,7 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
   }, []);
 
   useEffect(() => {
-    if (!preSelectedStudentId) { setHwDone([]); setLessonProgress(new Map()); return; }
-    getHomeworkCompletionsForStudent(preSelectedStudentId).then(setHwDone);
+    if (!preSelectedStudentId) { setLessonProgress(new Map()); return; }
     getLessonProgressForStudent(preSelectedStudentId).then(setLessonProgress);
   }, [preSelectedStudentId]);
 
@@ -658,8 +652,6 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
                 isAdmin={isAdmin}
                 isDragOver={overIdx === idx}
                 isCompleted={isCompleted}
-                hwQuestionCount={hwCounts[lesson.id] ?? 0}
-                homeworkDone={hwDone.includes(lesson.id)}
                 wordCount={wordCounts[lesson.id] ?? 0}
                 progress={lessonProgress.get(lesson.id) ?? null}
                 showStudentStats={!!preSelectedStudentId}
@@ -727,18 +719,10 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
             setViewing(null);
             setViewingFromDeepLink(false);
             if (preSelectedStudentId) {
-              const [dbDone, prog] = await Promise.all([
-                getHomeworkCompletionsForStudent(preSelectedStudentId),
-                getLessonProgressForStudent(preSelectedStudentId),
-              ]);
-              setHwDone(prev => [...new Set([...prev, ...dbDone])]);
-              setLessonProgress(prog);
+              setLessonProgress(await getLessonProgressForStudent(preSelectedStudentId));
             }
           }}
           onStudentUpdated={onStudentUpdated}
-          onHomeworkComplete={lessonId =>
-            setHwDone(prev => prev.includes(lessonId) ? prev : [...prev, lessonId])
-          }
         />
       )}
     </div>
@@ -746,9 +730,10 @@ const ArabicLessonPage: React.FC<Props> = ({ students, teacherId, preSelectedStu
 };
 
 // ── Lesson row ────────────────────────────────────────────────────────────────
-// One row answers the same five things in the same five places: which lesson,
-// what it teaches, where the student is, whether homework is owed, and how
-// often it has been revised.
+// One row answers the same four things in the same four places: which lesson,
+// what it teaches, where the student is, and how often it has been revised.
+// Homework used to have a column here as well; it lives in the Homework tab,
+// and on this page it was a column of dashes.
 
 /** Five little bars; past five the count takes over. */
 const RevisionBars: React.FC<{ n: number }> = ({ n }) => {
@@ -767,28 +752,10 @@ const RevisionBars: React.FC<{ n: number }> = ({ n }) => {
   );
 };
 
-const HomeworkChip: React.FC<{ assigned: boolean; done: boolean }> = ({ assigned, done }) => {
-  const { t } = useI18n();
-  if (!assigned) return <span className="text-xs font-semibold text-slate-300 dark:text-gray-600">—</span>;
-  return done ? (
-    <span className="inline-flex items-center gap-1 h-[25px] px-2.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5"><path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" /></svg>
-      {t('arabicLessonPage.homeworkDone')}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 h-[25px] px-2.5 rounded-full bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-[11px] font-extrabold">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-2.5 h-2.5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" /><circle cx="12" cy="12" r="9" />
-      </svg>
-      {t('arabicLessonPage.homeworkTodo')}
-    </span>
-  );
-};
-
 interface RowProps {
   lesson: ArabicLesson; index: number; isAdmin: boolean; isDragOver: boolean;
   isCompleted: boolean;
-  hwQuestionCount: number; homeworkDone: boolean; wordCount: number; showStudentStats: boolean;
+  wordCount: number; showStudentStats: boolean;
   progress?: ArabicLessonProgress | null;
   statusChip?: LessonState | null;
   onView: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void;
@@ -799,7 +766,7 @@ interface RowProps {
 const ArabicLessonRow: React.FC<RowProps> = ({
   lesson, index, isAdmin, isDragOver,
   isCompleted,
-  hwQuestionCount, homeworkDone, wordCount, showStudentStats,
+  wordCount, showStudentStats,
   progress, statusChip,
   onView, onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -807,7 +774,6 @@ const ArabicLessonRow: React.FC<RowProps> = ({
   const { t } = useI18n();
   const state = statusChip?.key ?? (isCompleted ? 'done' : 'not_started');
   const revisions = progress?.revisionCount ?? 0;
-  const assigned  = hwQuestionCount > 0;
 
   // The quiet line: what the lesson teaches, where they stopped, when that was.
   const meta: string[] = [];
@@ -880,7 +846,6 @@ const ArabicLessonRow: React.FC<RowProps> = ({
           {statusChip && (
             <span className={`inline-flex items-center h-[23px] px-2.5 rounded-full text-[11px] font-extrabold ${statusChip.cls}`}>{statusChip.label}</span>
           )}
-          {assigned && <HomeworkChip assigned={assigned} done={homeworkDone} />}
           {revisions > 0 && <RevisionBars n={revisions} />}
         </div>
       )}
@@ -893,9 +858,6 @@ const ArabicLessonRow: React.FC<RowProps> = ({
           {statusChip && (
             <span className={`inline-flex items-center h-[25px] px-2.5 rounded-full text-[11px] font-extrabold whitespace-nowrap ${statusChip.cls}`}>{statusChip.label}</span>
           )}
-        </div>
-        <div className="hidden md:flex flex-shrink-0 w-[132px] justify-center">
-          <HomeworkChip assigned={assigned} done={homeworkDone} />
         </div>
         <div className="hidden lg:flex flex-shrink-0 w-[84px] justify-start">
           <RevisionBars n={revisions} />
