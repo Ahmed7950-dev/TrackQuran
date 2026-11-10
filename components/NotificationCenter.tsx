@@ -12,6 +12,7 @@ import {
   NotificationType,
   getTutorNotifications,
   getStudentNotifications,
+  isCounted,
   markNotificationRead,
   markAllTutorNotificationsRead,
   markAllStudentNotificationsRead,
@@ -85,7 +86,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
    *  instead — measured, because header heights differ between pages. */
   const [sheetTop, setSheetTop] = useState<number | null>(null);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Unread AND still recent: see NOTIFICATION_BADGE_DAYS. An old one keeps its
+  // highlight in the list, it just no longer adds to the number on the bell.
+  const unreadCount = notifications.filter(n => isCounted(n)).length;
 
   const placePanel = useCallback(() => {
     const narrow = window.matchMedia('(max-width: 639px)').matches;

@@ -16,7 +16,7 @@ import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
 import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
 import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
-import { dueLabel, hunterMark, type HunterHomework } from '../services/lettersHunterHomeworkService';
+import { dueLabel, hunterMark, huntFinished, type HunterHomework } from '../services/lettersHunterHomeworkService';
 import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome,
   dueStateOf, dueLabel as quranDueLabel, timeLeft, DUE_PILL } from '../utils/quranHomework';
 
@@ -272,10 +272,71 @@ const HomeworkTab: React.FC<{
   }, [homework, recitations]);
 
   const openBlocks = useMemo(() => blocks.filter(b => !b.done), [blocks]);
+  /** A letters hunt stays on the page until there is nothing left to do with
+   *  it; then it joins the rest of the finished work in History. */
+  const huntsOpen = useMemo(() => (hunts ?? []).filter(h => !huntFinished(h)), [hunts]);
+  const huntsDone = useMemo(() => (hunts ?? []).filter(huntFinished), [hunts]);
   /** Everything closed, newest first — done, not done and withdrawn alike. */
   const history = useMemo(() => blocks.filter(b => b.done), [blocks]);
   const HISTORY_SHOWN = 5;
   const historyShown = showAllHistory ? history : history.slice(0, HISTORY_SHOWN);
+
+  /** One letters-hunter homework. The same card, quieter once it is over. */
+  const huntCard = (h: HunterHomework) => {
+    const finished = huntFinished(h);
+    const mark = hunterMark(h);
+    // Only call it waiting when there is writing actually waiting for him.
+    const waiting = h.status === 'submitted' && !!(h.drawings ?? []).length;
+    const canOpen = isTutor ? h.status !== 'assigned' : (h.status === 'assigned' || finished);
+    return (
+      <div key={h.id} className={`rounded-3xl border overflow-hidden ${finished
+        ? 'border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800/60'
+        : 'border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
+        <div className="px-5 py-4 flex items-center gap-3 flex-wrap">
+          <span className="text-2xl" aria-hidden="true">◎</span>
+          <div className="min-w-0">
+            <p className="text-lg text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+              Letters hunter ·{' '}
+              <span dir="rtl" lang="ar" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{h.letters.join(' ')}</span>
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              set {shortDate(h.createdAt)}
+              {/* A deadline on something already finished only misleads. */}
+              {!finished && ` · ${dueLabel(h)}`}
+              {waiting && ' · handed in, waiting to be marked'}
+              {finished && (h.markedAt
+                ? ` · marked ${shortDate(h.markedAt)}`
+                : h.submittedAt ? ` · handed in ${shortDate(h.submittedAt)}` : '')}
+            </p>
+          </div>
+          <span className="flex-grow" />
+          {mark && (
+            <span className="inline-flex items-baseline gap-1.5">
+              <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
+                {mark.right}/{mark.total}
+              </span>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">marked</span>
+            </span>
+          )}
+          {isTutor && onCopyHuntLink && !finished && (
+            <button onClick={() => onCopyHuntLink(h)}
+              className="flex-shrink-0 h-9 px-4 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-bold text-slate-600 dark:text-slate-300">
+              Copy link
+            </button>
+          )}
+          {onOpenHunt && canOpen && (
+            <button onClick={() => onOpenHunt(h)}
+              className={`flex-shrink-0 h-9 px-4 rounded-full text-[13px] font-black ${
+                waiting && isTutor ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                  : finished ? 'border border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white'}`}>
+              {isTutor ? (waiting ? 'Mark the writing' : 'Look at it') : mark ? 'See the mark' : 'Do it'}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const verseNumber = (key: string) => key.split(':')[1];
 
@@ -479,49 +540,7 @@ const HomeworkTab: React.FC<{
         )}
       </div>
 
-      {(hunts ?? []).map(h => {
-        const mark = hunterMark(h);
-        const waiting = h.status === 'submitted';
-        return (
-          <div key={h.id} className="rounded-3xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
-            <div className="px-5 py-4 flex items-center gap-3 flex-wrap">
-              <span className="text-2xl" aria-hidden="true">◎</span>
-              <div className="min-w-0">
-                <p className="text-lg text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
-                  Letters hunter ·{' '}
-                  <span dir="rtl" lang="ar" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>{h.letters.join(' ')}</span>
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  set {shortDate(h.createdAt)} · {dueLabel(h)}
-                  {waiting && ' · handed in, waiting to be marked'}
-                </p>
-              </div>
-              <span className="flex-grow" />
-              {mark && (
-                <span className="inline-flex items-baseline gap-1.5">
-                  <span className="text-[22px] leading-none text-emerald-700 dark:text-emerald-400" style={{ fontFamily: SERIF, fontWeight: 700 }}>
-                    {mark.right}/{mark.total}
-                  </span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">marked</span>
-                </span>
-              )}
-              {isTutor && onCopyHuntLink && (
-                <button onClick={() => onCopyHuntLink(h)}
-                  className="flex-shrink-0 h-9 px-4 rounded-full border border-slate-200 dark:border-gray-600 text-[13px] font-bold text-slate-600 dark:text-slate-300">
-                  Copy link
-                </button>
-              )}
-              {onOpenHunt && (isTutor ? h.status !== 'assigned' : h.status !== 'submitted') && (
-                <button onClick={() => onOpenHunt(h)}
-                  className={`flex-shrink-0 h-9 px-4 rounded-full text-[13px] font-black text-white ${
-                    waiting && isTutor ? 'bg-orange-500 hover:bg-orange-600' : 'bg-amber-500 hover:bg-amber-600'}`}>
-                  {isTutor ? (waiting ? 'Mark the writing' : 'Look at it') : mark ? 'See the mark' : 'Do it'}
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {huntsOpen.map(huntCard)}
 
       {(cardGames ?? []).map(g => {
         const tries = cardAttempts?.[g.id] ?? [];
@@ -579,7 +598,7 @@ const HomeworkTab: React.FC<{
         );
       })}
 
-      {openBlocks.length === 0 && (cardGames ?? []).length === 0 && (hunts ?? []).length === 0 ? (
+      {openBlocks.length === 0 && (cardGames ?? []).length === 0 && huntsOpen.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-10 text-center">
           <p className="text-lg text-slate-700 dark:text-slate-200" style={{ fontFamily: SERIF, fontWeight: 600 }}>
             {isTutor ? 'Nothing open' : 'All done'}
@@ -594,14 +613,14 @@ const HomeworkTab: React.FC<{
           not done, and the ones the tutor took back. The last few are here
           without asking, because the question is almost always "what did we do
           last week"; the rest are a click away. */}
-      {history.length > 0 && (
+      {(history.length > 0 || huntsDone.length > 0) && (
         <section className="flex flex-col gap-3 pt-2">
           <div className="flex items-center gap-3 px-1">
             <h2 className="text-xl text-slate-900 dark:text-slate-100" style={{ fontFamily: SERIF, fontWeight: 600 }}>
               History
             </h2>
             <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-slate-100 dark:bg-gray-700 text-[12px] font-bold text-slate-500 dark:text-slate-400">
-              {history.length}
+              {history.length + huntsDone.length}
             </span>
             <span className="flex-grow" />
             {isTutor && onClearFinished && (
@@ -614,6 +633,7 @@ const HomeworkTab: React.FC<{
           </div>
 
           <div className="flex flex-col gap-4">
+            {huntsDone.map(huntCard)}
             {historyShown.map(blockCard)}
           </div>
 

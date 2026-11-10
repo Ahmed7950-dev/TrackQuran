@@ -191,8 +191,22 @@ export async function deleteHunterHomework(id: string): Promise<void> {
 /* ── Reading one ─────────────────────────────────────────────────────────── */
 
 /** The whole mark, once the tutor has been through the drawings. */
+/**
+ * Nothing left for anybody to do with it.
+ *
+ * Either the tutor has marked the writing, or there was no writing in it —
+ * the rounds that mark themselves are the whole of it, so the moment the
+ * student hands it in it is finished and there is nothing to wait for.
+ *
+ * Everything that LISTS homework asks this. Without it a hunt stayed on the
+ * homework page for ever: the list had no idea of finished, so one marked
+ * three weeks ago still sat at the top as though it were due.
+ */
+export const huntFinished = (hw: HunterHomework): boolean =>
+  hw.status === 'marked' || (hw.status === 'submitted' && !(hw.drawings ?? []).length);
+
 export const hunterMark = (hw: HunterHomework): { right: number; total: number } | null => {
-  if (hw.status !== 'marked') return null;
+  if (!huntFinished(hw)) return null;
   const drawn = hw.drawings ?? [];
   return {
     right: (hw.autoRight ?? 0) + drawn.filter(d => d.verdict === 'right').length,

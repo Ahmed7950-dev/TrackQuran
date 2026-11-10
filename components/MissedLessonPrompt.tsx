@@ -1,8 +1,9 @@
 // components/MissedLessonPrompt.tsx
 // -----------------------------------------------------------------------------
-// Tutor-only nudge: when a calendar lesson has FULLY finished and nothing was
-// logged for that student that day, ask what happened. Mounted at the app
-// shell so it appears on any page (including the students list).
+// Tutor-only nudge: when a calendar lesson finished TEN MINUTES ago and nothing
+// was logged for that student that day, ask what happened. Mounted at the app
+// shell so it appears on any page (including the students list). The wait is
+// there because logging is the last thing that happens in a lesson.
 //
 // A lesson counts as "unlogged" when, on the lesson's own day, NOBODY in the
 // group sitting that lesson has:
@@ -37,6 +38,15 @@ import { listMissedLessonDismissals, dismissMissedLesson, type MissedOutcome } f
 
 /** How far back to look. Older misses are water under the bridge. */
 const LOOKBACK_DAYS = 14;
+/**
+ * How long after the lesson has ENDED before asking.
+ *
+ * The logging is the last thing that happens in a lesson, and often a minute
+ * or two after the hour: the card used to appear while the tutor was still
+ * writing the achievement up, asking whether a student he was looking at had
+ * turned up.
+ */
+const SETTLE_MINUTES = 10;
 const DISMISS_KEY = 'missedLesson:dismissed';
 
 interface Missed {
@@ -156,7 +166,8 @@ export function findMissedLessons(
     const start = new Date(startStr);
     const endStr = ev.end?.dateTime ?? ev.end?.date;
     const end = endStr ? new Date(endStr) : new Date(start.getTime() + 60 * 60_000);
-    if (end.getTime() > now.getTime()) continue;      // still running / upcoming
+    // Still running, just finished, or yet to come — give the tutor time to log it.
+    if (end.getTime() + SETTLE_MINUTES * 60_000 > now.getTime()) continue;
     for (const session of sessionMap[ev.id] ?? []) {
       const student = students.find(s => s.id === session.studentId);
       if (!student) continue;                          // Arabic session — not ours

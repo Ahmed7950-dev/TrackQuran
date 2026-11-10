@@ -196,6 +196,36 @@ export async function ensureSubscriptionRenewalReminder(input: {
   }
 }
 
+// ── How long a red number lasts ───────────────────────────────────────────────
+
+/**
+ * Past this an unread notification stops counting towards the bell's red
+ * number. It stays in the list and still reads as new there — it just stops
+ * shouting.
+ *
+ * A badge that only ever goes up is a badge nobody reads: a student who left
+ * twenty of them unopened in September is told nothing by "37" in November,
+ * and the one notification that arrived this morning is lost inside it. Two
+ * weeks is about as old as something can be and still be worth interrupting
+ * anyone over.
+ */
+export const NOTIFICATION_BADGE_DAYS = 14;
+
+const BADGE_MS = NOTIFICATION_BADGE_DAYS * 24 * 60 * 60 * 1000;
+
+/** Old enough that it no longer counts. */
+export const isStaleNotification = (
+  n: Pick<BookingNotification, 'createdAt'>, now: number = Date.now(),
+): boolean => {
+  const at = Date.parse(n.createdAt);
+  return !Number.isNaN(at) && now - at > BADGE_MS;
+};
+
+/** Read, or old enough to have expired — either way it is not waiting. */
+export const isCounted = (
+  n: Pick<BookingNotification, 'isRead' | 'createdAt'>, now?: number,
+): boolean => !n.isRead && !isStaleNotification(n, now);
+
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 export async function getTutorNotifications(
