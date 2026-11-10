@@ -116,6 +116,12 @@ function isSameDay(a: Date, b: Date) {
          a.getDate()     === b.getDate();
 }
 
+/** Money for a narrow column: 12.30 stays 12.30, 12.00 becomes 12. */
+function money(n: number): string {
+  const two = n.toFixed(2);
+  return two.endsWith('.00') ? two.slice(0, -3) : two;
+}
+
 function formatHeaderDate(date: Date): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -981,13 +987,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
   const weekDays: Date[] = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const today            = new Date();
 
-  // Tutor's net earnings for the selected week: linked GCal events + Platform
-  // students' scheduled bookings. A lesson is billed in 50-minute units, so a
+  // Tutor's net earnings for the selected week, one number per day of it:
+  // linked GCal events + Platform students' scheduled bookings. A lesson is billed in 50-minute units, so a
   // 25-min event = half the net rate (e.g. 15/h, 18% Preply → 12.30 net; a
   // 25-min lesson → 6.15). Platform bookings are matched to a student by name.
-  const weekEarnings = useMemo(() => {
+  const dayEarnings = useMemo<number[] | null>(() => {
     if (isStudentView) return null;
-    let total = 0;
+    const perDay = [0, 0, 0, 0, 0, 0, 0];
+    // Which column a date sits in. Rounded, so an hour lost or gained to a
+    // daylight-saving change cannot push a lesson into the day next door.
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const columnOf = (d: Date) => Math.round((startOfDay(d) - startOfDay(monday)) / 86_400_000);
     const linkedNames = new Set<string>();
     // Linked GCal events in this week (the `events` state holds this week's events).
     // A dual-linked event (same student's Quran + Arabic profile) is ONE lesson
@@ -999,10 +1009,13 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
       billings.forEach(b => linkedNames.add(b.name));
       const b = billings.find(x => x.hourlyRate != null);
       if (!b?.hourlyRate) continue;
-      const startMs = new Date(ev.start.dateTime ?? ev.start.date ?? '').getTime();
+      const start   = new Date(ev.start.dateTime ?? ev.start.date ?? '');
+      const startMs = start.getTime();
       const endMs   = new Date(ev.end.dateTime   ?? ev.end.date   ?? '').getTime();
       const minutes = endMs > startMs ? (endMs - startMs) / 60_000 : 50;
-      total += netEarning(b.hourlyRate, b.studentType, b.preplyPercentage) * (minutes / 50);
+      const col = columnOf(start);
+      if (col < 0 || col > 6) continue;   // an event outside the week on screen
+      perDay[col] += netEarning(b.hourlyRate, b.studentType, b.preplyPercentage) * (minutes / 50);
     }
     // Platform students' confirmed bookings this week — skip any whose lessons are
     // already counted via a linked GCal event (avoid double-counting).
@@ -1012,11 +1025,17 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
         if (bk.status !== 'confirmed' || linkedNames.has(bk.studentName)) continue;
         const stu = linkStudents.find(s => s.studentType === 'platform' && s.name === bk.studentName && s.hourlyRate);
         if (!stu?.hourlyRate) continue;
-        total += netEarning(stu.hourlyRate, 'platform', undefined) * (bk.durationMinutes / 50);
+        perDay[i] += netEarning(stu.hourlyRate, 'platform', undefined) * (bk.durationMinutes / 50);
       }
     }
-    return total;
+    return perDay;
   }, [isStudentView, events, linkedSessions, linkStudentById, linkStudents, myBookings, monday]);
+
+  /** The same money, added up — what the toolbar badge has always shown. */
+  const weekEarnings = useMemo(
+    () => (dayEarnings ? dayEarnings.reduce((a, b) => a + b, 0) : null),
+    [dayEarnings],
+  );
 
   /** The picked day headers, as dates, oldest first. */
   const pickedDates = useMemo(() => [...pickedDays].sort().map(key => {
@@ -1291,9 +1310,46 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
 
       {/* Calendar grid */}
       <div ref={calendarGridRef} className={`${isStudentView ? 'h-[68vh]' : 'flex-1'} overflow-auto rounded-2xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm`}>
+        {/* Header: what each day earns, then the day names. Both stay put while
+            the hours scroll under them. */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700">
+
+        {/* Earnings row — a day at a time, net, in the same columns as the days */}
+        {dayEarnings && weekEarnings !== null && weekEarnings > 0 && (
+          <div
+            className="grid border-b border-slate-100 dark:border-gray-700/70 bg-emerald-50/60 dark:bg-emerald-900/10"
+            style={{ gridTemplateColumns: weekGridCols }}
+          >
+            <div
+              className="border-e border-slate-200 dark:border-gray-700 flex items-center justify-end pe-1.5 text-[10px] leading-none"
+              title={`Your net earnings, day by day — ${money(weekEarnings)} this week`}
+            >
+              💰
+            </div>
+            {weekDays.map((day, i) => {
+              const earned = dayEarnings[i];
+              return (
+                <div
+                  key={i}
+                  className={`py-1 text-center border-e border-slate-200 dark:border-gray-700 last:border-e-0 ${
+                    isSameDay(day, today) ? 'bg-teal-50 dark:bg-teal-900/20' : ''}`}
+                  title={earned > 0
+                    ? `${money(earned)} on ${day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}`
+                    : 'Nothing booked this day'}
+                >
+                  <span className={`text-[10px] sm:text-xs font-extrabold tabular-nums ${
+                    earned > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-300 dark:text-gray-600'}`}>
+                    {earned > 0 ? money(earned) : '·'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Day header row */}
         <div
-          className="grid sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700"
+          className="grid"
           style={{ gridTemplateColumns: weekGridCols }}
         >
           {/* Corner: timezone label */}
@@ -1338,6 +1394,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({
               </div>
             );
           })}
+        </div>
         </div>
 
         {/* Time grid body */}
