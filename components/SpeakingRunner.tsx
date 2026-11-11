@@ -241,7 +241,12 @@ export const SpeakingRunner: React.FC<{
               <div className="min-h-[3.1rem] lg:min-h-[3.6rem]">
                 {!hidden && <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">{slot.label}</p>}
                 <p dir="auto" aria-hidden={hidden} aria-live="polite"
-                  className={`text-[17px] lg:text-[22px] font-bold leading-snug transition-[filter] duration-300 ${hidden ? 'select-none pointer-events-none' : ''}`}
+                  className={`text-[17px] lg:text-[22px] font-bold leading-snug ${
+                    // The fade is for REVEALING only. Putting the blur back must be
+                    // instant: the words underneath change in the same frame (the
+                    // hint closing leaves the English there), and a 0.3s fade-in
+                    // let it be read in between.
+                    hidden ? 'select-none pointer-events-none' : 'transition-[filter] duration-300'}`}
                   style={hidden ? { filter: 'blur(7px)' } : undefined}>
                   {slot.body}
                 </p>
