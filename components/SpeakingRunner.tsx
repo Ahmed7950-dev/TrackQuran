@@ -26,6 +26,23 @@ export const tryName = (i: number): string => TRY_NAMES[i] ?? `Try ${i + 1}`;
 
 const seenKey = (attemptId: string) => `speakSeen:${attemptId}`;
 
+/** Room for two panels side by side — Tailwind's `lg`, read in JS because the
+ *  photo's size and where the teacher's note sits both depend on it. */
+function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setOn(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return on;
+}
+const useWide = () => useMedia('(min-width: 1024px)');
+/** A wide but shallow window — a laptop with the browser's bars showing. */
+const useShallow = () => useMedia('(max-height: 740px)');
+
 export const SpeakingRunner: React.FC<{
   attempt: SpeakingAttempt;
   /** The tutor trying his own dialogue: answers stay in the browser, nothing is sent. */
@@ -144,6 +161,8 @@ export const SpeakingRunner: React.FC<{
 
   const redo = !!a.parentId;
   const shown = recorder.error || error;
+  const wide = useWide();
+  const shallow = useShallow();
 
   if (!line) {
     return (
@@ -153,217 +172,268 @@ export const SpeakingRunner: React.FC<{
     );
   }
 
+  /* ── The pieces. They are the same on a phone and on a desk; only where
+        they sit differs. ── */
+
+  const avatarSize = wide ? (shallow ? 168 : 232) : (open.hint || open.text || line.note || line.prev || answer ? 104 : 168);
+
+  /** The speaker: his photo, whether he is talking, and what can be asked of him. */
+  const stage = (
+    <>
+      <button onClick={() => void listen()} aria-label={speaking ? 'Stop' : 'Listen to the line'}
+        className="rounded-full focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300 p-3 lg:p-5">
+        <SpeakerAvatar url={a.avatarUrl} size={avatarSize} speaking={speaking} />
+      </button>
+
+      <div className="h-8 flex items-center">
+        {speaking ? (
+          <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-3.5 py-1.5 text-[13px] lg:text-sm font-bold">
+            <Bars /> Speaking… listen carefully
+          </span>
+        ) : blocked ? (
+          <span className="text-[13px] lg:text-sm font-bold text-amber-800 dark:text-amber-200">{wide ? 'Click' : 'Tap'} the photo to hear the line</span>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-center flex-wrap gap-2.5">
+        <button onClick={() => void listen()}
+          className="h-12 lg:h-[52px] px-4 lg:px-5 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-slate-50 dark:hover:bg-gray-700 text-[14.5px] lg:text-[15px] font-bold flex items-center gap-2">
+          {speaking ? <Icon.pause className="w-[18px] h-[18px]" /> : <Icon.replay className="w-[18px] h-[18px]" />}
+          {speaking ? 'Stop' : 'Listen again'}
+        </button>
+        {line.hint && (
+          <button onClick={() => { setOpen(o => ({ ...o, hint: !o.hint })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, hint: true })); }}
+            aria-label={open.hint ? 'Hide the hint' : 'Show the hint'} aria-pressed={open.hint}
+            className={`h-12 lg:h-[52px] rounded-2xl border flex items-center justify-center gap-2 text-[15px] font-bold ${wide ? 'px-5' : 'w-12'} ${
+              open.hint ? 'bg-amber-500 border-amber-500 text-white'
+                : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'}`}>
+            <Icon.bulb />
+            {wide && <span aria-hidden="true">Hint</span>}
+          </button>
+        )}
+        {line.text && (
+          <button onClick={() => { setOpen(o => ({ ...o, text: !o.text })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, text: true })); }}
+            aria-pressed={open.text}
+            className={`h-12 lg:h-[52px] px-4 lg:px-5 rounded-2xl border text-[14.5px] lg:text-[15px] font-bold flex items-center gap-2 ${
+              open.text ? 'bg-slate-800 border-slate-800 text-white dark:bg-slate-100 dark:border-slate-100 dark:text-slate-900'
+                : 'bg-white dark:bg-gray-800 border-slate-300 dark:border-gray-600 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+            <Icon.eye className="w-[18px] h-[18px]" /> Meaning
+          </button>
+        )}
+      </div>
+
+      {open.text && (
+        <div className="w-full lg:max-w-xl rounded-[20px] bg-white dark:bg-gray-800 lg:bg-slate-50 lg:dark:bg-gray-900/50 border border-slate-200 dark:border-gray-700 px-4 lg:px-5 py-3.5 lg:py-4">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">What was said</p>
+          <p dir="auto" className="mt-1 text-[19px] lg:text-[22px] font-bold leading-snug">{line.text}</p>
+        </div>
+      )}
+      {open.hint && (
+        <div className="w-full lg:max-w-xl rounded-[20px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 lg:px-5 py-3 lg:py-4 flex gap-3 items-start">
+          <span aria-hidden="true" className="w-8 h-8 flex-shrink-0 rounded-[10px] bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100 flex items-center justify-center">
+            <Icon.bulb className="w-[18px] h-[18px]" />
+          </span>
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-amber-800 dark:text-amber-200">Hint</p>
+            <p dir="auto" className="mt-0.5 text-[15px] lg:text-[17px] font-semibold leading-snug text-amber-900 dark:text-amber-100">{line.hint}</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  /** A line sent back: what the teacher said, and what he said. */
+  const noteCard = (line.note || line.prev) ? (
+    <div className="w-full rounded-[20px] bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 px-4 lg:px-5 py-3.5 lg:py-4 flex flex-col gap-2.5">
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="w-6 h-6 rounded-full bg-rose-700 text-white flex items-center justify-center">
+          <Icon.cross className="w-3.5 h-3.5" />
+        </span>
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-rose-800 dark:text-rose-200">
+          {line.note ? 'Your teacher’s note' : 'This line came back'}
+        </span>
+      </div>
+      {line.note && <p dir="auto" className="text-[15.5px] lg:text-[17px] font-semibold leading-snug text-rose-900 dark:text-rose-100">{line.note}</p>}
+      {line.prev?.url && (
+        <button onClick={() => void player.play(`prev:${line.id}`, line.prev!.url)}
+          className="self-start h-11 pl-1.5 pr-3.5 rounded-full border border-rose-300 dark:border-rose-700 bg-white dark:bg-gray-800 text-rose-800 dark:text-rose-200 text-[13.5px] font-bold flex items-center gap-2">
+          <span aria-hidden="true" className="w-8 h-8 rounded-full bg-rose-700 text-white flex items-center justify-center">
+            {player.playing === `prev:${line.id}` ? <Icon.pause className="w-3.5 h-3.5" /> : <Icon.play className="w-3.5 h-3.5" />}
+          </span>
+          Hear what I said last time · {fmtClock(line.prev.ms)}
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  /** His side: the microphone, or the answer once there is one. */
+  const answerZone = (
+    <>
+      {shown && <p role="alert" className="mb-2.5 text-center text-[13px] lg:text-sm font-semibold text-rose-700 dark:text-rose-300">{shown}</p>}
+      {answer && !recording ? (
+        <div className="w-full lg:max-w-md lg:mx-auto rounded-[22px] bg-white dark:bg-gray-800 border-2 border-teal-700 dark:border-teal-500 px-4 lg:px-5 py-3.5 lg:py-5 flex flex-col gap-3 lg:gap-4">
+          <div className="flex items-center gap-2 text-teal-700 dark:text-teal-300">
+            <span aria-hidden="true" className="w-[22px] h-[22px] rounded-full bg-teal-700 dark:bg-teal-500 text-white flex items-center justify-center">
+              <Icon.check className="w-3.5 h-3.5" />
+            </span>
+            <span className="text-sm lg:text-base font-extrabold">{saving ? 'Saving your answer…' : 'Your answer is saved'}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={() => void player.play(`mine:${line.id}`, answer.url)} aria-label="Play my answer"
+              className="w-12 h-12 lg:w-14 lg:h-14 flex-shrink-0 rounded-full bg-teal-700 dark:bg-teal-500 text-white flex items-center justify-center">
+              {player.playing === `mine:${line.id}` ? <Icon.pause /> : <Icon.play />}
+            </button>
+            <span aria-hidden="true" className="flex-grow h-1.5 lg:h-2 rounded-full bg-teal-100 dark:bg-teal-900/50 overflow-hidden">
+              <span className="block h-full rounded-full bg-teal-700 dark:bg-teal-400"
+                style={{ width: `${player.playing === `mine:${line.id}` ? Math.round(player.progress * 100) : 0}%` }} />
+            </span>
+            <span className="text-sm lg:text-base font-bold tabular-nums text-slate-700 dark:text-slate-200">{fmtClock(answer.ms)}</span>
+          </div>
+          <button onClick={startRecording} disabled={saving}
+            className="h-11 lg:h-12 rounded-[14px] border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-sm lg:text-[15px] font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            <Icon.mic className="w-[17px] h-[17px]" /> Record it again
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-2 lg:gap-3">
+          <button onClick={recording ? recorder.stop : startRecording} disabled={saving}
+            aria-label={recording ? 'Stop recording' : 'Record your answer'}
+            className={`w-[92px] h-[92px] lg:w-[128px] lg:h-[128px] rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center disabled:opacity-50 transition-colors ${
+              recording ? 'sp-recording' : 'shadow-[0_0_0_8px_#ffe4e6,0_16px_28px_-14px_rgba(225,29,72,0.7)] lg:shadow-[0_0_0_12px_#ffe4e6,0_22px_36px_-16px_rgba(225,29,72,0.7)] dark:shadow-[0_0_0_8px_rgba(225,29,72,0.22)]'}`}>
+            {recording ? <Icon.stop className="w-9 h-9 lg:w-12 lg:h-12" /> : <Icon.mic className="w-9 h-9 lg:w-12 lg:h-12" />}
+          </button>
+          {recording ? (
+            <>
+              <p className="mt-1 lg:mt-3 text-base lg:text-2xl font-extrabold tabular-nums">{fmtClock(recorder.elapsed)} <span className="text-slate-500 dark:text-slate-400 font-semibold">/ {fmtClock(MAX_ANSWER_MS)}</span></p>
+              <span aria-hidden="true" className="block w-40 lg:w-64 h-1.5 lg:h-2 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
+                <span ref={recorder.meterRef} className="block h-full w-full origin-left rounded-full bg-rose-600" style={{ transform: 'scaleX(0.02)' }} />
+              </span>
+              <p className="text-[12.5px] lg:text-sm font-semibold text-slate-500 dark:text-slate-400">{wide ? 'Click' : 'Tap'} to stop when you have answered</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 lg:mt-3 text-base lg:text-2xl font-extrabold">{saving ? 'Saving your answer…' : redo ? 'Record a new answer' : 'Record your answer'}</p>
+              <p className="text-[12.5px] lg:text-sm font-semibold text-slate-500 dark:text-slate-400">Answer out loud · up to {Math.round(MAX_ANSWER_MS / 1000)} seconds</p>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  /** On, or in. */
+  const nav = (
+    <div className="flex-shrink-0 flex gap-2.5">
+      <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || recording || saving}
+        className="h-[52px] lg:h-14 w-24 lg:w-28 flex-shrink-0 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-[15px] lg:text-base font-bold disabled:opacity-40">
+        Back
+      </button>
+      {all || last ? (
+        <button onClick={send} disabled={!all || sending || recording || saving}
+          className={`h-[52px] lg:h-14 flex-grow rounded-2xl text-[15px] lg:text-base font-extrabold flex items-center justify-center gap-2 ${
+            all ? 'bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60'
+              : 'bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400'}`}>
+          {!all && <Icon.lock className="w-[17px] h-[17px]" />}
+          {sending ? 'Sending…' : preview ? (all ? 'Finish trying it' : `${left} left to record`) : all ? 'Send to my teacher' : `${left} left to record`}
+        </button>
+      ) : (
+        <button onClick={() => setIdx(i => Math.min(lines.length - 1, i + 1))} disabled={!answer || recording || saving}
+          className={`h-[52px] lg:h-14 flex-grow rounded-2xl text-[15px] lg:text-base font-extrabold flex items-center justify-center gap-2 ${
+            answer ? 'bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60'
+              : 'bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400'}`}>
+          {answer ? <>Next line <Icon.arrow className="w-[18px] h-[18px]" /></> : 'Record to go on'}
+        </button>
+      )}
+    </div>
+  );
+
+  const eyebrow = 'text-[11px] font-extrabold uppercase tracking-[0.12em]';
+
   return (
     <div className="h-[100dvh] overflow-hidden flex flex-col bg-slate-50 dark:bg-gray-900 text-slate-800 dark:text-slate-100"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <SpeakingStyles />
-      <div className="w-full max-w-md mx-auto flex flex-col flex-grow min-h-0 px-5 pt-3.5 pb-5">
+      <div className="w-full max-w-md lg:max-w-7xl mx-auto flex flex-col flex-grow min-h-0 px-5 lg:px-8 pt-3.5 lg:pt-6 pb-5 lg:pb-7">
 
         {/* Who, what, how far */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 lg:gap-4">
           <button onClick={onExit} aria-label="Leave — your answers are saved"
-            className="w-11 h-11 flex-shrink-0 rounded-[14px] border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+            className="w-11 h-11 lg:w-12 lg:h-12 flex-shrink-0 rounded-[14px] border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
             <Icon.back />
           </button>
           <div className="flex-grow min-w-0">
-            <p className={`text-[11px] font-extrabold uppercase tracking-[0.1em] truncate ${redo ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
+            <p className={`${eyebrow} truncate ${redo ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}`}>
               {preview ? 'Trying it as a student' : redo ? `Another try · ${lines.length} ${lines.length === 1 ? 'line' : 'lines'} to redo` : 'Speaking homework'}
             </p>
-            <h1 className="text-[17px] font-extrabold truncate">{a.title}</h1>
+            <h1 className="text-[17px] lg:text-2xl font-extrabold truncate">{a.title}</h1>
           </div>
-          <span className="flex-shrink-0 text-[13px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-full px-3 py-1.5 tabular-nums">
+          <p className="hidden lg:block flex-shrink-0 text-sm font-semibold text-slate-500 dark:text-slate-400">
+            {done === 0 ? `${lines.length} ${lines.length === 1 ? 'line' : 'lines'} to answer`
+              : left === 0 ? 'Every line is answered — you can send it'
+              : `${done} answered · ${left} to go`}
+          </p>
+          <span className="flex-shrink-0 text-[13px] lg:text-[15px] font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-full px-3 lg:px-4 py-1.5 lg:py-2 tabular-nums">
             {idx + 1} / {lines.length}
           </span>
         </div>
 
         {/* One segment a line: teal once answered, amber where he is */}
-        <div className="flex gap-1.5 mt-3">
+        <div className="flex gap-1.5 lg:gap-2 mt-3">
           {lines.map((l, i) => {
             const has = !!a.answers[l.id];
             return (
               <button key={l.id} onClick={() => { if (!recording && !saving) setIdx(i); }}
                 aria-label={`Line ${i + 1}${has ? ', answered' : ''}`} aria-current={i === idx ? 'step' : undefined}
                 className="flex-1 h-8 flex items-center">
-                <span className={`block w-full h-1.5 rounded-full ${
+                <span className={`block w-full h-1.5 lg:h-2 rounded-full ${
                   has ? 'bg-teal-700 dark:bg-teal-500' : i === idx ? 'bg-amber-500' : 'bg-slate-200 dark:bg-gray-700'} ${
                   i === idx && has ? 'ring-2 ring-offset-2 ring-amber-500 ring-offset-slate-50 dark:ring-offset-gray-900' : ''}`} />
               </button>
             );
           })}
         </div>
-        <p className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
+        <p className="lg:hidden text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
           {done === 0 ? `${lines.length} ${lines.length === 1 ? 'line' : 'lines'} to answer`
             : left === 0 ? 'Every line is answered — you can send it'
             : `${done} answered · ${left} to go`}
         </p>
 
-        {/* The line */}
-        {/* The only part that scrolls. It fades out at the foot, so a long
-            note runs under the microphone softly instead of being cut by it. */}
-        <main className="flex-grow min-h-0 overflow-y-auto -mx-1 px-1 pt-3 pb-5 flex flex-col items-center gap-3.5"
-          style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)' }}>
-          <div className="flex-grow min-h-[0.5rem]" />
-          <button onClick={() => void listen()} aria-label={speaking ? 'Stop' : 'Listen to the line'}
-            className="rounded-full focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300 p-3">
-            <SpeakerAvatar url={a.avatarUrl} size={open.hint || open.text || line.note || line.prev || answer ? 104 : 168} speaking={speaking} />
-          </button>
-
-          <div className="h-8 flex items-center">
-            {speaking ? (
-              <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-3.5 py-1.5 text-[13px] font-bold">
-                <Bars /> Speaking… listen carefully
-              </span>
-            ) : blocked ? (
-              <span className="text-[13px] font-bold text-amber-800 dark:text-amber-200">Tap the photo to hear the line</span>
-            ) : null}
+        {wide ? (
+          /* A desk: the speaker on the left, the student's answer on the right,
+             each a panel of its own that fills the height. */
+          <div className="flex-grow min-h-0 mt-3 grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-6">
+            <section aria-label="The speaker"
+              className="min-h-0 overflow-y-auto rounded-[32px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-10 py-8 flex flex-col items-center gap-4">
+              <p className={`${eyebrow} self-start text-slate-500 dark:text-slate-400`}>Listen · line {idx + 1} of {lines.length}</p>
+              <div className="flex-grow min-h-[0.5rem]" />
+              {stage}
+              <div className="flex-grow min-h-[0.5rem]" />
+            </section>
+            <section aria-label="Your answer"
+              className="min-h-0 overflow-y-auto rounded-[32px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-10 py-8 flex flex-col gap-5">
+              <p className={`${eyebrow} text-slate-500 dark:text-slate-400`}>Your answer</p>
+              {noteCard}
+              <div className="flex-grow flex flex-col justify-center py-2">{answerZone}</div>
+              {nav}
+            </section>
           </div>
-
-          <div className="flex items-center justify-center flex-wrap gap-2.5">
-            <button onClick={() => void listen()}
-              className="h-12 px-4 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-[14.5px] font-bold flex items-center gap-2">
-              {speaking ? <Icon.pause className="w-[18px] h-[18px]" /> : <Icon.replay className="w-[18px] h-[18px]" />}
-              {speaking ? 'Stop' : 'Listen again'}
-            </button>
-            {line.hint && (
-              <button onClick={() => { setOpen(o => ({ ...o, hint: !o.hint })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, hint: true })); }}
-                aria-label={open.hint ? 'Hide the hint' : 'Show the hint'} aria-pressed={open.hint}
-                className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${
-                  open.hint ? 'bg-amber-500 border-amber-500 text-white'
-                    : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'}`}>
-                <Icon.bulb />
-              </button>
-            )}
-            {line.text && (
-              <button onClick={() => { setOpen(o => ({ ...o, text: !o.text })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, text: true })); }}
-                aria-pressed={open.text}
-                className={`h-12 px-4 rounded-2xl border text-[14.5px] font-bold flex items-center gap-2 ${
-                  open.text ? 'bg-slate-800 border-slate-800 text-white dark:bg-slate-100 dark:border-slate-100 dark:text-slate-900'
-                    : 'bg-white dark:bg-gray-800 border-slate-300 dark:border-gray-600'}`}>
-                <Icon.eye className="w-[18px] h-[18px]" /> Meaning
-              </button>
-            )}
-          </div>
-
-          {open.text && (
-            <div className="w-full rounded-[20px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-4 py-3.5">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">What was said</p>
-              <p dir="auto" className="mt-1 text-[19px] font-bold leading-snug">{line.text}</p>
-            </div>
-          )}
-          {open.hint && (
-            <div className="w-full rounded-[20px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 flex gap-3 items-start">
-              <span aria-hidden="true" className="w-8 h-8 flex-shrink-0 rounded-[10px] bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100 flex items-center justify-center">
-                <Icon.bulb className="w-[18px] h-[18px]" />
-              </span>
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-amber-800 dark:text-amber-200">Hint</p>
-                <p dir="auto" className="mt-0.5 text-[15px] font-semibold leading-snug text-amber-900 dark:text-amber-100">{line.hint}</p>
-              </div>
-            </div>
-          )}
-
-          {/* A line sent back: what the teacher said, and what he said */}
-          {(line.note || line.prev) && (
-            <div className="w-full rounded-[20px] bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 px-4 py-3.5 flex flex-col gap-2.5">
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="w-6 h-6 rounded-full bg-rose-700 text-white flex items-center justify-center">
-                  <Icon.cross className="w-3.5 h-3.5" />
-                </span>
-                <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-rose-800 dark:text-rose-200">
-                  {line.note ? 'Your teacher’s note' : 'This line came back'}
-                </span>
-              </div>
-              {line.note && <p dir="auto" className="text-[15.5px] font-semibold leading-snug text-rose-900 dark:text-rose-100">{line.note}</p>}
-              {line.prev?.url && (
-                <button onClick={() => void player.play(`prev:${line.id}`, line.prev!.url)}
-                  className="self-start h-11 pl-1.5 pr-3.5 rounded-full border border-rose-300 dark:border-rose-700 bg-white dark:bg-gray-800 text-rose-800 dark:text-rose-200 text-[13.5px] font-bold flex items-center gap-2">
-                  <span aria-hidden="true" className="w-8 h-8 rounded-full bg-rose-700 text-white flex items-center justify-center">
-                    {player.playing === `prev:${line.id}` ? <Icon.pause className="w-3.5 h-3.5" /> : <Icon.play className="w-3.5 h-3.5" />}
-                  </span>
-                  Hear what I said last time · {fmtClock(line.prev.ms)}
-                </button>
-              )}
-            </div>
-          )}
-          <div className="flex-grow min-h-[0.5rem]" />
-        </main>
-
-        {/* The answer — a plain last child, so it can never sit on top of the line */}
-        <div className="flex-shrink-0 pt-3 pb-3.5">
-          {shown && <p role="alert" className="mb-2.5 text-center text-[13px] font-semibold text-rose-700 dark:text-rose-300">{shown}</p>}
-          {answer && !recording ? (
-            <div className="rounded-[22px] bg-white dark:bg-gray-800 border-2 border-teal-700 dark:border-teal-500 px-4 py-3.5 flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-teal-700 dark:text-teal-300">
-                <span aria-hidden="true" className="w-[22px] h-[22px] rounded-full bg-teal-700 dark:bg-teal-500 text-white flex items-center justify-center">
-                  <Icon.check className="w-3.5 h-3.5" />
-                </span>
-                <span className="text-sm font-extrabold">{saving ? 'Saving your answer…' : 'Your answer is saved'}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button onClick={() => void player.play(`mine:${line.id}`, answer.url)} aria-label="Play my answer"
-                  className="w-12 h-12 flex-shrink-0 rounded-full bg-teal-700 dark:bg-teal-500 text-white flex items-center justify-center">
-                  {player.playing === `mine:${line.id}` ? <Icon.pause /> : <Icon.play />}
-                </button>
-                <span aria-hidden="true" className="flex-grow h-1.5 rounded-full bg-teal-100 dark:bg-teal-900/50 overflow-hidden">
-                  <span className="block h-full rounded-full bg-teal-700 dark:bg-teal-400"
-                    style={{ width: `${player.playing === `mine:${line.id}` ? Math.round(player.progress * 100) : 0}%` }} />
-                </span>
-                <span className="text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">{fmtClock(answer.ms)}</span>
-              </div>
-              <button onClick={startRecording} disabled={saving}
-                className="h-11 rounded-[14px] border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-                <Icon.mic className="w-[17px] h-[17px]" /> Record it again
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <button onClick={recording ? recorder.stop : startRecording} disabled={saving}
-                aria-label={recording ? 'Stop recording' : 'Record your answer'}
-                className={`w-[92px] h-[92px] rounded-full bg-rose-600 text-white flex items-center justify-center disabled:opacity-50 ${
-                  recording ? 'sp-recording' : 'shadow-[0_0_0_8px_#ffe4e6,0_16px_28px_-14px_rgba(225,29,72,0.7)] dark:shadow-[0_0_0_8px_rgba(225,29,72,0.22)]'}`}>
-                {recording ? <Icon.stop className="w-9 h-9" /> : <Icon.mic className="w-9 h-9" />}
-              </button>
-              {recording ? (
-                <>
-                  <p className="mt-1 text-base font-extrabold tabular-nums">{fmtClock(recorder.elapsed)} <span className="text-slate-500 dark:text-slate-400 font-semibold">/ {fmtClock(MAX_ANSWER_MS)}</span></p>
-                  <span aria-hidden="true" className="block w-40 h-1.5 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden">
-                    <span ref={recorder.meterRef} className="block h-full w-full origin-left rounded-full bg-rose-600" style={{ transform: 'scaleX(0.02)' }} />
-                  </span>
-                  <p className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">Tap to stop when you have answered</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-1 text-base font-extrabold">{saving ? 'Saving your answer…' : redo ? 'Record a new answer' : 'Record your answer'}</p>
-                  <p className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">Answer out loud · up to {Math.round(MAX_ANSWER_MS / 1000)} seconds</p>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* On, or in */}
-        <div className="flex-shrink-0 flex gap-2.5">
-          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0 || recording || saving}
-            className="h-[52px] w-24 flex-shrink-0 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-[15px] font-bold disabled:opacity-40">
-            Back
-          </button>
-          {all || last ? (
-            <button onClick={send} disabled={!all || sending || recording || saving}
-              className={`h-[52px] flex-grow rounded-2xl text-[15px] font-extrabold flex items-center justify-center gap-2 ${
-                all ? 'bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60'
-                  : 'bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400'}`}>
-              {!all && <Icon.lock className="w-[17px] h-[17px]" />}
-              {sending ? 'Sending…' : preview ? (all ? 'Finish trying it' : `${left} left to record`) : all ? 'Send to my teacher' : `${left} left to record`}
-            </button>
-          ) : (
-            <button onClick={() => setIdx(i => Math.min(lines.length - 1, i + 1))} disabled={!answer || recording || saving}
-              className={`h-[52px] flex-grow rounded-2xl text-[15px] font-extrabold flex items-center justify-center gap-2 ${
-                answer ? 'bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-60'
-                  : 'bg-slate-200 dark:bg-gray-700 text-slate-500 dark:text-slate-400'}`}>
-              {answer ? <>Next line <Icon.arrow className="w-[18px] h-[18px]" /></> : 'Record to go on'}
-            </button>
-          )}
-        </div>
+        ) : (
+          <>
+            {/* A phone. This is the only part that scrolls, and it fades out at
+                the foot, so a long note runs under the microphone softly
+                instead of being cut by it. */}
+            <main className="flex-grow min-h-0 overflow-y-auto -mx-1 px-1 pt-3 pb-5 flex flex-col items-center gap-3.5"
+              style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)' }}>
+              <div className="flex-grow min-h-[0.5rem]" />
+              {stage}
+              {noteCard}
+              <div className="flex-grow min-h-[0.5rem]" />
+            </main>
+            {/* The answer — a plain last child, so it can never sit on top of the line */}
+            <div className="flex-shrink-0 pt-3 pb-3.5">{answerZone}</div>
+            {nav}
+          </>
+        )}
       </div>
     </div>
   );
@@ -381,8 +451,11 @@ export const SpeakingResult: React.FC<{
   /** The try that replaced this one, when the teacher sent lines back. */
   next?: SpeakingAttempt | null;
   onOpenNext?: (a: SpeakingAttempt) => void;
+  /** Shown only to the student's own tutor, signed in and looking at the
+   *  student's link: a way across to the marking. */
+  onMark?: () => void;
   onExit: () => void;
-}> = ({ attempt: a, next, onOpenNext, onExit }) => {
+}> = ({ attempt: a, next, onOpenNext, onMark, onExit }) => {
   const player = usePlayer();
   const marked = a.status === 'passed' || a.status === 'needs_revision';
   const right = a.lines.filter(l => a.marks[l.id]?.ok).length;
@@ -399,19 +472,21 @@ export const SpeakingResult: React.FC<{
     <div className="min-h-[100dvh] bg-slate-50 dark:bg-gray-900 text-slate-800 dark:text-slate-100"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <SpeakingStyles />
-      <div className="w-full max-w-md mx-auto px-5 pt-3.5 pb-6 flex flex-col gap-4">
-        <div className="flex items-center gap-2.5">
+      <div className="w-full max-w-md lg:max-w-5xl mx-auto px-5 lg:px-8 pt-3.5 lg:pt-6 pb-6 lg:pb-10 flex flex-col gap-4 lg:gap-6">
+        <div className="flex items-center gap-2.5 lg:gap-4">
           <button onClick={onExit} aria-label="Back"
             className="w-11 h-11 flex-shrink-0 rounded-[14px] border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
             <Icon.back />
           </button>
           <div className="min-w-0">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">Speaking homework</p>
-            <h1 className="text-[17px] font-extrabold truncate">{a.title}</h1>
+            <h1 className="text-[17px] lg:text-2xl font-extrabold truncate">{a.title}</h1>
           </div>
         </div>
 
-        <div className="rounded-[26px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-5 py-6 flex flex-col items-center text-center gap-3">
+        {/* On a desk the verdict stays put on the left while the lines scroll beside it. */}
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-6 lg:items-start">
+        <div className="lg:sticky lg:top-6 rounded-[26px] lg:rounded-[32px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-5 py-6 lg:px-7 lg:py-9 flex flex-col items-center text-center gap-3">
           <SpeakerAvatar url={a.avatarUrl} size={104} />
           <span className={`mt-1 text-[11px] font-extrabold uppercase tracking-[0.1em] rounded-full px-3 py-1 ${
             head.tone === 'ok' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
@@ -426,6 +501,16 @@ export const SpeakingResult: React.FC<{
               Redo {next.lines.length === 1 ? 'that line' : `those ${next.lines.length} lines`}
             </button>
           )}
+          {onMark && (
+            <button onClick={onMark}
+              className="mt-1 h-[52px] px-6 rounded-2xl bg-rose-700 hover:bg-rose-800 text-white text-[15px] font-extrabold flex items-center gap-2">
+              <Icon.check className="w-[18px] h-[18px]" /> You are the teacher — mark it
+            </button>
+          )}
+          <button onClick={onExit}
+            className="hidden lg:block mt-2 h-12 px-6 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-slate-50 dark:hover:bg-gray-700 text-[15px] font-bold">
+            Back to my page
+          </button>
         </div>
 
         <div className="flex flex-col gap-2.5">
@@ -467,8 +552,10 @@ export const SpeakingResult: React.FC<{
           })}
         </div>
 
+        </div>
+
         <button onClick={onExit}
-          className="h-[52px] rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-[15px] font-bold">
+          className="lg:hidden h-[52px] rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-[15px] font-bold">
           Back to my page
         </button>
       </div>
