@@ -93,9 +93,10 @@ export async function saveSpeakingContent(templateId: string, content: SpeakingC
   return true;
 }
 
-/** The photo, shrunk first — it is shown at a couple of hundred pixels. */
+/** The photo, shrunk first. It is shown large — up to ~700px wide on a desk —
+ *  so it keeps 960px square, which is still only ~150 KB as a JPEG. */
 export async function uploadSpeakingAvatar(file: File, templateId: string): Promise<string | null> {
-  const blob = await shrinkSquare(file, 640, 0.84).catch(() => file as Blob);
+  const blob = await shrinkSquare(file, 960, 0.86).catch(() => file as Blob);
   const path = `speaking-homework/${templateId}/avatar-${Date.now()}.jpg`;
   const { error } = await supabase.storage.from(ASSET_BUCKET)
     .upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '31536000' });

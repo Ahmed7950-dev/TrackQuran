@@ -159,7 +159,12 @@ const SpeakingBuilder: React.FC<{
       <div className="flex flex-wrap gap-5 items-start">
         {/* The speaker */}
         <div className="flex-[1_1_15rem] max-w-xs bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl p-5 flex flex-col items-center gap-4">
-          <SpeakerAvatar url={content.avatarUrl} size={146} className="m-2" />
+          {/* As the student sees it: a wide, centred crop under a "Listen" label. */}
+          <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden bg-amber-100 dark:bg-amber-900/30 border border-slate-200 dark:border-gray-700 relative">
+            {content.avatarUrl
+              ? <img src={content.avatarUrl} alt="The speaker" draggable={false} className="absolute inset-0 w-full h-full object-cover object-[50%_28%]" />
+              : <div className="absolute inset-0 flex items-center justify-center"><SpeakerAvatar url={null} size={96} /></div>}
+          </div>
           <input ref={avatarInput} type="file" accept="image/*" className="hidden"
             onChange={e => { void pickAvatar(e.target.files?.[0]); e.target.value = ''; }} />
           <button onClick={() => avatarInput.current?.click()} disabled={avatarBusy}
@@ -168,7 +173,7 @@ const SpeakingBuilder: React.FC<{
             {avatarBusy ? 'Uploading…' : content.avatarUrl ? 'Change the photo' : 'Upload the speaker’s photo'}
           </button>
           <p className="text-[12.5px] font-medium text-slate-500 dark:text-slate-400 text-center leading-snug">
-            One photo for the whole dialogue. The student sees it in the middle of the screen while this person speaks.
+            One photo for the whole dialogue, shown large above the line. It is cropped to a wide rectangle around the face, so put the speaker in the middle.
           </p>
         </div>
 

@@ -40,8 +40,6 @@ function useMedia(query: string): boolean {
   return on;
 }
 const useWide = () => useMedia('(min-width: 1024px)');
-/** A wide but shallow window — a laptop with the browser's bars showing. */
-const useShallow = () => useMedia('(max-height: 740px)');
 
 export const SpeakingRunner: React.FC<{
   attempt: SpeakingAttempt;
@@ -78,8 +76,10 @@ export const SpeakingRunner: React.FC<{
     });
   }, [attempt.id, preview]);
 
-  /** Which reveals are open on screen now — a line's own, closed again when he moves on. */
-  const [open, setOpen] = useState<{ hint: boolean; text: boolean }>({ hint: false, text: false });
+  /** Which of the two the student has asked to read on this line — the text
+   *  under the photo is blurred until he picks one, and closed again when he
+   *  moves on. */
+  const [view, setView] = useState<'hint' | 'text' | null>(null);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -104,7 +104,7 @@ export const SpeakingRunner: React.FC<{
 
   // Arriving on a line he has not answered: the speaker says it.
   useEffect(() => {
-    setOpen({ hint: false, text: false });
+    setView(null);
     setError('');
     if (line && !a.answers[line.id]) void listen(true);
     else player.stop();
@@ -162,7 +162,6 @@ export const SpeakingRunner: React.FC<{
   const redo = !!a.parentId;
   const shown = recorder.error || error;
   const wide = useWide();
-  const shallow = useShallow();
 
   if (!line) {
     return (
@@ -175,71 +174,103 @@ export const SpeakingRunner: React.FC<{
   /* ── The pieces. They are the same on a phone and on a desk; only where
         they sit differs. ── */
 
-  const avatarSize = wide ? (shallow ? 168 : 232) : (open.hint || open.text || line.note || line.prev || answer ? 104 : 168);
+  const eyebrow = 'text-[11px] font-extrabold uppercase tracking-[0.12em]';
 
-  /** The speaker: his photo, whether he is talking, and what can be asked of him. */
-  const stage = (
-    <>
-      <button onClick={() => void listen()} aria-label={speaking ? 'Stop' : 'Listen to the line'}
-        className="rounded-full focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300 p-3 lg:p-5">
-        <SpeakerAvatar url={a.avatarUrl} size={avatarSize} speaking={speaking} />
-      </button>
+  /** Ask to read one of the two. Asking again puts the blur back. The first
+   *  time on a line counts as "he looked", which the tutor is shown. */
+  const reveal = (which: 'hint' | 'text') => {
+    setView(v => (v === which ? null : which));
+    if (!a.answers[line.id]) note(line.id, s => ({ ...s, [which]: true }));
+  };
+  /** What sits under the photo. Before he picks, the line's own text is
+   *  there — blurred past reading — so the band never changes size. */
+  const hasText = !!line.text, hasHint = !!line.hint;
+  const slot = view === 'hint' ? { label: 'Hint', body: line.hint }
+    : view === 'text' ? { label: 'English', body: line.text }
+    : { label: '', body: line.text || line.hint };
+  const hidden = view === null;
 
-      <div className="h-8 flex items-center">
+  /** The speaker's card: the photo as large as the room allows, and under it
+   *  the play button, the text (blurred until asked for) and the two buttons
+   *  that ask for it. */
+  const speakerCard = (
+    <div className={`flex flex-col overflow-hidden rounded-[28px] lg:rounded-[36px] bg-white dark:bg-gray-800 border transition-shadow w-full ${
+      wide ? 'h-full min-h-0' : 'flex-shrink-0'} ${
+      speaking ? 'border-amber-400 shadow-[0_0_0_3px_rgba(245,158,11,0.35)]' : 'border-slate-200 dark:border-gray-700'}`}>
+      <div className="flex-shrink-0 flex items-center justify-between gap-3 px-5 lg:px-8 pt-4 lg:pt-6 pb-3 lg:pb-4">
+        <p className={`${eyebrow} text-slate-500 dark:text-slate-400`}>Listen · line {idx + 1} of {lines.length}</p>
         {speaking ? (
-          <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 px-3.5 py-1.5 text-[13px] lg:text-sm font-bold">
-            <Bars /> Speaking… listen carefully
-          </span>
+          <span className="inline-flex items-center gap-2 text-[12px] font-bold text-amber-800 dark:text-amber-200"><Bars /> Speaking…</span>
         ) : blocked ? (
-          <span className="text-[13px] lg:text-sm font-bold text-amber-800 dark:text-amber-200">{wide ? 'Click' : 'Tap'} the photo to hear the line</span>
+          <span className="text-[12px] font-bold text-amber-800 dark:text-amber-200">{wide ? 'Click' : 'Tap'} play to hear the line</span>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-center flex-wrap gap-2.5">
-        <button onClick={() => void listen()}
-          className="h-12 lg:h-[52px] px-4 lg:px-5 rounded-2xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-slate-50 dark:hover:bg-gray-700 text-[14.5px] lg:text-[15px] font-bold flex items-center gap-2">
-          {speaking ? <Icon.pause className="w-[18px] h-[18px]" /> : <Icon.replay className="w-[18px] h-[18px]" />}
-          {speaking ? 'Stop' : 'Listen again'}
-        </button>
-        {line.hint && (
-          <button onClick={() => { setOpen(o => ({ ...o, hint: !o.hint })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, hint: true })); }}
-            aria-label={open.hint ? 'Hide the hint' : 'Show the hint'} aria-pressed={open.hint}
-            className={`h-12 lg:h-[52px] rounded-2xl border flex items-center justify-center gap-2 text-[15px] font-bold ${wide ? 'px-5' : 'w-12'} ${
-              open.hint ? 'bg-amber-500 border-amber-500 text-white'
-                : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'}`}>
-            <Icon.bulb />
-            {wide && <span aria-hidden="true">Hint</span>}
-          </button>
+      {/* The photo: edge to edge. Taller on a desk, where there is room. */}
+      <button onClick={() => void listen()} aria-label={speaking ? 'Stop the speaker' : 'Listen to the line'}
+        className={`relative block w-full flex-shrink-0 overflow-hidden bg-amber-100 dark:bg-amber-900/30 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-amber-400 ${
+          wide ? 'flex-grow min-h-[16rem]' : 'aspect-[4/3] max-h-[25dvh]'}`}>
+        {a.avatarUrl ? (
+          <img src={a.avatarUrl} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover object-[50%_28%]" />
+        ) : (
+          <svg viewBox="0 0 174 174" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full" aria-hidden="true">
+            <rect width="174" height="174" fill="#FDE68A" />
+            <circle cx="87" cy="70" r="34" fill="#92400E" />
+            <path d="M22 174c4-40 30-58 65-58s61 18 65 58z" fill="#B45309" />
+          </svg>
         )}
-        {line.text && (
-          <button onClick={() => { setOpen(o => ({ ...o, text: !o.text })); if (!a.answers[line.id]) note(line.id, s => ({ ...s, text: true })); }}
-            aria-pressed={open.text}
-            className={`h-12 lg:h-[52px] px-4 lg:px-5 rounded-2xl border text-[14.5px] lg:text-[15px] font-bold flex items-center gap-2 ${
-              open.text ? 'bg-slate-800 border-slate-800 text-white dark:bg-slate-100 dark:border-slate-100 dark:text-slate-900'
-                : 'bg-white dark:bg-gray-800 border-slate-300 dark:border-gray-600 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
-            <Icon.eye className="w-[18px] h-[18px]" /> Meaning
-          </button>
-        )}
-      </div>
+        {speaking && <span aria-hidden="true" className="pointer-events-none absolute inset-0 ring-4 ring-inset ring-amber-500/80" />}
+      </button>
 
-      {open.text && (
-        <div className="w-full lg:max-w-xl rounded-[20px] bg-white dark:bg-gray-800 lg:bg-slate-50 lg:dark:bg-gray-900/50 border border-slate-200 dark:border-gray-700 px-4 lg:px-5 py-3.5 lg:py-4">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">What was said</p>
-          <p dir="auto" className="mt-1 text-[19px] lg:text-[22px] font-bold leading-snug">{line.text}</p>
+      <div className="flex-shrink-0 flex items-center gap-4 lg:gap-6 px-5 lg:px-8 py-4 lg:py-6">
+        {/* White circle, like the sketch. Inline style: the "reading" theme
+            repaints every bg-white cream, and this one must stay white. */}
+        <span className="relative flex-shrink-0 w-14 h-14 lg:w-[72px] lg:h-[72px]">
+          {speaking && <span aria-hidden="true" className="sp-ring absolute inset-0 rounded-full border-amber-500" style={{ borderWidth: 3 }} />}
+          <button onClick={() => void listen()} aria-label={speaking ? 'Stop' : 'Listen to the line again'}
+            title={speaking ? 'Stop' : 'Listen again'}
+            className="relative w-full h-full rounded-full flex items-center justify-center text-amber-700 hover:scale-105 active:scale-95 transition-transform focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+            style={{ background: '#FFFFFF', boxShadow: '0 0 0 1px rgba(15,23,42,0.10), 0 6px 14px -6px rgba(15,23,42,0.35)' }}>
+            {speaking ? <Icon.pause className="w-6 h-6 lg:w-8 lg:h-8" /> : <Icon.play className="w-6 h-6 lg:w-8 lg:h-8 ml-0.5" />}
+          </button>
+        </span>
+
+        <div className="flex-grow min-w-0 flex flex-col gap-2.5">
+          {(hasText || hasHint) ? (
+            <>
+              <div className="min-h-[3.1rem] lg:min-h-[3.6rem]">
+                {!hidden && <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">{slot.label}</p>}
+                <p dir="auto" aria-hidden={hidden} aria-live="polite"
+                  className={`text-[17px] lg:text-[22px] font-bold leading-snug transition-[filter] duration-300 ${hidden ? 'select-none pointer-events-none' : ''}`}
+                  style={hidden ? { filter: 'blur(7px)' } : undefined}>
+                  {slot.body}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {hasHint && (
+                  <button onClick={() => reveal('hint')} aria-pressed={view === 'hint'}
+                    className={`h-11 pl-3 pr-4 rounded-full border text-[14px] font-bold flex items-center gap-2 transition-colors ${
+                      view === 'hint' ? 'bg-amber-500 border-amber-500 text-white'
+                        : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50'}`}>
+                    <Icon.bulb className="w-[18px] h-[18px]" /> Hint
+                  </button>
+                )}
+                {hasText && (
+                  <button onClick={() => reveal('text')} aria-pressed={view === 'text'}
+                    className={`h-11 pl-3 pr-4 rounded-full border text-[14px] font-bold flex items-center gap-2 transition-colors ${
+                      view === 'text' ? 'bg-slate-800 border-slate-800 text-white dark:bg-slate-100 dark:border-slate-100 dark:text-slate-900'
+                        : 'bg-white dark:bg-gray-800 border-slate-300 dark:border-gray-600 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+                    <Icon.eye className="w-[18px] h-[18px]" /> English
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-[15px] lg:text-lg font-semibold text-slate-600 dark:text-slate-300">Listen, then answer out loud.</p>
+          )}
         </div>
-      )}
-      {open.hint && (
-        <div className="w-full lg:max-w-xl rounded-[20px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 lg:px-5 py-3 lg:py-4 flex gap-3 items-start">
-          <span aria-hidden="true" className="w-8 h-8 flex-shrink-0 rounded-[10px] bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100 flex items-center justify-center">
-            <Icon.bulb className="w-[18px] h-[18px]" />
-          </span>
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-amber-800 dark:text-amber-200">Hint</p>
-            <p dir="auto" className="mt-0.5 text-[15px] lg:text-[17px] font-semibold leading-snug text-amber-900 dark:text-amber-100">{line.hint}</p>
-          </div>
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 
   /** A line sent back: what the teacher said, and what he said. */
@@ -347,7 +378,6 @@ export const SpeakingRunner: React.FC<{
     </div>
   );
 
-  const eyebrow = 'text-[11px] font-extrabold uppercase tracking-[0.12em]';
 
   return (
     <div className="h-[100dvh] overflow-hidden flex flex-col bg-slate-50 dark:bg-gray-900 text-slate-800 dark:text-slate-100"
@@ -402,13 +432,7 @@ export const SpeakingRunner: React.FC<{
           /* A desk: the speaker on the left, the student's answer on the right,
              each a panel of its own that fills the height. */
           <div className="flex-grow min-h-0 mt-3 grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-6">
-            <section aria-label="The speaker"
-              className="min-h-0 overflow-y-auto rounded-[32px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-10 py-8 flex flex-col items-center gap-4">
-              <p className={`${eyebrow} self-start text-slate-500 dark:text-slate-400`}>Listen · line {idx + 1} of {lines.length}</p>
-              <div className="flex-grow min-h-[0.5rem]" />
-              {stage}
-              <div className="flex-grow min-h-[0.5rem]" />
-            </section>
+            <section aria-label="The speaker" className="min-h-0">{speakerCard}</section>
             <section aria-label="Your answer"
               className="min-h-0 overflow-y-auto rounded-[32px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-10 py-8 flex flex-col gap-5">
               <p className={`${eyebrow} text-slate-500 dark:text-slate-400`}>Your answer</p>
@@ -425,7 +449,7 @@ export const SpeakingRunner: React.FC<{
             <main className="flex-grow min-h-0 overflow-y-auto -mx-1 px-1 pt-3 pb-5 flex flex-col items-center gap-3.5"
               style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 22px), transparent)' }}>
               <div className="flex-grow min-h-[0.5rem]" />
-              {stage}
+              {speakerCard}
               {noteCard}
               <div className="flex-grow min-h-[0.5rem]" />
             </main>
