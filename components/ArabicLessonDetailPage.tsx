@@ -50,6 +50,8 @@ import {
 import {
   PronounPicturesEditor, PronounPicturesRunner, PronounPicturesReview, ExerciseInbox,
 } from './PronounPicturesExercise';
+import { listLessonHomework, KIND_LABEL, type HomeworkTemplate } from '../services/arabicHomeworkTemplateService';
+import SpeakingLessonCard from './SpeakingLessonCard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2198,15 +2200,30 @@ const HomeworkArea: React.FC<{
 }> = ({ lessonId, lessonTitle, isAdmin, studentMode, studentId, studentName, nameOf, teacherId, onHomeworkComplete }) => {
   const [exercises, setExercises] = useState<LessonExercise[] | null>(null);
   const [latest, setLatest] = useState<Map<string, ExerciseSubmission>>(new Map());
-  /** null = the list · 'writing' = the written homework · otherwise an id. */
+  /** Homework added to this lesson from a tutor's library — a link, not a
+   *  copy, so it is built and changed there and only done here. */
+  const [linked, setLinked] = useState<HomeworkTemplate[]>([]);
+  /** templateId → the exercise row behind a linked pronoun-pictures homework. */
+  const [linkedExercise, setLinkedExercise] = useState<Map<string, LessonExercise>>(new Map());
+  /** null = the list · 'writing' = the written homework · 'tpl:<id>' = a
+   *  linked homework · otherwise an exercise id. */
   const [open, setOpen] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     // The admin sees the unpublished ones too — that is where they are built.
-    const rows = await listLessonExercises(lessonId, isAdmin);
+    const [rows, links] = await Promise.all([listLessonExercises(lessonId, isAdmin), listLessonHomework(lessonId)]);
+    const behind = new Map<string, LessonExercise>();
+    await Promise.all(links.filter(t => t.kind === 'pronoun_pictures').map(async t => {
+      const [ex] = await listLessonExercises(t.id, true);
+      if (ex) behind.set(t.id, ex);
+    }));
     setExercises(rows);
-    if (studentId) setLatest(await latestByExercise(rows.map(r => r.id), studentId));
+    setLinked(links);
+    setLinkedExercise(behind);
+    if (studentId) {
+      setLatest(await latestByExercise([...rows.map(r => r.id), ...[...behind.values()].map(e => e.id)], studentId));
+    }
   }, [lessonId, isAdmin, studentId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -2225,7 +2242,7 @@ const HomeworkArea: React.FC<{
   );
 
   // Nothing else on this lesson, and nothing to add: it is just the homework.
-  if (!exercises.length && !isAdmin) return writing;
+  if (!exercises.length && !linked.length && !isAdmin) return writing;
 
   const addExercise = async () => {
     setCreating(true);
@@ -2248,6 +2265,42 @@ const HomeworkArea: React.FC<{
 
   if (open === 'writing') {
     return <div>{back('Writing homework')}{writing}</div>;
+  }
+
+  // A homework from a tutor's library. It is DONE here, never built here: the
+  // builder is the library's, so there is one place a homework is changed.
+  const linkedOpen = open?.startsWith('tpl:') ? linked.find(t => `tpl:${t.id}` === open) : undefined;
+  if (linkedOpen) {
+    const behind = linkedExercise.get(linkedOpen.id);
+    return (
+      <div>
+        {back(linkedOpen.title)}
+        {linkedOpen.kind === 'speaking' ? (
+          <SpeakingLessonCard template={linkedOpen} lessonId={lessonId} lessonTitle={lessonTitle}
+            studentMode={studentMode} studentId={studentId} studentName={studentName} teacherId={teacherId} />
+        ) : linkedOpen.kind === 'pronoun_pictures' ? (
+          !behind ? <p className="p-6 text-sm text-slate-500 dark:text-slate-400">This exercise is not available.</p>
+          : studentMode ? (
+            <PronounPicturesRunner
+              exercise={behind} studentId={studentId} studentName={studentName} studentMode
+              teacherId={teacherId} lessonTitle={lessonTitle}
+              onSubmitted={() => { void load(); }}
+            />
+          ) : studentId ? (
+            <PronounPicturesReview exercise={behind} studentId={studentId} studentName={studentName} />
+          ) : (
+            <PronounPicturesRunner exercise={behind} studentMode={false} />
+          )
+        ) : (
+          <HomeworkTab
+            lessonId={linkedOpen.id} lessonTitle={linkedOpen.title}
+            isAdmin={false} studentMode={studentMode}
+            studentId={studentId} studentName={studentName}
+            teacherId={teacherId}
+          />
+        )}
+      </div>
+    );
   }
 
   const current = exercises.find(e => e.id === open);
@@ -2331,6 +2384,28 @@ const HomeworkArea: React.FC<{
           () => setOpen(ex.id),
           scorePill(latest.get(ex.id)),
         ))}
+
+        {linked.map(t => {
+          const behind = linkedExercise.get(t.id);
+          const sub = behind ? latest.get(behind.id) : undefined;
+          const lines = t.speaking?.lines.filter(l => !!l.audioUrl).length ?? 0;
+          return card(
+            `tpl:${t.id}`,
+            t.kind === 'speaking' ? '🎙️' : t.kind === 'pronoun_pictures' ? '🧩' : '📝',
+            t.title,
+            <>
+              {t.kind === 'speaking'
+                ? `${lines} ${lines === 1 ? 'line' : 'lines'} to answer out loud`
+                : t.kind === 'pronoun_pictures'
+                ? `${behind?.rounds.length ?? 0} ${(behind?.rounds.length ?? 0) === 1 ? 'round' : 'rounds'}`
+                : KIND_LABEL[t.kind]}
+              {sub?.status === 'returned' && <span className="ml-2 text-emerald-600 dark:text-emerald-400 font-bold">· checked</span>}
+              {sub?.status === 'submitted' && <span className="ml-2 text-sky-600 dark:text-sky-400 font-bold">· sent in</span>}
+            </>,
+            () => setOpen(`tpl:${t.id}`),
+            scorePill(sub),
+          );
+        })}
       </div>
 
       {isAdmin && (

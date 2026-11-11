@@ -74,6 +74,8 @@ import { listHunterHomework, hunterHomeworkUrl, type HunterHomework } from './se
 import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
+import SpeakingHomeworkPage from './components/SpeakingHomeworkPage';
+import { purgeOldSpeaking } from './services/speakingHomeworkService';
 import RecitationReviewPanel from './components/RecitationReviewPanel';
 import TadabburLabPage from './components/TadabburLabPage';
 import HomeworkTab from './components/HomeworkTab';
@@ -545,6 +547,13 @@ const App: React.FC = () => {
   })();
   if (recitationId) return <RecitationHomeworkPage recitationId={recitationId} />;
 
+  // ── Speaking homework — the student answers each line out loud, no auth ───
+  const speakingAttemptId = (() => {
+    const m = window.location.pathname.match(/^\/speak\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (speakingAttemptId) return <SpeakingHomeworkPage attemptId={speakingAttemptId} />;
+
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   /** Work that is only on screen is worse than work never done: the tutor
@@ -997,6 +1006,11 @@ const App: React.FC = () => {
     if (currentUserRole !== 'teacher' || !currentUserId) return;
     purgeOldRecitations(currentUserId)
       .then(n => { if (n) console.info(`[recitations] cleared the recordings of ${n} old homework(s)`); })
+      .catch(() => {});
+    // Speaking homework the same way: a week after it is all right, two months
+    // after one that never got there.
+    purgeOldSpeaking(currentUserId)
+      .then(n => { if (n) console.info(`[speaking] cleared the recordings of ${n} old try(s)`); })
       .catch(() => {});
   }, [currentUserId, currentUserRole]);
 
@@ -1951,6 +1965,8 @@ const App: React.FC = () => {
                 recipient="tutor"
                 onNavigate={(sid, lid) => {
                   if (lid.startsWith('recite:')) { getRecitationHomework(lid.slice(7)).then(r => { if (r) openRecitationReview(r); }); return; }
+                  // A speaking homework is Arabic: go there even from the Quran section.
+                  if (lid.startsWith('speaking:')) handleSelectSubject('arabic');
                   setSelectedArabicStudentId(sid);
                   setActiveTab('main');
                   setHwDeepLink({ studentId: sid, lessonId: lid });
@@ -2196,6 +2212,8 @@ const App: React.FC = () => {
                   recipient="tutor"
                   onNavigate={(sid, lid) => {
                     if (lid.startsWith('recite:')) { getRecitationHomework(lid.slice(7)).then(r => { if (r) openRecitationReview(r); }); return; }
+                    // A speaking homework is Arabic: go there even from the Quran section.
+                    if (lid.startsWith('speaking:')) handleSelectSubject('arabic');
                     setSelectedArabicStudentId(sid);
                     setActiveTab('main');
                     setHwDeepLink({ studentId: sid, lessonId: lid });

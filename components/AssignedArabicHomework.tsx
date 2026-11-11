@@ -5,13 +5,20 @@ import { getArabicLessons, getStudentByShareToken } from '../services/arabicServ
 import { getVocabHomework, type VocabHomework, type HomeworkResult } from '../services/vocabHomeworkService';
 import { answerAssignedFlashcard, homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicFlashcard from './ArabicFlashcard';
-import ArabicLessonDetailPage from './ArabicLessonDetailPage';
+import ArabicLessonDetailPage, { HomeworkTab } from './ArabicLessonDetailPage';
+import { getHomeworkTemplate, type HomeworkTemplate } from '../services/arabicHomeworkTemplateService';
+import { listLessonExercises, type LessonExercise } from '../services/lessonExerciseService';
+import { getAttemptForHomework, speakUrl } from '../services/speakingHomeworkService';
+import { PronounPicturesReview, PronounPicturesRunner } from './PronounPicturesExercise';
 
 export default function AssignedArabicHomework({ homework: initial }: { homework: VocabHomework }) {
   const [hw, setHw] = useState(initial);
   const [tutor, setTutor] = useState<boolean | null>(null);
   const [lesson, setLesson] = useState<ArabicLesson | null>(null);
   const [student, setStudent] = useState<ArabicStudent | null>(null);
+  /** A homework from the tutor's library: which kind it is decides what opens. */
+  const [template, setTemplate] = useState<HomeworkTemplate | null>(null);
+  const [exercise, setExercise] = useState<LessonExercise | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [flipped, setFlipped] = useState(false);
@@ -30,6 +37,25 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
       const { data } = await supabase.auth.getSession();
       if (!live) return;
       setTutor(data.session?.user?.id === hw.teacherId);
+      if (hw.kind === 'custom' && hw.lessonId) {
+        const found = await getHomeworkTemplate(hw.lessonId);
+        if (!live) return;
+        if (!found) { setError('This homework is not available any more.'); return; }
+        if (found.kind === 'speaking') {
+          // A speaking homework is done on its own page; this link only leads there.
+          const attempt = await getAttemptForHomework(hw.id);
+          if (!live) return;
+          if (attempt) { window.location.replace(speakUrl(attempt.id)); return; }
+          setError('This speaking homework could not be opened. Ask your teacher to assign it again.');
+          return;
+        }
+        if (found.kind === 'pronoun_pictures') {
+          const [ex] = await listLessonExercises(found.id, true);
+          if (live) setExercise(ex ?? null);
+        }
+        if (live) setTemplate(found);
+        return;
+      }
       if (hw.kind === 'lesson') {
         const [lessons, result] = await Promise.all([getArabicLessons(), supabase.from('arabic_students').select('share_token').eq('id', hw.studentId).single()]);
         const s = result.data?.share_token ? await getStudentByShareToken(result.data.share_token) : null;
@@ -66,6 +92,20 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
     finally { gate.current = false; setBusy(false); }
   };
   const status = homeworkStatus(hw);
+  // From the library: the written questions, or the pictures, as their own page.
+  if (hw.kind === 'custom' && template && tutor !== null && template.kind !== 'speaking') {
+    return <main className="min-h-screen bg-slate-50 dark:bg-gray-900 p-4 sm:p-8"><div className="max-w-5xl mx-auto space-y-4">
+      <header className="flex justify-between items-center gap-3"><div><h1 className="text-xl font-bold text-slate-900 dark:text-white">{hw.title}</h1><p className="text-sm text-slate-500">{hw.deadline ? `Due ${new Date(hw.deadline).toLocaleString()}` : 'No deadline'}</p></div><button onClick={back} className="px-4 py-2 rounded-xl bg-white dark:bg-gray-800 text-slate-700 dark:text-slate-200">Back</button></header>
+      {template.kind === 'pronoun_pictures'
+        ? (exercise
+          ? (tutor
+            ? <PronounPicturesReview exercise={exercise} studentId={hw.studentId} studentName={hw.studentName} />
+            : <PronounPicturesRunner exercise={exercise} studentId={hw.studentId} studentName={hw.studentName} studentMode teacherId={hw.teacherId} lessonTitle={hw.title} />)
+          : <p className="text-slate-500">This exercise is not available.</p>)
+        : <HomeworkTab lessonId={template.id} lessonTitle={hw.title} isAdmin={false} studentMode={!tutor}
+            studentId={hw.studentId} studentName={hw.studentName} teacherId={hw.teacherId} />}
+    </div></main>;
+  }
   if (hw.kind === 'lesson' && lesson && student && tutor !== null) return <ArabicLessonDetailPage
     lesson={lesson} students={[student]} teacherId={hw.teacherId} preSelectedStudentId={student.id}
     studentMode={!tutor} initialTab="homework" onClose={back} />;
@@ -77,6 +117,6 @@ export default function AssignedArabicHomework({ homework: initial }: { homework
       : (hw.kind === 'flashcards' || hw.kind === 'word_cards') && tutor ? <section className="space-y-3"><p className="text-slate-500">Student assignment · {hw.kind === 'flashcards' ? `${results.length}/${hw.words.length} answered` : `${hw.words.length} words`}</p>{hw.words.map(w => <div key={w.id} className="p-4 flex justify-between bg-white dark:bg-gray-800 rounded-xl text-slate-800 dark:text-white"><span>{w.english}</span><span dir="rtl" className="text-2xl">{w.arabic}</span></div>)}</section>
       : hw.kind === 'flashcards' && results.length < hw.words.length ? <><p className="text-slate-500">Card {results.length + 1} of {hw.words.length} · Progress saved after every answer</p><ArabicFlashcard word={hw.words[results.length]} flipped={flipped} onFlip={() => setFlipped(v => !v)} disabled={busy || !!error} onKnow={() => answer(true)} onReview={() => answer(false)} /></>
       : hw.kind === 'flashcards' ? <section className="p-8 bg-white dark:bg-gray-800 rounded-2xl text-slate-800 dark:text-white"><h2 className="text-2xl font-bold">All cards answered</h2><button disabled={busy} onClick={() => answer()} className="mt-4 px-5 py-3 rounded-xl bg-teal-700 text-white">{busy ? 'Saving…' : 'Save completion'}</button></section>
-      : <p className="text-slate-500">Loading lesson homework…</p>}
+      : !error ? <p className="text-slate-500">Loading homework…</p> : null}
   </div></main>;
 }

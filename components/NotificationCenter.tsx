@@ -52,6 +52,8 @@ function iconForType(type: NotificationType): { emoji: string; color: string } {
     case 'exam_result_published':        return { emoji: '🏆', color: 'text-amber-500' };
     case 'exam_retake_allowed':          return { emoji: '🔄', color: 'text-indigo-500' };
     case 'homework_submitted':           return { emoji: '📋', color: 'text-teal-500' };
+    case 'speaking_homework_submitted':  return { emoji: '🎙️', color: 'text-teal-500' };
+    case 'speaking_homework_reviewed':   return { emoji: '🎙️', color: 'text-amber-500' };
     case 'subscription_renewal_reminder': return { emoji: '💳', color: 'text-violet-500' };
     case 'student_join_request':         return { emoji: '🙋', color: 'text-teal-500' };
     case 'lesson_scheduled':             return { emoji: '📅', color: 'text-indigo-500' };
@@ -207,6 +209,19 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       return;
     }
     if (n.type === 'vocab_homework_assigned' && n.metadata?.url) {
+      setOpen(false);
+      window.location.href = n.metadata.url;
+      return;
+    }
+    // A speaking homework sent in: straight to that try's marking.
+    if (n.type === 'speaking_homework_submitted' && n.metadata?.attemptId && onNavigate) {
+      setOpen(false);
+      onNavigate(n.studentId, `speaking:${n.metadata.attemptId}`);
+      return;
+    }
+    // …and marked: the student goes back to it — to redo the lines that came
+    // back, or to see that every one was right.
+    if (n.type === 'speaking_homework_reviewed' && n.metadata?.url) {
       setOpen(false);
       window.location.href = n.metadata.url;
       return;

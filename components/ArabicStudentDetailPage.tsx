@@ -511,6 +511,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const [examAttempts, setExamAttempts] = useState<ArabicExamAttempt[]>([]);
   const [markingAttempt, setMarkingAttempt] = useState<ArabicExamAttempt | null>(null);
   const [deepLinkLessonId, setDeepLinkLessonId] = useState<string | null>(null);
+  /** A speaking try to open on its marking, from the tutor's notification. */
+  const [openSpeakingId, setOpenSpeakingId] = useState<string | null>(null);
   const [gcalToken, setGcalToken] = useState<string | null>(() => getStoredToken());
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [upcomingLessons, setUpcomingLessons] = useState<UnifiedLesson[]>([]);
@@ -525,8 +527,15 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // Handle deep-link from homework notification
   useEffect(() => {
     if (!hwDeepLink) return;
-    setActiveSection('lessons');
-    setDeepLinkLessonId(hwDeepLink.lessonId);
+    // "speaking:<try id>" is not a lesson: it is a speaking homework sent in,
+    // and it is marked from the Homework tab.
+    if (hwDeepLink.lessonId.startsWith('speaking:')) {
+      setActiveSection('homework');
+      setOpenSpeakingId(hwDeepLink.lessonId.slice('speaking:'.length));
+    } else {
+      setActiveSection('lessons');
+      setDeepLinkLessonId(hwDeepLink.lessonId);
+    }
     onHwDeepLinkConsumed?.();
   }, [hwDeepLink, onHwDeepLinkConsumed]);
 
@@ -854,7 +863,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         />
       )}
 
-      {activeSection === 'homework' && <ArabicHomeworkTab student={student} lessons={dialectLessons} studentMode={studentMode} />}
+      {activeSection === 'homework' && <ArabicHomeworkTab student={student} lessons={dialectLessons} studentMode={studentMode}
+        openSpeakingId={openSpeakingId} onOpenSpeakingConsumed={() => setOpenSpeakingId(null)} />}
 
       {/* ── Create homework (tutor only): the library, written once for everyone ── */}
       {activeSection === 'createHomework' && !studentMode && (

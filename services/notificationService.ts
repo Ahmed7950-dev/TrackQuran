@@ -42,7 +42,9 @@ export type NotificationType =
   | 'hunter_homework_marked'
   | 'tadabbur_deck_assigned'
   | 'tadabbur_deck_completed'
-  | 'homework_nudge';
+  | 'homework_nudge'
+  | 'speaking_homework_submitted'
+  | 'speaking_homework_reviewed';
 
 export interface BookingNotification {
   id:         string;
