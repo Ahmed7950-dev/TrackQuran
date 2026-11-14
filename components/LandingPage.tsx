@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useI18n } from '../context/I18nProvider';
 import { AppTheme, applyTheme, readTheme, nextTheme, isDarkTheme } from '../utils/theme';
 import SharedThemeIcon from './ThemeIcon';
+import WhyUsSlider from './WhyUsSlider';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const C = {
@@ -269,6 +270,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           </div>
         )}
       </nav>
+
+      {/* ── 2b. Why us: six reasons with real screens, the first thing under the nav ── */}
+      <WhyUsSlider isDark={isDark} onBook={() => { window.location.href = '/join'; }} />
 
       {/* ── 3. Hero ─────────────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gap: 40, alignItems: 'center' }}
