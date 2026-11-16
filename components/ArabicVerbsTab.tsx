@@ -824,6 +824,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   const learnsBoth = learnsBothOf(student);
   // The tutor always; the student on their own page (they write with their link).
   const canEdit = !studentMode || !!student.shareToken;
+  // Adding words and verbs, Talk questions and the variety/script label are the tutor's only.
+  const canAdd = !studentMode;
   const showSwitch = learnsBoth;
 
   const changeVariety = async (v: VerbVariety) => {
@@ -918,12 +920,14 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           </span>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
+          {canAdd && (
           <button type="button" onClick={() => setAsking(true)}
             title="Questions to answer out loud, from the lessons"
             className="h-9 px-3.5 rounded-full bg-slate-900 hover:bg-slate-700 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:opacity-40 text-xs font-extrabold flex items-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v11H9l-5 4z" /><path strokeLinecap="round" d="M10 9.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9M12 13.4v.1" /></svg>
             Talk questions
           </button>
+          )}
           {!studentMode && (
             <button type="button" onClick={() => setSharing(true)}
               className="h-9 px-3 rounded-full bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-600 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-amber-500 hover:text-amber-800 flex items-center gap-1.5">
@@ -932,9 +936,11 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
             </button>
           )}
           {showSwitch && <VarietySwitch value={variety} onChange={changeVariety} />}
+          {!studentMode && (
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-2.5 py-1.5 rounded-full">
             {!showSwitch && `${VARIETY_NAME[variety]} · `}{script === 'arabic' ? 'Arabic script' : 'Transliteration'}
           </span>
+          )}
         </div>
       </div>
 
@@ -944,7 +950,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           query={query}
           words={foundWords}
           script={script}
-          onAdd={canEdit ? () => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) }) : undefined}
+          onAdd={canAdd ? () => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) }) : undefined}
         />
         <div className="flex items-center gap-2 flex-shrink-0">
           <label className="relative flex-1 lg:flex-none">
@@ -955,14 +961,14 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
               aria-label="Search verbs and words" placeholder="Search a verb or a word"
               className="w-full lg:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
-          {canEdit && (
+          {canAdd && (
             <button type="button" onClick={() => setAddingWord({ ar: '', en: '' })}
               className="flex-shrink-0 h-11 px-3.5 rounded-xl border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 dark:bg-gray-800 dark:text-teal-300 dark:border-teal-500 dark:hover:bg-teal-900/30 text-sm font-bold flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
               <span className="hidden sm:inline">Add word</span><span className="sm:hidden">Word</span>
             </button>
           )}
-          {canEdit && (
+          {canAdd && (
             <button type="button" onClick={() => setEditing('new')}
               className="flex-shrink-0 h-11 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
@@ -1006,9 +1012,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       ) : verbs.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-dashed border-slate-300 dark:border-gray-600 rounded-2xl py-14 px-6 text-center">
           <p className="text-base font-bold text-slate-700 dark:text-slate-200">No {VARIETY_NAME[variety]} verbs yet</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {studentMode ? 'Add your first one with Add verb, or wait for your teacher to add some.' : `Verbs you add here are for ${student.name} only.`}
-          </p>
+          {!studentMode && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Verbs you add here are for {student.name} only.</p>}
         </div>
       ) : (
         <div ref={wallRef} className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3 sm:gap-3.5">
