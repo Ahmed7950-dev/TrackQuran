@@ -11,8 +11,9 @@
 //     green and dims the rest. Open a card and it plays its own conjugations
 //     in place: ←/→ through the pronouns, ↑/↓ through the tenses, only what
 //     was written; on a phone the same by swiping the card.
-//   · Students see the page from level 2 on, read-only. The tutor can always
-//     open it, picks the script once per student, and edits. The variety
+//   · Students see the page from level 2 on and can add, edit and delete
+//     their own verbs too (through their link token). The tutor can always
+//     open it and picks the script once per student. The variety
 //     comes from the student's details (what was chosen when they were added);
 //     only a student learning both gets a switch.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,8 +202,10 @@ const VerbEditor: React.FC<{
   script: VerbScript;
   teacherId: string;
   student: ArabicStudent;
+  /** Set when the student is the one editing, on their own page. */
+  studentToken?: string;
   onDone: (changed: boolean) => void;
-}> = ({ initial, variety, script, teacherId, student, onDone }) => {
+}> = ({ initial, variety, script, teacherId, student, studentToken, onDone }) => {
   const ar = script === 'arabic';
   const [meaning, setMeaning] = useState(initial?.meaning ?? '');
   const [tables, setTables] = useState<Partial<Record<TenseKey, VerbTable>>>(() =>
@@ -249,7 +252,7 @@ const VerbEditor: React.FC<{
       clean[t] = { dual: tb.dual && hasDual(variety), plural: tb.plural, cells };
     }
     setBusy(true); setError(null);
-    const res = await saveVerb({ id: initial?.id, teacherId, studentId: student.id, variety, meaning, conjugations: clean });
+    const res = await saveVerb({ id: initial?.id, teacherId, studentId: student.id, variety, meaning, conjugations: clean }, studentToken);
     setBusy(false);
     if (typeof res === 'string') { setError(`Not saved: ${res}`); return; }
     onDone(true);
@@ -258,7 +261,7 @@ const VerbEditor: React.FC<{
   const remove = async () => {
     if (!initial) return;
     setBusy(true);
-    const err = await deleteVerb(initial.id);
+    const err = await deleteVerb(initial.id, studentToken);
     setBusy(false);
     if (err) { setError(`Not deleted: ${err}`); return; }
     onDone(true);
@@ -350,7 +353,9 @@ const VerbEditor: React.FC<{
         <div className="flex-1 min-w-[240px]">
           <h2 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{initial ? 'Edit verb' : 'New verb'}</h2>
           <p className="mt-1 text-[13px] text-slate-500 dark:text-slate-400">
-            Saved for {student.name} only, in {VARIETY_NAME[variety]}.
+            {studentToken
+              ? `Saved on your page, in ${VARIETY_NAME[variety]}. Your teacher sees it too.`
+              : `Saved for ${student.name} only, in ${VARIETY_NAME[variety]}.`}
           </p>
         </div>
         <span className="text-xs font-bold text-amber-800 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-300 px-3 py-1.5 rounded-full">
@@ -504,6 +509,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
 
   const script: VerbScript = prefs && prefs !== 'loading' ? prefs.script : 'arabic';
   const learnsBoth = learnsBothOf(student);
+  // The tutor always; the student on their own page (they write with their link).
+  const canEdit = !studentMode || !!student.shareToken;
   const showSwitch = learnsBoth;
 
   const changeVariety = async (v: VerbVariety) => {
@@ -554,7 +561,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
   if (!studentMode && prefs === null) {
     return <Setup student={student} onDone={p => { setPrefs(p); setVariety(defaultVariety(student)); }} />;
   }
-  if (editing && !studentMode) {
+  if (editing && canEdit) {
     return (
       <VerbEditor
         initial={editing === 'new' ? null : editing}
@@ -562,6 +569,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
         script={script}
         teacherId={teacherId}
         student={student}
+        studentToken={studentMode ? student.shareToken : undefined}
         onDone={changed => { setEditing(null); setOpen(null); if (changed) reload(); }}
       />
     );
@@ -602,7 +610,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
               aria-label="Search verbs" placeholder={script === 'arabic' ? 'Search: كتب or write' : 'Search: katab or write'}
               className="w-full sm:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
-          {!studentMode && (
+          {canEdit && (
             <button type="button" onClick={() => setEditing('new')}
               className="flex-shrink-0 h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
@@ -619,7 +627,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
         <div className="bg-white dark:bg-gray-800 border border-dashed border-slate-300 dark:border-gray-600 rounded-2xl py-14 px-6 text-center">
           <p className="text-base font-bold text-slate-700 dark:text-slate-200">No {VARIETY_NAME[variety]} verbs yet</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {studentMode ? 'Your teacher has not added any yet.' : `Verbs you add here are for ${student.name} only.`}
+            {studentMode ? 'Add your first one with Add verb, or wait for your teacher to add some.' : `Verbs you add here are for ${student.name} only.`}
           </p>
         </div>
       ) : (
@@ -632,7 +640,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
               open={open?.id === v.id ? open.pos : null}
               match={matches ? (matches.has(v.id) ? 'hit' : 'dim') : null}
               onOpen={pos => setOpen(pos ? { id: v.id, pos } : null)}
-              onEdit={studentMode ? undefined : () => setEditing(v)}
+              onEdit={canEdit ? () => setEditing(v) : undefined}
             />
           ))}
         </div>
@@ -643,7 +651,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
           <span className="flex items-center gap-1.5"><kbd className="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 font-bold">← →</kbd>pronouns</span>
           <span className="flex items-center gap-1.5"><kbd className="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 font-bold">↑ ↓</kbd>past, present, imperative</span>
           <span className="flex items-center gap-1.5"><kbd className="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 font-bold">Esc</kbd>close the card</span>
-          {!studentMode && <span>Double-click a card to edit it</span>}
+          {canEdit && <span>Double-click a card to edit it</span>}
         </div>
       )}
     </div>

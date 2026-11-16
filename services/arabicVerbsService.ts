@@ -4,6 +4,9 @@
 // (arabic_verb_prefs). Migrations: supabase/migrations/20261116_arabic_verbs.sql
 // and 20261117_arabic_verbs_per_student.sql (verbs are not shared).
 //
+// The tutor writes to the table; the student writes through two functions
+// that take their link token (20261118_arabic_verbs_student_write.sql).
+//
 // Every write returns an error message instead of failing quietly: a verb
 // typed out cell by cell must never vanish without the tutor knowing.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,8 +52,22 @@ export async function listVerbs(studentId: string, variety: VerbVariety): Promis
   return (data ?? []).map(fromRow);
 }
 
-/** Insert (no id) or update a verb. Returns the saved verb, or an error message. */
-export async function saveVerb(v: Omit<ArabicVerb, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<ArabicVerb | string> {
+/** Insert (no id) or update a verb. Returns the saved verb, or an error message.
+ *  `studentToken` = the student is the one writing (their portal has no
+ *  sign-in): it goes through student_save_verb, which only touches their verbs. */
+export async function saveVerb(
+  v: Omit<ArabicVerb, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  studentToken?: string,
+): Promise<ArabicVerb | string> {
+  if (studentToken) {
+    const { data, error } = await supabase.rpc('student_save_verb', {
+      p_token: studentToken, p_id: v.id ?? null, p_variety: v.variety,
+      p_meaning: v.meaning.trim(), p_conjugations: v.conjugations,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row) return error?.message ?? 'The verb was not saved.';
+    return fromRow(row);
+  }
   const row = {
     teacher_id: v.teacherId, student_id: v.studentId, variety: v.variety, meaning: v.meaning.trim(),
     conjugations: v.conjugations, updated_at: new Date().toISOString(),
@@ -63,7 +80,11 @@ export async function saveVerb(v: Omit<ArabicVerb, 'id' | 'createdAt' | 'updated
   return fromRow(data);
 }
 
-export async function deleteVerb(id: string): Promise<string | null> {
+export async function deleteVerb(id: string, studentToken?: string): Promise<string | null> {
+  if (studentToken) {
+    const { error } = await supabase.rpc('student_delete_verb', { p_token: studentToken, p_id: id });
+    return error ? error.message : null;
+  }
   const { error } = await supabase.from('arabic_verbs').delete().eq('id', id);
   return error ? error.message : null;
 }
