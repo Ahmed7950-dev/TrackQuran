@@ -5,6 +5,7 @@
 // code the tutor shares (in a lesson, on a phone). It is the same tab as on
 // the student's page: their verb cards, the word search, Add word / Add verb.
 // The tutor chose to share it, so the level 2 lock does not apply here.
+// The screen is kept awake while the page is open.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArabicLesson, ArabicStudent, ArabicCourseDialect } from '../types';
@@ -13,12 +14,15 @@ import ArabicVerbsTab from './ArabicVerbsTab';
 import Logo from './Logo';
 import ThemeIcon from './ThemeIcon';
 import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
+import { useKeepScreenAwake } from '../hooks/useKeepScreenAwake';
 
 const FreeTalkPage: React.FC<{ token: string }> = ({ token }) => {
   const [student, setStudent] = useState<ArabicStudent | null | 'loading'>('loading');
   const [lessons, setLessons] = useState<ArabicLesson[]>([]);
   const [theme, setTheme] = useState<AppTheme>(readTheme);
   useEffect(() => { applyTheme(theme); }, [theme]);
+  // The student talks with the phone in hand: the screen must not lock mid-answer.
+  useKeepScreenAwake();
 
   useEffect(() => {
     void getStudentByShareToken(token).then(s => setStudent(s ?? null));
