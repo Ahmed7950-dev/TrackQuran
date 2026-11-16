@@ -81,3 +81,24 @@ export function normForSearch(s: string): string {
     .replace(/[ʿʾ'’`]/g, '')
     .toLowerCase().trim();
 }
+
+/** The words of a text, normalised for search (punctuation, hyphens and
+ *  slashes split words: "il-bet", "car / auto"). */
+const searchWords = (s: string) => normForSearch(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** "البيت" and "بيت" are the same word to a search. */
+const noArticle = (w: string) => w.replace(/^ال(?=..)/, '');
+
+/**
+ * Whole-word search: true when the text contains the typed word(s) as whole
+ * words. "car" finds "car" and "a red car", never "card" or "scared".
+ * Several typed words must appear together, in that order.
+ */
+export function matchesWords(text: string, query: string): boolean {
+  const q = searchWords(query);
+  if (!q.length) return false;
+  const t = searchWords(text);
+  for (let i = 0; i + q.length <= t.length; i++) {
+    if (q.every((w, k) => t[i + k] === w || noArticle(t[i + k]) === noArticle(w))) return true;
+  }
+  return false;
+}

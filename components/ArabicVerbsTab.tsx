@@ -21,6 +21,7 @@
 //     only a student learning both gets a switch.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
 import { getVocabWordsForLessons, ensureShareToken, getLessonProgressForStudent } from '../services/arabicService';
 import FreeTalkQuestions, { TalkWord } from './FreeTalkQuestions';
@@ -31,7 +32,7 @@ import {
   deleteVerb, getVerbPrefs, listVerbs, saveVerb, saveVerbPrefs, subscribeFreeTalk,
 } from '../services/arabicVerbsService';
 import {
-  PronounGroup, hasDual, normForSearch, pronounLabel, pronounsFor, tableOrder,
+  PronounGroup, hasDual, matchesWords, normForSearch, pronounLabel, pronounsFor, tableOrder,
 } from '../utils/arabicVerbPronouns';
 
 const TENSE_NAME: Record<TenseKey, string> = { past: 'Past', present: 'Present', imperative: 'Imperative' };
@@ -588,37 +589,96 @@ const ShareDialog: React.FC<{ student: ArabicStudent; onClose: () => void }> = (
 
 // ── Words found by the search ───────────────────────────────────────────────
 
-interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; kind: 'lesson' | 'list' }
+interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; level?: number; kind: 'lesson' | 'list' }
 
-const WordResults: React.FC<{ query: string; words: FoundWord[]; onAdd?: () => void }> = ({ query, words, onAdd }) => {
-  const shown = words.slice(0, 24);
+/** The details behind the (i) of a found word, floating over the page. */
+const WordInfo: React.FC<{ word: FoundWord; anchor: DOMRect; onClose: () => void }> = ({ word, anchor, onClose }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const t = window.setTimeout(() => document.addEventListener('pointerdown', away), 0);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', onClose, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', onClose, true); window.removeEventListener('resize', onClose);
+    };
+  }, [onClose]);
+  const width = Math.min(300, window.innerWidth - 24);
+  const left = Math.max(12, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 12));
+  const below = anchor.bottom + 8 + 190 < window.innerHeight;
+  const row = (label: string, value: React.ReactNode) => (
+    <div className="flex items-baseline gap-3 py-1.5 border-t border-slate-100 dark:border-gray-700 first:border-t-0">
+      <span className="w-[92px] flex-shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="min-w-0 flex-1 text-sm text-slate-800 dark:text-slate-100 break-words">{value}</span>
+    </div>
+  );
+  return createPortal(
+    <div ref={ref} role="dialog" aria-label={`About ${word.en || word.tr || word.ar}`}
+      className="fixed z-[70] rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 shadow-xl px-4 py-2.5"
+      style={{ width, left, ...(below ? { top: anchor.bottom + 8 } : { bottom: window.innerHeight - anchor.top + 8 }) }}>
+      {word.ar && row('Arabic', <span dir="rtl" className="font-bold" style={{ fontFamily: AR_FONT, fontSize: 20 }}>{word.ar}</span>)}
+      {word.tr && row('Translit.', <span className="italic">{word.tr}</span>)}
+      {word.en && row('English', word.en)}
+      {row(word.kind === 'lesson' ? 'Lesson' : 'Word list', (
+        <span className={`font-semibold ${word.kind === 'lesson' ? 'text-amber-700 dark:text-amber-400' : 'text-teal-700 dark:text-teal-400'}`}>
+          {word.source}{word.kind === 'lesson' && word.level ? <span className="font-normal text-slate-500 dark:text-slate-400"> · Level {word.level}</span> : null}
+        </span>
+      ))}
+    </div>,
+    document.body,
+  );
+};
+
+const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScript; onAdd?: () => void }> = ({ query, words, script, onAdd }) => {
+  const shown = words.slice(0, 30);
+  const [info, setInfo] = useState<{ word: FoundWord; anchor: DOMRect } | null>(null);
+  const closeInfo = useCallback(() => setInfo(null), []);
+  useEffect(() => { setInfo(null); }, [query]);
   return (
     <div aria-live="polite" aria-label="Words found"
-      className="flex-1 min-w-0 min-h-[44px] flex items-center gap-1.5 overflow-x-auto rounded-xl bg-white/70 dark:bg-gray-800/70 border border-slate-200 dark:border-gray-700 px-2 py-1.5"
+      className="flex-1 min-w-0 min-h-[52px] max-h-[188px] sm:max-h-none flex flex-wrap sm:flex-nowrap items-center gap-2 overflow-y-auto sm:overflow-y-hidden sm:overflow-x-auto rounded-xl bg-white/70 dark:bg-gray-800/70 border border-slate-200 dark:border-gray-700 px-2 py-2"
       style={{ scrollbarWidth: 'thin' }}>
       {!query.trim() ? (
-        <span className="px-1.5 text-xs text-slate-400 dark:text-slate-500">Forgot a word? Type it in the search: lesson words and word lists show here.</span>
+        <span className="px-1.5 text-[13px] text-slate-400 dark:text-slate-500">Forgot a word? Type it in the search: lesson words and word lists show here.</span>
       ) : words.length === 0 ? (
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-xs text-slate-500 dark:text-slate-400 sm:whitespace-nowrap">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-[13px] text-slate-500 dark:text-slate-400 sm:whitespace-nowrap">
           No word found in the lessons or the word lists.
           {onAdd && <button type="button" onClick={onAdd} className="font-bold text-teal-700 dark:text-teal-300 hover:underline">Add it as a word</button>}
         </span>
       ) : (
         <>
-          {shown.map(w => (
-            <span key={w.key} title={`${w.kind === 'lesson' ? 'Lesson' : 'List'}: ${w.source}`}
-              className={`flex-shrink-0 inline-flex items-baseline gap-1.5 px-2 py-1 rounded-lg border text-[11.5px] leading-tight ${w.kind === 'lesson'
-                ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800'
-                : 'bg-teal-50 border-teal-200 dark:bg-teal-900/20 dark:border-teal-800'}`}>
-              {w.ar && <span dir="rtl" className="font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: AR_FONT, fontSize: 15 }}>{w.ar}</span>}
-              {w.tr && <span className="italic text-slate-500 dark:text-slate-400">{w.tr}</span>}
-              {w.en && <span className="text-slate-700 dark:text-slate-200">{w.en}</span>}
-              <span className={`text-[10px] font-bold ${w.kind === 'lesson' ? 'text-amber-700 dark:text-amber-400' : 'text-teal-700 dark:text-teal-400'}`}>· {w.source}</span>
-            </span>
-          ))}
-          {words.length > shown.length && <span className="flex-shrink-0 px-1.5 text-[11px] font-semibold text-slate-400">+{words.length - shown.length} more</span>}
+          {shown.map(w => {
+            // The writing chosen for Free Talk, or the other one when this word has only that.
+            const arMain = script === 'arabic' ? !!w.ar : !w.tr;
+            const main = arMain ? w.ar : w.tr;
+            const lesson = w.kind === 'lesson';
+            return (
+              <span key={w.key}
+                className={`flex-shrink-0 max-w-full inline-flex items-center gap-2 ps-3 pe-1 py-1 rounded-xl border ${lesson
+                  ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800'
+                  : 'bg-teal-50 border-teal-200 dark:bg-teal-900/20 dark:border-teal-800'}`}>
+                {main && (arMain
+                  ? <span dir="rtl" lang="ar" className="font-bold leading-[1.5] text-slate-900 dark:text-slate-100" style={{ fontFamily: AR_FONT, fontSize: 20 }}>{main}</span>
+                  : <span className="text-[15px] font-bold text-slate-900 dark:text-slate-100">{main}</span>)}
+                {w.en && <span className="min-w-0 text-[14px] text-slate-600 dark:text-slate-300">{w.en}</span>}
+                <button type="button" aria-label={`More about ${w.en || main}`} aria-expanded={info?.word.key === w.key}
+                  onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setInfo(i => (i?.word.key === w.key ? null : { word: w, anchor: r })); }}
+                  className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${lesson
+                    ? 'text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40'
+                    : 'text-teal-700 hover:bg-teal-100 dark:text-teal-400 dark:hover:bg-teal-900/40'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-[18px] h-[18px]"><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" d="M12 11v5M12 7.6v.1" /></svg>
+                </button>
+              </span>
+            );
+          })}
+          {words.length > shown.length && <span className="flex-shrink-0 px-1.5 text-xs font-semibold text-slate-400">+{words.length - shown.length} more</span>}
         </>
       )}
+      {info && <WordInfo word={info.word} anchor={info.anchor} onClose={closeInfo} />}
     </div>
   );
 };
@@ -784,20 +844,21 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     const hit = new Set<string>();
     for (const v of verbs) {
       const words = [v.meaning, ...TENSES.flatMap(t => Object.values(v.conjugations[t]?.cells ?? {}).flatMap(c => [c.ar ?? '', c.tr ?? '']))];
-      if (words.some(w => normForSearch(w).includes(q))) hit.add(v.id);
+      if (words.some(w => matchesWords(w, query))) hit.add(v.id);
     }
     return hit;
-  }, [q, verbs]);
+  }, [q, query, verbs]);
 
   const lessonTitle = useMemo(() => new Map(lessons.map(l => [l.id, l.title])), [lessons]);
+  const lessonLevel = useMemo(() => new Map(lessons.map(l => [l.id, l.level ?? 1])), [lessons]);
   const foundWords = useMemo<FoundWord[]>(() => {
     if (!q) return [];
     const all: FoundWord[] = [
-      ...lessonWords.map(w => ({ key: `w-${w.id}`, ar: w.arabic, tr: w.transliteration, en: w.english, source: lessonTitle.get(w.lessonId) ?? 'Lesson', kind: 'lesson' as const })),
+      ...lessonWords.map(w => ({ key: `w-${w.id}`, ar: w.arabic, tr: w.transliteration, en: w.english, source: lessonTitle.get(w.lessonId) ?? 'Lesson', level: lessonLevel.get(w.lessonId), kind: 'lesson' as const })),
       ...listWords,
     ];
-    return all.filter(w => [w.ar, w.tr, w.en].some(x => normForSearch(x || '').includes(q)));
-  }, [q, lessonWords, listWords, lessonTitle]);
+    return all.filter(w => [w.ar, w.tr, w.en].some(x => matchesWords(x || '', query)));
+  }, [q, query, lessonWords, listWords, lessonTitle, lessonLevel]);
 
   // Clicking anywhere outside the open card closes it.
   const wallRef = useRef<HTMLDivElement>(null);
@@ -887,6 +948,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
         <WordResults
           query={query}
           words={foundWords}
+          script={script}
           onAdd={canEdit ? () => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) }) : undefined}
         />
         <div className="flex items-center gap-2 flex-shrink-0">
