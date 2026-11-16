@@ -23,16 +23,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      },
-    );
+    // gemini-2.0-flash was retired (404). The "latest" alias follows Google's
+    // current Flash model; 2.5 is the fallback if the alias is ever missing.
+    let response = null;
+    for (const model of ['gemini-flash-latest', 'gemini-2.5-flash']) {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        },
+      );
+      if (response.status !== 404) break;
+    }
 
     if (!response.ok) {
       const errText = await response.text();
