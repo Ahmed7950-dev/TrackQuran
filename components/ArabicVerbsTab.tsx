@@ -22,7 +22,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
-import { getVocabWordsForLessons } from '../services/arabicService';
+import { getVocabWordsForLessons, ensureShareToken } from '../services/arabicService';
+import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
@@ -508,6 +509,82 @@ const VarietySwitch: React.FC<{ value: VerbVariety; onChange: (v: VerbVariety) =
   </div>
 );
 
+// ── Sharing Free Talk on its own: a link, a QR code, the phone's share sheet ─
+
+const ShareDialog: React.FC<{ student: ArabicStudent; onClose: () => void }> = ({ student, onClose }) => {
+  const [link, setLink] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const token = student.shareToken || await ensureShareToken(student);
+        if (live) setLink(`${window.location.origin}/free-talk/${token}`);
+      } catch (e) {
+        if (live) setError('The link could not be made. Try again.');
+      }
+    })();
+    return () => { live = false; };
+  }, [student]);
+  const copy = async () => {
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { setError('Copying is blocked here. Select the link and copy it.'); }
+  };
+  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+  const share = async () => {
+    if (!link) return;
+    try { await navigator.share({ title: `Free Talk · ${student.name}`, url: link }); } catch { /* closed the sheet */ }
+  };
+  const qrSize = Math.min(220, (typeof window !== 'undefined' ? window.innerWidth : 360) - 120);
+  return (
+    <>
+      <span className="fixed inset-0 z-50 bg-slate-900/40" onClick={onClose} />
+      <div role="dialog" aria-label={`Share Free Talk with ${student.name}`}
+        onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+        className="fixed z-50 inset-x-3 bottom-3 max-h-[88dvh] overflow-y-auto sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[420px] rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-5 flex flex-col items-center gap-4"
+        style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="w-full flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">Share Free Talk</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Opens {student.name}'s Free Talk on its own, on any phone or computer, with no sign-in. {student.name} can add words and verbs there.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="w-10 h-10 -mt-1 -me-1 flex-shrink-0 rounded-xl flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        {link ? (
+          <>
+            <div className="p-3 rounded-2xl bg-white border border-slate-200" aria-label="QR code for the link">
+              <QRCodeSVG value={link} size={qrSize} level="M" />
+            </div>
+            <p className="text-[11px] text-slate-400 -mt-2">Scan with the phone's camera</p>
+            <div className="w-full flex items-center gap-2">
+              <input readOnly value={link} onFocus={e => e.currentTarget.select()} aria-label="Free Talk link"
+                className="flex-1 min-w-0 h-11 px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-900 text-xs text-slate-700 dark:text-slate-200" />
+              <button type="button" onClick={copy}
+                className="flex-shrink-0 h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold">{copied ? 'Copied' : 'Copy'}</button>
+            </div>
+            {canShare && (
+              <button type="button" onClick={share}
+                className="w-full h-11 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700">
+                Send with WhatsApp, Messages…
+              </button>
+            )}
+          </>
+        ) : !error ? (
+          <div className="py-10"><div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" /></div>
+        ) : null}
+        {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
+      </div>
+    </>
+  );
+};
+
 // ── Words found by the search ───────────────────────────────────────────────
 
 interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; kind: 'lesson' | 'list' }
@@ -631,6 +708,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   useEffect(() => { reloadLists(); }, [reloadLists]);
   const [addingWord, setAddingWord] = useState<{ ar: string; en: string } | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -747,6 +825,13 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           </span>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
+          {!studentMode && (
+            <button type="button" onClick={() => setSharing(true)}
+              className="h-9 px-3 rounded-full bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-600 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-amber-500 hover:text-amber-800 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2" /></svg>
+              Share link · QR
+            </button>
+          )}
           {showSwitch && <VarietySwitch value={variety} onChange={changeVariety} />}
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-2.5 py-1.5 rounded-full">
             {!showSwitch && `${VARIETY_NAME[variety]} · `}{script === 'arabic' ? 'Arabic script' : 'Transliteration'}
@@ -767,7 +852,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" /></svg>
             </span>
             <input type="search" value={query} onChange={e => { setQuery(e.target.value); setOpen(null); }}
-              aria-label="Search verbs and words" placeholder={script === 'arabic' ? 'Search: كتب, بيت or write' : 'Search: katab, beit or write'}
+              aria-label="Search verbs and words" placeholder="Search a verb or a word"
               className="w-full lg:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
           {canEdit && (
@@ -787,6 +872,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
         </div>
       </div>
       {savedNote && <p role="status" className="text-[13px] font-semibold text-teal-700 dark:text-teal-300">{savedNote}</p>}
+      {sharing && <ShareDialog student={student} onClose={() => setSharing(false)} />}
       {addingWord && (
         <AddWordDialog
           initial={addingWord}

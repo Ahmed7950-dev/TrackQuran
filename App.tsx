@@ -75,6 +75,7 @@ import VocabHomeworkPage from './components/VocabHomeworkPage';
 import { LetterMatchPage } from './components/LetterMatchChallenge';
 import RecitationHomeworkPage from './components/RecitationHomeworkPage';
 import SpeakingHomeworkPage from './components/SpeakingHomeworkPage';
+import FreeTalkPage from './components/FreeTalkPage';
 import { purgeOldSpeaking } from './services/speakingHomeworkService';
 import RecitationReviewPanel from './components/RecitationReviewPanel';
 import TadabburLabPage from './components/TadabburLabPage';
@@ -553,6 +554,13 @@ const App: React.FC = () => {
     return m ? m[1] : null;
   })();
   if (speakingAttemptId) return <SpeakingHomeworkPage attemptId={speakingAttemptId} />;
+
+  // ── Free Talk shared on its own (link or QR from the tutor), no auth ──────
+  const freeTalkToken = (() => {
+    const m = window.location.pathname.match(/^\/free-talk\/([a-f0-9-]{36})$/i);
+    return m ? m[1] : null;
+  })();
+  if (freeTalkToken) return <FreeTalkPage token={freeTalkToken} />;
 
   const { currentUser, loading, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
