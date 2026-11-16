@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Verbs — conjugation tables a tutor writes once and every student of the same
-// variety reads (table arabic_verbs), plus each student's reading choices
-// (arabic_verb_prefs). Migration: supabase/migrations/20261116_arabic_verbs.sql
+// Verbs — conjugation tables a tutor writes for ONE student (table
+// arabic_verbs, keyed by student_id), plus each student's reading choice
+// (arabic_verb_prefs). Migrations: supabase/migrations/20261116_arabic_verbs.sql
+// and 20261117_arabic_verbs_per_student.sql (verbs are not shared).
 //
 // Every write returns an error message instead of failing quietly: a verb
 // typed out cell by cell must never vanish without the tutor knowing.
@@ -22,6 +23,7 @@ export interface VerbTable {
 export interface ArabicVerb {
   id: string;
   teacherId: string;
+  studentId: string;
   variety: VerbVariety;
   meaning: string;
   conjugations: Partial<Record<TenseKey, VerbTable>>;
@@ -31,16 +33,16 @@ export interface ArabicVerb {
 export interface VerbPrefs { script: VerbScript; variety: VerbVariety }
 
 const fromRow = (r: any): ArabicVerb => ({
-  id: r.id, teacherId: r.teacher_id, variety: r.variety, meaning: r.meaning,
+  id: r.id, teacherId: r.teacher_id, studentId: r.student_id, variety: r.variety, meaning: r.meaning,
   conjugations: r.conjugations ?? {}, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
-/** The tutor's verbs of one variety, oldest first (the order they were added). */
-export async function listVerbs(teacherId: string, variety: VerbVariety): Promise<ArabicVerb[]> {
+/** One student's verbs of one variety, oldest first (the order they were added). */
+export async function listVerbs(studentId: string, variety: VerbVariety): Promise<ArabicVerb[]> {
   const { data, error } = await supabase
     .from('arabic_verbs')
     .select('*')
-    .eq('teacher_id', teacherId)
+    .eq('student_id', studentId)
     .eq('variety', variety)
     .order('created_at', { ascending: true });
   if (error) { console.error('listVerbs:', error.message); return []; }
@@ -50,7 +52,7 @@ export async function listVerbs(teacherId: string, variety: VerbVariety): Promis
 /** Insert (no id) or update a verb. Returns the saved verb, or an error message. */
 export async function saveVerb(v: Omit<ArabicVerb, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<ArabicVerb | string> {
   const row = {
-    teacher_id: v.teacherId, variety: v.variety, meaning: v.meaning.trim(),
+    teacher_id: v.teacherId, student_id: v.studentId, variety: v.variety, meaning: v.meaning.trim(),
     conjugations: v.conjugations, updated_at: new Date().toISOString(),
   };
   const q = v.id

@@ -4,9 +4,9 @@
 //   · The tutor writes a verb once: its English meaning, then up to three
 //     tables (past, present, imperative), each starting with the singular
 //     pronouns and growing a dual (MSA only) and a plural column on request.
-//   · Every verb belongs to a variety, and every student of this tutor who
-//     learns that variety sees it. Each cell keeps both writings, so the
-//     Arabic-script student and the transliteration student share one card.
+//   · Every verb belongs to ONE student (nothing is shared between students).
+//     Each cell keeps both writings, Arabic script and transliteration, so
+//     the script can change without losing what was written.
 //   · The page is a wall of small cards. Search lights the matching ones up
 //     green and dims the rest. Open a card and it plays its own conjugations
 //     in place: ←/→ through the pronouns, ↑/↓ through the tenses, only what
@@ -200,8 +200,9 @@ const VerbEditor: React.FC<{
   variety: VerbVariety;
   script: VerbScript;
   teacherId: string;
+  student: ArabicStudent;
   onDone: (changed: boolean) => void;
-}> = ({ initial, variety, script, teacherId, onDone }) => {
+}> = ({ initial, variety, script, teacherId, student, onDone }) => {
   const ar = script === 'arabic';
   const [meaning, setMeaning] = useState(initial?.meaning ?? '');
   const [tables, setTables] = useState<Partial<Record<TenseKey, VerbTable>>>(() =>
@@ -238,7 +239,7 @@ const VerbEditor: React.FC<{
       clean[t] = { dual: tb.dual && hasDual(variety), plural: tb.plural, cells };
     }
     setBusy(true); setError(null);
-    const res = await saveVerb({ id: initial?.id, teacherId, variety, meaning, conjugations: clean });
+    const res = await saveVerb({ id: initial?.id, teacherId, studentId: student.id, variety, meaning, conjugations: clean });
     setBusy(false);
     if (typeof res === 'string') { setError(`Not saved: ${res}`); return; }
     onDone(true);
@@ -339,7 +340,7 @@ const VerbEditor: React.FC<{
         <div className="flex-1 min-w-[240px]">
           <h2 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{initial ? 'Edit verb' : 'New verb'}</h2>
           <p className="mt-1 text-[13px] text-slate-500 dark:text-slate-400">
-            Saved to the {VARIETY_NAME[variety]} verbs, so every student learning {VARIETY_NAME[variety]} sees it.
+            Saved for {student.name} only, in {VARIETY_NAME[variety]}.
           </p>
         </div>
         <span className="text-xs font-bold text-amber-800 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-300 px-3 py-1.5 rounded-full">
@@ -375,7 +376,7 @@ const VerbEditor: React.FC<{
           <span className="flex-1" />
           {initial && (confirmDelete ? (
             <>
-              <span className="text-xs font-semibold text-red-600">Delete for every student?</span>
+              <span className="text-xs font-semibold text-red-600">Delete this verb?</span>
               <button type="button" disabled={busy} onClick={remove} className="h-11 px-3 rounded-xl bg-red-600 text-white text-sm font-bold">Delete</button>
               <button type="button" onClick={() => setConfirmDelete(false)} className="h-11 px-3 rounded-xl bg-slate-100 dark:bg-gray-700 text-sm font-semibold">Keep</button>
             </>
@@ -487,8 +488,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
 
   const reload = useCallback(() => {
     setVerbs(null);
-    void listVerbs(teacherId, variety).then(setVerbs);
-  }, [teacherId, variety]);
+    void listVerbs(student.id, variety).then(setVerbs);
+  }, [student.id, variety]);
   useEffect(() => { reload(); }, [reload]);
 
   const script: VerbScript = prefs && prefs !== 'loading' ? prefs.script : 'arabic';
@@ -550,6 +551,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
         variety={variety}
         script={script}
         teacherId={teacherId}
+        student={student}
         onDone={changed => { setEditing(null); setOpen(null); if (changed) reload(); }}
       />
     );
@@ -607,7 +609,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
         <div className="bg-white dark:bg-gray-800 border border-dashed border-slate-300 dark:border-gray-600 rounded-2xl py-14 px-6 text-center">
           <p className="text-base font-bold text-slate-700 dark:text-slate-200">No {VARIETY_NAME[variety]} verbs yet</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {studentMode ? 'Your teacher has not added any yet.' : `Add one, and every student learning ${VARIETY_NAME[variety]} will see it.`}
+            {studentMode ? 'Your teacher has not added any yet.' : `Verbs you add here are for ${student.name} only.`}
           </p>
         </div>
       ) : (
