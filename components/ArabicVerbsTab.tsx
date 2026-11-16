@@ -24,7 +24,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
 import { getVocabWordsForLessons, ensureShareToken, getLessonProgressForStudent } from '../services/arabicService';
-import FreeTalkQuestions, { TalkWord } from './FreeTalkQuestions';
+import FreeTalkQuestions from './FreeTalkQuestions';
 import FreeTalkBoard from './FreeTalkBoard';
 import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
@@ -774,8 +774,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   const [sharing, setSharing] = useState(false);
   const [asking, setAsking] = useState(false);
 
-  // "Words we learned" for the talk questions: lesson words of the lessons
-  // the student has started or finished, and every word-list word.
+  // Talk questions come from the lessons the student has started or finished.
   const [startedLessons, setStartedLessons] = useState<Set<string>>(new Set(student.completedLessonIds ?? []));
   useEffect(() => {
     let live = true;
@@ -784,10 +783,6 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     });
     return () => { live = false; };
   }, [student.id, student.completedLessonIds]);
-  const learnedWords = useMemo<TalkWord[]>(() => [
-    ...lessonWords.filter(w => startedLessons.has(w.lessonId)).map(w => ({ ar: w.arabic, tr: w.transliteration, en: w.english })),
-    ...listWords.map(w => ({ ar: w.ar, tr: w.tr, en: w.en })),
-  ], [lessonWords, listWords, startedLessons]);
 
   useEffect(() => {
     let live = true;
@@ -924,8 +919,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
           <button type="button" onClick={() => setAsking(true)}
-            disabled={!verbs || (verbs.length === 0 && learnedWords.length === 0)}
-            title={verbs && verbs.length === 0 && learnedWords.length === 0 ? 'Add a few verbs or words first' : 'Questions to answer out loud with these verbs and words'}
+            title="Questions to answer out loud, from the lessons"
             className="h-9 px-3.5 rounded-full bg-slate-900 hover:bg-slate-700 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:opacity-40 text-xs font-extrabold flex items-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v11H9l-5 4z" /><path strokeLinecap="round" d="M10 9.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9M12 13.4v.1" /></svg>
             Talk questions
@@ -979,8 +973,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       </div>
       {savedNote && <p role="status" className="text-[13px] font-semibold text-teal-700 dark:text-teal-300">{savedNote}</p>}
       {sharing && <ShareDialog student={student} onClose={() => setSharing(false)} />}
-      {asking && verbs && (
-        <FreeTalkQuestions verbs={verbs} words={learnedWords} variety={variety} script={script} onClose={() => setAsking(false)} />
+      {asking && (
+        <FreeTalkQuestions lessonIds={[...startedLessons]} lessons={lessons} variety={variety} script={script} onClose={() => setAsking(false)} />
       )}
       {addingWord && (
         <AddWordDialog
