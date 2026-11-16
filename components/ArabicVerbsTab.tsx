@@ -29,7 +29,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
-  deleteVerb, getVerbPrefs, listVerbs, saveVerb, saveVerbPrefs, subscribeFreeTalk,
+  deleteVerb, getVerbPrefs, listVerbs, logFreeTalkWord, saveVerb, saveVerbPrefs, subscribeFreeTalk,
 } from '../services/arabicVerbsService';
 import {
   PronounGroup, hasDual, matchesWords, normForSearch, pronounLabel, pronounsFor, tableOrder,
@@ -990,7 +990,12 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
             if (err) return `Not saved: ${err}`;
             setAddingWord(null);
             reloadLists();
-            setSavedNote(`Saved to the list "${FREE_TALK_LIST_NAME}". It is in Vocabulary, Word lists, too.`);
+            // The student's own word marks their calendar (the tutor's does not).
+            const logErr = studentMode && student.shareToken
+              ? await logFreeTalkWord(student.shareToken, w.translation.trim() || w.transliteration.trim() || w.text.trim())
+              : null;
+            if (logErr) console.error('logFreeTalkWord:', logErr);
+            setSavedNote(`Saved to the list "${FREE_TALK_LIST_NAME}". It is in Vocabulary, Word lists, too.${logErr ? ' (Today was not marked in the calendar.)' : ''}`);
             setTimeout(() => setSavedNote(null), 5000);
             return null;
           }}

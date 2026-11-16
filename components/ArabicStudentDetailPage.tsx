@@ -28,6 +28,7 @@ import ArabicGrammarTab from './ArabicGrammarTab';
 import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicVocabularyHub from './ArabicVocabularyHub';
+import { getFreeTalkDays, FreeTalkDay } from '../services/arabicVerbsService';
 import NatureScene from './NatureScene';
 import ArabicVerbsTab from './ArabicVerbsTab';
 import StudentToolsBar, { type ToolsTab } from './StudentToolsBar';
@@ -262,6 +263,8 @@ interface ArabicLessonCalendarProps {
   lessons: ArabicLesson[];
   /** Days the student turned flashcards over, by `Date.toDateString()`. */
   vocabDays: Map<string, VocabRevisionDay>;
+  /** Days the student added verbs or words in Free Talk, same keys. */
+  freeTalkDays: Map<string, FreeTalkDay>;
   calendarDate: Date;
   onMonthChange: (d: Date) => void;
 }
@@ -275,8 +278,11 @@ const KIND_BADGE: Record<ArabicLessonLog['kind'], { cls: string; label: string }
 /** Vocabulary is not a lesson log — it is counted from the answers — so it
  *  carries its own badge rather than a KIND_BADGE entry. */
 const VOCAB_BADGE = { cls: 'bg-sky-100 text-sky-700', label: 'Words' };
+/** Free Talk is logged on its own (arabic_free_talk_logs), so it has its own badge too. */
+const FREE_TALK_BADGE = { cls: 'bg-orange-100 text-orange-700', label: 'Free Talk' };
+const listOf = (xs: string[]) => (xs.length > 4 ? `${xs.slice(0, 4).join(', ')} +${xs.length - 4}` : xs.join(', '));
 
-const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, vocabDays, calendarDate, onMonthChange }) => {
+const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lessons, vocabDays, freeTalkDays, calendarDate, onMonthChange }) => {
   const lessonMap = useMemo(() => new Map(lessons.map(l => [l.id, l])), [lessons]);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
@@ -305,10 +311,11 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
     const ds      = new Date(year, month, day).toDateString();
     const entries = dayMap.get(ds) ?? [];
     const vocab   = vocabDays.get(ds);
+    const talk    = freeTalkDays.get(ds);
     const isToday = ds === new Date().toDateString();
-    const active  = entries.length > 0 || !!vocab;
+    const active  = entries.length > 0 || !!vocab || !!talk;
     const isOpen  = expandedDay === ds;
-    const chipCount = entries.length + (vocab ? 1 : 0);
+    const chipCount = entries.length + (vocab ? 1 : 0) + (talk ? 1 : 0);
 
     const headerCls = active
       ? 'bg-emerald-500 text-white'
@@ -333,6 +340,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
           const chips = [
             ...entries.map(log => KIND_BADGE[log.kind] ?? KIND_BADGE.progress),
             ...(vocab ? [VOCAB_BADGE] : []),
+            ...(talk ? [FREE_TALK_BADGE] : []),
           ];
           return (
             <div className="flex flex-col gap-0.5 p-1 overflow-hidden">
@@ -387,6 +395,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
       {expandedDay && (() => {
         const entries = dayMap.get(expandedDay) ?? [];
         const vocab   = vocabDays.get(expandedDay);
+        const talk    = freeTalkDays.get(expandedDay);
         const dateLabel = new Date(expandedDay).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         return (
           <div className="border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 space-y-3">
@@ -425,6 +434,22 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
                   </div>
                 </div>
               )}
+              {talk && (
+                <div className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-slate-100 dark:border-gray-700">
+                  <span className={`flex-shrink-0 px-2 py-1 rounded-full text-[10px] font-bold ${FREE_TALK_BADGE.cls}`}>{FREE_TALK_BADGE.label}</span>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    {talk.verbsAdded.length > 0 && (
+                      <p className="text-sm text-slate-800 dark:text-slate-100"><span className="font-semibold">Added {talk.verbsAdded.length} {talk.verbsAdded.length === 1 ? 'verb' : 'verbs'}:</span> {listOf(talk.verbsAdded)}</p>
+                    )}
+                    {talk.verbsEdited.length > 0 && (
+                      <p className="text-sm text-slate-800 dark:text-slate-100"><span className="font-semibold">Edited {talk.verbsEdited.length} {talk.verbsEdited.length === 1 ? 'verb' : 'verbs'}:</span> {listOf(talk.verbsEdited)}</p>
+                    )}
+                    {talk.wordsAdded.length > 0 && (
+                      <p className="text-sm text-slate-800 dark:text-slate-100"><span className="font-semibold">Added {talk.wordsAdded.length} {talk.wordsAdded.length === 1 ? 'word' : 'words'}:</span> {listOf(talk.wordsAdded)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -432,14 +457,14 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
 
       {/* Badge legend */}
       <div className="flex flex-wrap gap-2 justify-center pt-1">
-        {Object.entries({ ...KIND_BADGE, vocab: VOCAB_BADGE }).map(([kind, { cls, label }]) => (
+        {Object.entries({ ...KIND_BADGE, vocab: VOCAB_BADGE, talk: FREE_TALK_BADGE }).map(([kind, { cls, label }]) => (
           <span key={kind} className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>
             {label}
           </span>
         ))}
       </div>
 
-      {logs.length === 0 && (
+      {logs.length === 0 && vocabDays.size === 0 && freeTalkDays.size === 0 && (
         <p className="text-center text-slate-400 dark:text-slate-500 text-sm py-4">No lesson activity logged yet.</p>
       )}
     </div>
@@ -508,9 +533,13 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   // homework count, so finishing a deck and coming back shows the day marked
   // without a reload.
   const [vocabDays, setVocabDays] = useState<Map<string, VocabRevisionDay>>(new Map());
+  const [freeTalkDays, setFreeTalkDays] = useState<Map<string, FreeTalkDay>>(new Map());
   useEffect(() => {
     let live = true;
-    const load = () => { void getVocabRevisionDays(student.id).then(m => { if (live) setVocabDays(m); }); };
+    const load = () => {
+      void getVocabRevisionDays(student.id).then(m => { if (live) setVocabDays(m); });
+      void getFreeTalkDays(student.id).then(m => { if (live) setFreeTalkDays(m); });
+    };
     load();
     window.addEventListener('focus', load);
     return () => { live = false; window.removeEventListener('focus', load); };
@@ -834,6 +863,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           logs={lessonLogs}
           lessons={dialectLessons}
           vocabDays={vocabDays}
+          freeTalkDays={freeTalkDays}
           calendarDate={calendarDate}
           onMonthChange={setCalendarDate}
         />

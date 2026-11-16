@@ -132,3 +132,39 @@ export function subscribeFreeTalk(
     .subscribe();
   return () => { void supabase.removeChannel(ch); };
 }
+
+// ── Free Talk in the calendar (migration 20261120_free_talk_log.sql) ────────
+
+/** What the student did in Free Talk on one day (labels are distinct, oldest first). */
+export interface FreeTalkDay { verbsAdded: string[]; verbsEdited: string[]; wordsAdded: string[] }
+
+/** The days the student added or edited a verb, or added a word, keyed by
+ *  `Date.toDateString()` like the rest of the Arabic calendar. A verb saved
+ *  through student_save_verb is logged by that function itself. */
+export async function getFreeTalkDays(studentId: string): Promise<Map<string, FreeTalkDay>> {
+  const out = new Map<string, FreeTalkDay>();
+  if (!studentId) return out;
+  const { data, error } = await supabase
+    .from('arabic_free_talk_logs')
+    .select('kind, label, created_at')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: true })
+    .limit(5000);
+  if (error) { console.error('getFreeTalkDays:', error.message); return out; }
+  for (const r of (data ?? []) as Array<{ kind: string; label: string; created_at: string }>) {
+    const day = new Date(r.created_at).toDateString();
+    const d = out.get(day) ?? { verbsAdded: [], verbsEdited: [], wordsAdded: [] };
+    const list = r.kind === 'verb_added' ? d.verbsAdded : r.kind === 'verb_edited' ? d.verbsEdited : d.wordsAdded;
+    if (!list.includes(r.label)) list.push(r.label);
+    out.set(day, d);
+  }
+  // A verb added and then edited the same day reads as added.
+  for (const d of out.values()) d.verbsEdited = d.verbsEdited.filter(l => !d.verbsAdded.includes(l));
+  return out;
+}
+
+/** The student added a word in Free Talk: mark the day. Returns an error message or null. */
+export async function logFreeTalkWord(studentToken: string, label: string): Promise<string | null> {
+  const { error } = await supabase.rpc('student_log_free_talk_word', { p_token: studentToken, p_label: label });
+  return error ? error.message : null;
+}
