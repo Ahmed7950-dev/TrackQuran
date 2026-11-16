@@ -213,8 +213,18 @@ const VerbEditor: React.FC<{
 
   const setCell = (tense: TenseKey, key: string, value: string) => setTables(prev => {
     const t = prev[tense] ?? emptyTable();
-    const cell = { ...(t.cells[key] ?? {}), [ar ? 'ar' : 'tr']: value };
-    return { ...prev, [tense]: { ...t, cells: { ...t.cells, [key]: cell } } };
+    const field = ar ? 'ar' : 'tr';
+    const cells = { ...t.cells, [key]: { ...(t.cells[key] ?? {}), [field]: value } };
+    // Palestinian past: "I" and "you (m)" are the same form (katabt / katabt),
+    // so writing one writes the other — unless the other was deliberately
+    // made different (it no longer matches what this cell held).
+    const twin = variety === 'levantine' && tense === 'past' ? ({ s1: 's2m', s2m: 's1' } as Record<string, string>)[key] : undefined;
+    if (twin) {
+      const before = (t.cells[key]?.[field] ?? '');
+      const other = (t.cells[twin]?.[field] ?? '');
+      if (!other || other === before) cells[twin] = { ...(t.cells[twin] ?? {}), [field]: value };
+    }
+    return { ...prev, [tense]: { ...t, cells } };
   });
   const setFlag = (tense: TenseKey, flag: 'dual' | 'plural', on: boolean) =>
     setTables(prev => ({ ...prev, [tense]: { ...(prev[tense] ?? emptyTable()), [flag]: on } }));
