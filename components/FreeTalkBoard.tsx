@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// FreeTalkBoard — the tutor's board at the bottom of Free Talk.
+// FreeTalkBoard — the tutor's board in Free Talk, above the verb cards.
 //
 // A big text area for what the tutor says, or notes, with the text centred
 // both ways and FITTED to the box: big when short, smaller as more is
@@ -201,7 +201,7 @@ const FreeTalkBoard: React.FC<{ studentId: string; studentName: string }> = ({ s
   const wide = typeof window !== 'undefined' && window.innerWidth >= 640;
 
   return (
-    <section aria-label="Board" className="mt-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.04),0_12px_32px_-18px_rgba(15,23,42,.18)]">
+    <section aria-label="Board" className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.04),0_12px_32px_-18px_rgba(15,23,42,.18)]">
       <div className="flex items-center gap-2 sm:gap-2.5 ps-3.5 sm:ps-5 pe-2.5 py-2.5 border-b border-slate-100 dark:border-gray-700">
         <span className="flex-shrink-0 w-[30px] h-[30px] rounded-[9px] bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 flex items-center justify-center">{ICON.board}</span>
         <span className="text-base font-extrabold text-slate-900 dark:text-slate-100">Board</span>

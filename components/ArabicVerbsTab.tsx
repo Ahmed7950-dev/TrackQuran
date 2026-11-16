@@ -1004,6 +1004,9 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       )}
       {switchError && <p role="alert" className="text-sm font-semibold text-red-600">{switchError}</p>}
 
+      {/* The tutor's board, above the verbs. Never on the student's side. */}
+      {!studentMode && <FreeTalkBoard studentId={student.id} studentName={student.name} />}
+
       {verbs === null ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" /></div>
       ) : verbs.length === 0 ? (
@@ -1037,9 +1040,6 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           {canEdit && <span>Double-click a card to edit it</span>}
         </div>
       )}
-
-      {/* The tutor's board, after the verbs. Never on the student's side. */}
-      {!studentMode && <FreeTalkBoard studentId={student.id} studentName={student.name} />}
     </div>
   );
 };
