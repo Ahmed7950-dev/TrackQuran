@@ -28,7 +28,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
-  deleteVerb, getVerbPrefs, listVerbs, saveVerb, saveVerbPrefs,
+  deleteVerb, getVerbPrefs, listVerbs, saveVerb, saveVerbPrefs, subscribeFreeTalk,
 } from '../services/arabicVerbsService';
 import {
   PronounGroup, hasDual, normForSearch, pronounLabel, pronounsFor, tableOrder,
@@ -701,8 +701,9 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonKey]);
+  const listIds = useRef<Set<string>>(new Set());
   const reloadLists = useCallback(() => {
-    void getVocabularyLists(student.id).then(ls => setListWords(ls.flatMap(l => (l.words ?? []).map(w => ({
+    void getVocabularyLists(student.id).then(ls => (listIds.current = new Set(ls.map(l => l.id)), ls)).then(ls => setListWords(ls.flatMap(l => (l.words ?? []).map(w => ({
       key: `l-${l.id}-${w.id}`, ar: w.text, tr: w.transliteration, en: w.translation, source: l.name, kind: 'list' as const,
     })))));
   }, [student.id]);
@@ -744,6 +745,24 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     void listVerbs(student.id, variety).then(setVerbs);
   }, [student.id, variety]);
   useEffect(() => { reload(); }, [reload]);
+
+  // ── Live: what the other side adds shows here without a refresh ──
+  // A quiet re-read (no spinner) so an open card or a search stays as it is.
+  const verbsRef = useRef<ArabicVerb[] | null>(null);
+  verbsRef.current = verbs;
+  const refresh = useRef<() => void>(() => {});
+  refresh.current = () => { void listVerbs(student.id, variety).then(v => setVerbs(cur => (cur === null ? cur : v))); };
+  useEffect(() => {
+    const timers: Record<string, number> = {};
+    const soon = (key: string, fn: () => void) => { clearTimeout(timers[key]); timers[key] = window.setTimeout(fn, 300); };
+    const off = subscribeFreeTalk(student.id,
+      { verbs: () => soon('v', () => refresh.current()), lists: () => soon('l', reloadLists) },
+      { verb: id => !!verbsRef.current?.some(v => v.id === id), list: id => listIds.current.has(id) });
+    // A phone that slept may have missed changes: re-read when the page is back.
+    const back = () => { if (document.visibilityState === 'visible') { refresh.current(); reloadLists(); } };
+    document.addEventListener('visibilitychange', back);
+    return () => { off(); document.removeEventListener('visibilitychange', back); Object.values(timers).forEach(clearTimeout); };
+  }, [student.id, reloadLists]);
 
   const script: VerbScript = prefs && prefs !== 'loading' ? prefs.script : 'arabic';
   const learnsBoth = learnsBothOf(student);

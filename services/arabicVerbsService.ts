@@ -103,3 +103,32 @@ export async function saveVerbPrefs(studentId: string, prefs: VerbPrefs): Promis
   }, { onConflict: 'student_id' });
   return error ? error.message : null;
 }
+
+/**
+ * Live changes to one student's Free Talk: their verbs and their word lists
+ * (migration 20261119_free_talk_realtime.sql). A verb the tutor saves shows
+ * on the student's open page at once, and the other way round.
+ *
+ * Supabase does not filter DELETE events by column, so deletes arrive for
+ * every row of the table; `isMine` tells whether a deleted id was on screen.
+ * Returns an unsubscribe function.
+ */
+export function subscribeFreeTalk(
+  studentId: string,
+  on: { verbs: () => void; lists: () => void },
+  isMine: { verb: (id: string) => boolean; list: (id: string) => boolean },
+): () => void {
+  const filter = `student_id=eq.${studentId}`;
+  const ch = supabase
+    .channel(`free-talk-${studentId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'arabic_verbs', filter }, () => on.verbs())
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'arabic_verbs', filter }, () => on.verbs())
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'arabic_verbs' },
+      (p: any) => { if (p?.old?.id && isMine.verb(p.old.id)) on.verbs(); })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vocabulary_lists', filter }, () => on.lists())
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vocabulary_lists', filter }, () => on.lists())
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'vocabulary_lists' },
+      (p: any) => { if (p?.old?.id && isMine.list(p.old.id)) on.lists(); })
+    .subscribe();
+  return () => { void supabase.removeChannel(ch); };
+}
