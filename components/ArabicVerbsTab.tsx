@@ -17,7 +17,7 @@
 //     comes from the student's details (what was chosen when they were added);
 //     only a student learning both gets a switch.
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArabicStudent } from '../types';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
@@ -87,6 +87,22 @@ const VerbCard: React.FC<{
   const pos = open ?? null;
   const keys = pos ? filledKeys(verb, pos.tense, script) : [];
   const touch = useRef<{ x: number; y: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLSpanElement>(null);
+  const [slotPos, setSlotPos] = useState<{ left: number; top: number } | null>(null);
+  const isOpenNow = !!open;
+  useLayoutEffect(() => {
+    const w = wrapRef.current, sl = slotRef.current;
+    if (!isOpenNow || !w || !sl) { setSlotPos(null); return; }
+    const place = () => {
+      const a = w.getBoundingClientRect(), b = sl.getBoundingClientRect();
+      setSlotPos({ left: b.left - a.left, top: b.top - a.top });
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(w);
+    return () => ro.disconnect();
+  }, [isOpenNow, open?.tense]);
 
   const move = (dTense: number, dKey: number) => {
     const cur = pos ?? first;
@@ -133,7 +149,7 @@ const VerbCard: React.FC<{
     : 'border border-slate-200 dark:border-gray-700 shadow-sm hover:-translate-y-px';
 
   return (
-    <div className={`relative ${pos ? 'col-span-2 sm:col-span-1' : ''}`}>
+    <div ref={wrapRef} className={`relative ${pos ? 'col-span-2 sm:col-span-1' : ''}`}>
       <button
         type="button"
         onClick={() => { if (!pos && first) onOpen(first); }}
@@ -168,6 +184,8 @@ const VerbCard: React.FC<{
                 <span key={t} className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${t === pos.tense
                   ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-300'}`}>{TENSE_NAME[t]}</span>
               ))}
+              {/* the pencil sits here, laid over the card (a button cannot hold a button) */}
+              {onEdit && <span ref={slotRef} aria-hidden="true" className="w-[22px] h-[20px] flex-shrink-0" />}
               <span className="flex-1" />
               <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[40%]">{showMeaning(verb.meaning)}</span>
             </span>
@@ -176,7 +194,7 @@ const VerbCard: React.FC<{
                 style={ar ? { fontFamily: AR_FONT, fontSize: 15 } : { fontSize: 12 }}>
                 {pronounLabel(tableOrder(verb.variety, pos.tense, true, true).find(p => p.key === pos.key) ?? { key: '', ar: '', tr: '' }, script)}
               </span>
-              <span className="font-bold leading-none text-slate-900 dark:text-slate-100 truncate"
+              <span className="font-bold leading-[1.4] py-0.5 text-slate-900 dark:text-slate-100 truncate"
                 style={ar ? { fontFamily: AR_FONT, fontSize: 32 } : { fontSize: 24 }}>
                 {cellText(verb.conjugations[pos.tense], pos.key, script)}
               </span>
@@ -190,10 +208,11 @@ const VerbCard: React.FC<{
           </span>
         )}
       </button>
-      {pos && onEdit && (
-        <button type="button" onClick={onEdit} aria-label={`Edit ${showMeaning(verb.meaning)}`}
-          className="absolute -top-2 -end-2 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 shadow flex items-center justify-center text-slate-500 hover:text-amber-700">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.86 4.49 1.69-1.69a1.875 1.875 0 1 1 2.65 2.65L6.83 19.82a4.5 4.5 0 0 1-1.9 1.13L2 22l1.05-2.93a4.5 4.5 0 0 1 1.13-1.9L16.86 4.49Z" /></svg>
+      {pos && onEdit && slotPos && (
+        <button type="button" onClick={onEdit} aria-label={`Edit ${showMeaning(verb.meaning)}`} title="Edit"
+          className="absolute w-[22px] h-[20px] rounded-full flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-800 dark:bg-gray-700 dark:text-slate-300 dark:hover:bg-amber-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50"
+          style={{ left: slotPos.left, top: slotPos.top }}>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="m16.86 4.49 1.69-1.69a1.875 1.875 0 1 1 2.65 2.65L6.83 19.82a4.5 4.5 0 0 1-1.9 1.13L2 22l1.05-2.93a4.5 4.5 0 0 1 1.13-1.9L16.86 4.49Z" /></svg>
         </button>
       )}
     </div>
