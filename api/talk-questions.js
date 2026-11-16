@@ -16,7 +16,7 @@
  * Response: { questions: [{ q, en, hint, uses: [] }] } | { error }
  */
 
-const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'];
 const MAX_VERBS = 30;
 const MAX_WORDS = 80;
 const clip = (s, n) => String(s ?? '').slice(0, n);
@@ -86,7 +86,7 @@ Reply with JSON only, in this shape:
           generationConfig: { responseMimeType: 'application/json', temperature: 1 },
         }),
       });
-      if (response.status !== 404) break;
+      if (![404, 429, 500, 503].includes(response.status)) break;   // gone or busy: try the next model
     }
     if (!response.ok) {
       console.error('talk-questions Gemini error:', response.status, await response.text());

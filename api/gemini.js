@@ -37,7 +37,7 @@ export default async function handler(req, res) {
           }),
         },
       );
-      if (response.status !== 404) break;
+      if (![404, 429, 500, 503].includes(response.status)) break;   // gone or busy: try the next model
     }
 
     if (!response.ok) {
