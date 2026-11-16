@@ -168,3 +168,64 @@ export async function logFreeTalkWord(studentToken: string, label: string): Prom
   const { error } = await supabase.rpc('student_log_free_talk_word', { p_token: studentToken, p_label: label });
   return error ? error.message : null;
 }
+
+// ── The shared board (migration 20261122_free_talk_board.sql) ───────────────
+
+export type BoardSide = 'tutor' | 'student';
+
+/** The saved board text, or null when nothing was saved yet (undefined = could not read). */
+export async function getBoard(studentId: string): Promise<string | null | undefined> {
+  const { data, error } = await supabase
+    .from('arabic_free_talk_boards').select('body').eq('student_id', studentId).maybeSingle();
+  if (error) { console.error('getBoard:', error.message); return undefined; }
+  return data ? (data.body as string) : null;
+}
+
+/** Save the board. The student passes their link token; the tutor is checked by login. */
+export async function saveBoard(studentId: string, body: string, studentToken?: string): Promise<string | null> {
+  const { error } = await supabase.rpc('save_free_talk_board', {
+    p_student_id: studentId, p_token: studentToken ?? null, p_body: body,
+  });
+  return error ? error.message : null;
+}
+
+/**
+ * The live link between the two sides of one student's board: every change
+ * goes out as a broadcast (not a database write), and presence says who else
+ * has the board open. `send` is safe to call before the channel is joined
+ * (the latest text goes out once it is).
+ */
+export function joinBoard(
+  studentId: string,
+  me: BoardSide,
+  on: { text: (body: string) => void; others: (sides: BoardSide[]) => void },
+): { send: (body: string) => void; close: () => void } {
+  const ch = supabase.channel(`free-talk-board-${studentId}`, {
+    config: { broadcast: { self: false }, presence: { key: `${me}-${Math.random().toString(36).slice(2, 8)}` } },
+  });
+  let joined = false;
+  let pending: string | null = null;
+  ch.on('broadcast', { event: 'text' }, ({ payload }) => {
+    if (typeof payload?.body === 'string') on.text(payload.body);
+  });
+  ch.on('presence', { event: 'sync' }, () => {
+    const state = ch.presenceState() as Record<string, Array<{ side?: BoardSide }>>;
+    const mine = Object.keys(state).filter(k => k.startsWith(`${me}-`)).length;
+    const sides = Object.values(state).flat().map(p => p.side).filter((s): s is BoardSide => !!s);
+    // Others = the other side, or this side on another device (more than one of mine).
+    on.others(sides.filter(s => s !== me).concat(mine > 1 ? [me] : []));
+  });
+  ch.subscribe(status => {
+    if (status !== 'SUBSCRIBED') return;
+    joined = true;
+    void ch.track({ side: me });
+    if (pending !== null) { void ch.send({ type: 'broadcast', event: 'text', payload: { body: pending } }); pending = null; }
+  });
+  return {
+    send: body => {
+      if (!joined) { pending = body; return; }
+      void ch.send({ type: 'broadcast', event: 'text', payload: { body } });
+    },
+    close: () => { void supabase.removeChannel(ch); },
+  };
+}

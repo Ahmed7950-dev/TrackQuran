@@ -958,7 +958,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" /></svg>
             </span>
             <input type="search" value={query} onChange={e => { setQuery(e.target.value); setOpen(null); }}
-              aria-label="Search verbs and words" placeholder="Search a verb or a word"
+              aria-label="Search verbs and words" placeholder={typeof window !== 'undefined' && window.innerWidth < 420 && canAdd ? 'Search' : 'Search a verb or a word'}
               className="w-full lg:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
           {canAdd && (
@@ -1004,8 +1004,9 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       )}
       {switchError && <p role="alert" className="text-sm font-semibold text-red-600">{switchError}</p>}
 
-      {/* The tutor's board, above the verbs. Never on the student's side. */}
-      {!studentMode && <FreeTalkBoard studentId={student.id} studentName={student.name} />}
+      {/* The board, above the verbs: shared live by the tutor and the student. */}
+      <FreeTalkBoard studentId={student.id} studentName={student.name}
+        side={studentMode ? 'student' : 'tutor'} studentToken={studentMode ? student.shareToken : undefined} />
 
       {verbs === null ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" /></div>
