@@ -25,6 +25,7 @@ import { createPortal } from 'react-dom';
 import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
 import { getVocabWordsForLessons, ensureShareToken, getLessonProgressForStudent } from '../services/arabicService';
 import FreeTalkQuestions, { TalkWord } from './FreeTalkQuestions';
+import FreeTalkBoard from './FreeTalkBoard';
 import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
@@ -1036,6 +1037,9 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           {canEdit && <span>Double-click a card to edit it</span>}
         </div>
       )}
+
+      {/* The tutor's board, after the verbs. Never on the student's side. */}
+      {!studentMode && <FreeTalkBoard studentId={student.id} studentName={student.name} />}
     </div>
   );
 };
