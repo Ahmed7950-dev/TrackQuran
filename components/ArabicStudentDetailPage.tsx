@@ -16,6 +16,7 @@ import {
   getLessonLogsForStudent,
   getArabicStudentNote,
   getVocabWords,
+  getLessonProgressForStudent,
 } from '../services/arabicService';
 import {
   getUnlocksForStudent, setExamUnlock, removeExamUnlock, setRetakeAllowed, getAttemptsForStudent, reopenAttempt,
@@ -27,6 +28,7 @@ import ArabicGrammarTab from './ArabicGrammarTab';
 import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicVocabularyHub from './ArabicVocabularyHub';
+import ArabicVerbsTab from './ArabicVerbsTab';
 import StudentToolsBar, { type ToolsTab } from './StudentToolsBar';
 import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
 import ExamMarkingPage from './ExamMarkingPage';
@@ -483,7 +485,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       opened by tapping their name. (It replaced the ⋯ menu and the Profile tab.) */
   const [sheetOpen, setSheetOpen] = useState(false);
   const [lessons, setLessons]         = useState<ArabicLesson[]>([]);
-  const [activeSection, setActiveSection] = useState<'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'>('lessons');
+  const [activeSection, setActiveSection] = useState<'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'verbs' | 'homework' | 'createHomework'>('lessons');
   /** Homework that is OPEN — handed over and neither done, cancelled nor past
    *  its deadline. Every kind counts: a lesson's, a vocabulary set, word cards,
    *  flashcards, one the tutor wrote on its own. It reloads whenever the page
@@ -547,6 +549,16 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
 
   useEffect(() => {
     getLessonLogsForStudent(student.id).then(setLessonLogs);
+  }, [student.id]);
+
+  // Verbs open once ANY level 2 lesson is in progress or done.
+  const [levelTwoStarted, setLevelTwoStarted] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let live = true;
+    void getLessonProgressForStudent(student.id).then(m => {
+      if (live) setLevelTwoStarted(new Set([...m.values()].filter(p => p.status === 'in_progress' || p.status === 'done').map(p => p.lessonId)));
+    });
+    return () => { live = false; };
   }, [student.id]);
 
   // Teacher's private note — shown in the hero card for the TUTOR only, and
@@ -627,6 +639,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     homework: stroke('M8 4h8M8 3h8v4H8zM6 5H4v16h16V5h-2M8 12h8M8 16h5'),
     createHomework: stroke('M8 4h8M8 3h8v4H8zM6 5H4v16h16V5h-2M12 11v6M9 14h6'),
     vocabulary: stroke('M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5Z'),
+    verbs:      stroke('M4 7h10M4 12h16M4 17h7M17 4l3 3-3 3'),
+    locked:     stroke('M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z'),
     progress:   stroke('M4 19.5V13m5 6.5V8m5 11.5v-5m5 5V5'),
     schedule:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
     exams:      stroke('m9 11.5 2 2 4.5-4.5M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z'),
@@ -634,10 +648,11 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     calendar:   stroke('M3.5 10h17M8 3v4m8-4v4M6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10A2.5 2.5 0 0 1 6.5 5Z'),
   };
 
-  const TABS: Array<{ key: 'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
+  const TABS: Array<{ key: 'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'verbs' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'grammar', label: 'Grammar', mobileLabel: 'Grammar' },
     { key: 'vocabulary', label: t('arabicPortal.vocabulary'), mobileLabel: t('arabicPortal.vocabulary') },
+    { key: 'verbs', label: 'Verbs', mobileLabel: 'Verbs' },
     { key: 'homework', label: 'Homework', mobileLabel: 'Homework' },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [
@@ -678,11 +693,14 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     return `in ${d} day${d === 1 ? '' : 's'}`;
   })();
 
+  const verbsUnlocked = dialectLessons.some(l => (l.level ?? 1) >= 2
+    && (levelTwoStarted.has(l.id) || student.completedLessonIds.includes(l.id)));
+
   /** The section bar's pills. Homework carries the count of open homework. */
   const toolTabs: ToolsTab[] = TABS.map(tab => ({
     id: tab.key,
     label: tab.label.replace(/\s*\(\d+\)$/, ''),
-    icon: <span className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4">{RAIL_ICON[tab.key]}</span>,
+    icon: <span className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4">{RAIL_ICON[tab.key === 'verbs' && studentMode && !verbsUnlocked ? 'locked' : tab.key]}</span>,
     badge: tab.key === 'homework' ? openHomework : undefined,
   }));
 
@@ -849,6 +867,10 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           studentMode={studentMode}
           nextLessonAt={nextLessonAt}
         />
+      )}
+
+      {activeSection === 'verbs' && (
+        <ArabicVerbsTab student={student} studentMode={studentMode} unlocked={verbsUnlocked} />
       )}
 
       {activeSection === 'homework' && <ArabicHomeworkTab student={student} lessons={dialectLessons} studentMode={studentMode}

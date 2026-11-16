@@ -1,0 +1,82 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Verbs — conjugation tables a tutor writes once and every student of the same
+// variety reads (table arabic_verbs), plus each student's reading choices
+// (arabic_verb_prefs). Migration: supabase/migrations/20261116_arabic_verbs.sql
+//
+// Every write returns an error message instead of failing quietly: a verb
+// typed out cell by cell must never vanish without the tutor knowing.
+// ─────────────────────────────────────────────────────────────────────────────
+import { supabase } from '../lib/supabase';
+
+export type VerbVariety = 'levantine' | 'msa';
+export type VerbScript = 'arabic' | 'translit';
+export type TenseKey = 'past' | 'present' | 'imperative';
+export const TENSES: TenseKey[] = ['past', 'present', 'imperative'];
+
+export interface VerbCell { ar?: string; tr?: string }
+export interface VerbTable {
+  dual: boolean;
+  plural: boolean;
+  cells: Record<string, VerbCell>;   // pronoun key → both writings
+}
+export interface ArabicVerb {
+  id: string;
+  teacherId: string;
+  variety: VerbVariety;
+  meaning: string;
+  conjugations: Partial<Record<TenseKey, VerbTable>>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface VerbPrefs { script: VerbScript; variety: VerbVariety }
+
+const fromRow = (r: any): ArabicVerb => ({
+  id: r.id, teacherId: r.teacher_id, variety: r.variety, meaning: r.meaning,
+  conjugations: r.conjugations ?? {}, createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+/** The tutor's verbs of one variety, oldest first (the order they were added). */
+export async function listVerbs(teacherId: string, variety: VerbVariety): Promise<ArabicVerb[]> {
+  const { data, error } = await supabase
+    .from('arabic_verbs')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .eq('variety', variety)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('listVerbs:', error.message); return []; }
+  return (data ?? []).map(fromRow);
+}
+
+/** Insert (no id) or update a verb. Returns the saved verb, or an error message. */
+export async function saveVerb(v: Omit<ArabicVerb, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<ArabicVerb | string> {
+  const row = {
+    teacher_id: v.teacherId, variety: v.variety, meaning: v.meaning.trim(),
+    conjugations: v.conjugations, updated_at: new Date().toISOString(),
+  };
+  const q = v.id
+    ? supabase.from('arabic_verbs').update(row).eq('id', v.id).select('*').single()
+    : supabase.from('arabic_verbs').insert(row).select('*').single();
+  const { data, error } = await q;
+  if (error || !data) return error?.message ?? 'The verb was not saved.';
+  return fromRow(data);
+}
+
+export async function deleteVerb(id: string): Promise<string | null> {
+  const { error } = await supabase.from('arabic_verbs').delete().eq('id', id);
+  return error ? error.message : null;
+}
+
+/** null = the tutor has not set Verbs up for this student yet. */
+export async function getVerbPrefs(studentId: string): Promise<VerbPrefs | null> {
+  const { data, error } = await supabase
+    .from('arabic_verb_prefs').select('script, variety').eq('student_id', studentId).maybeSingle();
+  if (error) { console.error('getVerbPrefs:', error.message); return null; }
+  return data ? { script: data.script, variety: data.variety } : null;
+}
+
+export async function saveVerbPrefs(studentId: string, prefs: VerbPrefs): Promise<string | null> {
+  const { error } = await supabase.from('arabic_verb_prefs').upsert({
+    student_id: studentId, script: prefs.script, variety: prefs.variety, updated_at: new Date().toISOString(),
+  }, { onConflict: 'student_id' });
+  return error ? error.message : null;
+}
