@@ -28,6 +28,7 @@ import ArabicGrammarTab from './ArabicGrammarTab';
 import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
 import ArabicVocabularyHub from './ArabicVocabularyHub';
+import NatureScene from './NatureScene';
 import ArabicVerbsTab from './ArabicVerbsTab';
 import StudentToolsBar, { type ToolsTab } from './StudentToolsBar';
 import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
@@ -783,24 +784,25 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           </div>
 
           {/* the next lesson, and the one action that belongs to it */}
-          <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#14161A' }}>
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: '#9BA3A0' }}>Next lesson</p>
+          <div className="relative overflow-hidden rounded-2xl p-4 flex flex-col isolate" style={{ background: '#14161A' }}>
+            <NatureScene className="-z-10" />
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] [text-shadow:0_1px_3px_rgba(0,0,0,.6)]" style={{ color: '#E2E8E5' }}>Next lesson</p>
             {nextLesson ? (
               <>
-                <p className="mt-1.5 text-lg font-extrabold text-white">
+                <p className="mt-1.5 text-lg font-extrabold text-white [text-shadow:0_1px_4px_rgba(0,0,0,.55)]">
                   {new Date(nextLesson.startAt).toLocaleDateString([], { weekday: 'short' })} · {new Date(nextLesson.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
-                <p className="mt-0.5 text-xs" style={{ color: '#B6BDB9' }}>{untilNext}{nextLesson.title ? ` · ${nextLesson.title}` : ''}</p>
+                <p className="mt-0.5 text-xs font-semibold [text-shadow:0_1px_3px_rgba(0,0,0,.6)]" style={{ color: '#EEF2F0' }}>{untilNext}{nextLesson.title ? ` · ${nextLesson.title}` : ''}</p>
               </>
             ) : (
-              <p className="mt-1.5 text-sm font-semibold" style={{ color: '#B6BDB9' }}>Nothing on the calendar yet</p>
+              <p className="mt-1.5 text-sm font-semibold [text-shadow:0_1px_3px_rgba(0,0,0,.6)]" style={{ color: '#EEF2F0' }}>Nothing on the calendar yet</p>
             )}
             {!studentMode && <span className="block h-3.5 flex-shrink-0" />}
             {!studentMode && (
               <button
                 onClick={meetState === 'idle' ? handleMeetNow : undefined}
                 title={meetState === 'started' ? 'Meet started — link copied, student notified' : 'Start a Google Meet now'}
-                className="mt-auto w-full h-11 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-colors"
+                className="mt-auto w-full h-11 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-black/25"
                 style={meetState === 'started' ? { background: '#CFE6DC', color: '#06231B' } : { background: '#4F9E85', color: '#06231B' }}>
                 {meetState === 'loading' ? (
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
