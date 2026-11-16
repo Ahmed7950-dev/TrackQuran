@@ -78,6 +78,7 @@ Reply with JSON only, in this shape:
 
   try {
     let response = null;
+    const tried = [];
     for (const model of MODELS) {
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -88,10 +89,12 @@ Reply with JSON only, in this shape:
         }),
       });
       if (![404, 429, 500, 503].includes(response.status)) break;   // gone or busy: try the next model
+      const why = await response.clone().json().catch(() => ({}));
+      tried.push(`${model} ${response.status} ${String(why?.error?.status ?? '')} ${String(why?.error?.message ?? '').slice(0, 140)}`);
     }
     if (!response.ok) {
       console.error('talk-questions Gemini error:', response.status, await response.text());
-      return res.status(502).json({ error: `The question writer did not answer (${response.status}). Try again in a minute.` });
+      return res.status(502).json({ error: `The question writer did not answer (${response.status}). Try again in a minute.`, tried });
     }
     const data = await response.json();
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? '';
