@@ -102,7 +102,11 @@ Reply with JSON only, in this shape:
         uses: (Array.isArray(q?.uses) ? q.uses : []).slice(0, 4).map(u => clip(u, 40)),
       }))
       .filter(q => q.q);
-    if (!questions.length) return res.status(502).json({ error: 'No questions came back. Try again.' });
+    if (!questions.length) {
+      const why = data?.candidates?.[0]?.finishReason ?? data?.promptFeedback?.blockReason ?? 'empty';
+      console.error('talk-questions unreadable reply:', why, text.slice(0, 500));
+      return res.status(502).json({ error: `No questions came back (${why}, ${text.length}). Try again.` });
+    }
     return res.status(200).json({ questions });
   } catch (err) {
     console.error('talk-questions error:', err);
