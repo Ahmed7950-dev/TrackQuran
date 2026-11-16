@@ -1,5 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ArabicVerbsTab — the Verbs tool on an Arabic student's page.
+// ArabicVerbsTab — the "Free Talk" tab on an Arabic student's page: a place to
+// talk freely, with the student's verb cards and one search box that also
+// finds a forgotten word among the lesson words and the word lists (and can
+// add a new word to the "Free Talk words" list).
 //
 //   · The tutor writes a verb once: its English meaning, then up to three
 //     tables (past, present, imperative), each starting with the singular
@@ -18,7 +21,9 @@
 //     only a student learning both gets a switch.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArabicStudent } from '../types';
+import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
+import { getVocabWordsForLessons } from '../services/arabicService';
+import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
   deleteVerb, getVerbPrefs, listVerbs, saveVerb, saveVerbPrefs,
@@ -375,7 +380,7 @@ const VerbEditor: React.FC<{
       <button type="button" onClick={() => onDone(false)}
         className="self-start flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 rtl:rotate-180"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-        Verbs
+        Free Talk
       </button>
       <div className="flex items-end gap-3 flex-wrap">
         <div className="flex-1 min-w-[240px]">
@@ -458,10 +463,10 @@ const Setup: React.FC<{ student: ArabicStudent; onDone: (p: VerbPrefs) => void }
     ? 'border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border border-slate-200 dark:border-gray-700 hover:border-slate-300'}`;
   return (
     <div className="flex justify-center py-6">
-      <div role="dialog" aria-label={`Set up Verbs for ${student.name}`}
+      <div role="dialog" aria-label={`Set up Free Talk for ${student.name}`}
         className="w-full max-w-[600px] bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-[22px] shadow-xl p-6 sm:p-7 flex flex-col gap-5">
         <div>
-          <h2 className="text-[22px] font-extrabold text-slate-900 dark:text-slate-100">Set up Verbs for {student.name}</h2>
+          <h2 className="text-[22px] font-extrabold text-slate-900 dark:text-slate-100">Set up Free Talk for {student.name}</h2>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-500 dark:text-slate-400">
             You choose this once for {student.name}. The verbs follow the dialect in {student.name}'s details: {VARIETY_NAME[variety]}.
           </p>
@@ -482,7 +487,7 @@ const Setup: React.FC<{ student: ArabicStudent; onDone: (p: VerbPrefs) => void }
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
         <div className="flex justify-end">
           <button type="button" disabled={busy} onClick={go} className="h-11 px-6 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-extrabold disabled:opacity-60">
-            {busy ? 'Saving…' : 'Open Verbs'}
+            {busy ? 'Saving…' : 'Open Free Talk'}
           </button>
         </div>
       </div>
@@ -503,16 +508,102 @@ const VarietySwitch: React.FC<{ value: VerbVariety; onChange: (v: VerbVariety) =
   </div>
 );
 
+// ── Words found by the search ───────────────────────────────────────────────
+
+interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; kind: 'lesson' | 'list' }
+
+const WordResults: React.FC<{ query: string; words: FoundWord[]; onAdd?: () => void }> = ({ query, words, onAdd }) => {
+  const shown = words.slice(0, 24);
+  return (
+    <div aria-live="polite" aria-label="Words found"
+      className="flex-1 min-w-0 min-h-[44px] flex items-center gap-1.5 overflow-x-auto rounded-xl bg-white/70 dark:bg-gray-800/70 border border-slate-200 dark:border-gray-700 px-2 py-1.5"
+      style={{ scrollbarWidth: 'thin' }}>
+      {!query.trim() ? (
+        <span className="px-1.5 text-xs text-slate-400 dark:text-slate-500">Forgot a word? Type it in the search: lesson words and word lists show here.</span>
+      ) : words.length === 0 ? (
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-xs text-slate-500 dark:text-slate-400 sm:whitespace-nowrap">
+          No word found in the lessons or the word lists.
+          {onAdd && <button type="button" onClick={onAdd} className="font-bold text-teal-700 dark:text-teal-300 hover:underline">Add it as a word</button>}
+        </span>
+      ) : (
+        <>
+          {shown.map(w => (
+            <span key={w.key} title={`${w.kind === 'lesson' ? 'Lesson' : 'List'}: ${w.source}`}
+              className={`flex-shrink-0 inline-flex items-baseline gap-1.5 px-2 py-1 rounded-lg border text-[11.5px] leading-tight ${w.kind === 'lesson'
+                ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800'
+                : 'bg-teal-50 border-teal-200 dark:bg-teal-900/20 dark:border-teal-800'}`}>
+              {w.ar && <span dir="rtl" className="font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: AR_FONT, fontSize: 15 }}>{w.ar}</span>}
+              {w.tr && <span className="italic text-slate-500 dark:text-slate-400">{w.tr}</span>}
+              {w.en && <span className="text-slate-700 dark:text-slate-200">{w.en}</span>}
+              <span className={`text-[10px] font-bold ${w.kind === 'lesson' ? 'text-amber-700 dark:text-amber-400' : 'text-teal-700 dark:text-teal-400'}`}>· {w.source}</span>
+            </span>
+          ))}
+          {words.length > shown.length && <span className="flex-shrink-0 px-1.5 text-[11px] font-semibold text-slate-400">+{words.length - shown.length} more</span>}
+        </>
+      )}
+    </div>
+  );
+};
+
+const AddWordDialog: React.FC<{
+  initial: { ar: string; en: string };
+  onClose: () => void;
+  onSave: (w: { text: string; transliteration: string; translation: string }) => Promise<string | null>;
+}> = ({ initial, onClose, onSave }) => {
+  const [ar, setAr] = useState(initial.ar);
+  const [tr, setTr] = useState('');
+  const [en, setEn] = useState(initial.en);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    if (!ar.trim() && !tr.trim()) { setError('Write the word in Arabic or in transliteration.'); return; }
+    setBusy(true); setError(null);
+    const err = await onSave({ text: ar, transliteration: tr, translation: en });
+    setBusy(false);
+    if (err) setError(err);
+  };
+  const field = 'h-11 px-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20';
+  return (
+    <>
+      <span className="fixed inset-0 z-50 bg-slate-900/40" onClick={onClose} />
+      <div role="dialog" aria-label="Add a word"
+        className="fixed z-50 inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[440px] rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-5 flex flex-col gap-3.5"
+        onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter') void save(); }}>
+        <div>
+          <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">Add a word</h3>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">It goes into the word list "{FREE_TALK_LIST_NAME}", which you also find in Vocabulary, Word lists.</p>
+        </div>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Arabic
+          <input dir="rtl" value={ar} onChange={e => setAr(e.target.value)} autoFocus={!initial.en} className={field} style={{ fontFamily: AR_FONT, fontSize: 20, fontWeight: 700 }} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Transliteration
+          <input value={tr} onChange={e => setTr(e.target.value)} className={`${field} text-sm`} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Meaning in English
+          <input value={en} onChange={e => setEn(e.target.value)} autoFocus={!!initial.en} className={`${field} text-sm`} />
+        </label>
+        {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200">Cancel</button>
+          <button type="button" disabled={busy} onClick={save} className="h-11 px-5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-extrabold">{busy ? 'Saving…' : 'Save word'}</button>
+        </div>
+      </div>
+    </>
+  );
+};
+
 // ── The tab ─────────────────────────────────────────────────────────────────
 
 interface Props {
   student: ArabicStudent;
+  /** The student's course lessons (their dialect) — the search looks in their words. */
+  lessons: ArabicLesson[];
   studentMode?: boolean;
   /** The student has started level 2 (decided by the page, which also locks the tab pill). */
   unlocked: boolean;
 }
 
-const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocked }) => {
+const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false, unlocked }) => {
   const teacherId = student.teacherId;
   const [prefs, setPrefs] = useState<VerbPrefs | null | 'loading'>('loading');
   const [variety, setVariety] = useState<VerbVariety>(defaultVariety(student));
@@ -521,6 +612,25 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
   const [open, setOpen] = useState<{ id: string; pos: Pos } | null>(null);
   const [editing, setEditing] = useState<ArabicVerb | 'new' | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
+
+  // ── Words to find: the lesson words and the word lists, kept apart ──
+  const [lessonWords, setLessonWords] = useState<LessonWord[]>([]);
+  const [listWords, setListWords] = useState<FoundWord[]>([]);
+  const lessonKey = lessons.map(l => l.id).join(',');
+  useEffect(() => {
+    let live = true;
+    void getVocabWordsForLessons(lessons.map(l => l.id)).then(w => { if (live) setLessonWords(w); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonKey]);
+  const reloadLists = useCallback(() => {
+    void getVocabularyLists(student.id).then(ls => setListWords(ls.flatMap(l => (l.words ?? []).map(w => ({
+      key: `l-${l.id}-${w.id}`, ar: w.text, tr: w.transliteration, en: w.translation, source: l.name, kind: 'list' as const,
+    })))));
+  }, [student.id]);
+  useEffect(() => { reloadLists(); }, [reloadLists]);
+  const [addingWord, setAddingWord] = useState<{ ar: string; en: string } | null>(null);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -565,6 +675,16 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
     return hit;
   }, [q, verbs]);
 
+  const lessonTitle = useMemo(() => new Map(lessons.map(l => [l.id, l.title])), [lessons]);
+  const foundWords = useMemo<FoundWord[]>(() => {
+    if (!q) return [];
+    const all: FoundWord[] = [
+      ...lessonWords.map(w => ({ key: `w-${w.id}`, ar: w.arabic, tr: w.transliteration, en: w.english, source: lessonTitle.get(w.lessonId) ?? 'Lesson', kind: 'lesson' as const })),
+      ...listWords,
+    ];
+    return all.filter(w => [w.ar, w.tr, w.en].some(x => normForSearch(x || '').includes(q)));
+  }, [q, lessonWords, listWords, lessonTitle]);
+
   // Clicking anywhere outside the open card closes it.
   const wallRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -582,8 +702,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
           <span className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.9} stroke="currentColor" className="w-7 h-7"><rect x="5" y="11" width="14" height="10" rx="2" /><path strokeLinecap="round" d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
           </span>
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Verbs open at level 2</h2>
-          <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">They appear as soon as you start your first level 2 lesson.</p>
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Free Talk opens at level 2</h2>
+          <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">It appears as soon as you start your first level 2 lesson.</p>
         </div>
       </div>
     );
@@ -615,43 +735,73 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
     <div className="flex flex-col gap-4">
       {!studentMode && !unlocked && (
         <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2.5">
-          {student.name} has not started level 2 yet, so this tab is locked on their side. You can still add verbs.
+          {student.name} has not started level 2 yet, so Free Talk is locked on their side. You can still add verbs.
         </p>
       )}
 
       <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-baseline gap-3">
-            <h2 className="text-[26px] font-extrabold text-slate-900 dark:text-slate-100">Verbs</h2>
-            <span className="text-[13px] font-semibold text-slate-500 dark:text-slate-400" aria-live="polite">
-              {verbs === null ? '' : q ? (hits ? `${hits} of ${count} match` : 'No verb matches') : `${count} ${VARIETY_NAME[variety]} verb${count === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {showSwitch && <VarietySwitch value={variety} onChange={changeVariety} />}
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-2.5 py-1.5 rounded-full">
-              {!showSwitch && `${VARIETY_NAME[variety]} · `}{script === 'arabic' ? 'Arabic script' : 'Transliteration'}
-            </span>
-          </div>
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[26px] font-extrabold text-slate-900 dark:text-slate-100">Free Talk</h2>
+          <span className="text-[13px] font-semibold text-slate-500 dark:text-slate-400" aria-live="polite">
+            {verbs === null ? '' : q ? (hits ? `${hits} of ${count} verbs match` : 'No verb matches') : `${count} ${VARIETY_NAME[variety]} verb${count === 1 ? '' : 's'}`}
+          </span>
         </div>
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <label className="relative flex-1 sm:flex-none">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {showSwitch && <VarietySwitch value={variety} onChange={changeVariety} />}
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-2.5 py-1.5 rounded-full">
+            {!showSwitch && `${VARIETY_NAME[variety]} · `}{script === 'arabic' ? 'Arabic script' : 'Transliteration'}
+          </span>
+        </div>
+      </div>
+
+      {/* ── One search: verbs glow below, words show in the bar on its left ── */}
+      <div className="flex flex-col-reverse lg:flex-row lg:items-center gap-2.5">
+        <WordResults
+          query={query}
+          words={foundWords}
+          onAdd={canEdit ? () => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) }) : undefined}
+        />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <label className="relative flex-1 lg:flex-none">
             <span className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" /></svg>
             </span>
             <input type="search" value={query} onChange={e => { setQuery(e.target.value); setOpen(null); }}
-              aria-label="Search verbs" placeholder={script === 'arabic' ? 'Search: كتب or write' : 'Search: katab or write'}
-              className="w-full sm:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
+              aria-label="Search verbs and words" placeholder={script === 'arabic' ? 'Search: كتب, بيت or write' : 'Search: katab, beit or write'}
+              className="w-full lg:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
           {canEdit && (
-            <button type="button" onClick={() => setEditing('new')}
-              className="flex-shrink-0 h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold flex items-center gap-1.5">
+            <button type="button" onClick={() => setAddingWord({ ar: '', en: '' })}
+              className="flex-shrink-0 h-11 px-3.5 rounded-xl border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 dark:bg-gray-800 dark:text-teal-300 dark:border-teal-500 dark:hover:bg-teal-900/30 text-sm font-bold flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
-              <span className="hidden sm:inline">Add verb</span><span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">Add word</span><span className="sm:hidden">Word</span>
+            </button>
+          )}
+          {canEdit && (
+            <button type="button" onClick={() => setEditing('new')}
+              className="flex-shrink-0 h-11 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+              <span className="hidden sm:inline">Add verb</span><span className="sm:hidden">Verb</span>
             </button>
           )}
         </div>
       </div>
+      {savedNote && <p role="status" className="text-[13px] font-semibold text-teal-700 dark:text-teal-300">{savedNote}</p>}
+      {addingWord && (
+        <AddWordDialog
+          initial={addingWord}
+          onClose={() => setAddingWord(null)}
+          onSave={async w => {
+            const err = await addWordToFreeTalkList(student.id, w);
+            if (err) return `Not saved: ${err}`;
+            setAddingWord(null);
+            reloadLists();
+            setSavedNote(`Saved to the list "${FREE_TALK_LIST_NAME}". It is in Vocabulary, Word lists, too.`);
+            setTimeout(() => setSavedNote(null), 5000);
+            return null;
+          }}
+        />
+      )}
       {switchError && <p role="alert" className="text-sm font-semibold text-red-600">{switchError}</p>}
 
       {verbs === null ? (

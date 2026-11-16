@@ -84,3 +84,31 @@ export const getCustomVocabWordCount = async (studentId: string): Promise<number
   const counts = await getCustomVocabWordCountsForStudents([studentId]);
   return counts[studentId] ?? 0;
 };
+
+/** The list words added from the Free Talk tab go into (made the first time). */
+export const FREE_TALK_LIST_NAME = 'Free Talk words';
+
+/** Add one word to the student's "Free Talk words" list, creating the list if
+ *  needed. Returns an error message, or null when saved: a word typed during a
+ *  conversation must not vanish quietly. */
+export const addWordToFreeTalkList = async (
+  studentId: string,
+  word: { text: string; translation: string; transliteration: string },
+): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('vocabulary_lists').select('*')
+    .eq('student_id', studentId).eq('name', FREE_TALK_LIST_NAME)
+    .order('created_at', { ascending: true }).limit(1);
+  if (error) return error.message;
+  const now = new Date().toISOString();
+  const existing = (data ?? [])[0] as VocabList | undefined;
+  const entry: VocabWord = {
+    id: crypto.randomUUID(), text: word.text.trim(), translation: word.translation.trim(),
+    transliteration: word.transliteration.trim(), clicks: 0, category: 'other',
+  };
+  const row = existing
+    ? { ...existing, words: [...(existing.words ?? []), entry], updated_at: now }
+    : { id: crypto.randomUUID(), student_id: studentId, name: FREE_TALK_LIST_NAME, words: [entry], phrases: [], srs_attempts: [], created_at: now, updated_at: now };
+  const { error: saveErr } = await supabase.from('vocabulary_lists').upsert(row, { onConflict: 'id' });
+  return saveErr ? saveErr.message : null;
+};

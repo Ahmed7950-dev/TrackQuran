@@ -652,7 +652,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'grammar', label: 'Grammar', mobileLabel: 'Grammar' },
     { key: 'vocabulary', label: t('arabicPortal.vocabulary'), mobileLabel: t('arabicPortal.vocabulary') },
-    { key: 'verbs', label: 'Verbs', mobileLabel: 'Verbs' },
+    { key: 'verbs', label: 'Free Talk', mobileLabel: 'Free Talk' },
     { key: 'homework', label: 'Homework', mobileLabel: 'Homework' },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [
@@ -863,7 +863,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       )}
 
       {activeSection === 'verbs' && (
-        <ArabicVerbsTab student={student} studentMode={studentMode} unlocked={verbsUnlocked} />
+        <ArabicVerbsTab student={student} lessons={dialectLessons} studentMode={studentMode} unlocked={verbsUnlocked} />
       )}
 
       {activeSection === 'homework' && <ArabicHomeworkTab student={student} lessons={dialectLessons} studentMode={studentMode}
