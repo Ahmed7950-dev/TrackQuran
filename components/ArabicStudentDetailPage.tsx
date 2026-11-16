@@ -718,6 +718,8 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             activeId={activeSection}
             onSelect={id => setActiveSection(id as typeof activeSection)}
             onNameClick={() => setSheetOpen(true)}
+            onBack={studentMode ? undefined : onBack}
+            backLabel={t('arabicStudentDetail.allStudents')}
           />
         );
         return toolbarHost ? createPortal(bar, toolbarHost) : <div className="sticky top-0 z-[35] -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-4">{bar}</div>;
@@ -726,15 +728,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         {/* ── The pane ── */}
         <div className="min-w-0 flex flex-col gap-4">
 
-        {/* the way back to the list (the tutor's only; the portal has no list) */}
-        {!studentMode && (
-          <button onClick={onBack} className="self-start flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 rtl:rotate-180">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-            {t('arabicStudentDetail.allStudents')}
-          </button>
-        )}
 
       {/* ── Lessons opens with who this is, what happens next, and the private note ── */}
       {activeSection === 'lessons' && (

@@ -55,6 +55,9 @@ type Props = {
   accent?: 'teal' | 'amber';
   /** Tapping the student's name (the Arabic side opens their details sheet). */
   onNameClick?: () => void;
+  /** A way back to the student list, shown first, before the avatar. */
+  onBack?: () => void;
+  backLabel?: string;
 };
 
 /** How far the strip can still scroll each way, so an edge is only faded when
@@ -115,7 +118,7 @@ const NameBlock: React.FC<{ onClick?: () => void; title: string; children: React
 
 const StudentToolsBar: React.FC<Props> = ({
   studentName, profileIcon, tabs, activeId, onSelect, inSession = false, stickyTop, barRef,
-  accent = 'teal', onNameClick,
+  accent = 'teal', onNameClick, onBack, backLabel = 'Back',
 }) => {
   const amber = accent === 'amber';
   const stripRef = useRef<HTMLDivElement>(null);
@@ -156,6 +159,19 @@ const StudentToolsBar: React.FC<Props> = ({
       style={{ top: stickyTop }}
     >
       <div className="flex items-stretch">
+        {/* ── Back to the list (phones: the arrow alone) ── */}
+        {onBack && (
+          <>
+            <button type="button" onClick={onBack} aria-label={backLabel} title={backLabel}
+              className="flex-shrink-0 flex items-center gap-1.5 ps-2.5 pe-2 sm:pe-3 my-1.5 ms-1 rounded-lg text-sm font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-gray-700/70 dark:hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 rtl:rotate-180">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              </svg>
+              <span className="hidden sm:inline whitespace-nowrap">{backLabel}</span>
+            </button>
+            <span className="w-px self-stretch my-2 bg-slate-200 dark:bg-gray-700 flex-shrink-0" />
+          </>
+        )}
         {/* ── Whose lesson this is ── */}
         <NameBlock onClick={onNameClick} title={studentName}>
           <span className={`relative flex-shrink-0 rounded-full p-[2px] bg-gradient-to-br ${amber
