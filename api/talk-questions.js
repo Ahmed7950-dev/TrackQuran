@@ -20,6 +20,10 @@ const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-la
 const MAX_VERBS = 30;
 const MAX_WORDS = 80;
 const clip = (s, n) => String(s ?? '').slice(0, n);
+const AR = /[\u0600-\u06FF]/;
+const LATIN = /[A-Za-z]{2,}/;
+/** Persian/Urdu letters the model sometimes slips in, as Arabic ones. */
+const fixLetters = s => String(s ?? '').replace(/\u06CC/g, '\u064A').replace(/\u06A9/g, '\u0643').replace(/\u06C1/g, '\u0647');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -43,7 +47,7 @@ export default async function handler(req, res) {
     ? 'Modern Standard Arabic (fusha)'
     : 'Palestinian colloquial Arabic (spoken Levantine, NOT fusha). Use everyday Palestinian words like shu, wen, emta, kif, ma3 min, lesh, mbareh, bukra, kul yom';
   const writing = script === 'arabic'
-    ? 'Write the questions and hints in Arabic script.' + (variety === 'msa' ? ' Add the vowel marks needed to read the verb forms.' : ' Spell the way the student\'s own forms are spelled.')
+    ? 'Write the questions and hints in Arabic script ONLY: no Latin letters at all, not even for one word, and only Arabic letters (ي not ی, ك not ک).' + (variety === 'msa' ? ' Add the vowel marks needed to read the verb forms.' : ' Spell the way the student\'s own forms are spelled.')
     : 'Write the questions and hints in Latin transliteration ONLY (no Arabic script), copying the spelling style of the student\'s forms exactly (same letters for ḥ, 3, kh, gh, long vowels).';
   const focusLine = focus === 'past'
     ? 'Every question asks about the past, so the answer uses a past form.'
@@ -77,9 +81,15 @@ Reply with JSON only, in this shape:
 {"questions":[{"q":"...","en":"...","hint":"...","uses":["to write","kitab"]}]}`;
 
   try {
+    // Google often answers 503 "busy" for a few seconds at a time: go round
+    // the models up to three times, waiting a little longer each round.
     let response = null;
     const tried = [];
-    for (const model of MODELS) {
+    const started = Date.now();
+    rounds: for (let round = 0; round < 3; round++) {
+     if (round > 0) await new Promise(r => setTimeout(r, round * 2500));
+     for (const model of MODELS) {
+      if (Date.now() - started > 45000) break rounds;
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,9 +98,10 @@ Reply with JSON only, in this shape:
           generationConfig: { responseMimeType: 'application/json', temperature: 1 },
         }),
       });
-      if (![404, 429, 500, 503].includes(response.status)) break;   // gone or busy: try the next model
+      if (![404, 429, 500, 503].includes(response.status)) break rounds;   // answered (or a real error)
       const why = await response.clone().json().catch(() => ({}));
       tried.push(`${model} ${response.status} ${String(why?.error?.status ?? '')} ${String(why?.error?.message ?? '').slice(0, 140)}`);
+     }
     }
     if (!response.ok) {
       console.error('talk-questions Gemini error:', response.status, await response.text());
@@ -114,7 +125,9 @@ Reply with JSON only, in this shape:
         q: clip(q?.q ?? q?.question, 200).trim(), en: clip(q?.en ?? q?.english, 200).trim(), hint: clip(q?.hint, 120).trim(),
         uses: (Array.isArray(q?.uses) ? q.uses : []).slice(0, 4).map(u => clip(u, 40)),
       }))
-      .filter(q => q.q);
+      .map(q => ({ ...q, q: fixLetters(q.q), hint: fixLetters(q.hint), uses: q.uses.map(fixLetters) }))
+      // the student reads one script: drop a question written in the other one
+      .filter(q => q.q && (script === 'arabic' ? AR.test(q.q) && !LATIN.test(q.q) : !AR.test(q.q)));
     if (!questions.length) {
       const why = data?.candidates?.[0]?.finishReason ?? data?.promptFeedback?.blockReason ?? 'empty';
       console.error('talk-questions unreadable reply:', why, text.slice(0, 500));
