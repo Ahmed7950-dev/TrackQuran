@@ -85,7 +85,10 @@ const FreeTalkQuestions: React.FC<{
   const load = useCallback((f: Focus) => {
     const mine = ++run.current;
     setQuestions(null); setError(null); setIdx(0); setShowHint(false); setShowEn(false);
-    void fetchQuestions(verbs, words, variety, script, f).then(res => {
+    // Google is sometimes busy for a moment: one quiet retry before showing an error.
+    void fetchQuestions(verbs, words, variety, script, f)
+      .then(res => (typeof res === 'string' && mine === run.current ? fetchQuestions(verbs, words, variety, script, f) : res))
+      .then(res => {
       if (mine !== run.current) return;   // a newer request replaced this one
       if (typeof res === 'string') setError(res); else setQuestions(res);
     });

@@ -56,6 +56,7 @@ The point is to make the student SPEAK: each question must need an answer that u
 
 Rules:
 - Use ONLY verbs from the list below, and build each question with the student's own "you" forms where given (copy them exactly). Do not use other verbs in the question if you can avoid it.
+- The question talks TO the student, so its verb is a "you" form (or a question about he/she/they). Never put the "I" form in the question: the "I" form belongs in the hint, the answer.
 - Prefer the student's words for the nouns. Do not bring in rare words they do not know.
 - Questions must make sense in real life (no "did you eat the pen"). Ask about their day, family, home, work, school, food, plans, likes.
 - Questions are short: 3 to 9 words. Address the student as a male "you" unless the forms only give the female one.
