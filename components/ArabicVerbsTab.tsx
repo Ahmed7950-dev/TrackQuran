@@ -12,7 +12,9 @@
 //     in place: ←/→ through the pronouns, ↑/↓ through the tenses, only what
 //     was written; on a phone the same by swiping the card.
 //   · Students see the page from level 2 on, read-only. The tutor can always
-//     open it, sets it up once per student (script + variety), and edits.
+//     open it, picks the script once per student, and edits. The variety
+//     comes from the student's details (what was chosen when they were added);
+//     only a student learning both gets a switch.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArabicStudent } from '../types';
@@ -50,6 +52,9 @@ function headword(v: ArabicVerb, script: VerbScript): string {
   return '';
 }
 
+const learnsBothOf = (s: ArabicStudent) => s.arabicDialects.includes('msa') && s.arabicDialects.includes('levantine');
+
+/** The variety from the student's details: Palestinian when they learn Levantine, else MSA. */
 function defaultVariety(s: ArabicStudent): VerbVariety {
   return s.arabicDialects.includes('levantine') || !s.arabicDialects.includes('msa') ? 'levantine' : 'msa';
 }
@@ -386,11 +391,11 @@ const VerbEditor: React.FC<{
   );
 };
 
-// ── First open, tutor: script + variety, once ───────────────────────────────
+// ── First open, tutor: the script, once ─────────────────────────────────────
 
 const Setup: React.FC<{ student: ArabicStudent; onDone: (p: VerbPrefs) => void }> = ({ student, onDone }) => {
   const [script, setScript] = useState<VerbScript>('arabic');
-  const [variety, setVariety] = useState<VerbVariety>(defaultVariety(student));
+  const variety = defaultVariety(student);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const go = async () => {
@@ -409,7 +414,7 @@ const Setup: React.FC<{ student: ArabicStudent; onDone: (p: VerbPrefs) => void }
         <div>
           <h2 className="text-[22px] font-extrabold text-slate-900 dark:text-slate-100">Set up Verbs for {student.name}</h2>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-500 dark:text-slate-400">
-            You choose this once for {student.name}. The variety can be switched later from the top of the tab.
+            You choose this once for {student.name}. The verbs follow the dialect in {student.name}'s details: {VARIETY_NAME[variety]}.
           </p>
         </div>
         <fieldset>
@@ -424,10 +429,6 @@ const Setup: React.FC<{ student: ArabicStudent; onDone: (p: VerbPrefs) => void }
               <span className="block mt-3 text-[22px] font-bold text-slate-900 dark:text-slate-100">katabt · baktob</span>
             </button>
           </div>
-        </fieldset>
-        <fieldset>
-          <legend className="mb-2.5 text-xs font-bold uppercase tracking-wider text-slate-500">Variety</legend>
-          <VarietySwitch value={variety} onChange={setVariety} />
         </fieldset>
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
         <div className="flex justify-end">
@@ -478,7 +479,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
     void getVerbPrefs(student.id).then(p => {
       if (!live) return;
       setPrefs(p);
-      if (p) setVariety(p.variety);
+      // The details decide; a saved switch only counts for a student who learns both.
+      setVariety(p && learnsBothOf(student) ? p.variety : defaultVariety(student));
     });
     return () => { live = false; };
   }, [student.id]);
@@ -490,8 +492,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
   useEffect(() => { reload(); }, [reload]);
 
   const script: VerbScript = prefs && prefs !== 'loading' ? prefs.script : 'arabic';
-  const learnsBoth = student.arabicDialects.includes('msa') && student.arabicDialects.includes('levantine');
-  const showSwitch = !studentMode || learnsBoth;
+  const learnsBoth = learnsBothOf(student);
+  const showSwitch = learnsBoth;
 
   const changeVariety = async (v: VerbVariety) => {
     setVariety(v); setOpen(null);
@@ -539,7 +541,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
     return <div className="flex justify-center py-16"><div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" /></div>;
   }
   if (!studentMode && prefs === null) {
-    return <Setup student={student} onDone={p => { setPrefs(p); setVariety(p.variety); }} />;
+    return <Setup student={student} onDone={p => { setPrefs(p); setVariety(defaultVariety(student)); }} />;
   }
   if (editing && !studentMode) {
     return (
@@ -575,7 +577,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, studentMode = false, unlocke
           <div className="flex items-center gap-2.5 flex-wrap">
             {showSwitch && <VarietySwitch value={variety} onChange={changeVariety} />}
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 px-2.5 py-1.5 rounded-full">
-              {script === 'arabic' ? 'Arabic script' : 'Transliteration'}
+              {!showSwitch && `${VARIETY_NAME[variety]} · `}{script === 'arabic' ? 'Arabic script' : 'Transliteration'}
             </span>
           </div>
         </div>
