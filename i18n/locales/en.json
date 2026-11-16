@@ -608,7 +608,8 @@
     "nextLessonTomorrow": "Tomorrow · {{time}}",
     "nextLessonDate": "{{date}} · {{time}}",
     "joinLesson": "Join Lesson",
-    "noMeetLink": "Your tutor has not generated the meeting link yet"
+    "noMeetLink": "Your tutor has not generated the meeting link yet",
+    "myPage": "My page"
   },
   "arabicDashboard": {
     "title": "Arabic Students",
@@ -809,7 +810,17 @@
     "wordCount_other": "{{count}} words learned",
     "teacherNoteTitle": "Teacher's note",
     "teacherNotePrivate": "(private — not shown to the student)",
-    "tabLessonsVocab": "Lessons Vocabulary"
+    "tabLessonsVocab": "Lessons Vocabulary",
+    "vocabTitle": "Vocabulary",
+    "vocabIntro": "Two collections, kept apart. Each one has its own words, games and flashcards.",
+    "vocabLessonWords": "Lesson words",
+    "vocabLessonWordsSub": "Every word in the course, lesson by lesson",
+    "vocabLists": "Word lists",
+    "vocabListsSub": "Lists made outside the lessons",
+    "vocabLearnt": "{{count}} learnt",
+    "vocabListCount": "{{count}} lists",
+    "vocabTotal": "{{count}} words in all",
+    "vocabChoose": "Which vocabulary"
   },
   "arabicStudentModal": {
     "editTitle": "Edit Student",

@@ -8,7 +8,7 @@
 // so the tutor sees everything in real-time.
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArabicStudent, LessonSession } from '../types';
 import { getStudentByShareToken, saveArabicStudent, getVocabWordCountsByLesson } from '../services/arabicService';
 import { getCustomVocabWordCount } from '../services/vocabularyService';
@@ -18,7 +18,6 @@ import NotificationCenter from './NotificationCenter';
 import ArabicStudentDetailPage from './ArabicStudentDetailPage';
 import AboutUsPage from './AboutUsPage';
 import ContactUsPage from './ContactUsPage';
-import VocabularyPracticePage from './VocabularyPracticePage';
 import Logo from './Logo';
 import Footer from './Footer';
 import { useI18n } from '../context/I18nProvider';
@@ -54,11 +53,26 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
   const [sessions, setSessions] = useState<LessonSession[]>([]);
   const [unifiedLessons, setUnifiedLessons] = useState<UnifiedLesson[]>([]);
   const [now, setNow] = useState(() => new Date());
-  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'vocabulary' | 'contact'>('lessons');
+  const [portalTab, setPortalTab] = useState<'lessons' | 'about' | 'contact'>('lessons');
   const [totalVocabCount, setTotalVocabCount] = useState<number>(0);
   const [theme, setTheme] = useState<AppTheme>(readTheme);
   useEffect(() => { applyTheme(theme); }, [theme]);
   const toggleTheme = () => setTheme(nextTheme);
+
+  // The student page's section bar sits right under this header: measure the
+  // header (notch padding included) and hand the page a sticky slot.
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerH, setHeaderH] = useState(64);
+  const [barHost, setBarHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderH(el.getBoundingClientRect().height);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, [student]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -117,8 +131,8 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
 
   /** The five places this portal goes. One row on a computer, two on a phone. */
   const PLACES = [
-    { key: 'lessons',    label: t('arabicPortal.lessons'),    short: t('arabicPortal.lessons') },
-    { key: 'vocabulary', label: t('arabicPortal.vocabulary'), short: 'Words' },
+    // The student's own page; its sections (Lessons, Vocabulary, …) are in the bar under the header.
+    { key: 'lessons',    label: t('arabicPortal.myPage'),     short: t('arabicPortal.myPage') },
     { key: 'about',      label: t('arabicPortal.aboutUs'),    short: 'About' },
   ] as const;
 
@@ -134,7 +148,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
       <LessonJoinPopup studentId={student.id} bookingKey={student.shareToken ?? undefined} bookingPortal="arabic" />
 
       {/* ── Header ── */}
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {/* ── One row on a computer: logo · the places · the name ── */}
         <div className="container mx-auto px-3 sm:px-6 lg:px-6 xl:px-8 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2">
           {backUrl && (
@@ -248,6 +262,9 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           </div>
         </nav>
       </header>
+      {portalTab === 'lessons' && (
+        <div ref={setBarHost} className="sticky z-[35]" style={{ top: headerH }} />
+      )}
 
       {/* ── Main content ── */}
       <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8 space-y-4">
@@ -316,9 +333,6 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
           <ContactUsPage />
         ) : portalTab === 'about' ? (
           <AboutUsPage />
-        ) : portalTab === 'vocabulary' ? (
-          <VocabularyPracticePage studentId={student.id} studentName={student.name}
-            selfPlay={{ teacherId: student.teacherId }} />
         ) : (
           <ArabicStudentDetailPage
             student={student}
@@ -328,6 +342,7 @@ const ArabicStudentPortal: React.FC<Props> = ({ token, switchPortal, onLogout })
             onDeleteStudent={() => {/* blocked in student mode */}}
             studentMode
             vocabCount={totalVocabCount}
+            toolbarHost={barHost}
           />
         )}
       </main>

@@ -558,7 +558,8 @@
     "nextLessonTomorrow": "غداً · {{time}}",
     "nextLessonDate": "{{date}} · {{time}}",
     "joinLesson": "انضم للدرس",
-    "noMeetLink": "لم يُنشئ معلمك رابط الاجتماع بعد"
+    "noMeetLink": "لم يُنشئ معلمك رابط الاجتماع بعد",
+    "myPage": "صفحتي"
   },
   "arabicDashboard": {
     "title": "طلاب العربية",
@@ -759,7 +760,17 @@
     "wordCount_other": "{{count}} كلمة مُتعلَّمة",
     "teacherNoteTitle": "ملاحظة المعلّم",
     "teacherNotePrivate": "(خاصة — لا تظهر للطالب)",
-    "tabLessonsVocab": "مفردات الدروس"
+    "tabLessonsVocab": "مفردات الدروس",
+    "vocabTitle": "المفردات",
+    "vocabIntro": "مجموعتان منفصلتان، لكل واحدة كلماتها وألعابها وبطاقاتها.",
+    "vocabLessonWords": "كلمات الدروس",
+    "vocabLessonWordsSub": "كل كلمات المنهج، درساً درساً",
+    "vocabLists": "قوائم الكلمات",
+    "vocabListsSub": "قوائم خارج الدروس",
+    "vocabLearnt": "{{count}} محفوظة",
+    "vocabListCount": "{{count}} قوائم",
+    "vocabTotal": "{{count}} كلمة في المجموع",
+    "vocabChoose": "أي مفردات"
   },
   "arabicStudentModal": {
     "editTitle": "تعديل الطالب",

@@ -821,10 +821,10 @@ const App: React.FC = () => {
   const [currentStudentView, setCurrentStudentView] = useState<'details' | 'mistakes'>(
     () => (localStorage.getItem('nav_currentStudentView') === 'mistakes' ? 'mistakes' : 'details'),
   );
-  type ActiveTab = 'main' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'contactUs' | 'tajweed' | 'vocabulary' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest' | 'tadabburLab' | 'media';
+  type ActiveTab = 'main' | 'alphabetTrainer' | 'qaedah' | 'aboutUs' | 'contactUs' | 'tajweed' | 'calendar' | 'accountSettings' | 'homework' | 'bill' | 'mistakesStudy' | 'fluencyTest' | 'tadabburLab' | 'media';
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     const saved = localStorage.getItem('nav_activeTab');
-    const allowed: ActiveTab[] = ['main', 'alphabetTrainer', 'qaedah', 'aboutUs', 'contactUs', 'tajweed', 'vocabulary', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab', 'media'];
+    const allowed: ActiveTab[] = ['main', 'alphabetTrainer', 'qaedah', 'aboutUs', 'contactUs', 'tajweed', 'calendar', 'accountSettings', 'homework', 'bill', 'mistakesStudy', 'fluencyTest', 'tadabburLab', 'media'];
     return saved && (allowed as string[]).includes(saved) ? (saved as ActiveTab) : 'main';
   });
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -857,7 +857,10 @@ const App: React.FC = () => {
     ro.observe(el);
     measure();
     return () => ro.disconnect();
-  }, [currentUser]);
+  }, [currentUser, subjectMode]);
+
+  // The Arabic student page puts its section bar here, under the Arabic header.
+  const [arabicBarHost, setArabicBarHost] = useState<HTMLDivElement | null>(null);
 
   // Measure the thin tools bar height so the surah nav sits exactly below it
   const thinBarRef = useRef<HTMLDivElement>(null);
@@ -1906,7 +1909,7 @@ const App: React.FC = () => {
     return (
       <div className="bg-slate-100 dark:bg-gray-900 min-h-screen font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300 flex flex-col">
         {/* Arabic header */}
-        <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <header ref={headerRef} className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-4">
             <button onClick={() => { setSelectedArabicStudentId(null); }} className="cursor-pointer hover:opacity-80 transition-opacity" aria-label="Return to Arabic dashboard">
               <Logo />
@@ -1935,10 +1938,6 @@ const App: React.FC = () => {
                   </span>
                 )}
               </button>
-              <button
-                onClick={() => setActiveTab(tab => tab === 'vocabulary' ? 'main' : 'vocabulary')}
-                className={`text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500' : 'text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-orange-500'}`}
-              >Vocabulary</button>
               {/* Switch to Quran */}
               <button
                 onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); setActiveTab('main'); }}
@@ -2026,13 +2025,16 @@ const App: React.FC = () => {
                   <span>Calendar</span>
                   {pendingBookingCount > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingBookingCount}</span>}
                 </button>
-                <button onClick={() => { setActiveTab(tab => tab === 'vocabulary' ? 'main' : 'vocabulary'); setIsMobileNavOpen(false); }} className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${activeTab === 'vocabulary' ? 'text-teal-600 dark:text-orange-500 bg-teal-50 dark:bg-orange-900/10' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>Vocabulary</button>
                 <div className="mx-5 my-1 border-t border-slate-100 dark:border-gray-700" />
                 <button onClick={() => { handleSelectSubject('quran'); setSelectedArabicStudentId(null); setActiveTab('main'); setIsMobileNavOpen(false); }} className="flex items-center gap-3 px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">{t('header.switchToQuran')}</button>
               </nav>
             </div>
           )}
         </header>
+        {/* The open student's section bar lands here (ArabicStudentDetailPage portals it in). */}
+        {selectedArabicStudent && activeTab === 'main' && (
+          <div ref={setArabicBarHost} className="sticky z-[35] no-print" style={{ top: headerHeight }} />
+        )}
         <main className="container mx-auto flex-grow p-4 sm:p-6 lg:p-8">
           {activeTab === 'accountSettings' ? (
             <AccountSettingsPage
@@ -2056,16 +2058,6 @@ const App: React.FC = () => {
               arabicStudents={arabicStudents}
               quranStudents={students}
             />
-          ) : activeTab === 'vocabulary' ? (
-            selectedArabicStudent ? (
-              <VocabularyPracticePage studentId={selectedArabicStudent.id} studentName={selectedArabicStudent.name} />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <p className="text-4xl mb-4">📚</p>
-                <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">Vocabulary Practice</p>
-                <p className="text-slate-500 dark:text-slate-400">Select a student from the dashboard to view their vocabulary lists.</p>
-              </div>
-            )
           ) : selectedArabicStudent ? (
             <ArabicStudentDetailPage
               student={selectedArabicStudent}
@@ -2078,6 +2070,7 @@ const App: React.FC = () => {
               onHwDeepLinkConsumed={() => setHwDeepLink(null)}
               isArchived={archive.arabic.includes(selectedArabicStudent.id)}
               onToggleArchive={archived => handleToggleArchive('arabic', selectedArabicStudent.id, archived)}
+              toolbarHost={arabicBarHost}
             />
           ) : (
             <ArabicDashboard

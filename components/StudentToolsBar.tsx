@@ -51,6 +51,10 @@ type Props = {
   stickyTop: number;
   /** App measures this bar to place the surah nav below it. */
   barRef?: React.RefObject<HTMLDivElement>;
+  /** The Arabic side wears amber; the Quran side keeps teal. */
+  accent?: 'teal' | 'amber';
+  /** Tapping the student's name (the Arabic side opens their details sheet). */
+  onNameClick?: () => void;
 };
 
 /** How far the strip can still scroll each way, so an edge is only faded when
@@ -88,6 +92,10 @@ const REST = 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 hover:text-s
 const ON_DEFAULT = 'bg-teal-100/70 text-teal-800 ring-1 ring-teal-600/20 ' +
                    'dark:bg-orange-400/15 dark:text-orange-300 dark:ring-orange-400/30';
 
+/** The Arabic side's open page: the section's amber, in both lights. */
+const ON_AMBER = 'bg-amber-100/80 text-amber-800 ring-1 ring-amber-600/25 ' +
+                 'dark:bg-amber-400/15 dark:text-amber-300 dark:ring-amber-400/30';
+
 const ON_HOMEWORK = 'bg-violet-100/70 text-violet-800 ring-1 ring-violet-600/20 ' +
                     'dark:bg-violet-400/15 dark:text-violet-300 dark:ring-violet-400/30';
 
@@ -96,9 +104,20 @@ const QURAN_ON = 'bg-green-500 text-white shadow-sm';
 const QURAN_OFF = 'bg-green-50 text-green-700 ring-1 ring-green-600/20 hover:bg-green-100 ' +
                   'dark:bg-green-900/30 dark:text-green-300 dark:ring-green-400/20 dark:hover:bg-green-900/50';
 
+/** The avatar and name: a plain block, or a button when it opens something. */
+const NameBlock: React.FC<{ onClick?: () => void; title: string; children: React.ReactNode }> = ({ onClick, title, children }) => {
+  const cls = 'flex items-center gap-2.5 flex-shrink-0 ps-3 pe-2.5 py-1.5';
+  return onClick
+    ? <button type="button" onClick={onClick} title={title} aria-haspopup="dialog"
+        className={`${cls} rounded-lg hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50`}>{children}</button>
+    : <div className={cls} title={title}>{children}</div>;
+};
+
 const StudentToolsBar: React.FC<Props> = ({
   studentName, profileIcon, tabs, activeId, onSelect, inSession = false, stickyTop, barRef,
+  accent = 'teal', onNameClick,
 }) => {
+  const amber = accent === 'amber';
   const stripRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -138,12 +157,14 @@ const StudentToolsBar: React.FC<Props> = ({
     >
       <div className="flex items-stretch">
         {/* ── Whose lesson this is ── */}
-        <div className="flex items-center gap-2.5 flex-shrink-0 ps-3 pe-2.5 py-1.5" title={studentName}>
-          <span className="relative flex-shrink-0 rounded-full p-[2px] bg-gradient-to-br from-teal-400 to-emerald-600 dark:from-orange-400 dark:to-amber-600">
+        <NameBlock onClick={onNameClick} title={studentName}>
+          <span className={`relative flex-shrink-0 rounded-full p-[2px] bg-gradient-to-br ${amber
+            ? 'from-amber-300 to-amber-600 dark:from-amber-400 dark:to-orange-600'
+            : 'from-teal-400 to-emerald-600 dark:from-orange-400 dark:to-amber-600'}`}>
             <span className="flex items-center justify-center w-[30px] h-[30px] rounded-full overflow-hidden bg-white dark:bg-gray-800">
               {profileIcon
                 ? <StudentProfileIcon src={profileIcon} size={28} mode="always" />
-                : <span className="text-[13px] font-extrabold text-teal-700 dark:text-orange-300">
+                : <span className={`text-[13px] font-extrabold ${amber ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-orange-300'}`}>
                     {studentName.charAt(0).toUpperCase()}
                   </span>}
             </span>
@@ -157,7 +178,7 @@ const StudentToolsBar: React.FC<Props> = ({
           <span className="max-w-[108px] sm:max-w-[190px] truncate text-[14px] sm:text-[15px] font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
             {studentName}
           </span>
-        </div>
+        </NameBlock>
 
         <span className="w-px self-stretch my-2 bg-slate-200 dark:bg-gray-700 flex-shrink-0" />
 
@@ -173,7 +194,7 @@ const StudentToolsBar: React.FC<Props> = ({
               const primary = tab.tone === 'primary';
               const look = primary
                 ? (on ? QURAN_ON : QURAN_OFF)
-                : on ? (tab.tone === 'homework' ? ON_HOMEWORK : ON_DEFAULT)
+                : on ? (tab.tone === 'homework' ? ON_HOMEWORK : amber ? ON_AMBER : ON_DEFAULT)
                      : REST;
               return (
                 <button
@@ -187,7 +208,7 @@ const StudentToolsBar: React.FC<Props> = ({
                   {tab.label}
                   {!!tab.badge && tab.badge > 0 && (
                     <span className={`min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-extrabold leading-none inline-flex items-center justify-center text-white ${
-                      tab.tone === 'homework' ? 'bg-violet-600' : 'bg-rose-500'
+                      tab.tone === 'homework' ? 'bg-violet-600' : amber ? 'bg-amber-500' : 'bg-rose-500'
                     }`}>
                       {tab.badge}
                     </span>

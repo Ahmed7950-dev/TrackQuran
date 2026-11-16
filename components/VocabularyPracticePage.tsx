@@ -69,9 +69,12 @@ interface Props {
   /** Set when the STUDENT is the one looking: the card game then deals against
    *  the computer instead of making a link for someone to send. */
   selfPlay?: { teacherId: string };
+  /** Inside the student's Vocabulary tab: take the tab's width instead of
+   *  centring a narrow column of its own. */
+  embedded?: boolean;
 }
 
-const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'your student', selfPlay }) => {
+const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'your student', selfPlay, embedded = false }) => {
   // ── data ──────────────────────────────────────────────────────────────────
   const [lists, setLists] = useState<VocabList[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -601,7 +604,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   }
 
   return (
-    <div className="vocab-reading-mode max-w-4xl mx-auto space-y-3">
+    <div className={`vocab-reading-mode space-y-3 ${embedded ? '' : 'max-w-4xl mx-auto'}`}>
 
       {/* ═══════════════ OVERLAYS ═══════════════ */}
 

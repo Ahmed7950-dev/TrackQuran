@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ArabicStudent, ArabicLesson, ArabicCourseDialect, WeeklySlot, ArabicExamUnlock, ArabicExamAttempt, ArabicLessonLog } from '../types';
 import { useI18n } from '../context/I18nProvider';
 import StudentProfileIcon from './StudentProfileIcon';
@@ -25,7 +26,8 @@ import ArabicHomeworkTab from './ArabicHomeworkTab';
 import ArabicGrammarTab from './ArabicGrammarTab';
 import { listVocabHomework, getVocabRevisionDays, VocabRevisionDay } from '../services/vocabHomeworkService';
 import { homeworkStatus } from '../services/arabicHomeworkService';
-import ArabicLessonsVocabularyTab from './ArabicLessonsVocabularyTab';
+import ArabicVocabularyHub from './ArabicVocabularyHub';
+import StudentToolsBar, { type ToolsTab } from './StudentToolsBar';
 import ArabicCreateHomeworkTab from './ArabicCreateHomeworkTab';
 import ExamMarkingPage from './ExamMarkingPage';
 import LeaderboardPage from './LeaderboardPage';
@@ -51,6 +53,10 @@ interface Props {
   /** Archive state for this student (tutor-private organisation). */
   isArchived?: boolean;
   onToggleArchive?: (archived: boolean) => void;
+  /** Where the section bar goes: a sticky slot the page's owner placed right
+   *  under its site header (App for the tutor, the portal for the student).
+   *  Without one the bar sits sticky at the top of this page. */
+  toolbarHost?: HTMLElement | null;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -442,7 +448,7 @@ const ArabicLessonCalendar: React.FC<ArabicLessonCalendarProps> = ({ logs, lesso
 const ArabicStudentDetailPage: React.FC<Props> = ({
   student, teacherId, onBack, onUpdateStudent, onDeleteStudent, studentMode = false, vocabCount = 0,
   isArchived = false, onToggleArchive,
-  hwDeepLink, onHwDeepLinkConsumed,
+  hwDeepLink, onHwDeepLinkConsumed, toolbarHost,
 }) => {
   const { t } = useI18n();
   const [editOpen, setEditOpen]       = useState(false);
@@ -631,7 +637,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
   const TABS: Array<{ key: 'lessons' | 'grammar' | 'schedule' | 'exams' | 'vocabulary' | 'homework' | 'createHomework'; label: string; mobileLabel: string }> = [
     { key: 'lessons',  label: `${t('arabicPortal.lessons')} (${studentLessonCount})`,  mobileLabel: `${t('arabicPortal.lessons')} (${studentLessonCount})` },
     { key: 'grammar', label: 'Grammar', mobileLabel: 'Grammar' },
-    { key: 'vocabulary', label: t('arabicStudentDetail.tabLessonsVocab'), mobileLabel: t('arabicStudentDetail.tabLessonsVocab') },
+    { key: 'vocabulary', label: t('arabicPortal.vocabulary'), mobileLabel: t('arabicPortal.vocabulary') },
     { key: 'homework', label: 'Homework', mobileLabel: 'Homework' },
     { key: 'schedule', label: 'Schedule', mobileLabel: 'Schedule' },
     ...(studentMode ? [] : [
@@ -672,52 +678,49 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
     return `in ${d} day${d === 1 ? '' : 's'}`;
   })();
 
-  /** A bar slot is 70px wide: these names fit on one line there. */
-  const PHONE_LABEL: Record<string, string> = {
-    lessons: 'Lessons', vocabulary: 'Words', homework: 'Homework', createHomework: 'Create', schedule: 'Schedule', exams: 'Exams',
-  };
-
-  /** One row of the rail's section list. */
-  const railLink = (key: typeof activeSection, label: string, count: string | null, icon: React.ReactNode, accent = false) => {
-    const on = activeSection === key;
-    return (
-      <button key={key} onClick={() => setActiveSection(key)}
-        className={`w-full flex items-center gap-3 h-11 px-3 rounded-xl text-sm transition-colors ${
-          on ? 'bg-slate-100 dark:bg-gray-700 font-bold text-slate-900 dark:text-white'
-             : 'font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-700/60'}`}>
-        <span className="flex-shrink-0 w-[18px] h-[18px]">{icon}</span>
-        <span className="truncate">{label}</span>
-        {count && (
-          <span className={`ms-auto text-xs font-semibold ${accent
-            ? 'min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center bg-amber-500 text-white font-extrabold'
-            : 'text-slate-400 dark:text-slate-500'}`}>{count}</span>
-        )}
-      </button>
-    );
-  };
+  /** The section bar's pills. Homework carries the count of open homework. */
+  const toolTabs: ToolsTab[] = TABS.map(tab => ({
+    id: tab.key,
+    label: tab.label.replace(/\s*\(\d+\)$/, ''),
+    icon: <span className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4">{RAIL_ICON[tab.key]}</span>,
+    badge: tab.key === 'homework' ? openHomework : undefined,
+  }));
 
   return (
     <div>
-      <div className="grid gap-5 lg:grid-cols-[292px_minmax(0,1fr)] items-start">
+      {/* ── The sections: a second bar under the site header, like the Quran side ── */}
+      {(() => {
+        const bar = (
+          <StudentToolsBar
+            accent="amber"
+            stickyTop={0}
+            studentName={student.name}
+            profileIcon={student.profileIcon}
+            tabs={toolTabs}
+            activeId={activeSection}
+            onSelect={id => setActiveSection(id as typeof activeSection)}
+            onNameClick={() => setSheetOpen(true)}
+          />
+        );
+        return toolbarHost ? createPortal(bar, toolbarHost) : <div className="sticky top-0 z-[35] -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-4">{bar}</div>;
+      })()}
 
-        {/* ── The rail: who this is, what happens next, and where to go ── */}
-        <div className="flex flex-col gap-3.5 lg:sticky lg:top-4">
+        {/* ── The pane ── */}
+        <div className="min-w-0 flex flex-col gap-4">
 
-          <div className="flex items-center gap-2">
-            {!studentMode ? (
-              <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                </svg>
-                {t('arabicStudentDetail.allStudents')}
-              </button>
-            ) : (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: '#E4EDE8', color: '#1E4336' }}>
-                🎓 {t('arabicStudentDetail.studentPortal')}
-              </span>
-            )}
-          </div>
+        {/* the way back to the list (the tutor's only; the portal has no list) */}
+        {!studentMode && (
+          <button onClick={onBack} className="self-start flex items-center gap-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 rtl:rotate-180">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            {t('arabicStudentDetail.allStudents')}
+          </button>
+        )}
 
+      {/* ── Lessons opens with who this is, what happens next, and the private note ── */}
+      {activeSection === 'lessons' && (
+        <div className={`grid gap-3.5 md:grid-cols-2 ${!studentMode && teacherNote.trim() ? 'xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)]' : 'xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'}`}>
           {/* identity + how far through each level — tap it for everything else */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-5">
             <button onClick={() => setSheetOpen(true)} aria-haspopup="dialog"
@@ -769,7 +772,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
           </div>
 
           {/* the next lesson, and the one action that belongs to it */}
-          <div className="rounded-2xl p-4" style={{ background: '#14161A' }}>
+          <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#14161A' }}>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.12em]" style={{ color: '#9BA3A0' }}>Next lesson</p>
             {nextLesson ? (
               <>
@@ -781,11 +784,12 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             ) : (
               <p className="mt-1.5 text-sm font-semibold" style={{ color: '#B6BDB9' }}>Nothing on the calendar yet</p>
             )}
+            {!studentMode && <span className="block h-3.5 flex-shrink-0" />}
             {!studentMode && (
               <button
                 onClick={meetState === 'idle' ? handleMeetNow : undefined}
                 title={meetState === 'started' ? 'Meet started — link copied, student notified' : 'Start a Google Meet now'}
-                className="mt-3.5 w-full h-11 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-colors"
+                className="mt-auto w-full h-11 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition-colors"
                 style={meetState === 'started' ? { background: '#CFE6DC', color: '#06231B' } : { background: '#4F9E85', color: '#06231B' }}>
                 {meetState === 'loading' ? (
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -799,23 +803,9 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             )}
           </div>
 
-          {/* where to go — the old tab row, stood up on its side */}
-          <nav className="hidden lg:flex bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-1.5 flex-col gap-0.5">
-            {TABS.map(tab => railLink(
-              tab.key,
-              tab.label.replace(/\s*\(\d+\)$/, ''),
-              tab.key === 'lessons' ? String(studentLessonCount)
-                : tab.key === 'vocabulary' && vocabCount > 0 ? String(vocabCount)
-                : tab.key === 'homework' && openHomework > 0 ? String(openHomework)
-                : null,
-              RAIL_ICON[tab.key],
-              tab.key === 'homework',
-            ))}
-          </nav>
-
           {/* the note nobody else sees */}
           {!studentMode && teacherNote.trim() && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4">
+            <div className="md:col-span-2 xl:col-span-1 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-gray-700 p-4">
               <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
                 {t('arabicStudentDetail.teacherNoteTitle')}
               </p>
@@ -823,9 +813,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
             </div>
           )}
         </div>
-
-        {/* ── The pane ── */}
-        <div className="min-w-0 flex flex-col gap-4 max-lg:pb-24">
+      )}
 
       {/* ── Lessons section — the history first, then the library ── */}
       {activeSection === 'lessons' && (
@@ -855,7 +843,7 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
       {activeSection === 'grammar' && <ArabicGrammarTab lessons={dialectLessons} studentMode={studentMode} />}
 
       {activeSection === 'vocabulary' && (
-        <ArabicLessonsVocabularyTab
+        <ArabicVocabularyHub
           lessons={dialectLessons}
           student={student}
           studentMode={studentMode}
@@ -970,32 +958,6 @@ const ArabicStudentDetailPage: React.FC<Props> = ({
         )}
 
         </div>
-      </div>
-
-      {/* ── Phones: the sections sit under the thumb, not above the content ── */}
-      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
-        <div className="px-1.5 pt-1.5 grid gap-0.5"
-          style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
-          {TABS.map(tab => {
-            const on = activeSection === tab.key;
-            return (
-              <button key={tab.key} onClick={() => setActiveSection(tab.key)}
-                className={`relative h-[54px] rounded-xl flex flex-col items-center justify-center gap-1 transition-colors ${
-                  on ? 'bg-slate-100 dark:bg-gray-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-                {tab.key === 'homework' && openHomework > 0 && (
-                  <span aria-label={`${openHomework} homework waiting`}
-                    className="absolute top-1.5 right-1/2 translate-x-[14px] min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
-                    {openHomework}
-                  </span>
-                )}
-                {RAIL_ICON[tab.key]}
-                <span className={`text-[10.5px] leading-none ${on ? 'font-extrabold' : 'font-semibold'}`}>{PHONE_LABEL[tab.key] ?? tab.mobileLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
 
       {/* ── The student sheet: who they are, and everything you can do ── */}
       {sheetOpen && (

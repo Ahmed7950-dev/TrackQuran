@@ -558,7 +558,8 @@
     "nextLessonTomorrow": "Yarın · {{time}}",
     "nextLessonDate": "{{date}} · {{time}}",
     "joinLesson": "Derse Katıl",
-    "noMeetLink": "Öğretmeniniz henüz toplantı bağlantısı oluşturmadı"
+    "noMeetLink": "Öğretmeniniz henüz toplantı bağlantısı oluşturmadı",
+    "myPage": "Sayfam"
   },
   "arabicDashboard": {
     "title": "Arapça Öğrencileri",
@@ -759,7 +760,17 @@
     "wordCount_other": "{{count}} kelime öğrenildi",
     "teacherNoteTitle": "Öğretmen notu",
     "teacherNotePrivate": "(özel — öğrenciye gösterilmez)",
-    "tabLessonsVocab": "Ders Kelimeleri"
+    "tabLessonsVocab": "Ders Kelimeleri",
+    "vocabTitle": "Kelimeler",
+    "vocabIntro": "Birbirinden ayrı iki koleksiyon. Her birinin kendi kelimeleri, oyunları ve kartları var.",
+    "vocabLessonWords": "Ders kelimeleri",
+    "vocabLessonWordsSub": "Programdaki bütün kelimeler, ders ders",
+    "vocabLists": "Kelime listeleri",
+    "vocabListsSub": "Dersler dışında hazırlanan listeler",
+    "vocabLearnt": "{{count}} öğrenildi",
+    "vocabListCount": "{{count}} liste",
+    "vocabTotal": "toplam {{count}} kelime",
+    "vocabChoose": "Hangi kelimeler"
   },
   "arabicStudentModal": {
     "editTitle": "Öğrenciyi Düzenle",
