@@ -56,6 +56,14 @@ function headword(v: ArabicVerb, script: VerbScript): string {
 const learnsBothOf = (s: ArabicStudent) => s.arabicDialects.includes('msa') && s.arabicDialects.includes('levantine');
 
 /** The variety from the student's details: Palestinian when they learn Levantine, else MSA. */
+/** The meaning is stored as "to write"; the editor shows "To" fixed and keeps
+ *  only the verb, and the cards show "To Write". */
+const verbPart = (meaning: string) => meaning.replace(/^\s*to\s+/i, '').trim();
+const showMeaning = (meaning: string) => {
+  const v = verbPart(meaning);
+  return v ? `To ${v.charAt(0).toUpperCase()}${v.slice(1)}` : '';
+};
+
 function defaultVariety(s: ArabicStudent): VerbVariety {
   return s.arabicDialects.includes('levantine') || !s.arabicDialects.includes('msa') ? 'levantine' : 'msa';
 }
@@ -133,7 +141,7 @@ const VerbCard: React.FC<{
         onKeyDown={onKeyDown}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        aria-label={`${verb.meaning}${head ? `, ${head}` : ''}`}
+        aria-label={`${showMeaning(verb.meaning)}${head ? `, ${head}` : ''}`}
         aria-expanded={!!pos}
         className={`w-full text-start rounded-2xl bg-white dark:bg-gray-800 px-4 py-3.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${pos ? 'h-[150px] sm:h-[128px]' : 'h-[112px] sm:h-[128px]'} ${ring} ${match === 'dim' ? 'opacity-25 grayscale' : ''}`}
         style={{ touchAction: pos ? 'none' : 'pan-y' }}
@@ -141,7 +149,7 @@ const VerbCard: React.FC<{
         {!pos ? (
           <span className="flex flex-col-reverse justify-between sm:flex-row sm:items-center sm:justify-start gap-1.5 sm:gap-3 h-full">
             <span className="sm:flex-1 min-w-0">
-              <span className="block text-[13px] font-bold text-slate-600 dark:text-slate-300 truncate">{verb.meaning}</span>
+              <span className="block text-[13px] font-bold text-slate-600 dark:text-slate-300 truncate">{showMeaning(verb.meaning)}</span>
               <span className="flex gap-1 mt-2">
                 {TENSES.map(t => (
                   <span key={t} className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded-full ${tenses.includes(t)
@@ -161,7 +169,7 @@ const VerbCard: React.FC<{
                   ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-300'}`}>{TENSE_NAME[t]}</span>
               ))}
               <span className="flex-1" />
-              <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[40%]">{verb.meaning}</span>
+              <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[40%]">{showMeaning(verb.meaning)}</span>
             </span>
             <span dir={ar ? 'rtl' : 'ltr'} className="flex-1 flex items-center justify-between gap-2 min-h-0">
               <span className="px-2.5 py-0.5 rounded-full border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300 font-bold"
@@ -183,7 +191,7 @@ const VerbCard: React.FC<{
         )}
       </button>
       {pos && onEdit && (
-        <button type="button" onClick={onEdit} aria-label={`Edit ${verb.meaning}`}
+        <button type="button" onClick={onEdit} aria-label={`Edit ${showMeaning(verb.meaning)}`}
           className="absolute -top-2 -end-2 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-slate-200 dark:border-gray-600 shadow flex items-center justify-center text-slate-500 hover:text-amber-700">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.86 4.49 1.69-1.69a1.875 1.875 0 1 1 2.65 2.65L6.83 19.82a4.5 4.5 0 0 1-1.9 1.13L2 22l1.05-2.93a4.5 4.5 0 0 1 1.13-1.9L16.86 4.49Z" /></svg>
         </button>
@@ -207,7 +215,8 @@ const VerbEditor: React.FC<{
   onDone: (changed: boolean) => void;
 }> = ({ initial, variety, script, teacherId, student, studentToken, onDone }) => {
   const ar = script === 'arabic';
-  const [meaning, setMeaning] = useState(initial?.meaning ?? '');
+  // Only the verb: "To" is fixed in front of the box.
+  const [meaning, setMeaning] = useState(initial ? verbPart(initial.meaning) : '');
   const [tables, setTables] = useState<Partial<Record<TenseKey, VerbTable>>>(() =>
     initial ? JSON.parse(JSON.stringify(initial.conjugations)) : { past: emptyTable() });
   const [busy, setBusy] = useState(false);
@@ -236,7 +245,7 @@ const VerbEditor: React.FC<{
     .some(p => cellText(tables[t], p.key, script) || (tables[t]!.cells[p.key]?.[ar ? 'tr' : 'ar'] ?? '').trim()));
 
   const save = async () => {
-    if (!meaning.trim()) { setError('Write the meaning in English first.'); return; }
+    if (!verbPart(meaning)) { setError('Write the meaning in English first.'); return; }
     if (!anyFilled) { setError('Fill at least one cell.'); return; }
     // Keep only the cells of the columns and tables that are showing.
     const clean: Partial<Record<TenseKey, VerbTable>> = {};
@@ -252,7 +261,7 @@ const VerbEditor: React.FC<{
       clean[t] = { dual: tb.dual && hasDual(variety), plural: tb.plural, cells };
     }
     setBusy(true); setError(null);
-    const res = await saveVerb({ id: initial?.id, teacherId, studentId: student.id, variety, meaning, conjugations: clean }, studentToken);
+    const res = await saveVerb({ id: initial?.id, teacherId, studentId: student.id, variety, meaning: `to ${verbPart(meaning)}`, conjugations: clean }, studentToken);
     setBusy(false);
     if (typeof res === 'string') { setError(`Not saved: ${res}`); return; }
     onDone(true);
@@ -365,8 +374,13 @@ const VerbEditor: React.FC<{
 
       <label className="flex flex-col gap-1.5 max-w-[520px] text-[13px] font-bold text-slate-700 dark:text-slate-200">
         Meaning in English
-        <input value={meaning} onChange={e => setMeaning(e.target.value)} placeholder="to write" autoFocus={!initial}
-          className="h-12 px-3.5 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-base font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
+        <span dir="ltr" className="flex items-stretch h-12 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20">
+          <span className="flex items-center px-3.5 bg-slate-100 dark:bg-gray-800 border-e border-slate-300 dark:border-gray-600 text-base font-bold text-slate-500 dark:text-slate-400 select-none">To</span>
+          {/* typing "to " anyway is forgiven: it is dropped, "To" is already there */}
+          <input value={meaning} onChange={e => setMeaning(e.target.value.replace(/^\s*to\s+/i, ''))} placeholder="write" autoFocus={!initial}
+            aria-label="Meaning in English, after To"
+            className="flex-1 min-w-0 px-3 bg-transparent text-base font-semibold text-slate-900 dark:text-slate-100 focus:outline-none" />
+        </span>
       </label>
 
       {TENSES.filter(t => tables[t]).map(table)}
