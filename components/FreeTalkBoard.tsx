@@ -222,7 +222,7 @@ const FreeTalkBoard: React.FC<{ studentId: string; studentName: string }> = ({ s
       </div>
 
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2 border-t border-slate-100 dark:border-gray-700 text-xs text-slate-400 dark:text-slate-500">
-        <span className="flex-1 min-w-0 truncate">{boost === 0 ? 'The text shrinks as you write more, and grows back' : `Text ${boost > 0 ? 'bigger' : 'smaller'} by hand · Auto fits it again`}</span>
+        <span className="flex-1" />
         <button type="button" role="separator" aria-orientation="horizontal" aria-label="Board height" aria-valuenow={Math.round(height)} aria-valuemin={200} aria-valuemax={900}
           title="Drag to make the board taller or shorter"
           onPointerDown={onGripDown} onPointerMove={onGripMove} onPointerUp={() => { drag.current = null; }}
