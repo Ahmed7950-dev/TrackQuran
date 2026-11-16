@@ -95,17 +95,26 @@ Reply with JSON only, in this shape:
     const data = await response.json();
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? '';
     let parsed;
-    try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { parsed = null; }
-    const questions = (parsed?.questions ?? [])
+    try {
+      const raw = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+      const from = Math.min(...['{', '['].map(c => raw.indexOf(c)).filter(i => i >= 0));
+      parsed = JSON.parse(Number.isFinite(from) ? raw.slice(from) : raw);
+    } catch { parsed = null; }
+    // The model is asked for {"questions":[…]} but sometimes sends the bare
+    // list or another key, so take the first list found.
+    const list = Array.isArray(parsed) ? parsed
+      : Array.isArray(parsed?.questions) ? parsed.questions
+      : Object.values(parsed ?? {}).find(Array.isArray) ?? [];
+    const questions = list
       .map(q => ({
-        q: clip(q?.q, 200).trim(), en: clip(q?.en, 200).trim(), hint: clip(q?.hint, 120).trim(),
+        q: clip(q?.q ?? q?.question, 200).trim(), en: clip(q?.en ?? q?.english, 200).trim(), hint: clip(q?.hint, 120).trim(),
         uses: (Array.isArray(q?.uses) ? q.uses : []).slice(0, 4).map(u => clip(u, 40)),
       }))
       .filter(q => q.q);
     if (!questions.length) {
       const why = data?.candidates?.[0]?.finishReason ?? data?.promptFeedback?.blockReason ?? 'empty';
       console.error('talk-questions unreadable reply:', why, text.slice(0, 500));
-      return res.status(502).json({ error: `No questions came back (${why}, ${text.length}). Try again.` });
+      return res.status(502).json({ error: `No questions came back (${why}). Try again.`, debug: text.slice(0, 300) });
     }
     return res.status(200).json({ questions });
   } catch (err) {
