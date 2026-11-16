@@ -644,7 +644,7 @@ const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScr
       className="flex-1 min-w-0 min-h-[52px] max-h-[188px] sm:max-h-none flex flex-wrap sm:flex-nowrap items-center gap-2 overflow-y-auto sm:overflow-y-hidden sm:overflow-x-auto rounded-xl bg-white/70 dark:bg-gray-800/70 border border-slate-200 dark:border-gray-700 px-2 py-2"
       style={{ scrollbarWidth: 'thin' }}>
       {!query.trim() ? (
-        <span className="px-1.5 text-[13px] text-slate-400 dark:text-slate-500">Forgot a word? Type it in the search: lesson words and word lists show here.</span>
+        <span className="px-1.5 text-[13px] text-slate-400 dark:text-slate-500">Search results show here</span>
       ) : words.length === 0 ? (
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-[13px] text-slate-500 dark:text-slate-400 sm:whitespace-nowrap">
           No word found in the lessons or the word lists.

@@ -21,7 +21,7 @@ const LINE = 1.45;
 const ADJUST = 'from-font';
 const MIN_SIZE = 16;
 const STEP = 1.15;
-const PLACEHOLDER = 'Type what you say. It stays big and in the middle.';
+const PLACEHOLDER = 'Type here';
 /** An empty board shows its hint at a calm size, not the full fitted one. */
 const HINT_MAX = 30;
 
@@ -128,7 +128,6 @@ const SizeSwitch: React.FC<{ boost: number; setBoost: (f: (b: number) => number)
 
 const ICON = {
   board: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><rect x="3" y="4" width="18" height="13" rx="2" /><path strokeLinecap="round" d="M8 21h8M12 17v4" /></svg>,
-  lock: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5"><rect x="5" y="11" width="14" height="10" rx="2" /><path strokeLinecap="round" d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>,
   clear: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>,
   present: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>,
 };
@@ -205,9 +204,6 @@ const FreeTalkBoard: React.FC<{ studentId: string; studentName: string }> = ({ s
       <div className="flex items-center gap-2 sm:gap-2.5 ps-3.5 sm:ps-5 pe-2.5 py-2.5 border-b border-slate-100 dark:border-gray-700">
         <span className="flex-shrink-0 w-[30px] h-[30px] rounded-[9px] bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 flex items-center justify-center">{ICON.board}</span>
         <span className="text-base font-extrabold text-slate-900 dark:text-slate-100">Board</span>
-        <span className="hidden md:flex items-center gap-1 text-xs font-semibold text-slate-400 dark:text-slate-500 truncate">
-          {ICON.lock}Only you see it · kept for {studentName} on this device
-        </span>
         <span className="flex-1" />
         <SizeSwitch boost={boost} setBoost={setBoost} />
         <ToolButton onClick={clear} label="Clear" icon={ICON.clear} />
