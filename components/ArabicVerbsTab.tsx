@@ -684,18 +684,28 @@ const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScr
   );
 };
 
+/** One spelling of a word, for "is it already there?": no vowel marks, one
+ *  alif, no "ال" / "il-", no spaces or punctuation, any letter case. */
+const sameWordKey = (s: string) => normForSearch(s.replace(/^\s*[ae]?[lstdrzn]h?-/i, ''))
+  .replace(/[^\p{L}\p{N}]/gu, '').replace(/^ال(?=..)/, '');
+const wordKeys = (s: string) => (s || '').split('/').map(sameWordKey).filter(Boolean);
+
 const AddWordDialog: React.FC<{
   initial: { ar: string; en: string };
   onClose: () => void;
   onSave: (w: { text: string; transliteration: string; translation: string }) => Promise<string | null>;
-}> = ({ initial, onClose, onSave }) => {
+  /** Where this word already is (a lesson or the Free Talk list), or null. */
+  findExisting: (ar: string, tr: string) => string | null;
+}> = ({ initial, onClose, onSave, findExisting }) => {
   const [ar, setAr] = useState(initial.ar);
   const [tr, setTr] = useState('');
   const [en, setEn] = useState(initial.en);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const already = useMemo(() => findExisting(ar, tr), [ar, tr, findExisting]);
   const save = async () => {
     if (!ar.trim() && !tr.trim()) { setError('Write the word in Arabic or in transliteration.'); return; }
+    if (already) return;
     setBusy(true); setError(null);
     const err = await onSave({ text: ar, transliteration: tr, translation: en });
     setBusy(false);
@@ -708,10 +718,7 @@ const AddWordDialog: React.FC<{
       <div role="dialog" aria-label="Add a word"
         className="fixed z-50 inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[440px] rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-5 flex flex-col gap-3.5"
         onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter') void save(); }}>
-        <div>
-          <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">Add a word</h3>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">It goes into the word list "{FREE_TALK_LIST_NAME}", which you also find in Vocabulary, Word lists.</p>
-        </div>
+        <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">Add a word</h3>
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Arabic
           <input dir="rtl" value={ar} onChange={e => setAr(e.target.value)} autoFocus={!initial.en} className={field} style={{ fontFamily: AR_FONT, fontSize: 20, fontWeight: 700 }} />
         </label>
@@ -721,10 +728,11 @@ const AddWordDialog: React.FC<{
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Meaning in English
           <input value={en} onChange={e => setEn(e.target.value)} autoFocus={!!initial.en} className={`${field} text-sm`} />
         </label>
+        {already && <p role="alert" className="text-sm font-semibold text-amber-700 dark:text-amber-400">Already in {already}</p>}
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-700 dark:text-slate-200">Cancel</button>
-          <button type="button" disabled={busy} onClick={save} className="h-11 px-5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-extrabold">{busy ? 'Saving…' : 'Save word'}</button>
+          <button type="button" disabled={busy || !!already} onClick={save} className="h-11 px-5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-extrabold">{busy ? 'Saving…' : 'Save word'}</button>
         </div>
       </div>
     </>
@@ -858,6 +866,18 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     return all.filter(w => [w.ar, w.tr, w.en].some(x => matchesWords(x || '', query)));
   }, [q, query, lessonWords, listWords, lessonTitle, lessonLevel]);
 
+  // Adding a word: is it already among the lesson words or the Free Talk list?
+  const knownWords = useMemo(() => [
+    ...lessonWords.map(w => ({ ar: wordKeys(w.arabic), tr: wordKeys(w.transliteration), where: lessonTitle.get(w.lessonId) ?? 'a lesson' })),
+    ...listWords.filter(w => w.source === FREE_TALK_LIST_NAME).map(w => ({ ar: wordKeys(w.ar), tr: wordKeys(w.tr), where: `"${FREE_TALK_LIST_NAME}"` })),
+  ], [lessonWords, listWords, lessonTitle]);
+  const findExisting = useCallback((ar: string, tr: string): string | null => {
+    const a = sameWordKey(ar), t = sameWordKey(tr);
+    if (!a && !t) return null;
+    const hit = knownWords.find(k => (a && k.ar.includes(a)) || (!a && t && k.tr.includes(t)));
+    return hit ? hit.where : null;
+  }, [knownWords]);
+
   // Clicking anywhere outside the open card closes it.
   const wallRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -985,6 +1005,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       {addingWord && (
         <AddWordDialog
           initial={addingWord}
+          findExisting={findExisting}
           onClose={() => setAddingWord(null)}
           onSave={async w => {
             const err = await addWordToFreeTalkList(student.id, w);
