@@ -100,7 +100,7 @@ const BoardText: React.FC<{
         aria-label="Board"
         placeholder={PLACEHOLDER}
         spellCheck={false}
-        className="block w-full resize-none border-0 bg-transparent p-0 text-center text-slate-900 dark:text-slate-50 placeholder:text-slate-300 dark:placeholder:text-slate-600 placeholder:font-semibold focus:outline-none focus:ring-0"
+        className="board-text block w-full resize-none border-0 bg-transparent p-0 text-center text-slate-900 dark:text-slate-50 placeholder:text-slate-300 dark:placeholder:text-slate-600 placeholder:font-semibold focus:outline-none focus:ring-0"
         style={{
           fontFamily: FONT, fontWeight: 700, lineHeight: LINE, fontSizeAdjust: ADJUST, fontSize: layout.size, height: layout.h,
           paddingTop: PAD * layout.size, paddingBottom: PAD * layout.size, boxSizing: 'border-box',
