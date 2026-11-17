@@ -513,6 +513,14 @@ const Booth: React.FC<BoothProps> = ({
   );
 };
 
+type ShelfView = 'icons' | 'list' | 'gallery';
+const VIEW_KEY = 'mediaShelfView';
+const VIEWS: { id: ShelfView; label: string; d: string }[] = [
+  { id: 'icons', label: 'Icons', d: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z' },
+  { id: 'list', label: 'List', d: 'M4 6h2M10 6h10M4 12h2M10 12h10M4 18h2M10 18h10' },
+  { id: 'gallery', label: 'Gallery', d: 'M3 5h18v10H3zM3 19h7M14 19h7' },
+];
+
 /** The length filter's steps, in minutes: "under 5", "under 10"… */
 const LENGTH_STEPS = [5, 10, 15, 20, 25];
 
@@ -691,6 +699,17 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'finished'>('all');
   /** Show only videos shorter than this many minutes; null = any length. */
   const [underMin, setUnderMin] = useState<number | null>(null);
+  /** How the shelf is laid out; remembered on this device. */
+  const [view, setView] = useState<ShelfView>(() => {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      return v === 'icons' || v === 'gallery' ? v : 'list';
+    } catch { return 'list'; }
+  });
+  const pickView = (v: ShelfView) => {
+    setView(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* storage off */ }
+  };
   /** Seconds per video id, read from YouTube once and kept on this device. */
   const [lengths, setLengths] = useState<Map<string, number>>(new Map());
   const [adding, setAdding] = useState(false);
@@ -1129,9 +1148,21 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
               </div>
             </div>
 
-            <h2 className="m-0 mb-3" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: '0.12em', color: C.dim }}>
-              {(channel === 'all' ? 'EVERYTHING' : (cats.find(c => c.id === channel)?.name ?? '').toUpperCase())} · {shown.length} REEL{shown.length === 1 ? '' : 'S'}
-            </h2>
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="m-0 flex-grow min-w-0" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: '0.12em', color: C.dim }}>
+                {(channel === 'all' ? 'EVERYTHING' : (cats.find(c => c.id === channel)?.name ?? '').toUpperCase())} · {shown.length} REEL{shown.length === 1 ? '' : 'S'}
+              </h2>
+              <div role="group" aria-label="View" className="flex-shrink-0 flex gap-[3px] p-1" style={{ borderRadius: 10, background: C.card, border: `1px solid ${C.line}` }}>
+                {VIEWS.map(v => (
+                  <button key={v.id} type="button" onClick={() => pickView(v.id)} aria-pressed={view === v.id} aria-label={v.label} title={v.label}
+                    className="flex items-center justify-center gap-1.5"
+                    style={{ ...chipStyle(view === v.id), padding: '0 11px', minWidth: 44 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={v.d} /></svg>
+                    <span className="hidden sm:inline">{v.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {loading ? (
               <p className="py-16 text-center text-sm" style={{ color: C.dim }}>Opening the shelf…</p>
@@ -1145,7 +1176,11 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col gap-2.5">
+              <div className={view === 'icons'
+                ? 'grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-x-3 gap-y-4'
+                : view === 'gallery'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5'
+                  : 'flex flex-col gap-2.5'}>
                 {shown.map(it => {
                   const p = marks.get(it.id);
                   const done = !!p?.finished;
@@ -1162,6 +1197,108 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                     : done ? 'Watched to the end'
                       : started ? `Stopped at ${timecode(p?.positionSeconds)}${p?.durationSeconds ? ` of ${timecode(p.durationSeconds)}` : ''}`
                         : 'Not started';
+
+                  const thumb = thumbFor(it);
+                  const len = lengthOf(it);
+                  const lenLabel = it.kind === 'playlist' ? (total ? `${total} videos` : null) : (len != null ? timecode(len) : null);
+                  const barPct = `${(done ? 1 : frac) * 100}%`;
+                  const actions = (
+                    <div className="flex-shrink-0 flex items-center gap-1">
+                      <button type="button" onClick={() => void rename(it)} aria-label={`Rename ${it.title}`}
+                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
+                        <Icon d={PENCIL} size={17} stroke={1.8} />
+                      </button>
+                      <button type="button" onClick={() => void move(it)} aria-label={`Move ${it.title} to another category`}
+                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 7.5h7l2 2.5h9v9.5H3z" /><path d="M3 7.5V5h5.5" />
+                        </svg>
+                      </button>
+                      <button type="button" onClick={() => void remove(it)} aria-label={`Take ${it.title} off the shelf`}
+                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
+                        <Icon d={TRASH} size={17} stroke={1.8} />
+                      </button>
+                    </div>
+                  );
+
+                  /* ICONS: a small picture and the title, many to a row. */
+                  if (view === 'icons') return (
+                    <button key={it.id} type="button" onClick={() => openItem(it)} disabled={!studentId}
+                      aria-label={`Play ${it.title}`} title={it.title}
+                      className="flex flex-col gap-1.5 min-w-0 text-left disabled:opacity-60"
+                      style={{ background: 'transparent', border: 0, padding: 0, color: C.ink }}>
+                      <span className="relative block w-full overflow-hidden"
+                        style={{ aspectRatio: '16 / 9', borderRadius: 9, background: C.well, border: `1px solid ${done ? C.greenLine : C.line}` }}>
+                        {thumb && <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />}
+                        {lenLabel && (
+                          <span className="absolute right-1 bottom-1.5 px-1 rounded" style={{ background: 'rgba(0,0,0,0.78)', color: '#fff', fontFamily: MONO, fontSize: 10.5, lineHeight: '16px' }}>{lenLabel}</span>
+                        )}
+                        {done && (
+                          <span className="absolute left-1 top-1 flex items-center justify-center rounded-full" style={{ width: 20, height: 20, background: 'var(--m-good-fill)', color: 'var(--m-good-on)' }}>
+                            <Icon d={CHECK} size={12} stroke={3} />
+                          </span>
+                        )}
+                        {fresh > 0 && (
+                          <span className="absolute left-1 top-1 px-1.5 rounded" style={{ background: C.amber, color: C.onAmber, fontFamily: MONO, fontSize: 10, lineHeight: '17px' }}>NEW {fresh}</span>
+                        )}
+                        {studentId && (
+                          <span className="absolute left-0 right-0 bottom-0" style={{ height: 3, background: 'rgba(0,0,0,0.35)' }}>
+                            <span className="block h-full" style={{ width: barPct, background: done ? 'var(--m-good-fill)' : '#E8A33D' }} />
+                          </span>
+                        )}
+                      </span>
+                      <span className="line-clamp-2 font-semibold" style={{ fontSize: 13, lineHeight: 1.3 }}>{it.title}</span>
+                    </button>
+                  );
+
+                  /* GALLERY: a big picture with the details under it. */
+                  if (view === 'gallery') return (
+                    <div key={it.id} className="flex flex-col overflow-hidden"
+                      style={{ borderRadius: 14, background: C.card, border: `1px solid ${done ? C.greenLine : C.line}` }}>
+                      <button type="button" onClick={() => openItem(it)} disabled={!studentId}
+                        aria-label={`Play ${it.title}`}
+                        className="relative block w-full disabled:opacity-60"
+                        style={{ aspectRatio: '16 / 9', background: C.well, border: 0, padding: 0 }}>
+                        {thumb && <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 'var(--m-thumb-dim)' }} />}
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="flex items-center justify-center rounded-full" style={{ width: 54, height: 54, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>
+                            <Icon d={PLAY} size={22} fill />
+                          </span>
+                        </span>
+                        {lenLabel && (
+                          <span className="absolute right-2.5 bottom-3 px-1.5 rounded-[5px]" style={{ background: 'rgba(0,0,0,0.78)', color: '#fff', fontFamily: MONO, fontSize: 12, lineHeight: '20px' }}>{lenLabel}</span>
+                        )}
+                        {(done || fresh > 0) && (
+                          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 px-2 rounded-md"
+                            style={{ background: done ? 'var(--m-good-fill)' : C.amber, color: done ? 'var(--m-good-on)' : C.onAmber, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em', lineHeight: '22px' }}>
+                            {done ? <><Icon d={CHECK} size={11} stroke={3} /> SEEN</> : `NEW ${fresh}`}
+                          </span>
+                        )}
+                        {studentId && (
+                          <span className="absolute left-0 right-0 bottom-0" style={{ height: 4, background: 'rgba(0,0,0,0.35)' }}>
+                            <span className="block h-full" style={{ width: barPct, background: done ? 'var(--m-good-fill)' : '#E8A33D' }} />
+                          </span>
+                        )}
+                      </button>
+                      <div className="flex flex-col gap-1.5 flex-grow" style={{ padding: '14px 12px 8px 16px' }}>
+                        <h3 className="m-0 line-clamp-2 font-semibold" style={{ fontSize: 16, lineHeight: 1.32 }}>{it.title}</h3>
+                        <p className="m-0 flex items-center gap-2 flex-wrap" style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>
+                          <span>{it.kind === 'playlist' ? 'PLAYLIST' : 'VIDEO'}</span>
+                          {it.categoryId && (<>
+                            <span>·</span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: hueOf(it.categoryId) }} />
+                              {cats.find(c => c.id === it.categoryId)?.name}
+                            </span>
+                          </>)}
+                        </p>
+                        <div className="flex items-center gap-1 mt-auto pt-1">
+                          <p className="m-0 flex-grow min-w-0" style={{ fontFamily: MONO, fontSize: 11.5, color: done ? C.green : started ? C.amber : C.dim }}>{studentId ? stamp : ''}</p>
+                          {actions}
+                        </div>
+                      </div>
+                    </div>
+                  );
 
                   return (
                     <div key={it.id} className="relative flex flex-wrap items-center gap-4"
@@ -1225,22 +1362,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                         )}
                       </div>
 
-                      <div className="flex-shrink-0 flex items-center gap-1">
-                        <button type="button" onClick={() => void rename(it)} aria-label={`Rename ${it.title}`}
-                          className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
-                          <Icon d={PENCIL} size={17} stroke={1.8} />
-                        </button>
-                        <button type="button" onClick={() => void move(it)} aria-label={`Move ${it.title} to another category`}
-                          className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M3 7.5h7l2 2.5h9v9.5H3z" /><path d="M3 7.5V5h5.5" />
-                          </svg>
-                        </button>
-                        <button type="button" onClick={() => void remove(it)} aria-label={`Take ${it.title} off the shelf`}
-                          className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
-                          <Icon d={TRASH} size={17} stroke={1.8} />
-                        </button>
-                      </div>
+                      {actions}
                     </div>
                   );
                 })}
