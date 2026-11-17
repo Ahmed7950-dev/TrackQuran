@@ -769,7 +769,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     const ids = items.filter(it => it.kind === 'video' && !lengths.has(it.youtubeId)).map(it => it.youtubeId);
     if (!ids.length) return;
     let dead = false;
-    void fetchVideoLengths(ids).then(got => {
+    void fetchVideoLengths(ids, loadYouTubeApi).then(got => {
       if (dead || !got.size) return;
       setLengths(prev => { const next = new Map(prev); got.forEach((v, k) => next.set(k, v)); return next; });
     });

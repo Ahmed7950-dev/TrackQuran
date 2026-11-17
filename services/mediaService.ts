@@ -128,11 +128,59 @@ function readLengthCache(): Record<string, number> {
 }
 
 /**
- * Seconds per video id. A length never changes, so each one is asked for
- * once (through /api/youtube-video, which reads YouTube's watch page) and kept
- * on this device. Ids YouTube would not answer for are simply missing.
+ * How long one video is, read by a hidden 1-pixel YouTube player: it knows
+ * the length as soon as it is ready. Done in the tutor's browser because
+ * YouTube answers a server with "confirm you're not a bot" instead (tried:
+ * the watch page and the player endpoint both refuse from Vercel).
  */
-export async function fetchVideoLengths(ids: string[]): Promise<Map<string, number>> {
+function lengthFromPlayer(id: string): Promise<number | null> {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const YT = (window as any).YT;
+  return new Promise(resolve => {
+    const host = document.createElement('div');
+    const box = document.createElement('div');
+    box.setAttribute('aria-hidden', 'true');
+    box.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;pointer-events:none';
+    box.appendChild(host);
+    document.body.appendChild(box);
+    let player: any = null;
+    let done = false;
+    const finish = (sec: number | null) => {
+      if (done) return;
+      done = true;
+      try { player?.destroy?.(); } catch { /* already gone */ }
+      box.remove();
+      resolve(sec && sec > 0 ? Math.round(sec) : null);
+    };
+    const timer = window.setTimeout(() => finish(null), 10000);
+    try {
+      player = new YT.Player(host, {
+        width: 1, height: 1, videoId: id,
+        playerVars: { autoplay: 0, controls: 0, mute: 1 },
+        events: {
+          onReady: () => {
+            let tries = 0;
+            const look = () => {
+              const d = Number(player?.getDuration?.() ?? 0);
+              if (d > 0 || tries++ > 20) { window.clearTimeout(timer); finish(d); }
+              else window.setTimeout(look, 150);
+            };
+            look();
+          },
+          onError: () => { window.clearTimeout(timer); finish(null); },
+        },
+      });
+    } catch { window.clearTimeout(timer); finish(null); }
+  });
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+}
+
+/**
+ * Seconds per video id. A length never changes, so each one is read once and
+ * kept on this device. `loadApi` loads the YouTube IFrame API. Ids YouTube
+ * would not answer for are simply missing.
+ */
+export async function fetchVideoLengths(ids: string[], loadApi: () => Promise<void>): Promise<Map<string, number>> {
   const cache = readLengthCache();
   const out = new Map<string, number>();
   const missing: string[] = [];
@@ -140,18 +188,16 @@ export async function fetchVideoLengths(ids: string[]): Promise<Map<string, numb
     if (typeof cache[id] === 'number') out.set(id, cache[id]);
     else missing.push(id);
   }
-  for (let i = 0; i < missing.length; i += 12) {
-    const batch = missing.slice(i, i + 12);
-    try {
-      const res = await fetch(`/api/youtube-video?ids=${batch.map(encodeURIComponent).join(',')}`);
-      if (!res.ok) continue;
-      const answer = await res.json() as Record<string, { seconds?: number }>;
-      for (const id of batch) {
-        const sec = answer?.[id]?.seconds;
-        if (typeof sec === 'number' && sec > 0) { out.set(id, sec); cache[id] = sec; }
-      }
-    } catch { /* offline, or the route is not deployed yet */ }
-  }
+  if (!missing.length) return out;
+  try { await loadApi(); } catch { return out; }
+  // Three at a time: each is a real (hidden) player.
+  const queue = [...missing];
+  await Promise.all([0, 1, 2].map(async () => {
+    for (let id = queue.shift(); id; id = queue.shift()) {
+      const sec = await lengthFromPlayer(id);
+      if (sec) { out.set(id, sec); cache[id] = sec; }
+    }
+  }));
   try { localStorage.setItem(LENGTHS_KEY, JSON.stringify(cache)); } catch { /* storage off */ }
   return out;
 }
