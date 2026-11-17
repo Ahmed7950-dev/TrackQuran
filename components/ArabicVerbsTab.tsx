@@ -168,7 +168,7 @@ const VerbCard: React.FC<{
         onTouchEnd={onTouchEnd}
         aria-label={`${showMeaning(verb.meaning)}${head ? `, ${head}` : ''}`}
         aria-expanded={!!pos}
-        className={`w-full text-start rounded-2xl bg-white dark:bg-gray-800 px-4 py-3.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${pos ? 'h-[150px] sm:h-[128px]' : 'h-[112px] sm:h-[128px]'} ${ring} ${match === 'dim' ? 'opacity-25 grayscale' : ''}`}
+        className={`w-full text-start rounded-2xl bg-white dark:bg-gray-800 px-4 py-3.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${pos ? 'h-[150px] sm:h-[128px]' : 'h-[124px] sm:h-[128px]'} ${ring} ${match === 'dim' ? 'opacity-25 grayscale' : ''}`}
         style={{ touchAction: pos ? 'none' : 'pan-y' }}
       >
         {!pos ? (
@@ -183,7 +183,7 @@ const VerbCard: React.FC<{
                 ))}
               </span>
             </span>
-            <span dir={ar ? 'rtl' : 'ltr'} className="self-end sm:self-auto whitespace-nowrap text-slate-900 dark:text-slate-100 font-bold leading-[1.35]"
+            <span dir={ar ? 'rtl' : 'ltr'} className={`self-end sm:self-auto whitespace-nowrap text-slate-900 dark:text-slate-100 font-bold ${ar ? 'leading-[1.6]' : 'leading-[1.35]'}`}
               style={ar ? { fontFamily: AR_FONT, fontSize: 32 } : { fontSize: 22 }}>{head || '·'}</span>
           </span>
         ) : (
@@ -203,7 +203,7 @@ const VerbCard: React.FC<{
                 style={ar ? { fontFamily: AR_FONT, fontSize: 15 } : { fontSize: 12 }}>
                 {pronounLabel(tableOrder(verb.variety, pos.tense, true, true).find(p => p.key === pos.key) ?? { key: '', ar: '', tr: '' }, script)}
               </span>
-              <span className="font-bold leading-[1.4] py-0.5 text-slate-900 dark:text-slate-100 truncate"
+              <span className={`font-bold py-0.5 text-slate-900 dark:text-slate-100 truncate ${ar ? 'leading-[1.75]' : 'leading-[1.4]'}`}
                 style={ar ? { fontFamily: AR_FONT, fontSize: 32 } : { fontSize: 24 }}>
                 {cellText(verb.conjugations[pos.tense], pos.key, script)}
               </span>

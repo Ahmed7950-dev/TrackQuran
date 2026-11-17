@@ -16,7 +16,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { BoardSide, getBoard, joinBoard, saveBoard } from '../services/arabicVerbsService';
 
 const FONT = "'Inter', 'Amiri', sans-serif";
-const LINE = 1.45;
+const LINE = 1.6;
+/** Room above the first line and under the last one, in em: Arabic vowel
+ *  marks (scaled up by ADJUST) reach past the line box and were cut off. */
+const PAD = 0.4;
 /** Amiri draws small next to Inter at the same size; this scales the Arabic
  *  to match (Chrome 127+, Safari 17+, Firefox 118+; elsewhere it is ignored). */
 const ADJUST = 'from-font';
@@ -46,7 +49,7 @@ function measure(text: string, width: number, size: number): number {
   ruler.style.width = `${width}px`;
   ruler.style.fontSize = `${size}px`;
   ruler.textContent = `${text || ' '}${text.endsWith('\n') ? ' ' : ''}`;   // a last empty line still counts
-  return ruler.scrollHeight;
+  return ruler.scrollHeight + 2 * PAD * size;
 }
 
 /** The biggest size (≤ max) at which the text fits width × height. */
@@ -100,6 +103,7 @@ const BoardText: React.FC<{
         className="block w-full resize-none border-0 bg-transparent p-0 text-center text-slate-900 dark:text-slate-50 placeholder:text-slate-300 dark:placeholder:text-slate-600 placeholder:font-semibold focus:outline-none focus:ring-0"
         style={{
           fontFamily: FONT, fontWeight: 700, lineHeight: LINE, fontSizeAdjust: ADJUST, fontSize: layout.size, height: layout.h,
+          paddingTop: PAD * layout.size, paddingBottom: PAD * layout.size, boxSizing: 'border-box',
           overflowY: layout.h >= box.h - 1 ? 'auto' : 'hidden', overflowWrap: 'anywhere',
         }}
       />
