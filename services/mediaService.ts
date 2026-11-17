@@ -119,6 +119,43 @@ export async function fetchPlaylistThumb(playlistId: string): Promise<string | n
   }
 }
 
+/* ── How long a video is ──────────────────────────────────────────────── */
+
+const LENGTHS_KEY = 'mediaVideoLengths';
+
+function readLengthCache(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(LENGTHS_KEY) || '{}') || {}; } catch { return {}; }
+}
+
+/**
+ * Seconds per video id. A length never changes, so each one is asked for
+ * once (through /api/youtube-video, which reads YouTube's watch page) and kept
+ * on this device. Ids YouTube would not answer for are simply missing.
+ */
+export async function fetchVideoLengths(ids: string[]): Promise<Map<string, number>> {
+  const cache = readLengthCache();
+  const out = new Map<string, number>();
+  const missing: string[] = [];
+  for (const id of new Set(ids)) {
+    if (typeof cache[id] === 'number') out.set(id, cache[id]);
+    else missing.push(id);
+  }
+  for (let i = 0; i < missing.length; i += 12) {
+    const batch = missing.slice(i, i + 12);
+    try {
+      const res = await fetch(`/api/youtube-video?ids=${batch.map(encodeURIComponent).join(',')}`);
+      if (!res.ok) continue;
+      const answer = await res.json() as Record<string, { seconds?: number }>;
+      for (const id of batch) {
+        const sec = answer?.[id]?.seconds;
+        if (typeof sec === 'number' && sec > 0) { out.set(id, sec); cache[id] = sec; }
+      }
+    } catch { /* offline, or the route is not deployed yet */ }
+  }
+  try { localStorage.setItem(LENGTHS_KEY, JSON.stringify(cache)); } catch { /* storage off */ }
+  return out;
+}
+
 /** The still to draw for a reel, or null when there is nothing to draw yet. */
 export const thumbFor = (item: MediaItem): string | null =>
   item.kind === 'video' ? videoThumb(item.youtubeId) : item.thumbUrl;

@@ -25,7 +25,7 @@ import {
   listMedia, addMedia, updateMedia, deleteMedia,
   refreshPlaylistNews, markPlaylistSeen, newVideoIds, totalNewVideos,
   loadProgress, saveProgress, clearProgress,
-  parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, timecode, watchedFraction,
+  parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, fetchVideoLengths, timecode, watchedFraction,
 } from '../services/mediaService';
 
 /* ── The booth's palette ──────────────────────────────────────────────
@@ -513,15 +513,19 @@ const Booth: React.FC<BoothProps> = ({
   );
 };
 
+/** The length filter's steps, in minutes: "under 5", "under 10"… */
+const LENGTH_STEPS = [5, 10, 15, 20, 25];
+
 /* ── Paste a link ────────────────────────────────────────────────────── */
 
 const AddLink: React.FC<{
   categories: MediaCategory[];
+  shelf: MediaItem[];
   defaultCategory: string | null;
   onCancel: () => void;
   onAdd: (title: string, link: ParsedLink, categoryId: string | null) => Promise<string | null>;
   onNewCategory: (name: string) => Promise<MediaCategory | null>;
-}> = ({ categories, defaultCategory, onCancel, onAdd, onNewCategory }) => {
+}> = ({ categories, shelf, defaultCategory, onCancel, onAdd, onNewCategory }) => {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [cat, setCat] = useState<string | null>(defaultCategory);
@@ -532,9 +536,12 @@ const AddLink: React.FC<{
 
   const link = useMemo(() => parseYouTubeLink(url), [url]);
   const looksLikeTry = url.trim().length > 6;
+  const already = useMemo(() => (link
+    ? shelf.find(it => it.kind === link.kind && it.youtubeId === link.youtubeId) ?? null
+    : null), [link, shelf]);
 
   const submit = async () => {
-    if (!link || !title.trim()) return;
+    if (!link || already || !title.trim()) return;
     setBusy(true); setError('');
     const problem = await onAdd(title, link, cat);
     setBusy(false);
@@ -568,9 +575,14 @@ const AddLink: React.FC<{
           <label htmlFor="media-url" className="block mb-2" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>YOUTUBE LINK</label>
           <input id="media-url" type="url" value={url} onChange={e => setUrl(e.target.value)} autoFocus
             placeholder="https://www.youtube.com/watch?v=…"
-            style={{ ...field, fontFamily: MONO, fontSize: 13, borderColor: link ? C.greenLine : C.edge }} />
+            style={{ ...field, fontFamily: MONO, fontSize: 13, borderColor: already ? 'var(--m-bad-ink)' : link ? C.greenLine : C.edge }} />
 
-          {link && (
+          {already && (
+            <p role="alert" className="mt-3 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>
+              Already on the shelf: <strong>{already.title}</strong>
+            </p>
+          )}
+          {link && !already && (
             <div className="flex items-center gap-3.5 mt-3.5 px-4 py-3 rounded-[11px]"
               style={{ background: C.greenBg, border: `1px solid ${C.greenLine}` }}>
               <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 30, height: 30, borderRadius: 8, background: C.greenBg, color: C.green }}>
@@ -647,7 +659,7 @@ const AddLink: React.FC<{
           <span className="flex-grow" />
           <button type="button" onClick={onCancel} className="h-11 px-4 rounded-[9px] text-sm font-semibold"
             style={{ background: 'transparent', border: `1px solid ${C.edge}`, color: C.body }}>Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={!link || !title.trim() || busy}
+          <button type="button" onClick={() => void submit()} disabled={!link || !!already || !title.trim() || busy}
             className="h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-50"
             style={{ background: C.amber, color: C.onAmber, border: 0 }}>
             {busy ? 'Adding…' : 'Put it on the shelf'}
@@ -677,6 +689,10 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [channel, setChannel] = useState<string>('all');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'finished'>('all');
+  /** Show only videos shorter than this many minutes; null = any length. */
+  const [underMin, setUnderMin] = useState<number | null>(null);
+  /** Seconds per video id, read from YouTube once and kept on this device. */
+  const [lengths, setLengths] = useState<Map<string, number>>(new Map());
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<MediaItem | null>(null);
   /** What was new in the reel being opened, kept for as long as it is open. */
@@ -748,6 +764,24 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     return () => { dead = true; };
   }, [items]);
 
+  // Every video's length, for the length filter and the card.
+  useEffect(() => {
+    const ids = items.filter(it => it.kind === 'video' && !lengths.has(it.youtubeId)).map(it => it.youtubeId);
+    if (!ids.length) return;
+    let dead = false;
+    void fetchVideoLengths(ids).then(got => {
+      if (dead || !got.size) return;
+      setLengths(prev => { const next = new Map(prev); got.forEach((v, k) => next.set(k, v)); return next; });
+    });
+    return () => { dead = true; };
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** A video's length: YouTube's, or what the player reported while watching. */
+  const lengthOf = useCallback((it: MediaItem): number | null => {
+    if (it.kind !== 'video') return null;
+    return lengths.get(it.youtubeId) ?? marks.get(it.id)?.durationSeconds ?? null;
+  }, [lengths, marks]);
+
   const hueOf = useCallback((id: string | null): string => {
     if (!id) return C.dim;
     const i = cats.findIndex(c => c.id === id);
@@ -760,11 +794,15 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     return items.filter(it => {
       if (channel !== 'all' && it.categoryId !== channel) return false;
       if (q && !it.title.toLowerCase().includes(q)) return false;
+      if (underMin != null) {
+        const len = lengthOf(it);
+        if (len == null || len >= underMin * 60) return false;
+      }
       if (filter === 'all') return true;
       const done = marks.get(it.id)?.finished ?? false;
       return filter === 'finished' ? done : !done;
     });
-  }, [items, channel, query, filter, marks]);
+  }, [items, channel, query, filter, marks, underMin, lengthOf]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -1075,6 +1113,20 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                 <button type="button" onClick={() => setFilter('unwatched')} style={chipStyle(filter === 'unwatched')}>Unwatched</button>
                 <button type="button" onClick={() => setFilter('finished')} style={chipStyle(filter === 'finished')}>Finished</button>
               </div>
+              <div role="group" aria-label="Video length" className="flex items-center gap-[3px] p-1 max-w-full overflow-x-auto" style={{ borderRadius: 10, background: C.card, border: `1px solid ${C.line}` }}>
+                <span className="flex-shrink-0 flex items-center pl-2 pr-1" style={{ color: C.dim }} aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                  </svg>
+                </span>
+                <button type="button" onClick={() => setUnderMin(null)} style={{ ...chipStyle(underMin == null), padding: '0 12px', flexShrink: 0 }}>Any</button>
+                {LENGTH_STEPS.map(m => (
+                  <button key={m} type="button" onClick={() => setUnderMin(m)} aria-label={`Under ${m} minutes`}
+                    style={{ ...chipStyle(underMin === m), padding: '0 11px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    &lt;{m}<span style={{ fontSize: 11, opacity: 0.75 }}>m</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <h2 className="m-0 mb-3" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 500, letterSpacing: '0.12em', color: C.dim }}>
@@ -1134,7 +1186,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                             <p className="m-0 mt-1 flex items-center gap-2 flex-wrap" style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>
                               <span>{it.kind === 'playlist' ? 'PLAYLIST' : 'VIDEO'}</span>
                               <span>·</span>
-                              <span>{it.kind === 'playlist' ? (total ? `${total} videos` : 'length unknown yet') : 'single'}</span>
+                              <span>{it.kind === 'playlist' ? (total ? `${total} videos` : 'length unknown yet') : (lengthOf(it) != null ? timecode(lengthOf(it)) : 'single')}</span>
                               {it.categoryId && (<>
                                 <span>·</span>
                                 <span className="inline-flex items-center gap-1.5">
@@ -1201,6 +1253,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
       {adding && (
         <AddLink
           categories={cats}
+          shelf={items}
           defaultCategory={channel === 'all' ? null : channel}
           onCancel={() => setAdding(false)}
           onAdd={doAdd}
