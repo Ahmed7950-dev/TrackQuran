@@ -65,6 +65,9 @@ export interface RecitationHomework {
   submittedAt: string | null;
   reviewedAt: string | null;
   purgedAt: string | null;
+  /** The deadline (ISO), or null. Once passed, an 'assigned' homework is closed:
+   *  no more recording or submitting. Follow-ups never have one. */
+  dueAt: string | null;
 }
 
 interface Row {
@@ -75,6 +78,7 @@ interface Row {
   verses: string[] | null; parent_id: string | null; reassigned_count: number | null;
   mistakes: Record<string, Mistake> | null;
   created_at: string; submitted_at: string | null; reviewed_at: string | null; purged_at: string | null;
+  due_at?: string | null;
 }
 
 const fromRow = (r: Row): RecitationHomework => ({
@@ -87,7 +91,14 @@ const fromRow = (r: Row): RecitationHomework => ({
   reassignedCount: r.reassigned_count ?? undefined,
   mistakes: r.mistakes ?? undefined,
   createdAt: r.created_at, submittedAt: r.submitted_at, reviewedAt: r.reviewed_at, purgedAt: r.purged_at,
+  dueAt: r.due_at ?? null,
 });
+
+/** True once the deadline has passed on a homework the student has not sent.
+ *  A homework sent back as 'needs_revision' is a redo the tutor asked for, so
+ *  the deadline no longer applies to it. */
+export const isPastDeadline = (r: Pick<RecitationHomework, 'dueAt' | 'status'>, now: number = Date.now()): boolean =>
+  r.status === 'assigned' && !!r.dueAt && now > Date.parse(r.dueAt);
 
 export const recitationUrl = (id: string): string => `${SITE}/recite/${id}`;
 /** The student's portal, opened on this homework (SharedReportPage reads ?hw=). */
@@ -141,15 +152,25 @@ export async function createRecitationHomework(input: {
   verses?: string[]; parentId?: string;
   /** Only for a reassigned homework: the mistakes to show on those verses. */
   mistakes?: Record<string, Mistake>;
+  /** The deadline (ISO), copied from QuranHomework.dueAt. */
+  dueAt?: string | null;
 }): Promise<RecitationHomework | null> {
-  const { data, error } = await supabase.from('quran_recitation_homework').insert({
+  const row: Record<string, unknown> = {
     homework_id: input.homeworkId, teacher_id: input.teacherId, student_id: input.studentId,
     student_name: input.studentName, report_id: input.reportId,
     start_surah: input.startSurah, start_ayah: input.startAyah, end_surah: input.endSurah, end_ayah: input.endAyah,
     note: input.note ?? null, kind: input.kind ?? 'reading',
     verses: input.verses ?? null, parent_id: input.parentId ?? null,
     ...(input.mistakes && Object.keys(input.mistakes).length ? { mistakes: input.mistakes } : {}),
-  }).select('*').single();
+  };
+  let { data, error } = await supabase.from('quran_recitation_homework')
+    .insert(input.dueAt ? { ...row, due_at: input.dueAt } : row).select('*').single();
+  // Before the due_at migration is applied the column is missing: set the
+  // homework without it rather than not at all.
+  if (error && input.dueAt && /due_at/.test(error.message)) {
+    console.warn('createRecitationHomework: no due_at column yet, saved without the deadline');
+    ({ data, error } = await supabase.from('quran_recitation_homework').insert(row).select('*').single());
+  }
   if (error) { console.error('createRecitationHomework:', error.message); return null; }
   return fromRow(data as Row);
 }
@@ -171,6 +192,26 @@ export async function deleteRecitationHomework(rec: RecitationHomework): Promise
   const paths = Object.values(rec.recordings).map(r => r.path);
   if (paths.length) await supabase.storage.from(RECITATION_BUCKET).remove(paths);
   await supabase.from('quran_recitation_homework').delete().eq('id', rec.id);
+}
+
+/**
+ * The tutor withdrew the homework. The row and its recordings go (storage),
+ * but the id is kept in quran_recitation_cancelled so a student who opens the
+ * old link or notification is told it was cancelled.
+ */
+export async function cancelRecitationHomework(rec: RecitationHomework): Promise<void> {
+  const { error } = await supabase.from('quran_recitation_cancelled')
+    .insert({ id: rec.id, teacher_id: rec.teacherId });
+  if (error && error.code !== '23505') console.error('cancelRecitationHomework:', error.message);
+  await deleteRecitationHomework(rec);
+}
+
+/** Was this homework cancelled by the tutor? (Asked when its row is gone.) */
+export async function wasRecitationCancelled(id: string): Promise<boolean> {
+  const { data, error } = await supabase.from('quran_recitation_cancelled')
+    .select('id').eq('id', id).maybeSingle();
+  if (error) { console.warn('wasRecitationCancelled:', error.message); return false; }
+  return !!data;
 }
 
 // ── Recording ───────────────────────────────────────────────────────────────

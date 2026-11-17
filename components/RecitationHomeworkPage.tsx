@@ -31,10 +31,11 @@ import { alignWbw, fetchSurahWbw, WbwWord } from '../services/wordByWordService'
 import { wordAudioUrl } from '../services/tadabburLabService';
 import { QURAN_METADATA, QURANIC_FONTS } from '../constants';
 import {
-  RecitationHomework, RECORDER_BITRATE, getFollowUpRecitation, getRecitationHomework, isFullyRecorded, pickRecorderMime,
-  portalHomeworkUrl, rangeLabel, saveVerseRecording, saveWholeRecording, submitRecitationHomework,
-  versesOf, WHOLE_TAKE,
+  RecitationHomework, RECORDER_BITRATE, getFollowUpRecitation, getRecitationHomework, isFullyRecorded, isPastDeadline,
+  pickRecorderMime, portalHomeworkUrl, rangeLabel, saveVerseRecording, saveWholeRecording, submitRecitationHomework,
+  versesOf, wasRecitationCancelled, WHOLE_TAKE,
 } from '../services/recitationHomeworkService';
+import { dueLabel } from '../utils/quranHomework';
 import { StudentHomeworkBoard, studentStanding } from './HomeworkBoard';
 import type { Standing } from '../services/homeworkBoardService';
 
@@ -212,10 +213,32 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   /** Not a failure — a take that saved but came in faint. */
   const [faint, setFaint] = useState('');
 
+  /** The tutor withdrew this homework (its row is gone, the id was kept). */
+  const [cancelled, setCancelled] = useState(false);
   useEffect(() => {
     document.title = 'Recitation homework';
-    getRecitationHomework(recitationId).then(setRec);
+    let live = true;
+    getRecitationHomework(recitationId).then(async r => {
+      const gone = !r && await wasRecitationCancelled(recitationId);
+      if (!live) return;
+      setCancelled(gone);
+      setRec(r);
+    });
+    return () => { live = false; };
   }, [recitationId]);
+
+  // The deadline closes the homework the moment it passes, even with the page
+  // already open: one timer, set for exactly then, re-renders it locked.
+  const [clock, setClock] = useState(() => Date.now());
+  const dueMs = rec?.status === 'assigned' && rec.dueAt ? Date.parse(rec.dueAt) : NaN;
+  useEffect(() => {
+    if (Number.isNaN(dueMs)) return;
+    const wait = dueMs - Date.now();
+    if (wait < 0) return;
+    const t = window.setTimeout(() => setClock(Date.now()), Math.min(wait + 250, 2_147_000_000));
+    return () => window.clearTimeout(t);
+  }, [dueMs, clock]);
+  const late = !!rec && isPastDeadline(rec, Math.max(clock, Date.now()));
 
   // The mistakes the tutor has logged on these verses — live, the same marks as
   // on the tutor's Quran page (recitation_mistakes returns only this homework's
@@ -415,7 +438,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     void audioCtxRef.current?.close().catch(() => { /* already closed */ });
   }, []);
 
-  const editable = !!rec && !rec.purgedAt && !followUp
+  const editable = !!rec && !rec.purgedAt && !followUp && !late
     && (rec.status === 'assigned' || rec.status === 'needs_revision');
 
   /** The word the tutor marked, read on its own. Falls back to the whole verse
@@ -497,6 +520,7 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
   const startRecording = async () => {
     if (!rec || (!verses[idx] && rec.kind !== 'hifz')) return;
+    if (isPastDeadline(rec)) { setClock(Date.now()); return; }
     // Re-entrancy guard: getUserMedia is async, so a double tap could otherwise
     // start two recorders — and the one we forget about keeps the mic open and
     // keeps emitting chunks into every later take.
@@ -569,7 +593,14 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
         ? await saveWholeRecording(rec.id, blob, ms)
         : await saveVerseRecording(rec.id, s, a, blob, ms);
       setTake('idle');
-      if (!saved) { setError('Your recording could not be saved — check your connection and record again.'); return; }
+      if (!saved) {
+        // The deadline may have passed during the take: the database refuses
+        // it then, and the page should say so rather than blame the connection.
+        const fresh = await getRecitationHomework(rec.id);
+        if (fresh && isPastDeadline(fresh)) { setRec(fresh); setClock(Date.now()); return; }
+        setError('Your recording could not be saved — check your connection and record again.');
+        return;
+      }
       setRec(saved);
       if (meterOkRef.current && peakRef.current < FAINT_PEAK) {
         setFaint('Saved — but that one came out very quiet. Hold the microphone closer and record again if you can.');
@@ -595,10 +626,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
 
   const submit = async () => {
     if (!rec) return;
+    if (isPastDeadline(rec)) { setClock(Date.now()); return; }
     setSubmitting(true);
     const done = await submitRecitationHomework(rec);
     setSubmitting(false);
-    if (!done) { setError('Could not submit — check your connection and try again.'); return; }
+    if (!done) {
+      const fresh = await getRecitationHomework(rec.id);
+      if (fresh && isPastDeadline(fresh)) { setRec(fresh); setClock(Date.now()); return; }
+      setError('Could not submit — check your connection and try again.');
+      return;
+    }
     setRec(done);
     // The month's board as it stands — NOT counting this one, which is with the
     // teacher until he marks it right. A tutor opening the link is only looking
@@ -659,8 +696,12 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   if (rec === undefined) return shell(<p className="text-center py-24" style={{ color: P.faint }}>Loading your homework…</p>);
   if (!rec) return shell(
     <div className="text-center py-24 px-4 flex flex-col items-center gap-3">
-      <p className="font-bold text-lg" style={{ fontFamily: DISPLAY }}>Homework not found</p>
-      <p className="text-sm" style={{ color: P.muted }}>It may have been removed — ask your teacher for a new link.</p>
+      <p className="font-bold text-lg" style={{ fontFamily: DISPLAY }}>
+        {cancelled ? 'Your teacher cancelled this homework' : 'Homework not found'}
+      </p>
+      {!cancelled && (
+        <p className="text-sm" style={{ color: P.muted }}>It may have been cancelled — ask your teacher.</p>
+      )}
       <button onClick={leave}
         className="mt-2 inline-flex items-center gap-2 h-11 px-5 rounded-full text-[15px] font-bold transition-colors"
         style={{ background: P.primary, color: P.onPrimary, fontFamily: BODY }}>
@@ -853,16 +894,20 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
   };
 
   const eyebrow = rec.status === 'submitted' ? 'Submitted' : rec.status === 'passed' ? 'Passed'
+    : late ? 'Deadline passed'
     : followUp ? 'Reassigned' : rec.status === 'needs_revision' ? 'Needs revision'
     : isHifz ? 'Hifz homework' : 'Recitation homework';
   const subline = rec.status === 'submitted' ? 'Your teacher will listen and review it.'
     : rec.status === 'passed' ? 'Your teacher reviewed this homework — well done.'
+    : late && rec.dueAt ? `It was due ${dueLabel(rec.dueAt)}`
     : isHifz ? (allRecorded
         ? 'Recorded — listen back once more, then send it to your teacher'
         : `Recite all ${verses.length} verse${verses.length === 1 ? '' : 's'} from memory in one recording`)
     : allRecorded ? `All ${verses.length} verses recorded — listen back once more, then send it to your teacher`
     : `${recordedCount} of ${verses.length} verses recorded`;
-  const notice = followUp
+  const notice = late
+    ? 'The deadline has passed, so this homework is closed.'
+    : followUp
     ? `Your teacher sent ${rangeLabel(followUp)} back as a new homework — record ${versesOf(followUp).length === 1 ? 'that verse' : 'those verses'} there. This one is finished.`
     : rec.status === 'needs_revision'
     ? 'Your teacher left notes on this homework. Look at the mistakes in your Quran page, then record the verses again and resubmit.'

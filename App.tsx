@@ -85,7 +85,7 @@ import {
   LetterCardsAttempt, LetterCardsGame, listLetterCardsAttempts, listLetterCardsHomework,
 } from './services/letterCardsService';
 import {
-  RecitationHomework, clearRecitationHistory, createRecitationHomework, deleteRecitationHomework,
+  RecitationHomework, cancelRecitationHomework, clearRecitationHistory, createRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
   closeFollowUps, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
 } from './services/recitationHomeworkService';
@@ -1713,6 +1713,7 @@ const App: React.FC = () => {
         startSurah: newHomework.startSurah, startAyah: newHomework.startAyah,
         endSurah: newHomework.endSurah, endAyah: newHomework.endAyah, note: newHomework.note,
         kind: opts.reciteKind ?? 'reading',
+        dueAt: newHomework.dueAt ?? null,
       });
       if (rec) {
         newHomework.recitationId = rec.id;
@@ -2462,7 +2463,7 @@ const App: React.FC = () => {
           // they are the storage hog, and nobody listens to a withdrawn one.
           const removeHomework = async (hw: QuranHomework) => {
             const rec = hw.recitationId ? recitations[hw.recitationId] : undefined;
-            if (rec) deleteRecitationHomework(rec);
+            if (rec) cancelRecitationHomework(rec);
             const updated = hw_all.map(h =>
               h.id === hw.id ? { ...h, isDone: true, outcome: 'removed' as const, recitationId: undefined } : h);
             handleUpdateStudent({ ...hw_student, quranHomework: updated });

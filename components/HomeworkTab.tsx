@@ -14,7 +14,7 @@
 import React, { useMemo, useState } from 'react';
 import { QURAN_METADATA } from '../constants';
 import { QuranHomework } from '../types';
-import { RecitationHomework, rangeLabel, versesOf } from '../services/recitationHomeworkService';
+import { RecitationHomework, isPastDeadline, rangeLabel, versesOf } from '../services/recitationHomeworkService';
 import type { LetterCardsAttempt, LetterCardsGame } from '../services/letterCardsService';
 import { dueLabel, hunterMark, huntFinished, type HunterHomework } from '../services/lettersHunterHomeworkService';
 import { outcomeOf, OUTCOME_LABEL, OUTCOME_PILL, type HomeworkOutcome,
@@ -450,6 +450,9 @@ const HomeworkTab: React.FC<{
           {canListen(b, a) && listenGhost(b)}
         </span>
       )
+      // Past the deadline the recording page is closed, so is the way in.
+      : isPastDeadline({ status: a.rec.status, dueAt: a.rec.dueAt ?? (a.rec.parentId ? null : a.hw.dueAt ?? null) })
+        ? pill('Deadline passed', 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200')
       : (
         <button onClick={() => onRecord?.(a.hw, a.rec)}
           className="h-9 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-[13px] font-bold">
