@@ -22,10 +22,16 @@ import {
   logPdfLessonRevision, progressFraction, type PdfLessonProgress,
 } from '../services/pdfLessonProgressService';
 import { getQaedahWordIdsByTopic, getQaedahPractisedByTopic } from '../services/qaedahService';
+import { isShaddahTopic, shaddahPairs } from '../utils/shaddahPairs';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
+
+/** Shaddah lesson letter pairs: how many a run deals, and the id prefix that
+ *  marks one as generated (never a row in qaedah_words). */
+const PAIRS_PER_RUN = 20;
+const PAIR_ID = 'pair:';
 
 const PRAISE = [
   { emoji: '🌟', text: 'Amazing!' },   { emoji: '🎉', text: 'Woohoo!' },
@@ -182,6 +188,10 @@ const QaedahPage: React.FC<{
   /** Null on a lesson that teaches no vowel, or one with no recordings yet. */
   const soundsVowel = selectedTopic
     ? vowelForTopic(selectedTopic.titleEn, selectedTopic.titleAr) : null;
+  /** The Shaddah lesson also drills random letter pairs (utils/shaddahPairs). */
+  const pairsLesson = !!selectedTopic && isShaddahTopic(selectedTopic.titleEn, selectedTopic.titleAr);
+  /** What the running challenge is made of: the lesson's words, or random pairs. */
+  const [runKind, setRunKind] = useState<'words' | 'pairs'>('words');
   // topicId → lesson PDF (uploaded by an admin), and whether the board is open.
   const [pdfs,        setPdfs]       = useState<QaedahPdfIndex>({});
   /** How far through each lesson's PDF, and which of its words are known —
@@ -296,6 +306,8 @@ const QaedahPage: React.FC<{
 
   /** Record one tap locally (instant squares) and in the DB. */
   const recordAttempt = useCallback((w: QaedahWord, correct: boolean) => {
+    // A random letter pair is not a lesson word: no row, no squares.
+    if (w.id.startsWith(PAIR_ID)) return;
     setAttempts(prev => {
       const next = new Map<string, QaedahAttempt[]>(prev);
       next.set(w.id, [...(next.get(w.id) ?? []), { wordId: w.id, correct, at: new Date().toISOString() }]);
@@ -352,7 +364,7 @@ const QaedahPage: React.FC<{
           void logQaedahCompletion({
             studentId,
             topicId:      selectedTopic.id,
-            topicTitle:   selectedTopic.titleEn,
+            topicTitle:   runKind === 'pairs' ? `${selectedTopic.titleEn} · letter pairs` : selectedTopic.titleEn,
             wordsCount:   queue.length,
             correctCount: runTally.current.correct,
             wrongCount:   runTally.current.wrong,
@@ -361,7 +373,7 @@ const QaedahPage: React.FC<{
       }
       return next;
     });
-  }, [queue.length, childMode, launchConfetti, studentId, selectedTopic]);
+  }, [queue.length, childMode, launchConfetti, studentId, selectedTopic, runKind]);
 
   // ── Start challenge ───────────────────────────────────────────────────────
   /** The words a challenge would run on right now: the hand-picked ones if any,
@@ -373,7 +385,19 @@ const QaedahPage: React.FC<{
   const handleStart = () => {
     const filtered = challengeWords();
     if (filtered.length === 0) return;
-    const q = shuffle(filtered);
+    beginRun(shuffle(filtered), 'words');
+  };
+
+  /** Shaddah lesson: a fresh set of random pairs, the second letter doubled. */
+  const startPairs = () => {
+    if (!selectedTopic) return;
+    beginRun(shaddahPairs(PAIRS_PER_RUN).map((word, i) => ({
+      id: `${PAIR_ID}${i}`, topicId: selectedTopic.id, word, level: 1 as const, orderIndex: i, createdAt: '',
+    })), 'pairs');
+  };
+
+  const beginRun = (q: QaedahWord[], kind: 'words' | 'pairs') => {
+    setRunKind(kind);
     setQueue(q);
     setPos(0);
     setRestartMsg('');
@@ -632,6 +656,33 @@ const QaedahPage: React.FC<{
           </span>
           <span lang="ar" dir="rtl" className="flex-shrink-0 text-2xl text-amber-600 dark:text-amber-400" style={{ fontFamily: "'Hafs', 'Amiri', serif" }}>
             {glyphFor('ب', 'isolated', soundsVowel)}
+          </span>
+        </button>
+      )}
+
+      {/* ── Letter pairs ── Shaddah lesson only: two random letters, the second
+          doubled, read one at a time in the usual challenge. */}
+      {pairsLesson && (
+        <button
+          onClick={startPairs}
+          className="w-full mb-5 flex items-center gap-3 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md transition-all text-left group"
+        >
+          <span className="flex-shrink-0 w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center">
+            <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor">
+              <rect x="3.5" y="6" width="7" height="12" rx="2" />
+              <rect x="13.5" y="6" width="7" height="12" rx="2" />
+              <path strokeLinecap="round" d="M15.5 3.5l1.5 1.2 1.5-1.2" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Practice</span>
+            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+              Letter pairs with shaddah
+            </span>
+          </span>
+          <span lang="ar" dir="rtl" className="flex-shrink-0 text-2xl text-indigo-600 dark:text-indigo-400" style={HAFS}>
+            {/* بَتَّ — letter, shaddah, vowel: the lesson's own mark order */}
+            {'بَتَّ'}
           </span>
         </button>
       )}
@@ -984,12 +1035,12 @@ const QaedahPage: React.FC<{
       </h2>
       <p className={`mb-8 max-w-xs ${childMode ? 'text-lg font-bold text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
         {childMode
-          ? <>{`You practised ${queue.length} words!`}<br />Amazing work! 🎉</>
-          : `You went through all ${queue.length} words.`}
+          ? <>{`You practised ${queue.length} ${runKind === 'pairs' ? 'pairs' : 'words'}!`}<br />Amazing work! 🎉</>
+          : `You went through all ${queue.length} ${runKind === 'pairs' ? 'pairs' : 'words'}.`}
       </p>
       <div className="flex gap-3 flex-wrap justify-center">
         <button
-          onClick={handleStart}
+          onClick={runKind === 'pairs' ? startPairs : handleStart}
           className={`px-6 py-2.5 font-bold transition-all active:scale-95 ${
             childMode
               ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md'
