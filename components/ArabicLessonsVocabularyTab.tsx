@@ -30,6 +30,11 @@ import { supabase } from '../lib/supabase';
 import { LetterCardsSetup } from './LetterCardsGame';
 import WordFlightGame from './WordFlightGame';
 import CrosswordGame from './CrosswordGame';
+import LetterWheelGame from './LetterWheelGame';
+import QuickMatchGame from './QuickMatchGame';
+import WordSearchGame from './WordSearchGame';
+import WordSnakeGame from './WordSnakeGame';
+import { getQuickMatchBests } from '../services/quickMatchService';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
 const shuffleArray = <T,>(arr: T[]): T[] => {
@@ -91,6 +96,14 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const [showWordFlight, setShowWordFlight] = useState(false);
   const [showCrossword, setShowCrossword] = useState(false);
   const [showWordRace, setShowWordRace]     = useState(false);
+  /** One of the four letter / word games beside the crossword. */
+  const [wordGame, setWordGame] = useState<'wheel' | 'match' | 'search' | 'snake' | null>(null);
+  const [matchBest, setMatchBest] = useState(0);
+  useEffect(() => {
+    let live = true;
+    getQuickMatchBests(student.id).then(b => { if (live) setMatchBest(Math.max(b.arabic, b.translit)); });
+    return () => { live = false; };
+  }, [student.id, wordGame]);
 
   // Flashcard run — mirrors the per-lesson VocabularyTab flow exactly.
   const [phase, setPhase]           = useState<Phase>('idle');
@@ -504,6 +517,30 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             disabled={practicePool.length < 2}
             onClick={() => setShowCrossword(true)} />
 
+          <GameTile art="letterwheel" tone="amber" icon="🎡"
+            name="Letter Wheel"
+            hint={practicePool.length === 0 ? 'Pick some words' : 'Join the letters into the word'}
+            disabled={practicePool.length === 0}
+            onClick={() => setWordGame('wheel')} />
+
+          <GameTile art="quickmatch" tone="teal" icon="⚡"
+            name="Quick Match"
+            hint={practicePool.length < 2 ? 'Pick at least two words' : `60 seconds · match or not${matchBest ? ` · best ${matchBest}` : ''}`}
+            disabled={practicePool.length < 2}
+            onClick={() => setWordGame('match')} />
+
+          <GameTile art="wordsearch" tone="indigo" icon="🔎"
+            name="Word Search"
+            hint={practicePool.length === 0 ? 'Pick some words' : 'Find the hidden words'}
+            disabled={practicePool.length === 0}
+            onClick={() => setWordGame('search')} />
+
+          <GameTile art="wordsnake" tone="green" icon="🐍"
+            name="Word Snake"
+            hint={practicePool.length === 0 ? 'Pick some words' : 'Eat the letters in order'}
+            disabled={practicePool.length === 0}
+            onClick={() => setWordGame('snake')} />
+
           <GameTile art="wordcards" tone="orange" icon="🃏"
             name="Word Cards Game"
             hint={cardWords.length < 2
@@ -663,6 +700,17 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           onExit={() => setShowCrossword(false)}
         />
       )}
+      {wordGame && (() => {
+        const gameTitle = pool === 'picked' ? 'Picked words'
+          : pool === 'needs' ? 'Needs practice'
+          : selected.size === 1 ? (lessons.find(l => selected.has(l.id))?.title ?? '1 lesson')
+          : selected.size ? `${selected.size} lessons` : 'Every lesson';
+        const close = () => setWordGame(null);
+        return wordGame === 'wheel' ? <LetterWheelGame words={practicePool} title={gameTitle} onExit={close} />
+          : wordGame === 'match' ? <QuickMatchGame words={practicePool} title={gameTitle} studentId={student.id} onExit={close} />
+          : wordGame === 'search' ? <WordSearchGame words={practicePool} title={gameTitle} onExit={close} />
+          : <WordSnakeGame words={practicePool} title={gameTitle} onExit={close} />;
+      })()}
       {showWordRace && (
         <LetterRaceGame
           mode="words"

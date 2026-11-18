@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 import React, { useState } from 'react';
 
-export type GameTone = 'amber' | 'sky' | 'teal' | 'rose' | 'orange' | 'violet';
+export type GameTone = 'amber' | 'sky' | 'teal' | 'rose' | 'orange' | 'violet' | 'indigo' | 'green';
 
 /** Full class strings, never built by hand: Tailwind only ships what it sees. */
 const TONE: Record<GameTone, { box: string; chip: string; title: string; hint: string }> = {
@@ -53,6 +53,18 @@ const TONE: Record<GameTone, { box: string; chip: string; title: string; hint: s
     chip:  'bg-violet-100 dark:bg-violet-900/30',
     title: 'text-violet-800 dark:text-violet-200',
     hint:  'text-violet-600/70 dark:text-violet-300/60',
+  },
+  indigo: {
+    box:   'border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/60 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20',
+    chip:  'bg-indigo-100 dark:bg-indigo-900/30',
+    title: 'text-indigo-800 dark:text-indigo-200',
+    hint:  'text-indigo-600/70 dark:text-indigo-300/60',
+  },
+  green: {
+    box:   'border-green-200 dark:border-green-800/60 bg-green-50/60 dark:bg-green-900/10 hover:bg-green-50 dark:hover:bg-green-900/20',
+    chip:  'bg-green-100 dark:bg-green-900/30',
+    title: 'text-green-800 dark:text-green-200',
+    hint:  'text-green-600/70 dark:text-green-300/60',
   },
 };
 

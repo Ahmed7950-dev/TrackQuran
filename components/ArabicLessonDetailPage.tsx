@@ -16,6 +16,10 @@ import { useI18n } from '../context/I18nProvider';
 import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
 import WordFlightGame from './WordFlightGame';
 import CrosswordGame from './CrosswordGame';
+import LetterWheelGame from './LetterWheelGame';
+import QuickMatchGame from './QuickMatchGame';
+import WordSearchGame from './WordSearchGame';
+import WordSnakeGame from './WordSnakeGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
@@ -2710,6 +2714,8 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, lessonTitle, isAdmin
   const [showWordRace, setShowWordRace] = useState(false);
   // Crossword on this lesson's words
   const [showCrossword, setShowCrossword] = useState(false);
+  // Letter wheel / Quick match / Word search / Word snake on this lesson's words
+  const [wordGame, setWordGame] = useState<'wheel' | 'match' | 'search' | 'snake' | null>(null);
   const racePairs: RacePair[] = words
     .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
     .map(w => ({ prompt: w.english.trim(), answer: w.arabic.trim() }));
@@ -3091,6 +3097,48 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, lessonTitle, isAdmin
                   </button>
                 )}
 
+                {/* Letter Wheel */}
+                <button onClick={() => setWordGame('wheel')}
+                  className="group flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-3 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-amber-100 dark:bg-amber-900/30 ring-1 ring-amber-200/60 dark:ring-amber-800/40 flex items-center justify-center text-2xl">🎡</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-amber-800 dark:text-amber-200 truncate">Letter Wheel</span>
+                    <span className="block text-xs text-amber-600/70 dark:text-amber-300/60">Join the letters</span>
+                  </span>
+                </button>
+
+                {words.length >= 2 && (<>
+                {/* Quick Match */}
+                <button onClick={() => setWordGame('match')}
+                  className="group flex items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-900/10 px-4 py-3 text-left hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:border-teal-300 dark:hover:border-teal-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-teal-100 dark:bg-teal-900/30 ring-1 ring-teal-200/60 dark:ring-teal-800/40 flex items-center justify-center text-2xl">⚡</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-teal-800 dark:text-teal-200 truncate">Quick Match</span>
+                    <span className="block text-xs text-teal-600/70 dark:text-teal-300/60">60 seconds · match or not</span>
+                  </span>
+                </button>
+                </>)}
+
+                {/* Word Search */}
+                <button onClick={() => setWordGame('search')}
+                  className="group flex items-center gap-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/60 dark:bg-indigo-900/10 px-4 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 ring-1 ring-indigo-200/60 dark:ring-indigo-800/40 flex items-center justify-center text-2xl">🔎</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-indigo-800 dark:text-indigo-200 truncate">Word Search</span>
+                    <span className="block text-xs text-indigo-600/70 dark:text-indigo-300/60">Find the hidden words</span>
+                  </span>
+                </button>
+
+                {/* Word Snake */}
+                <button onClick={() => setWordGame('snake')}
+                  className="group flex items-center gap-3 rounded-xl border border-green-200 dark:border-green-800/60 bg-green-50/60 dark:bg-green-900/10 px-4 py-3 text-left hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-300 dark:hover:border-green-700 hover:shadow-sm transition-all">
+                  <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-green-100 dark:bg-green-900/30 ring-1 ring-green-200/60 dark:ring-green-800/40 flex items-center justify-center text-2xl">🐍</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-green-800 dark:text-green-200 truncate">Word Snake</span>
+                    <span className="block text-xs text-green-600/70 dark:text-green-300/60">Eat the letters in order</span>
+                  </span>
+                </button>
+
                 {/* Revise saved words — only when the learner has saved some */}
                 {savedWords.length > 0 && (
                   <button onClick={startRevisionChallenge}
@@ -3126,6 +3174,10 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, lessonTitle, isAdmin
           {showCrossword && (
             <CrosswordGame words={words} title={lessonTitle} onExit={() => setShowCrossword(false)} />
           )}
+          {wordGame === 'wheel' && <LetterWheelGame words={words} title={lessonTitle} onExit={() => setWordGame(null)} />}
+          {wordGame === 'match' && <QuickMatchGame words={words} title={lessonTitle} studentId={selectedStudentId || undefined} onExit={() => setWordGame(null)} />}
+          {wordGame === 'search' && <WordSearchGame words={words} title={lessonTitle} onExit={() => setWordGame(null)} />}
+          {wordGame === 'snake' && <WordSnakeGame words={words} title={lessonTitle} onExit={() => setWordGame(null)} />}
         </>
       )}
     </div>
