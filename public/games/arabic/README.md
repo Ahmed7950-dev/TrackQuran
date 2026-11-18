@@ -26,6 +26,7 @@ File names, exactly:
   wordflight.webp   Word Flight Game            (Catch the falling words)
   wordrace.webp     Word Race Game              (Run to the Arabic word)
   wordcards.webp    Word Cards Game             (Throw a card, match its pair)
+  crossword.webp    Crossword                   (Fill the grid · N words)
   saved.webp        Revise saved words          (the 🔖 list)
 
 The same files serve both places the tiles appear: the Practise box in Lessons

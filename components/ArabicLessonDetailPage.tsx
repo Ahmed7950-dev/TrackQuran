@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthProvider';
 import { useI18n } from '../context/I18nProvider';
 import TajweedLessonViewer, { VocabWordBasic } from './TajweedLessonViewer';
 import WordFlightGame from './WordFlightGame';
+import CrosswordGame from './CrosswordGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 import {
   getHomeworkQuestions, createHomeworkQuestion,
@@ -454,7 +455,7 @@ const ArabicLessonDetailPage: React.FC<Props> = ({
         {activeTab === 'vocabulary' && (
           <div className="h-full overflow-y-auto">
             <VocabularyTab
-              lessonId={lesson.id} isAdmin={isAdmin}
+              lessonId={lesson.id} lessonTitle={lesson.title} isAdmin={isAdmin}
               students={students} preSelectedStudentId={preSelectedStudentId}
             />
           </div>
@@ -2685,6 +2686,7 @@ const LottieIcon: React.FC<{ path: string; className?: string }> = ({ path, clas
 
 interface VocabTabProps {
   lessonId: string;
+  lessonTitle?: string;
   isAdmin: boolean;
   students: ArabicStudent[];
   preSelectedStudentId?: string;
@@ -2692,7 +2694,7 @@ interface VocabTabProps {
 
 type ChallengePhase = 'idle' | 'active' | 'complete';
 
-const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, preSelectedStudentId }) => {
+const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, lessonTitle, isAdmin, students, preSelectedStudentId }) => {
   const { t } = useI18n();
   const [words, setWords]           = useState<VocabWord[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -2706,6 +2708,8 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
   const [showWordFlight, setShowWordFlight] = useState(false);
   // Word Race game (Letter Race in Arabic word mode) — English prompt → Arabic crate
   const [showWordRace, setShowWordRace] = useState(false);
+  // Crossword on this lesson's words
+  const [showCrossword, setShowCrossword] = useState(false);
   const racePairs: RacePair[] = words
     .filter(w => (w.english ?? '').trim() && (w.arabic ?? '').trim())
     .map(w => ({ prompt: w.english.trim(), answer: w.arabic.trim() }));
@@ -3075,6 +3079,18 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
                   </button>
                 )}
 
+                {/* Crossword — this lesson's words in small grids */}
+                {words.length >= 2 && (
+                  <button onClick={() => setShowCrossword(true)}
+                    className="group flex items-center gap-3 rounded-xl border border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/10 px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-sm transition-all">
+                    <span className="flex-shrink-0 w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/30 ring-1 ring-violet-200/60 dark:ring-violet-800/40 flex items-center justify-center text-2xl">🧩</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-violet-800 dark:text-violet-200 truncate">Crossword</span>
+                      <span className="block text-xs text-violet-600/70 dark:text-violet-300/60">Fill the grid</span>
+                    </span>
+                  </button>
+                )}
+
                 {/* Revise saved words — only when the learner has saved some */}
                 {savedWords.length > 0 && (
                   <button onClick={startRevisionChallenge}
@@ -3105,6 +3121,10 @@ const VocabularyTab: React.FC<VocabTabProps> = ({ lessonId, isAdmin, students, p
               letterForm="isolated"
               onExit={() => setShowWordRace(false)}
             />
+          )}
+
+          {showCrossword && (
+            <CrosswordGame words={words} title={lessonTitle} onExit={() => setShowCrossword(false)} />
           )}
         </>
       )}

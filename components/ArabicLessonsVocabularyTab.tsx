@@ -29,6 +29,7 @@ import { createArabicHomework } from '../services/arabicHomeworkService';
 import { supabase } from '../lib/supabase';
 import { LetterCardsSetup } from './LetterCardsGame';
 import WordFlightGame from './WordFlightGame';
+import CrosswordGame from './CrosswordGame';
 import LetterRaceGame, { RacePair } from './LetterRaceGame';
 
 const shuffleArray = <T,>(arr: T[]): T[] => {
@@ -88,6 +89,7 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
   const [search, setSearch]   = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());   // lesson ids
   const [showWordFlight, setShowWordFlight] = useState(false);
+  const [showCrossword, setShowCrossword] = useState(false);
   const [showWordRace, setShowWordRace]     = useState(false);
 
   // Flashcard run — mirrors the per-lesson VocabularyTab flow exactly.
@@ -496,6 +498,12 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
               onClick={() => setShowWordRace(true)} />
           )}
 
+          <GameTile art="crossword" tone="violet" icon="🧩"
+            name="Crossword"
+            hint={practicePool.length < 2 ? 'Pick at least two words' : `Fill the grid · ${practicePool.length} words`}
+            disabled={practicePool.length < 2}
+            onClick={() => setShowCrossword(true)} />
+
           <GameTile art="wordcards" tone="orange" icon="🃏"
             name="Word Cards Game"
             hint={cardWords.length < 2
@@ -643,6 +651,16 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
           words={practicePool.map(w => ({ arabic: w.arabic, meaning: w.english }))}
           vsComputer={studentMode}
           onExit={() => setShowWordFlight(false)}
+        />
+      )}
+      {showCrossword && (
+        <CrosswordGame
+          words={practicePool}
+          title={pool === 'picked' ? 'Picked words'
+            : pool === 'needs' ? 'Needs practice'
+            : selected.size === 1 ? (lessons.find(l => selected.has(l.id))?.title ?? '1 lesson')
+            : selected.size ? `${selected.size} lessons` : 'Every lesson'}
+          onExit={() => setShowCrossword(false)}
         />
       )}
       {showWordRace && (
