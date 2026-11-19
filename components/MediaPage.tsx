@@ -26,6 +26,7 @@ import {
   refreshPlaylistNews, markPlaylistSeen, newVideoIds, totalNewVideos,
   loadProgress, saveProgress, clearProgress,
   parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, fetchVideoLengths, timecode, watchedFraction,
+  hasEnglishSound,
 } from '../services/mediaService';
 
 /* ── The booth's palette ──────────────────────────────────────────────
@@ -102,6 +103,10 @@ const PENCIL = 'M16.5 3.9l3.6 3.6L8 19.6 3.6 21l1.4-4.4z';
 const TRASH  = 'M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13';
 const REDO   = 'M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.5V10h5.2';
 const CLOSE  = 'M6 6l12 12M18 6L6 18';
+/** A speaker; SOUND_ON adds the waves, SOUND_OFF a cross. */
+const SPEAKER   = 'M4 9.5h3.5L12 5.5v13l-4.5-4H4z';
+const SOUND_ON  = 'M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11';
+const SOUND_OFF = 'M16 9.5l5 5M21 9.5l-5 5';
 
 /** One tick per video in a playlist — the same small-segment language the
  *  Qaedah words and the Tadabbur verses already speak. */
@@ -531,10 +536,12 @@ const AddLink: React.FC<{
   shelf: MediaItem[];
   defaultCategory: string | null;
   onCancel: () => void;
-  onAdd: (title: string, link: ParsedLink, categoryId: string | null) => Promise<string | null>;
+  onAdd: (title: string, link: ParsedLink, categoryId: string | null, audioLangs: string[] | null) => Promise<string | null>;
   onNewCategory: (name: string) => Promise<MediaCategory | null>;
 }> = ({ categories, shelf, defaultCategory, onCancel, onAdd, onNewCategory }) => {
   const [url, setUrl] = useState('');
+  /** Languages it can be heard in; empty = not said. */
+  const [sound, setSound] = useState<string[]>([]);
   const [title, setTitle] = useState('');
   const [cat, setCat] = useState<string | null>(defaultCategory);
   const [newCat, setNewCat] = useState('');
@@ -551,7 +558,7 @@ const AddLink: React.FC<{
   const submit = async () => {
     if (!link || already || !title.trim()) return;
     setBusy(true); setError('');
-    const problem = await onAdd(title, link, cat);
+    const problem = await onAdd(title, link, cat, sound.length ? [...sound].sort() : null);
     setBusy(false);
     if (problem) setError(problem);
   };
@@ -660,6 +667,24 @@ const AddLink: React.FC<{
             </div>
           </div>
 
+          <div className="mt-6">
+            <p className="m-0 mb-2.5" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>SOUND</p>
+            <div role="group" aria-label="Sound" className="flex flex-wrap gap-2">
+              {([['en', 'English'], ['ar', 'Arabic']] as const).map(([code, label]) => {
+                const on = sound.includes(code);
+                return (
+                  <button key={code} type="button" aria-pressed={on}
+                    onClick={() => setSound(prev => (on ? prev.filter(x => x !== code) : [...prev, code]))}
+                    className="inline-flex items-center gap-2 h-11 px-4 rounded-[9px] text-[13.5px]"
+                    style={{ background: on ? C.raised : C.card, border: `1px solid ${on ? C.amber : C.line}`, color: on ? C.ink : C.body, fontWeight: on ? 600 : 500 }}>
+                    <Icon d={on ? `${SPEAKER}${SOUND_ON}` : SPEAKER} size={15} stroke={1.9} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {error && <p role="alert" className="mt-5 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>{error}</p>}
         </div>
 
@@ -699,6 +724,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'finished'>('all');
   /** Show only videos shorter than this many minutes; null = any length. */
   const [underMin, setUnderMin] = useState<number | null>(null);
+  /** Only reels that can be heard in English. */
+  const [englishOnly, setEnglishOnly] = useState(false);
   /** How the shelf is laid out; remembered on this device. */
   const [view, setView] = useState<ShelfView>(() => {
     try {
@@ -817,11 +844,12 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
         const len = lengthOf(it);
         if (len == null || len >= underMin * 60) return false;
       }
+      if (englishOnly && !hasEnglishSound(it)) return false;
       if (filter === 'all') return true;
       const done = marks.get(it.id)?.finished ?? false;
       return filter === 'finished' ? done : !done;
     });
-  }, [items, channel, query, filter, marks, underMin, lengthOf]);
+  }, [items, channel, query, filter, marks, underMin, lengthOf, englishOnly]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -852,8 +880,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     return best;
   }, [items, marks, studentId]);
 
-  const doAdd = async (title: string, link: ParsedLink, categoryId: string | null): Promise<string | null> => {
-    const res = await addMedia({ teacherId, title, link, categoryId });
+  const doAdd = async (title: string, link: ParsedLink, categoryId: string | null, audioLangs: string[] | null): Promise<string | null> => {
+    const res = await addMedia({ teacherId, title, link, categoryId, audioLangs });
     if ('error' in res) return res.error;
     setItems(prev => [res.item, ...prev]);
     setAdding(false);
@@ -883,6 +911,19 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     const categoryId = n === 0 ? null : cats[n - 1].id;
     if (await updateMedia(it.id, { categoryId })) {
       setItems(prev => prev.map(x => (x.id === it.id ? { ...x, categoryId } : x)));
+    }
+  };
+
+  /** The speaker on a reel: English on or off. The rest of its languages stay. */
+  const toggleEnglish = async (it: MediaItem) => {
+    const before = it.audioLangs;
+    const next = hasEnglishSound(it)
+      ? (before ?? []).filter(l => l !== 'en')
+      : [...(before ?? []), 'en'].sort();
+    setItems(prev => prev.map(x => (x.id === it.id ? { ...x, audioLangs: next } : x)));
+    if (!(await updateMedia(it.id, { audioLangs: next }))) {
+      setItems(prev => prev.map(x => (x.id === it.id ? { ...x, audioLangs: before } : x)));
+      window.alert(`Could not save the sound for "${it.title}". Check the connection and try again.`);
     }
   };
 
@@ -1146,6 +1187,15 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   </button>
                 ))}
               </div>
+              <div className="flex p-1" style={{ borderRadius: 10, background: C.card, border: `1px solid ${C.line}` }}>
+                <button type="button" onClick={() => setEnglishOnly(v => !v)} aria-pressed={englishOnly}
+                  title="Only reels with English sound"
+                  className="flex items-center gap-2"
+                  style={{ ...chipStyle(englishOnly), padding: '0 13px', whiteSpace: 'nowrap' }}>
+                  <Icon d={`${SPEAKER}${SOUND_ON}`} size={16} stroke={1.9} />
+                  English
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 mb-3">
@@ -1202,8 +1252,14 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   const len = lengthOf(it);
                   const lenLabel = it.kind === 'playlist' ? (total ? `${total} videos` : null) : (len != null ? timecode(len) : null);
                   const barPct = `${(done ? 1 : frac) * 100}%`;
+                  const english = hasEnglishSound(it);
                   const actions = (
                     <div className="flex-shrink-0 flex items-center gap-1">
+                      <button type="button" onClick={() => void toggleEnglish(it)} aria-pressed={english}
+                        aria-label={`English sound for ${it.title}`} title={english ? 'English sound' : 'No English sound'}
+                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: english ? C.amber : C.dim, border: 0 }}>
+                        <Icon d={`${SPEAKER}${english ? SOUND_ON : SOUND_OFF}`} size={17} stroke={1.8} />
+                      </button>
                       <button type="button" onClick={() => void rename(it)} aria-label={`Rename ${it.title}`}
                         className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
                         <Icon d={PENCIL} size={17} stroke={1.8} />

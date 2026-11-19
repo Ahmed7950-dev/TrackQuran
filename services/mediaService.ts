@@ -40,8 +40,14 @@ export interface MediaItem {
   /** What the tutor has already been shown. Null until the first check. */
   seenVideoIds: string[] | null;
   checkedAt: string | null;
+  /** Languages it can be heard in, base codes ({ar,en}); null = not known.
+   *  See supabase/migrations/20261124_media_audio_langs.sql. */
+  audioLangs: string[] | null;
   createdAt: string;
 }
+
+/** True when English is one of the reel's sound tracks. */
+export const hasEnglishSound = (it: MediaItem): boolean => !!it.audioLangs?.includes('en');
 
 export interface MediaProgress {
   itemId: string;
@@ -258,6 +264,7 @@ type ItemRow = {
   youtube_id: string; url: string; item_count: number | null;
   thumb_url: string | null; created_at: string;
   latest_video_ids: string[] | null; seen_video_ids: string[] | null; checked_at: string | null;
+  audio_langs?: string[] | null;
 };
 const toItem = (r: ItemRow): MediaItem => ({
   id: r.id, categoryId: r.category_id, title: r.title, kind: r.kind,
@@ -265,12 +272,26 @@ const toItem = (r: ItemRow): MediaItem => ({
   thumbUrl: r.thumb_url ?? null,
   latestVideoIds: r.latest_video_ids ?? null, seenVideoIds: r.seen_video_ids ?? null,
   checkedAt: r.checked_at ?? null,
+  audioLangs: r.audio_langs ?? null,
   createdAt: r.created_at,
 });
 
 const ITEM_COLS = 'id, category_id, title, kind, youtube_id, url, item_count, thumb_url, created_at, latest_video_ids, seen_video_ids, checked_at';
+/** The same plus audio_langs. Kept as its own whole literal (see the note on
+ *  row-type inference) and only used once the column is known to exist, so the
+ *  shelf still opens before migration 20261124 has been run. */
+const ITEM_COLS_SOUND = 'id, category_id, title, kind, youtube_id, url, item_count, thumb_url, created_at, latest_video_ids, seen_video_ids, checked_at, audio_langs';
+let soundColumn = true;
+const missingSoundColumn = (msg: string | undefined) => !!msg && msg.includes('audio_langs');
 
 export async function listMedia(): Promise<MediaItem[]> {
+  if (soundColumn) {
+    const { data, error } = await supabase.from('media_items')
+      .select(ITEM_COLS_SOUND).order('created_at', { ascending: false });
+    if (!error) return (data as ItemRow[]).map(toItem);
+    if (!missingSoundColumn(error.message)) { console.error('listMedia:', error.message); return []; }
+    soundColumn = false;
+  }
   const { data, error } = await supabase.from('media_items')
     .select(ITEM_COLS).order('created_at', { ascending: false });
   if (error) { console.error('listMedia:', error.message); return []; }
@@ -281,10 +302,12 @@ export async function listMedia(): Promise<MediaItem[]> {
  *  failure the tutor can do something about, so it is worth saying plainly. */
 export async function addMedia(input: {
   teacherId: string; title: string; link: ParsedLink; categoryId: string | null;
+  /** The tutor's pick on the add form; null = left unset. */
+  audioLangs?: string[] | null;
 }): Promise<{ item: MediaItem } | { error: string }> {
   const thumbUrl = input.link.kind === 'playlist'
     ? await fetchPlaylistThumb(input.link.youtubeId) : null;
-  const { data, error } = await supabase.from('media_items').insert({
+  const row: Record<string, unknown> = {
     teacher_id: input.teacherId,
     category_id: input.categoryId,
     title: input.title.trim(),
@@ -292,7 +315,11 @@ export async function addMedia(input: {
     youtube_id: input.link.youtubeId,
     url: input.link.url,
     thumb_url: thumbUrl,
-  }).select(ITEM_COLS).single();
+  };
+  if (soundColumn && input.audioLangs?.length) row.audio_langs = input.audioLangs;
+  const { data, error } = soundColumn
+    ? await supabase.from('media_items').insert(row).select(ITEM_COLS_SOUND).single()
+    : await supabase.from('media_items').insert(row).select(ITEM_COLS).single();
 
   if (error) {
     if (error.code === '23505') return { error: 'That link is already on the shelf.' };
@@ -304,9 +331,10 @@ export async function addMedia(input: {
 
 export async function updateMedia(
   id: string,
-  patch: { title?: string; categoryId?: string | null; itemCount?: number; thumbUrl?: string | null },
+  patch: { title?: string; categoryId?: string | null; itemCount?: number; thumbUrl?: string | null; audioLangs?: string[] | null },
 ): Promise<boolean> {
   const row: Record<string, unknown> = {};
+  if (patch.audioLangs !== undefined) row.audio_langs = patch.audioLangs;
   if (patch.title !== undefined) row.title = patch.title.trim();
   if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
   if (patch.itemCount !== undefined) row.item_count = patch.itemCount;
