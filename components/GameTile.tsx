@@ -4,7 +4,8 @@
 // rails are: the artwork IS the tile. The picture carries the game's name, so
 // a tile with a file shows nothing else — no icon, no label, no hint.
 //
-// The box is exactly 4:1, and the
+// The box is exactly 4:1 (callers lay the tiles out small: two or three
+// across, see public/games/arabic/README.md), and the
 // picture is object-cover, so a master at that ratio is never cropped: what
 // you draw is what is shown. Art lives at /games/arabic/<art>.webp — see
 // public/games/arabic/README.md for the spec.
@@ -77,10 +78,12 @@ interface Props {
   icon: string;
   tone: GameTone;
   disabled?: boolean;
+  /** Grid placement from the caller, e.g. 'col-span-2 sm:col-span-1'. */
+  className?: string;
   onClick: () => void;
 }
 
-const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, onClick }) => {
+const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, className = '', onClick }) => {
   const [noArt, setNoArt] = useState(false);
   const t = TONE[tone];
   return (
@@ -90,19 +93,19 @@ const GameTile: React.FC<Props> = ({ art, name, hint, icon, tone, disabled, onCl
       disabled={disabled}
       title={hint ? `${name} — ${hint}` : name}
       aria-label={name}
-      className={`group relative w-full overflow-hidden rounded-2xl border text-start transition-all duration-150
-        disabled:opacity-40 disabled:cursor-default disabled:hover:translate-y-0 aspect-[4/1] ${
+      className={`group relative w-full overflow-hidden rounded-[10px] sm:rounded-xl border text-start transition-all duration-150
+        disabled:opacity-40 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-sm aspect-[4/1] ${className} ${
         noArt
           ? t.box
-          : 'border-transparent hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-black/40'
+          : 'border-transparent bg-slate-100 dark:bg-gray-700 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 hover:-translate-y-0.5 hover:shadow-md dark:hover:shadow-black/40'
       }`}
     >
       {noArt ? (
-        <span className="relative h-full flex items-center gap-3 px-4">
-          <span className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center text-2xl ${t.chip}`}>{icon}</span>
+        <span className="relative h-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3">
+          <span className={`flex-shrink-0 h-3/4 aspect-square rounded-md sm:rounded-lg flex items-center justify-center text-base sm:text-xl ${t.chip}`}>{icon}</span>
           <span className="min-w-0">
-            <span className={`block text-sm font-bold truncate ${t.title}`}>{name}</span>
-            {hint && <span className={`block text-xs truncate ${t.hint}`}>{hint}</span>}
+            <span className={`block text-xs sm:text-sm font-bold truncate ${t.title}`}>{name}</span>
+            {hint && <span className={`hidden sm:block text-xs truncate ${t.hint}`}>{hint}</span>}
           </span>
         </span>
       ) : (

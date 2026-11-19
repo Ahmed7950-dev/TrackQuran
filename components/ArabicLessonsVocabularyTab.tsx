@@ -493,8 +493,11 @@ const ArabicLessonsVocabularyTab: React.FC<Props> = ({ lessons, student, student
             : <>Everything below runs on <strong className="text-slate-700 dark:text-slate-200">{POOL_PHRASE[pool](practicePool.length, selected.size)}</strong>{studentMode ? '.' : ' — playing now or sent as homework.'}</>}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <GameTile art="flashcards" tone="amber" icon="🗂️"
+        {/* Small tiles: two across on a phone with Flashcards on its own row
+            above them, three across from sm up. 4:1 everywhere, so the art is
+            never cropped. Layout drawn on the design canvas, "Game buttons". */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+          <GameTile art="flashcards" tone="amber" icon="🗂️" className="col-span-2 sm:col-span-1"
             name={t('arabicLessonDetail.startFlashcard', { count: practicePool.length })}
             hint="Flip · memorise · repeat"
             disabled={practicePool.length === 0}

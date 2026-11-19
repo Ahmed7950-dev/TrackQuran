@@ -941,8 +941,8 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
                 {playSet.size > 1 ? ` from ${playSet.size} lists` : ' in this list'}
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <GameTile art="wordcards" tone="orange" icon="🃏"
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+              <GameTile art="wordcards" tone="orange" icon="🃏" className="col-span-2 sm:col-span-1"
                 name="Word Cards Game"
                 hint={selfPlay ? 'Play the computer' : 'Throw a card, match its pair'}
                 disabled={gamePairs.length < 2}

@@ -13,7 +13,9 @@ picture is never cropped: what you draw is what is shown.
 
 A tile with artwork shows NOTHING else — no name, no hint, no icon — so the
 picture has to carry the game's name itself. Keep the title away from the very
-edge: a 24 px margin all round clears the 16 px rounded corners.
+edge: a 24 px margin all round clears the 10-12 px rounded corners. Tiles are
+small now (about 40 px tall on a phone), so the title should be big and bold
+enough to read at that size.
 
 Nothing is ever dimmed and there is no selected state here (a tap starts the
 game), so draw for how it should normally look. Hovering lifts the tile a
@@ -36,11 +38,11 @@ File names, exactly:
 The same files serve both places the tiles appear: the Practise box in Lessons
 Vocabulary, and the Games row on the header's Vocabulary page.
 
-How the real sizes land, measured in the portal:
+How the real sizes land (Nov 2026 layout: two across on a phone with the
+first tile on its own row, three across from 640 px up):
 
-    phone   390 px wide   tile 324 × 81
-    tablet  820 px wide   tile 334 × 84
-    laptop 1280 px wide   tile 419 × 105   (Practise box, two columns)
-                          tile 281 ×  70   (Vocabulary page, three columns)
+    phone   375 px wide   first tile 309 × 77, the rest 151 × 38
+    laptop 1280 px wide   tile 275 × 69   (Practise box, three columns)
+                          tile 281 × 70   (Vocabulary page, three columns)
 
 So 1280 px across covers every case at 2× or better.
