@@ -27,6 +27,10 @@ File names, exactly:
   wordrace.webp     Word Race Game              (Run to the Arabic word)
   wordcards.webp    Word Cards Game             (Throw a card, match its pair)
   crossword.webp    Crossword                   (Fill the grid · N words)
+  letterwheel.webp  Letter Wheel                (Join the letters into the word)
+  quickmatch.webp   Quick Match                 (60 seconds · match or not)
+  wordsearch.webp   Word Search                 (Find the hidden words)
+  wordsnake.webp    Word Snake                  (Eat the letters in order)
   saved.webp        Revise saved words          (the 🔖 list)
 
 The same files serve both places the tiles appear: the Practise box in Lessons
