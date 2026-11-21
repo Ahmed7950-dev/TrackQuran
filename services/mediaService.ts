@@ -508,6 +508,179 @@ export async function markPlaylistSeen(item: MediaItem): Promise<boolean> {
   return true;
 }
 
+/* ── Watched channels ─────────────────────────────────────────────────
+ * A YouTube channel the tutor follows. Opening Media reads each one that is
+ * not muted (through /api/youtube-playlist on its uploads list) and offers
+ * whatever it posted since the tutor last decided. See migration
+ * 20261125_media_channels.sql. */
+
+export interface ChannelVideo { id: string; title: string; length: string | null; age: string | null }
+
+export interface MediaChannel {
+  id: string;
+  channelId: string;
+  handle: string | null;
+  title: string;
+  thumbUrl: string | null;
+  uploadsId: string;
+  categoryId: string | null;
+  muted: boolean;
+  latestVideos: ChannelVideo[];
+  seenVideoIds: string[];
+  checkedAt: string | null;
+  createdAt: string;
+}
+
+/** What /api/youtube-channel answers for a channel link. */
+export interface ChannelInfo {
+  channelId: string; title: string; thumb: string | null; handle: string | null;
+  uploadsId: string; videos: ChannelVideo[];
+}
+
+/** A channel link (/@handle, /channel/UC…, /c/…, /user/…) → true. Videos and
+ *  playlists are parseYouTubeLink's; this only says "it is a channel". */
+export function isChannelLink(raw: string): boolean {
+  const text = raw.trim();
+  if (/^@[\w.-]{2,100}$/.test(text)) return true;
+  let u: URL;
+  try { u = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`); } catch { return false; }
+  const host = u.hostname.replace(/^www\.|^m\./, '').toLowerCase();
+  if (host !== 'youtube.com') return false;
+  const [first, second] = u.pathname.split('/').filter(Boolean);
+  return !!first && (/^@[\w.-]{2,100}$/.test(decodeURIComponent(first))
+    || (first === 'channel' && /^UC[\w-]{22}$/.test(second ?? ''))
+    || ((first === 'c' || first === 'user') && !!second));
+}
+
+export async function resolveChannel(link: string): Promise<ChannelInfo | { error: string }> {
+  try {
+    const res = await fetch(`/api/youtube-channel?link=${encodeURIComponent(link.trim())}`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body || body.error) return { error: body?.error ?? 'Could not reach YouTube.' };
+    return body as ChannelInfo;
+  } catch {
+    return { error: 'Could not reach YouTube. Check the connection.' };
+  }
+}
+
+type ChannelRow = {
+  id: string; channel_id: string; handle: string | null; title: string; thumb_url: string | null;
+  uploads_id: string; category_id: string | null; muted: boolean;
+  latest_videos: ChannelVideo[] | null; seen_video_ids: string[] | null;
+  checked_at: string | null; created_at: string;
+};
+const toChannel = (r: ChannelRow): MediaChannel => ({
+  id: r.id, channelId: r.channel_id, handle: r.handle, title: r.title, thumbUrl: r.thumb_url,
+  uploadsId: r.uploads_id, categoryId: r.category_id, muted: r.muted,
+  latestVideos: Array.isArray(r.latest_videos) ? r.latest_videos : [],
+  seenVideoIds: r.seen_video_ids ?? [], checkedAt: r.checked_at, createdAt: r.created_at,
+});
+const CHANNEL_COLS = 'id, channel_id, handle, title, thumb_url, uploads_id, category_id, muted, latest_videos, seen_video_ids, checked_at, created_at';
+
+/** Every watched channel, oldest first. Empty (not an error) before the
+ *  migration has been run. */
+export async function listChannels(): Promise<MediaChannel[]> {
+  const { data, error } = await supabase.from('media_channels')
+    .select(CHANNEL_COLS).order('created_at', { ascending: true });
+  if (error) { console.error('listChannels:', error.message); return []; }
+  return (data as ChannelRow[]).map(toChannel);
+}
+
+/** Start watching. Everything it has posted so far counts as seen: only what
+ *  comes after today is offered. */
+export async function addChannel(teacherId: string, info: ChannelInfo, categoryId: string | null)
+  : Promise<{ channel: MediaChannel } | { error: string }> {
+  const { data, error } = await supabase.from('media_channels').insert({
+    teacher_id: teacherId,
+    channel_id: info.channelId,
+    handle: info.handle,
+    title: info.title,
+    thumb_url: info.thumb,
+    uploads_id: info.uploadsId,
+    category_id: categoryId,
+    latest_videos: info.videos,
+    seen_video_ids: info.videos.map(v => v.id),
+    checked_at: new Date().toISOString(),
+  }).select(CHANNEL_COLS).single();
+  if (error) {
+    if (error.code === '23505') return { error: 'You are already watching that channel.' };
+    console.error('addChannel:', error.message);
+    return { error: 'Could not save the channel.' };
+  }
+  return { channel: toChannel(data as ChannelRow) };
+}
+
+export async function updateChannel(id: string, patch: { muted?: boolean; categoryId?: string | null; seenVideoIds?: string[] })
+  : Promise<boolean> {
+  const row: Record<string, unknown> = {};
+  if (patch.muted !== undefined) row.muted = patch.muted;
+  if (patch.categoryId !== undefined) row.category_id = patch.categoryId;
+  if (patch.seenVideoIds !== undefined) row.seen_video_ids = patch.seenVideoIds;
+  if (!Object.keys(row).length) return true;
+  const { error } = await supabase.from('media_channels').update(row).eq('id', id);
+  if (error) { console.error('updateChannel:', error.message); return false; }
+  return true;
+}
+
+export async function deleteChannel(id: string): Promise<boolean> {
+  const { error } = await supabase.from('media_channels').delete().eq('id', id);
+  if (error) { console.error('deleteChannel:', error.message); return false; }
+  return true;
+}
+
+const CHANNEL_EVERY_MS = 30 * 60 * 1000;
+
+/** Ask YouTube what each unmuted channel holds now (at most every half hour
+ *  per channel). Returns the channels that were re-read. */
+export async function refreshChannelNews(channels: MediaChannel[]): Promise<MediaChannel[]> {
+  const now = Date.now();
+  const due = channels.filter(c => !c.muted
+    && (!c.checkedAt || now - new Date(c.checkedAt).getTime() > CHANNEL_EVERY_MS));
+  if (!due.length) return [];
+  const changed: MediaChannel[] = [];
+  for (let i = 0; i < due.length; i += 12) {
+    const batch = due.slice(i, i + 12);
+    let answer: Record<string, { videos?: ChannelVideo[]; videoIds?: string[]; error?: string }>;
+    try {
+      const res = await fetch(`/api/youtube-playlist?ids=${batch.map(c => encodeURIComponent(c.uploadsId)).join(',')}`);
+      if (!res.ok) continue;
+      answer = await res.json();
+    } catch { continue; }
+    for (const c of batch) {
+      const got = answer?.[c.uploadsId];
+      if (!got || got.error) continue;
+      const videos: ChannelVideo[] = got.videos?.length
+        ? got.videos
+        : (got.videoIds ?? []).map(id => ({ id, title: '', length: null, age: null }));
+      if (!videos.length) continue;
+      const checkedAt = new Date().toISOString();
+      const { error } = await supabase.from('media_channels')
+        .update({ latest_videos: videos, checked_at: checkedAt }).eq('id', c.id);
+      if (error) { console.error('refreshChannelNews:', error.message); continue; }
+      changed.push({ ...c, latestVideos: videos, checkedAt });
+    }
+  }
+  return changed;
+}
+
+/** What a channel posted that the tutor has not been offered yet and that is
+ *  not already on the shelf. Nothing for a muted channel. */
+export function pendingChannelVideos(c: MediaChannel, shelfVideoIds: Set<string>): ChannelVideo[] {
+  if (c.muted) return [];
+  const seen = new Set(c.seenVideoIds);
+  return c.latestVideos.filter(v => !seen.has(v.id) && !shelfVideoIds.has(v.id));
+}
+
+/** For the Media tab's badge: every pending video across the channels. */
+export function totalChannelNews(channels: MediaChannel[], items: MediaItem[]): number {
+  const shelf = new Set(items.filter(it => it.kind === 'video').map(it => it.youtubeId));
+  return channels.reduce((n, c) => n + pendingChannelVideos(c, shelf).length, 0);
+}
+
+/** A channel's picture, or null; YouTube's is large, so ask for a small one. */
+export const channelThumb = (c: { thumbUrl: string | null }): string | null =>
+  c.thumbUrl ? c.thumbUrl.replace(/=s\d+-/, '=s88-') : null;
+
 export const NEAR_END_SECONDS = 15;
 export const isAtEnd = (position: number, duration: number | null | undefined): boolean =>
   !!duration && duration > 0 && position >= duration - NEAR_END_SECONDS;

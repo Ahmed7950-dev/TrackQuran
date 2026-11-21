@@ -11,7 +11,7 @@ import LetterHuntGame from './components/LetterHuntGame';
 import { StudentArchive, EMPTY_ARCHIVE, ArchiveSubject, loadArchive, saveArchive, withArchived } from './services/archiveService';
 import { withActivityLog } from './utils/activityLog';
 import { useRosterRefresh } from './hooks/useRosterRefresh';
-import { listMedia, refreshPlaylistNews, totalNewVideos } from './services/mediaService';
+import { listMedia, refreshPlaylistNews, totalNewVideos, listChannels, refreshChannelNews, totalChannelNews } from './services/mediaService';
 import { ActivityLog } from './types';
 // FIX: Import 'calculateVersesAndPages' from dataService to resolve reference errors.
 import { getStudents, saveStudent, mergeStudentMistakes, deleteStudent, getTajweedRules, saveTajweedRules, calculateVersesAndPages, downloadBackup, restoreBackup, getStudentReportId, updateQuranHomeworkInReport, syncStudentDataInReport, setStudentApprovalStatus, createOrUpdateSharedReport, getTeacherProfile, saveTutorBillInfo, syncQuranicFontToReports , appendStudentActivity} from './services/dataService';
@@ -1109,12 +1109,15 @@ const App: React.FC = () => {
       if (Date.now() - mediaCheckedAt.current < 10 * 60 * 1000) return;
       mediaCheckedAt.current = Date.now();
       void (async () => {
-        const items = await listMedia();
+        const [items, channels] = await Promise.all([listMedia(), listChannels()]);
         if (stopped) return;
-        const changed = await refreshPlaylistNews(items);
+        // Watched channels count too: a new video there is one to offer.
+        const [changed, fresh] = await Promise.all([refreshPlaylistNews(items), refreshChannelNews(channels)]);
         if (stopped) return;
         const byId = new Map(changed.map(x => [x.id, x]));
-        setMediaNewCount(totalNewVideos(items.map(x => byId.get(x.id) ?? x)));
+        const chById = new Map(fresh.map(x => [x.id, x]));
+        const shelf = items.map(x => byId.get(x.id) ?? x);
+        setMediaNewCount(totalNewVideos(shelf) + totalChannelNews(channels.map(c => chById.get(c.id) ?? c), shelf));
       })();
     };
     look();

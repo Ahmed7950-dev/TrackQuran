@@ -27,6 +27,8 @@ import {
   loadProgress, saveProgress, clearProgress,
   parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, fetchVideoLengths, timecode, watchedFraction,
   hasEnglishSound,
+  MediaChannel, ChannelInfo, ChannelVideo, isChannelLink, resolveChannel, listChannels, addChannel,
+  updateChannel, deleteChannel, refreshChannelNews, pendingChannelVideos, totalChannelNews, channelThumb,
 } from '../services/mediaService';
 
 /* ── The booth's palette ──────────────────────────────────────────────
@@ -107,6 +109,10 @@ const CLOSE  = 'M6 6l12 12M18 6L6 18';
 const SPEAKER   = 'M4 9.5h3.5L12 5.5v13l-4.5-4H4z';
 const SOUND_ON  = 'M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11';
 const SOUND_OFF = 'M16 9.5l5 5M21 9.5l-5 5';
+const BELL     = 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0';
+const BELL_OFF = 'M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8M10 20.5a2 2 0 0 0 4 0M3.5 3.5l17 17';
+const CHEVRON  = 'M8 10l4 4 4-4';
+const FOLDER   = 'M3 7.5h7l2 2.5h9v9.5H3zM3 7.5V5h5.5';
 
 /** One tick per video in a playlist — the same small-segment language the
  *  Qaedah words and the Tadabbur verses already speak. */
@@ -538,7 +544,12 @@ const AddLink: React.FC<{
   onCancel: () => void;
   onAdd: (title: string, link: ParsedLink, categoryId: string | null, audioLangs: string[] | null) => Promise<string | null>;
   onNewCategory: (name: string) => Promise<MediaCategory | null>;
-}> = ({ categories, shelf, defaultCategory, onCancel, onAdd, onNewCategory }) => {
+  /** Channels already watched, to say so instead of adding one twice. */
+  channels: MediaChannel[];
+  onWatch: (info: ChannelInfo, categoryId: string | null) => Promise<string | null>;
+  /** Opened from "Watch a channel": the box asks for a channel link. */
+  forChannel?: boolean;
+}> = ({ categories, shelf, defaultCategory, onCancel, onAdd, onNewCategory, channels, onWatch, forChannel = false }) => {
   const [url, setUrl] = useState('');
   /** Languages it can be heard in; empty = not said. */
   const [sound, setSound] = useState<string[]>([]);
@@ -549,13 +560,37 @@ const AddLink: React.FC<{
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const link = useMemo(() => parseYouTubeLink(url), [url]);
+  const isChannel = useMemo(() => isChannelLink(url), [url]);
+  const link = useMemo(() => (isChannel ? null : parseYouTubeLink(url)), [url, isChannel]);
   const looksLikeTry = url.trim().length > 6;
   const already = useMemo(() => (link
     ? shelf.find(it => it.kind === link.kind && it.youtubeId === link.youtubeId) ?? null
     : null), [link, shelf]);
 
+  // A channel link is looked up on the server (who it is, what it has posted).
+  const [found, setFound] = useState<{ state: 'idle' | 'looking' | 'found' | 'error'; info?: ChannelInfo; error?: string }>({ state: 'idle' });
+  useEffect(() => {
+    if (!isChannel) { setFound({ state: 'idle' }); return; }
+    let dead = false;
+    setFound({ state: 'looking' });
+    const t = window.setTimeout(async () => {
+      const got = await resolveChannel(url);
+      if (dead) return;
+      setFound('error' in got ? { state: 'error', error: got.error } : { state: 'found', info: got });
+    }, 450);
+    return () => { dead = true; window.clearTimeout(t); };
+  }, [url, isChannel]);
+  const watching = found.info ? channels.find(c => c.channelId === found.info!.channelId) ?? null : null;
+
   const submit = async () => {
+    if (isChannel) {
+      if (found.state !== 'found' || !found.info || watching) return;
+      setBusy(true); setError('');
+      const problem = await onWatch(found.info, cat);
+      setBusy(false);
+      if (problem) setError(problem);
+      return;
+    }
     if (!link || already || !title.trim()) return;
     setBusy(true); setError('');
     const problem = await onAdd(title, link, cat, sound.length ? [...sound].sort() : null);
@@ -577,7 +612,7 @@ const AddLink: React.FC<{
         <div className="flex items-start gap-3.5 px-5 sm:px-6 pt-5 pb-4" style={{ borderBottom: `1px solid ${C.line}` }}>
           <div className="min-w-0 flex-grow">
             <h2 className="m-0 font-semibold" style={{ fontSize: 19, letterSpacing: '-0.015em' }}>Paste a link</h2>
-            <p className="mt-1 mb-0 text-[13.5px]" style={{ color: C.muted }}>It goes on the shelf for every student, not just this one.</p>
+            <p className="mt-1 mb-0 text-[13.5px]" style={{ color: C.muted }}>A video, a playlist or a channel.</p>
           </div>
           <button type="button" onClick={onCancel} aria-label="Close"
             className="flex-shrink-0 flex items-center justify-center w-11 h-11 -mt-1 -mr-2 rounded-[9px]"
@@ -589,8 +624,28 @@ const AddLink: React.FC<{
         <div className="flex-grow overflow-y-auto px-5 sm:px-6 py-5">
           <label htmlFor="media-url" className="block mb-2" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>YOUTUBE LINK</label>
           <input id="media-url" type="url" value={url} onChange={e => setUrl(e.target.value)} autoFocus
-            placeholder="https://www.youtube.com/watch?v=…"
-            style={{ ...field, fontFamily: MONO, fontSize: 13, borderColor: already ? 'var(--m-bad-ink)' : link ? C.greenLine : C.edge }} />
+            placeholder={forChannel ? 'https://www.youtube.com/@channel' : 'https://www.youtube.com/watch?v=…'}
+            style={{ ...field, fontFamily: MONO, fontSize: 13, borderColor: already || watching || found.state === 'error' ? 'var(--m-bad-ink)' : link || found.state === 'found' ? C.greenLine : C.edge }} />
+
+          {isChannel && found.state === 'looking' && (
+            <p className="mt-3 mb-0" style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: '0.06em', color: C.dim }}>LOOKING UP THE CHANNEL…</p>
+          )}
+          {isChannel && found.state === 'error' && (
+            <p role="alert" className="mt-3 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>{found.error}</p>
+          )}
+          {isChannel && found.state === 'found' && found.info && (
+            <div className="flex items-center gap-3.5 mt-3.5 px-4 py-3 rounded-[12px]"
+              style={{ background: watching ? 'var(--m-bad-bg)' : C.greenBg, border: `1px solid ${watching ? 'var(--m-bad-line)' : C.greenLine}` }}>
+              <ChannelAvatar ch={{ title: found.info.title, thumbUrl: found.info.thumb }} size={46} />
+              <div className="min-w-0 flex-grow">
+                <p className="m-0 text-[15.5px] font-semibold truncate">{found.info.title}</p>
+                <p className="m-0 mt-0.5 truncate" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em', color: watching ? 'var(--m-bad-ink)' : C.green }}>
+                  {watching ? 'ALREADY WATCHING' : `CHANNEL${found.info.handle ? ` · ${found.info.handle.toUpperCase()}` : ''} · ${found.info.videos.length} VIDEOS`}
+                </p>
+              </div>
+              {!watching && <span className="flex-shrink-0" style={{ color: C.green }}><Icon d={CHECK} size={19} stroke={2.4} /></span>}
+            </div>
+          )}
 
           {already && (
             <p role="alert" className="mt-3 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>
@@ -610,21 +665,21 @@ const AddLink: React.FC<{
               </p>
             </div>
           )}
-          {!link && looksLikeTry && (
+          {!link && !isChannel && looksLikeTry && (
             <p className="mt-3 mb-0 text-[13px]" style={{ color: 'var(--m-bad-ink)' }}>That is not a YouTube video or playlist link.</p>
           )}
 
-          <div className="mt-6">
+          {!isChannel && <div className="mt-6">
             <label htmlFor="media-title" className="block mb-2" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>TITLE ON THE SHELF</label>
             <input id="media-title" type="text" value={title} onChange={e => setTitle(e.target.value)}
               placeholder="What you will call it" style={{ ...field, fontSize: 15, fontWeight: 500 }} />
             <p className="mt-2 mx-0.5 mb-0 text-[12.5px]" style={{ color: C.dim }}>
               Your words, not YouTube&rsquo;s — this is what the search box looks through.
             </p>
-          </div>
+          </div>}
 
           <div className="mt-6">
-            <p className="m-0 mb-2.5" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>CATEGORY</p>
+            <p className="m-0 mb-2.5" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>{isChannel ? 'ITS NEW VIDEOS GO TO' : 'CATEGORY'}</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setCat(null)}
                 className="inline-flex items-center h-11 px-4 rounded-[9px] text-[13.5px]"
@@ -667,7 +722,7 @@ const AddLink: React.FC<{
             </div>
           </div>
 
-          <div className="mt-6">
+          {!isChannel && <div className="mt-6">
             <p className="m-0 mb-2.5" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>SOUND</p>
             <div role="group" aria-label="Sound" className="flex flex-wrap gap-2">
               {([['en', 'English'], ['ar', 'Arabic']] as const).map(([code, label]) => {
@@ -683,7 +738,7 @@ const AddLink: React.FC<{
                 );
               })}
             </div>
-          </div>
+          </div>}
 
           {error && <p role="alert" className="mt-5 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>{error}</p>}
         </div>
@@ -692,14 +747,290 @@ const AddLink: React.FC<{
           <span className="flex-grow" />
           <button type="button" onClick={onCancel} className="h-11 px-4 rounded-[9px] text-sm font-semibold"
             style={{ background: 'transparent', border: `1px solid ${C.edge}`, color: C.body }}>Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={!link || !!already || !title.trim() || busy}
-            className="h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-50"
+          {isChannel ? (
+            <button type="button" onClick={() => void submit()} disabled={found.state !== 'found' || !!watching || busy}
+              className="inline-flex items-center gap-2 h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-50"
+              style={{ background: C.amber, color: C.onAmber, border: 0 }}>
+              <Icon d={BELL} size={16} stroke={2} /> {busy ? 'Saving…' : 'Watch channel'}
+            </button>
+          ) : (
+            <button type="button" onClick={() => void submit()} disabled={!link || !!already || !title.trim() || busy}
+              className="h-11 px-5 rounded-[9px] text-sm font-bold disabled:opacity-50"
+              style={{ background: C.amber, color: C.onAmber, border: 0 }}>
+              {busy ? 'Adding…' : 'Put it on the shelf'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── A watched channel's picture ───────────────────────────────────────── */
+
+const ChannelAvatar: React.FC<{ ch: { title: string; thumbUrl: string | null }; size: number }> = ({ ch, size }) => {
+  const [broken, setBroken] = useState(false);
+  const src = channelThumb(ch);
+  if (src && !broken) {
+    return <img src={src} alt="" onError={() => setBroken(true)} referrerPolicy="no-referrer"
+      className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size, background: C.raised }} />;
+  }
+  return (
+    <span className="flex-shrink-0 rounded-full flex items-center justify-center font-bold"
+      style={{ width: size, height: size, background: C.raised, border: `1px solid ${C.edge}`, color: C.amber, fontSize: Math.round(size * 0.42) }}>
+      {ch.title.trim().charAt(0).toUpperCase() || '?'}
+    </span>
+  );
+};
+
+/* ── "This channel published new videos" ──────────────────────────────────
+ * One channel at a time. Add puts the ticked ones on the shelf and counts the
+ * unticked ones as skipped; Skip counts them all as skipped; the cross means
+ * "later" and asks again next time Media opens. Drawn on the Media canvas,
+ * "Channels & categories" page. */
+
+const NewVideosDialog: React.FC<{
+  channel: MediaChannel;
+  videos: ChannelVideo[];
+  step: { n: number; of: number };
+  categories: MediaCategory[];
+  hueOf: (id: string | null) => string;
+  onAdd: (picked: ChannelVideo[], categoryId: string | null) => Promise<string | null>;
+  onSkip: () => Promise<string | null>;
+  onMute: () => Promise<string | null>;
+  onLater: () => void;
+}> = ({ channel, videos, step, categories, hueOf, onAdd, onSkip, onMute, onLater }) => {
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(videos.map(v => v.id)));
+  const [cat, setCat] = useState<string | null>(channel.categoryId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  // A new channel in the same dialog starts fresh.
+  useEffect(() => { setPicked(new Set(videos.map(v => v.id))); setCat(channel.categoryId); setError(''); },
+    [channel.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onLater(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onLater]);
+
+  const n = videos.length;
+  const chosen = videos.filter(v => picked.has(v.id));
+  const run = async (job: () => Promise<string | null>) => {
+    setBusy(true); setError('');
+    const problem = await job();
+    setBusy(false);
+    if (problem) setError(problem);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-6"
+      style={{ background: 'rgba(5,6,7,0.72)' }} role="dialog" aria-modal="true" aria-label={`New videos from ${channel.title}`}>
+      <div className="w-full sm:max-w-[640px] flex flex-col overflow-hidden rounded-t-[20px] sm:rounded-2xl"
+        style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.ink, fontFamily: SANS, maxHeight: '92dvh', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+        <div className="sm:hidden flex justify-center pt-2"><span style={{ width: 40, height: 4, borderRadius: 2, background: C.edge }} /></div>
+
+        <div className="flex-grow overflow-y-auto">
+          <div className="flex items-center gap-2.5 pl-5 sm:pl-7 pr-3 pt-3 sm:pt-4">
+            <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.amber }}>
+              NEW ON YOUTUBE{step.of > 1 ? ` · ${step.n} OF ${step.of}` : ''}
+            </span>
+            <span className="flex-grow" />
+            <button type="button" onClick={onLater} aria-label="Later" title="Later"
+              className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
+              <Icon d={CLOSE} size={19} stroke={2.1} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 px-5 sm:px-7 pt-1">
+            <ChannelAvatar ch={channel} size={52} />
+            <div className="min-w-0">
+              <h2 className="m-0 font-semibold text-[19px] sm:text-[22px]" style={{ letterSpacing: '-0.015em', lineHeight: 1.25 }}>
+                {channel.title} published {n === 1 ? 'a new video' : `${n} new videos`}
+              </h2>
+              <p className="m-0 mt-1 text-[14px]" style={{ color: C.muted }}>Add {n === 1 ? 'it' : 'them'} to the shelf?</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 px-5 sm:px-7 pt-5">
+            {videos.map(v => {
+              const on = picked.has(v.id);
+              return (
+                <label key={v.id} className="flex items-center gap-3.5 p-2.5 rounded-[11px] cursor-pointer"
+                  style={{ background: C.raised, border: `1px solid ${on ? C.amber : C.line}` }}>
+                  <input type="checkbox" className="sr-only" checked={on}
+                    onChange={() => setPicked(prev => { const next = new Set(prev); if (next.has(v.id)) next.delete(v.id); else next.add(v.id); return next; })} />
+                  <span className="flex-shrink-0 flex items-center justify-center rounded-md"
+                    style={{ width: 22, height: 22, background: on ? C.amber : 'transparent', border: on ? 0 : `1.5px solid ${C.edge}`, color: C.onAmber }}>
+                    {on && <Icon d={CHECK} size={14} stroke={3} />}
+                  </span>
+                  <span className="relative flex-shrink-0 overflow-hidden w-[104px] sm:w-[136px]" style={{ aspectRatio: '16 / 9', borderRadius: 8, background: C.well }}>
+                    <img src={videoThumb(v.id)} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    {v.length && (
+                      <span className="absolute right-1 bottom-1 px-1 rounded" style={{ background: 'rgba(0,0,0,0.8)', color: '#fff', fontFamily: MONO, fontSize: 10.5, lineHeight: '17px' }}>{v.length}</span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex flex-col gap-1.5">
+                    <span className="text-[14px] sm:text-[15px] font-semibold line-clamp-2" style={{ lineHeight: 1.35 }}>{v.title || 'Untitled video'}</span>
+                    {v.age && <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em', color: C.amber }}>{v.age.toUpperCase()}</span>}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="px-5 sm:px-7 pt-5 pb-1">
+            <p className="m-0 mb-2.5" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>ADD TO</p>
+            <div role="group" aria-label="Category" className="flex flex-wrap gap-2">
+              {[{ id: null as string | null, name: 'None' }, ...categories.map(c => ({ id: c.id as string | null, name: c.name }))].map(c => {
+                const on = cat === c.id;
+                return (
+                  <button key={c.id ?? 'none'} type="button" aria-pressed={on} onClick={() => setCat(c.id)}
+                    className="inline-flex items-center gap-2 h-11 sm:h-10 px-3.5 rounded-[9px] text-[13.5px]"
+                    style={{ background: on ? C.raised : C.card, border: `1px solid ${on ? (c.id ? hueOf(c.id) : C.edge) : C.line}`, color: on ? C.ink : C.body, fontWeight: on ? 600 : 500 }}>
+                    {c.id && <span style={{ width: 8, height: 8, borderRadius: '50%', background: hueOf(c.id) }} />}
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {error && <p role="alert" className="mx-5 sm:mx-7 mt-4 mb-0 text-[13.5px]" style={{ color: 'var(--m-bad-ink)' }}>{error}</p>}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 px-5 sm:px-7 py-4 mt-4" style={{ borderTop: `1px solid ${C.line}` }}>
+          <button type="button" disabled={busy} onClick={() => void run(onMute)}
+            className="inline-flex items-center gap-2 h-11 px-3 rounded-[9px] text-[13.5px] font-medium disabled:opacity-50 max-sm:order-3 max-sm:w-full max-sm:justify-center"
+            style={{ background: 'transparent', border: 0, color: C.muted }}>
+            <Icon d={BELL_OFF} size={16} stroke={1.8} /> Mute channel
+          </button>
+          <span className="flex-grow max-sm:hidden" />
+          <button type="button" disabled={busy} onClick={() => void run(onSkip)}
+            className="h-[46px] px-[18px] rounded-[10px] text-sm font-semibold disabled:opacity-50 max-sm:flex-1"
+            style={{ background: 'transparent', border: `1px solid ${C.edge}`, color: C.body }}>Skip</button>
+          <button type="button" disabled={busy || !chosen.length} onClick={() => void run(() => onAdd(chosen, cat))}
+            className="inline-flex items-center justify-center gap-2 h-[46px] px-5 rounded-[10px] text-sm font-bold disabled:opacity-50 max-sm:flex-[2]"
             style={{ background: C.amber, color: C.onAmber, border: 0 }}>
-            {busy ? 'Adding…' : 'Put it on the shelf'}
+            <Icon d={PLUS} size={16} stroke={2.3} />
+            {busy ? 'Adding…' : `Add ${chosen.length === n && n > 1 ? `all ${n}` : chosen.length} to the shelf`}
           </button>
         </div>
       </div>
     </div>
+  );
+};
+
+/* ── Picking a reel's category ───────────────────────────────────────────
+ * A small menu beside whatever was tapped (the folder button, or the
+ * category chip on the card); a sheet from the bottom on a phone. A tap
+ * moves the reel and closes it. */
+
+const CategoryMenu: React.FC<{
+  item: MediaItem;
+  anchor: DOMRect;
+  categories: MediaCategory[];
+  counts: Map<string, number>;
+  hueOf: (id: string | null) => string;
+  onPick: (categoryId: string | null) => void;
+  onNew: (name: string) => Promise<MediaCategory | null>;
+  onClose: () => void;
+}> = ({ item, anchor, categories, counts, hueOf, onPick, onNew, onClose }) => {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const sheet = typeof window !== 'undefined' && window.innerWidth < 640;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    // The page scrolling away from the menu closes it; scrolling inside it does not.
+    const onScroll = (e: Event) => { if (!sheet && !box.current?.contains(e.target as Node)) onClose(); };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onClose);
+    };
+  }, [onClose, sheet]);
+
+  const make = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    const made = await onNew(name);
+    setBusy(false);
+    if (made) onPick(made.id);
+    else window.alert('Could not make that category. Check the connection and try again.');
+  };
+
+  const rows = [{ id: null as string | null, name: 'No category' }, ...categories.map(c => ({ id: c.id as string | null, name: c.name }))];
+  const rowH = sheet ? 52 : 40;
+  const list = (
+    <>
+      {rows.map(r => {
+        const on = item.categoryId === r.id;
+        return (
+          <button key={r.id ?? 'none'} type="button" role="menuitemradio" aria-checked={on} onClick={() => onPick(r.id)}
+            className="flex items-center gap-3 w-full px-3 rounded-[8px] text-left"
+            style={{ height: rowH, border: 0, background: on ? C.raised : 'transparent', color: on ? C.ink : C.body, fontWeight: on ? 600 : 500, fontSize: sheet ? 15 : 14 }}>
+            {r.id
+              ? <span className="flex-shrink-0" style={{ width: 9, height: 9, borderRadius: '50%', background: hueOf(r.id) }} />
+              : <span className="flex-shrink-0" style={{ width: 9, height: 9, borderRadius: '50%', border: `1.5px solid ${C.dim}` }} />}
+            <span className="flex-grow min-w-0 truncate">{r.name}</span>
+            {on
+              ? <span style={{ color: C.amber }}><Icon d={CHECK} size={16} stroke={2.6} /></span>
+              : r.id && <span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>{counts.get(r.id) ?? 0}</span>}
+          </button>
+        );
+      })}
+      <div style={{ height: 1, background: C.line, margin: '6px 4px' }} />
+      <div className="flex gap-1.5 p-1">
+        <label htmlFor="media-menu-newcat" className="sr-only">New category name</label>
+        <input id="media-menu-newcat" value={name} onChange={e => setName(e.target.value)} placeholder="New category"
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void make(); } }}
+          className="flex-grow min-w-0 px-2.5 rounded-[8px] text-[13.5px]"
+          style={{ height: sheet ? 44 : 38, border: `1px solid ${C.edge}`, background: C.card, color: C.ink, outline: 'none' }} />
+        <button type="button" onClick={() => void make()} disabled={!name.trim() || busy} aria-label="Add category"
+          className="flex-shrink-0 flex items-center justify-center rounded-[8px] disabled:opacity-50"
+          style={{ width: sheet ? 44 : 38, height: sheet ? 44 : 38, border: 0, background: C.amber, color: C.onAmber }}>
+          <Icon d={PLUS} size={16} stroke={2.3} />
+        </button>
+      </div>
+    </>
+  );
+
+  if (sheet) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-end" style={{ background: 'rgba(5,6,7,0.72)', fontFamily: SANS }} onClick={onClose}>
+        <div role="menu" aria-label={`Category for ${item.title}`} onClick={e => e.stopPropagation()}
+          className="w-full rounded-t-[20px] px-3 pt-2 pb-5 overflow-y-auto"
+          style={{ background: C.panel, borderTop: `1px solid ${C.line}`, color: C.ink, maxHeight: '85dvh' }}>
+          <div className="flex justify-center"><span style={{ width: 40, height: 4, borderRadius: 2, background: C.edge }} /></div>
+          <div className="flex items-center gap-3 px-2 pt-3.5 pb-3">
+            {thumbFor(item) && <img src={thumbFor(item)!} alt="" className="flex-shrink-0 object-cover" style={{ width: 64, height: 36, borderRadius: 6 }} />}
+            <div className="min-w-0">
+              <p className="m-0" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>MOVE TO</p>
+              <p className="m-0 mt-0.5 text-[14.5px] font-semibold truncate">{item.title}</p>
+            </div>
+          </div>
+          {list}
+        </div>
+      </div>
+    );
+  }
+
+  const est = rows.length * rowH + 120;
+  const below = anchor.bottom + 6 + est < window.innerHeight - 8;
+  const top = below ? anchor.bottom + 6 : Math.max(8, anchor.top - 6 - est);
+  const left = Math.min(Math.max(8, anchor.left), window.innerWidth - 288);
+  return (
+    <>
+      <div className="fixed inset-0 z-[59]" onClick={onClose} aria-hidden="true" />
+      <div ref={box} role="menu" aria-label={`Category for ${item.title}`}
+        className="fixed z-[60] p-2 rounded-xl overflow-y-auto"
+        style={{ top, left, width: 280, maxHeight: window.innerHeight - 16, background: C.panel, border: `1px solid ${C.edge}`, color: C.ink, fontFamily: SANS, boxShadow: '0 18px 50px rgba(0,0,0,0.4)' }}>
+        <p className="m-0 px-3 pt-1.5 pb-2" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>MOVE TO</p>
+        {list}
+      </div>
+    </>
   );
 };
 
@@ -745,6 +1076,18 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [freshIds, setFreshIds] = useState<string[]>([]);
   const [newCat, setNewCat] = useState('');
   const [catForm, setCatForm] = useState(false);
+  /** Watched YouTube channels, and whether this visit has asked YouTube yet. */
+  const [channels, setChannels] = useState<MediaChannel[]>([]);
+  const [channelsReady, setChannelsReady] = useState(false);
+  /** The channel whose "new videos" pop-up is open, and the ones after it. */
+  const [newsFor, setNewsFor] = useState<string | null>(null);
+  const newsQueue = useRef<string[]>([]);
+  const [newsTotal, setNewsTotal] = useState(0);
+  const autoOffered = useRef(false);
+  /** The add box was opened from "Watch a channel". */
+  const [addAsChannel, setAddAsChannel] = useState(false);
+  /** The category menu: which reel, and where it was opened from. */
+  const [catMenu, setCatMenu] = useState<{ item: MediaItem; rect: DOMRect } | null>(null);
 
   const who = studentName ?? '';
 
@@ -764,7 +1107,58 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   }, []);
 
   // One number for the tab badge, recomputed whenever the shelf changes.
-  useEffect(() => { onNewsChange?.(totalNewVideos(items)); }, [items, onNewsChange]);
+  useEffect(() => { onNewsChange?.(totalNewVideos(items) + totalChannelNews(channels, items)); }, [items, channels, onNewsChange]);
+
+  // Watched channels: read them, then ask YouTube what each has posted (the
+  // service skips any asked about in the last half hour, and muted ones).
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      const list = await listChannels();
+      if (dead) return;
+      setChannels(list);
+      const fresh = await refreshChannelNews(list);
+      if (dead) return;
+      if (fresh.length) {
+        const byId = new Map(fresh.map(c => [c.id, c]));
+        setChannels(prev => prev.map(c => byId.get(c.id) ?? c));
+      }
+      setChannelsReady(true);
+    })();
+    return () => { dead = true; };
+  }, []);
+
+  const shelfVideoIds = useMemo(
+    () => new Set(items.filter(it => it.kind === 'video').map(it => it.youtubeId)), [items]);
+  const pendingOf = useCallback((c: MediaChannel) => pendingChannelVideos(c, shelfVideoIds), [shelfVideoIds]);
+
+  const openNews = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    newsQueue.current = ids.slice(1);
+    setNewsTotal(ids.length);
+    setNewsFor(ids[0]);
+  }, []);
+  const nextNews = useCallback(() => {
+    const [head, ...rest] = newsQueue.current;
+    newsQueue.current = rest;
+    setNewsFor(head ?? null);
+  }, []);
+  const closeNews = useCallback(() => { newsQueue.current = []; setNewsFor(null); }, []);
+
+  // A channel in the queue with nothing left to offer (muted meanwhile, or its
+  // videos were added by hand) is passed over.
+  useEffect(() => {
+    if (!newsFor) return;
+    const ch = channels.find(c => c.id === newsFor);
+    if (!ch || !pendingOf(ch).length) nextNews();
+  }, [newsFor, channels, pendingOf, nextNews]);
+
+  // Opening Media: if a watched channel posted something, ask once per visit.
+  useEffect(() => {
+    if (autoOffered.current || loading || !channelsReady) return;
+    autoOffered.current = true;
+    openNews(channels.filter(c => pendingOf(c).length > 0).map(c => c.id));
+  }, [loading, channelsReady, channels, pendingOf, openNews]);
 
   /** Opening a playlist is the tutor looking at it: nothing in it is new now.
    *
@@ -902,16 +1296,72 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     }
   };
 
-  const move = async (it: MediaItem) => {
-    const names = ['None', ...cats.map(c => c.name)];
-    const pick = window.prompt(`Move "${it.title}" to which category?\n\n${names.map((n, i) => `${i}. ${n}`).join('\n')}`, '0');
-    if (pick == null) return;
-    const n = Number(pick);
-    if (!Number.isInteger(n) || n < 0 || n >= names.length) return;
-    const categoryId = n === 0 ? null : cats[n - 1].id;
-    if (await updateMedia(it.id, { categoryId })) {
-      setItems(prev => prev.map(x => (x.id === it.id ? { ...x, categoryId } : x)));
+  /** The category menu moves the reel at once; a failed save puts it back. */
+  const openCatMenu = (it: MediaItem, e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setCatMenu({ item: it, rect: e.currentTarget.getBoundingClientRect() });
+  };
+  const pickCategory = async (it: MediaItem, categoryId: string | null) => {
+    setCatMenu(null);
+    if (it.categoryId === categoryId) return;
+    const before = it.categoryId;
+    setItems(prev => prev.map(x => (x.id === it.id ? { ...x, categoryId } : x)));
+    if (!(await updateMedia(it.id, { categoryId }))) {
+      setItems(prev => prev.map(x => (x.id === it.id ? { ...x, categoryId: before } : x)));
+      window.alert(`Could not move "${it.title}". Check the connection and try again.`);
     }
+  };
+
+  // ── Watched channels ───────────────────────────────────────────────────
+  const watchChannel = async (info: ChannelInfo, categoryId: string | null): Promise<string | null> => {
+    const res = await addChannel(teacherId, info, categoryId);
+    if ('error' in res) return res.error;
+    setChannels(prev => [...prev, res.channel]);
+    setAdding(false);
+    return null;
+  };
+  /** Everything the pop-up offered counts as seen from now on. */
+  const markOffered = async (ch: MediaChannel, ids: string[], patch: { categoryId?: string | null } = {}): Promise<boolean> => {
+    const seen = Array.from(new Set([...ch.seenVideoIds, ...ids]));
+    if (!(await updateChannel(ch.id, { seenVideoIds: seen, ...patch }))) return false;
+    setChannels(prev => prev.map(c => (c.id === ch.id ? { ...c, seenVideoIds: seen, ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}) } : c)));
+    return true;
+  };
+  const addFromChannel = async (ch: MediaChannel, offered: ChannelVideo[], picked: ChannelVideo[], categoryId: string | null): Promise<string | null> => {
+    const failed: ChannelVideo[] = [];
+    // Oldest first, so the newest lands at the top of the shelf.
+    for (const v of [...picked].reverse()) {
+      const res = await addMedia({
+        teacherId, title: v.title || 'New video', categoryId,
+        link: { kind: 'video', youtubeId: v.id, url: `https://www.youtube.com/watch?v=${v.id}` },
+      });
+      if ('error' in res) { if (!/already on the shelf/i.test(res.error)) failed.push(v); continue; }
+      setItems(prev => [res.item, ...prev]);
+    }
+    const failedIds = new Set(failed.map(v => v.id));
+    if (!(await markOffered(ch, offered.map(v => v.id).filter(id => !failedIds.has(id)), { categoryId }))) {
+      return 'The videos were added, but the channel could not be updated. Check the connection.';
+    }
+    if (failed.length) return `Could not add ${failed.length === 1 ? 'one video' : `${failed.length} videos`}. Try again.`;
+    nextNews();
+    return null;
+  };
+  const skipChannel = async (ch: MediaChannel, offered: ChannelVideo[]): Promise<string | null> => {
+    if (!(await markOffered(ch, offered.map(v => v.id)))) return 'Could not save that. Check the connection and try again.';
+    nextNews();
+    return null;
+  };
+  const setMuted = async (ch: MediaChannel, muted: boolean): Promise<boolean> => {
+    setChannels(prev => prev.map(c => (c.id === ch.id ? { ...c, muted } : c)));
+    if (await updateChannel(ch.id, { muted })) return true;
+    setChannels(prev => prev.map(c => (c.id === ch.id ? { ...c, muted: ch.muted } : c)));
+    window.alert(`Could not ${muted ? 'mute' : 'unmute'} ${ch.title}. Check the connection and try again.`);
+    return false;
+  };
+  const removeChannel = async (ch: MediaChannel) => {
+    if (!window.confirm(`Stop watching ${ch.title}? Videos already on the shelf stay.`)) return;
+    if (await deleteChannel(ch.id)) setChannels(prev => prev.filter(c => c.id !== ch.id));
+    else window.alert(`Could not remove ${ch.title}. Check the connection and try again.`);
   };
 
   /** The speaker on a reel: English on or off. The rest of its languages stay. */
@@ -954,6 +1404,24 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     );
   }
 
+  /** The category on a card, as the button that changes it. */
+  const catChip = (it: MediaItem) => {
+    const name = cats.find(c => c.id === it.categoryId)?.name ?? null;
+    const on = catMenu?.item.id === it.id;
+    return (
+      <button type="button" onClick={e => openCatMenu(it, e)} aria-haspopup="menu" aria-expanded={on}
+        aria-label={`Category: ${name ?? 'none'}. Change it`}
+        className="inline-flex items-center gap-1.5 pl-2 pr-1 rounded-[6px] hover:border-[var(--m-edge)]"
+        style={{ height: 24, border: `1px solid ${on ? C.amber : C.line}`, background: on ? C.chip : 'transparent', color: name ? C.body : C.dim, fontFamily: MONO, fontSize: 11.5 }}>
+        {name
+          ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: hueOf(it.categoryId) }} />
+          : <span style={{ width: 7, height: 7, borderRadius: '50%', border: `1.5px solid ${C.dim}` }} />}
+        {name ?? 'No category'}
+        <Icon d={CHEVRON} size={13} stroke={2} />
+      </button>
+    );
+  };
+
   const chipStyle = (on: boolean): React.CSSProperties => ({
     height: 38, padding: '0 15px', borderRadius: 7, border: 0, fontSize: 13,
     fontWeight: on ? 600 : 500, background: on ? C.track : 'transparent', color: on ? C.ink : C.muted,
@@ -995,7 +1463,7 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
             </div>
           )}
 
-          <button type="button" onClick={() => setAdding(true)}
+          <button type="button" onClick={() => { setAddAsChannel(false); setAdding(true); }}
             className="flex items-center gap-2 px-5 text-[14.5px] font-bold"
             style={{ height: 46, borderRadius: 10, border: 0, background: C.amber, color: C.onAmber }}>
             <Icon d={PLUS} size={17} stroke={2.2} /> Paste a link
@@ -1076,6 +1544,54 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                   style={{ height: 44, borderRadius: 9, border: 0, background: C.amber, color: C.onAmber }}>Add</button>
               </div>
             )}
+
+            {/* ── Watched channels ─────────────────────────────────── */}
+            <div className="flex items-center mt-8 mb-2.5">
+              <p className="m-0 flex-grow" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.dim }}>CHANNELS</p>
+              {channels.length > 0 && <span style={{ fontFamily: MONO, fontSize: 12, color: C.dim }}>{channels.length}</span>}
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {channels.map(ch => {
+                const waiting = pendingOf(ch).length;
+                const home = `https://www.youtube.com/${ch.handle ?? `channel/${ch.channelId}`}`;
+                return (
+                  <div key={ch.id} className="group flex items-center gap-0.5 pr-1 hover:bg-[var(--m-raised)] focus-within:bg-[var(--m-raised)]"
+                    style={{ borderRadius: 9 }}>
+                    <button type="button"
+                      onClick={() => (waiting ? openNews([ch.id]) : window.open(home, '_blank', 'noopener'))}
+                      title={waiting ? `${waiting} new` : 'Open on YouTube'}
+                      className="flex items-center gap-2.5 flex-grow min-w-0 pl-2.5 pr-1 text-sm"
+                      style={{ height: 48, border: 0, borderRadius: 9, background: 'transparent', color: C.body, opacity: ch.muted ? 0.62 : 1 }}>
+                      <ChannelAvatar ch={ch} size={30} />
+                      <span className="flex-grow text-left min-w-0 truncate font-medium">{ch.title}</span>
+                      {waiting > 0 && (
+                        <span className="flex-shrink-0 px-2 rounded-[5px] [@media(hover:hover)]:group-hover:hidden [@media(hover:hover)]:group-focus-within:hidden"
+                          style={{ background: C.amber, color: C.onAmber, fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.08em', lineHeight: '22px' }}>
+                          {waiting} NEW
+                        </span>
+                      )}
+                      {ch.muted && <span className="flex-shrink-0 group-hover:hidden group-focus-within:hidden [@media(hover:none)]:hidden" style={{ color: C.dim }} aria-label="Muted"><Icon d={BELL_OFF} size={15} stroke={1.8} /></span>}
+                    </button>
+                    <button type="button" onClick={() => void setMuted(ch, !ch.muted)} aria-pressed={ch.muted}
+                      aria-label={ch.muted ? `Unmute ${ch.title}` : `Mute ${ch.title}`} title={ch.muted ? 'Unmute' : 'Mute'}
+                      className="flex-shrink-0 hidden items-center justify-center group-hover:flex group-focus-within:flex [@media(hover:none)]:flex"
+                      style={{ width: 34, height: 44, border: 0, borderRadius: 8, background: 'transparent', color: ch.muted ? C.amber : C.body }}>
+                      <Icon d={ch.muted ? BELL_OFF : BELL} size={16} stroke={1.8} />
+                    </button>
+                    <button type="button" onClick={() => void removeChannel(ch)} aria-label={`Stop watching ${ch.title}`} title="Remove"
+                      className="flex-shrink-0 hidden items-center justify-center group-hover:flex group-focus-within:flex [@media(hover:none)]:flex"
+                      style={{ width: 34, height: 44, border: 0, borderRadius: 8, background: 'transparent', color: C.body }}>
+                      <Icon d={TRASH} size={16} stroke={1.8} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => { setAddAsChannel(true); setAdding(true); }}
+              className="flex items-center gap-2.5 w-full mt-2.5 px-3.5 text-[13.5px] font-medium"
+              style={{ height: 44, border: `1px dashed ${C.edge}`, borderRadius: 9, background: 'transparent', color: C.muted }}>
+              <Icon d={PLUS} size={15} stroke={2} /> Watch a channel
+            </button>
 
             {who && items.length > 0 && (
               <div className="mt-7 p-4.5 rounded-xl" style={{ background: C.panel, border: `1px solid ${C.line}`, padding: 18 }}>
@@ -1264,11 +1780,10 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                         className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
                         <Icon d={PENCIL} size={17} stroke={1.8} />
                       </button>
-                      <button type="button" onClick={() => void move(it)} aria-label={`Move ${it.title} to another category`}
-                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M3 7.5h7l2 2.5h9v9.5H3z" /><path d="M3 7.5V5h5.5" />
-                        </svg>
+                      <button type="button" onClick={e => openCatMenu(it, e)} aria-label={`Category for ${it.title}`} title="Category"
+                        aria-haspopup="menu" aria-expanded={catMenu?.item.id === it.id}
+                        className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: catMenu?.item.id === it.id ? C.raised : 'transparent', color: C.dim, border: 0 }}>
+                        <Icon d={FOLDER} size={17} stroke={1.8} />
                       </button>
                       <button type="button" onClick={() => void remove(it)} aria-label={`Take ${it.title} off the shelf`}
                         className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
@@ -1340,13 +1855,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                         <h3 className="m-0 line-clamp-2 font-semibold" style={{ fontSize: 16, lineHeight: 1.32 }}>{it.title}</h3>
                         <p className="m-0 flex items-center gap-2 flex-wrap" style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>
                           <span>{it.kind === 'playlist' ? 'PLAYLIST' : 'VIDEO'}</span>
-                          {it.categoryId && (<>
-                            <span>·</span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: hueOf(it.categoryId) }} />
-                              {cats.find(c => c.id === it.categoryId)?.name}
-                            </span>
-                          </>)}
+                          <span>·</span>
+                          {catChip(it)}
                         </p>
                         <div className="flex items-center gap-1 mt-auto pt-1">
                           <p className="m-0 flex-grow min-w-0" style={{ fontFamily: MONO, fontSize: 11.5, color: done ? C.green : started ? C.amber : C.dim }}>{studentId ? stamp : ''}</p>
@@ -1380,13 +1890,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                               <span>{it.kind === 'playlist' ? 'PLAYLIST' : 'VIDEO'}</span>
                               <span>·</span>
                               <span>{it.kind === 'playlist' ? (total ? `${total} videos` : 'length unknown yet') : (lengthOf(it) != null ? timecode(lengthOf(it)) : 'single')}</span>
-                              {it.categoryId && (<>
-                                <span>·</span>
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: hueOf(it.categoryId) }} />
-                                  {cats.find(c => c.id === it.categoryId)?.name}
-                                </span>
-                              </>)}
+                              <span>·</span>
+                              {catChip(it)}
                             </p>
                           </div>
                           {fresh > 0 && (
@@ -1436,6 +1941,42 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
           onCancel={() => setAdding(false)}
           onAdd={doAdd}
           onNewCategory={doNewCategory}
+          channels={channels}
+          onWatch={watchChannel}
+          forChannel={addAsChannel}
+        />
+      )}
+
+      {(() => {
+        const ch = newsFor ? channels.find(c => c.id === newsFor) : null;
+        const offered = ch ? pendingOf(ch) : [];
+        if (!ch || !offered.length) return null;
+        return (
+          <NewVideosDialog
+            key={ch.id}
+            channel={ch}
+            videos={offered}
+            step={{ n: newsTotal - newsQueue.current.length, of: newsTotal }}
+            categories={cats}
+            hueOf={hueOf}
+            onAdd={(picked, categoryId) => addFromChannel(ch, offered, picked, categoryId)}
+            onSkip={() => skipChannel(ch, offered)}
+            onMute={async () => { if (!(await setMuted(ch, true))) return 'Could not mute the channel.'; nextNews(); return null; }}
+            onLater={closeNews}
+          />
+        );
+      })()}
+
+      {catMenu && (
+        <CategoryMenu
+          item={items.find(x => x.id === catMenu.item.id) ?? catMenu.item}
+          anchor={catMenu.rect}
+          categories={cats}
+          counts={counts}
+          hueOf={hueOf}
+          onPick={id => void pickCategory(items.find(x => x.id === catMenu.item.id) ?? catMenu.item, id)}
+          onNew={doNewCategory}
+          onClose={() => setCatMenu(null)}
         />
       )}
     </div>

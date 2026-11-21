@@ -16,41 +16,16 @@
  * than in the browser because youtube.com sends no CORS header — the fetch is
  * simply refused there.
  *
- * Response: { "PLaaa": { "videoIds": [...], "count": 11 }, "PLbbb": { "error": "…" } }
+ * Response: { "PLaaa": { "videoIds": [...], "count": 11, "videos": [{ id, title, length, age }] },
+ *             "PLbbb": { "error": "…" } }
+ * `videos` carries the titles (used by the watched-channels pop-up, which
+ * reads a channel's uploads list through this same route); it is empty if
+ * YouTube's page layout ever changes, and `videoIds` still works then.
  */
 
-/** YouTube renders about this many into the page; the rest lazy-load. */
-const PAGE_LIMIT = 100;
+import { readPlaylist } from './_youtube.js';
+
 const MAX_IDS = 12;
-
-/** Every distinct video id the page mentions, in the order it mentions them. */
-function videoIdsFrom(html) {
-  const out = [];
-  const seen = new Set();
-  const re = /"videoId":"([\w-]{11})"/g;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    if (seen.has(m[1])) continue;
-    seen.add(m[1]);
-    out.push(m[1]);
-  }
-  return out;
-}
-
-async function readPlaylist(id) {
-  const res = await fetch(`https://www.youtube.com/playlist?list=${encodeURIComponent(id)}`, {
-    headers: {
-      // Without a browser agent YouTube serves a consent interstitial with no list in it.
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  });
-  if (!res.ok) return { error: `youtube answered ${res.status}` };
-  const html = await res.text();
-  const videoIds = videoIdsFrom(html);
-  if (!videoIds.length) return { error: 'no videos found on the page' };
-  return { videoIds, count: videoIds.length, truncated: videoIds.length >= PAGE_LIMIT };
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
