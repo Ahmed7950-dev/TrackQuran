@@ -532,8 +532,13 @@ const VIEWS: { id: ShelfView; label: string; d: string }[] = [
   { id: 'gallery', label: 'Gallery', d: 'M3 5h18v10H3zM3 19h7M14 19h7' },
 ];
 
-/** The length filter's steps, in minutes: "under 5", "under 10"… */
-const LENGTH_STEPS = [5, 10, 15, 20, 25];
+/** The length filter's bands, in minutes. Each starts where the one before
+ *  it stops (5 to under 10, 10 to under 15…), and the last is open-ended so a
+ *  long film can be found too. */
+const LENGTH_BANDS: Array<{ from: number; to: number }> = [
+  { from: 0, to: 5 }, { from: 5, to: 10 }, { from: 10, to: 15 },
+  { from: 15, to: 20 }, { from: 20, to: 25 }, { from: 25, to: Infinity },
+];
 
 /* ── Paste a link ────────────────────────────────────────────────────── */
 
@@ -1103,8 +1108,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [channel, setChannel] = useState<string>('all');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'finished'>('all');
-  /** Show only videos shorter than this many minutes; null = any length. */
-  const [underMin, setUnderMin] = useState<number | null>(null);
+  /** Which LENGTH_BANDS entry the shelf is narrowed to; null = any length. */
+  const [band, setBand] = useState<number | null>(null);
   /** Only reels that can be heard in English. */
   const [englishOnly, setEnglishOnly] = useState(false);
   /** How the shelf is laid out; remembered on this device. */
@@ -1284,16 +1289,17 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     return items.filter(it => {
       if (channel !== 'all' && it.categoryId !== channel) return false;
       if (q && !it.title.toLowerCase().includes(q)) return false;
-      if (underMin != null) {
+      if (band != null) {
         const len = lengthOf(it);
-        if (len == null || len >= underMin * 60) return false;
+        const { from, to } = LENGTH_BANDS[band];
+        if (len == null || len < from * 60 || len >= to * 60) return false;
       }
       if (englishOnly && !hasEnglishSound(it)) return false;
       if (filter === 'all') return true;
       const done = marks.get(it.id)?.finished ?? false;
       return filter === 'finished' ? done : !done;
     });
-  }, [items, channel, query, filter, marks, underMin, lengthOf, englishOnly]);
+  }, [items, channel, query, filter, marks, band, lengthOf, englishOnly]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -1749,11 +1755,13 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
                     <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
                   </svg>
                 </span>
-                <button type="button" onClick={() => setUnderMin(null)} style={{ ...chipStyle(underMin == null), padding: '0 12px', flexShrink: 0 }}>Any</button>
-                {LENGTH_STEPS.map(m => (
-                  <button key={m} type="button" onClick={() => setUnderMin(m)} aria-label={`Under ${m} minutes`}
-                    style={{ ...chipStyle(underMin === m), padding: '0 11px', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    &lt;{m}<span style={{ fontSize: 11, opacity: 0.75 }}>m</span>
+                <button type="button" onClick={() => setBand(null)} aria-pressed={band == null} style={{ ...chipStyle(band == null), padding: '0 12px', flexShrink: 0 }}>Any</button>
+                {LENGTH_BANDS.map(({ from, to }, i) => (
+                  <button key={from} type="button" onClick={() => setBand(i)} aria-pressed={band === i}
+                    aria-label={from === 0 ? `Under ${to} minutes` : to === Infinity ? `${from} minutes or more` : `${from} to ${to} minutes`}
+                    style={{ ...chipStyle(band === i), padding: '0 11px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {from === 0 ? <>&lt;{to}</> : to === Infinity ? <>{from}+</> : <>{from}–{to}</>}
+                    <span style={{ fontSize: 11, opacity: 0.75 }}>m</span>
                   </button>
                 ))}
               </div>
