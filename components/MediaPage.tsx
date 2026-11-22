@@ -918,6 +918,17 @@ const NewVideosDialog: React.FC<{
                         <span className="truncate">{cname ?? 'No category'}</span>
                         <Icon d={CHEVRON} size={13} stroke={2} />
                       </button>
+                      {/* Watch it first. Inside the row's label: must not tick. */}
+                      <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        aria-label={`Open ${v.title || 'this video'} on YouTube`} title="Open on YouTube"
+                        className="inline-flex items-center gap-1.5 pl-1.5 pr-2 rounded-[7px] no-underline"
+                        style={{ height: 28, border: `1px solid ${C.edge}`, background: 'transparent', color: C.body, fontFamily: MONO, fontSize: 11.5 }}>
+                        <span className="flex items-center justify-center flex-shrink-0" style={{ width: 18, height: 13, borderRadius: 4, background: '#ff0033', color: '#fff' }}>
+                          <Icon d={PLAY} size={9} fill />
+                        </span>
+                        YouTube
+                      </a>
                     </span>
                   </span>
                 </label>
