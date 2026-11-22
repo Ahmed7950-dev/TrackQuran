@@ -18,7 +18,8 @@ import { pageVerseList } from '../services/quranPageData';
 import { splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
-import MistakeRing, { computeRingData, translitOf, EMPTY_MISTAKE_LABEL, MISTAKE_AREAS, TAJWEED_AREAS } from './MistakeRing';
+import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
+import MistakePicker, { MistakeKind } from './MistakePicker';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
@@ -297,6 +298,11 @@ const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';
 
 // Component for rendering a letter with error marking
+/** What the logging card tells the page about a log, beyond the text itself:
+ *  which kind of mistake (a tajweed pick turns a red mark green), and what to
+ *  show in the Undo bar. */
+type LogOpts = { type?: MistakeKind; glyph?: string; display?: string };
+
 const LetterWithError: React.FC<{
     letter: string;
     letterKey: string;
@@ -305,7 +311,7 @@ const LetterWithError: React.FC<{
     errorText: string;
     onLetterClick: (key: string) => void;
     onTextChange: (text: string) => void;
-    onTextSubmit: (key: string, text: string) => void;
+    onTextSubmit: (key: string, text: string, opts?: LogOpts) => void;
     onTextCancel: () => void;
     tajweedClass?: string; // 'tj-<rule>' color class from the tajweed engine
     tajweedTitle?: string; // rule name shown on hover (student side only)
@@ -318,7 +324,8 @@ const LetterWithError: React.FC<{
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     vowelAdj?: Record<string, VowelAdjustment>; // admin vowel-position corrections for this unit
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
-    ringCounts?: Record<string, number>;             // fixed mistake label → count (whole student)
+    ringCounts?: Record<string, number>;             // fixed reading label → count (whole student)
+    ringTajweedCounts?: Record<string, number>;      // fixed tajweed label → count (whole student)
     ringPermFlags?: string[];                        // permanent habit flags
     /** 'reading' (r key) draws the reading ring, 'tajweed' (t key) the tajweed one. */
     ringMode?: 'reading' | 'tajweed';
@@ -349,6 +356,7 @@ const LetterWithError: React.FC<{
     vowelAdj,
     focusMode,
     ringCounts = {},
+    ringTajweedCounts = {},
     ringPermFlags = [],
     ringMode = 'reading',
     onToggleFlag,
@@ -408,32 +416,30 @@ const LetterWithError: React.FC<{
     return (
         <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
             {isEditing && ReactDOM.createPortal(
-                <div className="fixed inset-0 z-[9999] grid place-items-center pointer-events-none">
-                    <MistakeRing
-                        counts={ringCounts}
-                        permFlags={ringPermFlags}
-                        areas={ringMode === 'tajweed' ? TAJWEED_AREAS : MISTAKE_AREAS}
-                        mode={ringMode}
-                        translit={translitOf(letter)}
-                        errorText={errorText}
-                        onTextChange={onTextChange}
-                        onPick={(label) => {
-                            // "No comment" logs an EMPTY note — the letter stays
-                            // highlighted with no text attached.
-                            if (label === EMPTY_MISTAKE_LABEL) { onTextSubmit(letterKey, ''); return; }
-                            // "Letter ?" logs the letter itself, nothing else.
-                            const text = label === 'Letter recognition' ? translitOf(letter) : label;
-                            const cur = errorText.trim();
-                            onTextSubmit(letterKey, cur ? `${cur} ${text}` : text);
-                        }}
-                        onToggleFlag={(f) => onToggleFlag?.(f)}
-                        onSubmitText={() => { if (errorText.trim()) onTextSubmit(letterKey, errorText.trim()); else onTextCancel(); }}
-                        onCancel={onTextCancel}
-                        voice={mistake?.voice}
-                        onVoiceSave={onVoiceSave ? (blob, ms) => onVoiceSave(letterKey, blob, ms) : undefined}
-                        onVoiceDelete={onVoiceDelete ? () => onVoiceDelete(letterKey) : undefined}
-                    />
-                </div>,
+                <MistakePicker
+                    letterKey={letterKey}
+                    glyph={glyph}
+                    translit={translitOf(letter)}
+                    markType={ringMode}
+                    readingCounts={ringCounts}
+                    tajweedCounts={ringTajweedCounts}
+                    permFlags={ringPermFlags}
+                    text={errorText}
+                    onTextChange={onTextChange}
+                    onPick={(label, kind, display) => {
+                        // "Letter ?" logs the letter itself, nothing else.
+                        const text = label === 'Letter recognition' ? translitOf(letter) : label;
+                        onTextSubmit(letterKey, text, { type: kind, glyph, display });
+                    }}
+                    onNote={(note) => onTextSubmit(letterKey, note.trim(), { glyph, display: note.trim() })}
+                    // An EMPTY note: the letter stays highlighted with nothing attached.
+                    onMarkOnly={() => onTextSubmit(letterKey, '', { glyph, display: '' })}
+                    onRemove={onTextCancel}
+                    onToggleFlag={(f) => onToggleFlag?.(f)}
+                    voice={mistake?.voice}
+                    onVoiceSave={onVoiceSave ? (blob, ms) => onVoiceSave(letterKey, blob, ms) : undefined}
+                    onVoiceDelete={onVoiceDelete ? () => onVoiceDelete(letterKey) : undefined}
+                />,
                 document.body
             )}
             {mistake && mistake.errorText && !isEditing && (
@@ -3903,15 +3909,45 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         requestAnimationFrame(hold);
     }, []);
 
-    const handleLetterTextSubmit = useCallback((letterKey: string, text: string) => {
+    /** The last thing logged, for the Undo bar (a few seconds). */
+    const [lastLog, setLastLog] = useState<{ key: string; type: MistakeKind; glyph: string; display: string; translit: string; at: number } | null>(null);
+    const lastLogTimer = useRef<number | null>(null);
+    useEffect(() => () => { if (lastLogTimer.current) window.clearTimeout(lastLogTimer.current); }, []);
+
+    const handleLetterTextSubmit = useCallback((letterKey: string, text: string, opts?: LogOpts) => {
         keepScroll();
         const [surah, ayah, wordIndex, letterIndex] = letterKey.split(':').map(Number);
         letterClickStates.current[letterKey] = 2; // Mark as completed
         setEditingLetterKey(null);
         setErrorTextInput('');
-        // Add the mistake with error type and text
-        onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, errorType, text);
+        // A pick from the other side of the card wins over the R/T switch: a
+        // tajweed rule logs a tajweed mistake even on a mark made in R mode.
+        const type = opts?.type ?? errorType;
+        onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, type, text);
+        if (opts?.glyph !== undefined) {
+            setLastLog({ key: letterKey, type, glyph: opts.glyph, display: opts.display ?? text, translit: translitOf(opts.glyph), at: Date.now() });
+            if (lastLogTimer.current) window.clearTimeout(lastLogTimer.current);
+            lastLogTimer.current = window.setTimeout(() => setLastLog(null), 6000);
+        }
     }, [errorType, student.id, onCycleMistakeLevel, studentMistakes, keepScroll]);
+
+    /** Undo the last log: the mark stays, its label goes, and the card opens
+     *  on that letter again so the right one can be picked. */
+    const undoLastLog = useCallback(() => {
+        if (!lastLog) return;
+        const { key, type } = lastLog;
+        if (lastLogTimer.current) window.clearTimeout(lastLogTimer.current);
+        setLastLog(null);
+        const [surah, ayah, wordIndex, letterIndex] = key.split(':').map(Number);
+        onCycleMistakeLevel(student.id, surah, ayah, wordIndex, letterIndex, type, '');
+        letterClickStates.current[key] = 2;
+        setErrorTextInput('');
+        setEditingLetterKey(key);
+        setClickStateUpdateTrigger(prev => prev + 1);
+    }, [lastLog, student.id, onCycleMistakeLevel]);
+
+    // A new card replaces the Undo bar (on a phone they would sit on top of each other).
+    useEffect(() => { if (editingLetterKey) setLastLog(null); }, [editingLetterKey]);
 
     /** Attach a recorded correction to the letter the ring is open on. The mark
      *  itself already exists — the click that opened the ring made it — so this
@@ -4441,7 +4477,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     onLetterClick={listenActive || hifzMode ? () => {} : handleLetterClick}
                                     onTextChange={setErrorTextInput}
                                     onTextSubmit={handleLetterTextSubmit}
-                                    ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
+                                    ringCounts={ringData.counts}
+                                    ringTajweedCounts={ringData.tajweedCounts}
                                     ringPermFlags={ringPermFlags}
                                     ringMode={errorType}
                                     onToggleFlag={handleToggleFlag}
@@ -5426,7 +5463,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             onLetterClick={listenActive ? () => {} : handleLetterClick}
                                                                             onTextChange={setErrorTextInput}
                                                                             onTextSubmit={handleLetterTextSubmit}
-                                                                            ringCounts={errorType === 'tajweed' ? ringData.tajweedCounts : ringData.counts}
+                                                                            ringCounts={ringData.counts}
+                                                                            ringTajweedCounts={ringData.tajweedCounts}
                                                                             ringPermFlags={ringPermFlags}
                                                                             ringMode={errorType}
                                                                             onToggleFlag={handleToggleFlag}
@@ -6092,6 +6130,29 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     preload="none"
                     style={{ display: 'none' }}
                 />
+            )}
+
+            {/* ── Undo the last mistake logged ─────────────────────────────── */}
+            {lastLog && !readOnly && ReactDOM.createPortal(
+                <div key={lastLog.at} data-mistake-undo role="status" dir="ltr"
+                    className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[9998] max-w-[calc(100vw-24px)] flex items-center gap-3 pl-3.5 pr-2 py-2 rounded-2xl bg-slate-900 text-slate-50 shadow-[0_16px_40px_rgba(15,23,42,0.35)] overflow-hidden">
+                    <span className={`flex-shrink-0 w-[26px] h-[26px] rounded-full flex items-center justify-center ${lastLog.type === 'tajweed' ? 'bg-green-600' : 'bg-red-600'}`}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5.2 5.2L20 7" /></svg>
+                    </span>
+                    <span className="min-w-0 text-[14px] truncate">
+                        <strong className="font-bold">{lastLog.display ? buttonMistakeLabel(lastLog.display, language) : 'Marked'}</strong>
+                        <span className="text-slate-300"> · </span>
+                        <span style={{ fontFamily: `'${currentQuranicFont()}', 'Amiri Quran', serif` }} className="text-[19px]">{lastLog.glyph}</span>
+                        <span className="text-slate-300"> {lastLog.translit} · {lastLog.key.replace(/^T/, '').split(':').slice(0, 2).join(':')}</span>
+                    </span>
+                    <button type="button" onClick={undoLastLog}
+                        className="flex-shrink-0 h-[34px] px-3.5 rounded-[9px] border border-slate-700 bg-slate-800 text-teal-300 hover:text-teal-200 text-[13.5px] font-bold inline-flex items-center gap-1.5">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                        Undo
+                    </button>
+                    <span aria-hidden="true" className="absolute left-0 bottom-0 h-[3px] w-full bg-teal-300 origin-left animate-[mistake-undo_6s_linear_forwards]" />
+                </div>,
+                document.body
             )}
 
             {/* ── The public reader: what the held verse means ─────────────── */}

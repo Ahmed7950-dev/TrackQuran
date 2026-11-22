@@ -28,6 +28,9 @@ type Props = {
   onSave: (blob: Blob, ms: number) => Promise<boolean>;
   onDelete: () => void;
   disabled?: boolean;
+  /** 'sm' (default) fits the old ring's centre; 'md' is a full-size button
+   *  for the logging card's footer. */
+  size?: 'sm' | 'md';
 };
 
 const Icon: React.FC<{ d: string; size?: number }> = ({ d, size = 11 }) => (
@@ -39,10 +42,14 @@ const MIC = 'M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1
 const PLAY = 'M8 5v14l11-7L8 5Z';
 const STOP = 'M7 7h10v10H7z';
 
-const PILL = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ' +
+const PILL_SM = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ' +
+             'transition-colors disabled:opacity-50 disabled:cursor-default';
+const PILL_MD = 'inline-flex items-center gap-1.5 h-[34px] [@media(pointer:coarse)]:h-11 px-3 rounded-[10px] text-[13px] font-semibold ' +
              'transition-colors disabled:opacity-50 disabled:cursor-default';
 
-const VoiceNoteButton: React.FC<Props> = ({ voice, onSave, onDelete, disabled }) => {
+const VoiceNoteButton: React.FC<Props> = ({ voice, onSave, onDelete, disabled, size = 'sm' }) => {
+  const PILL = size === 'md' ? PILL_MD : PILL_SM;
+  const iconSize = size === 'md' ? 14 : 11;
   const [state, setState] = useState<'idle' | 'recording' | 'saving'>('idle');
   const [secs, setSecs] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -185,7 +192,7 @@ const VoiceNoteButton: React.FC<Props> = ({ voice, onSave, onDelete, disabled })
         {state === 'recording' ? (
           <button type="button" onClick={stop} title="Stop and attach"
             className={`${PILL} bg-rose-600 text-white hover:bg-rose-700`}>
-            <Icon d={STOP} />
+            <Icon d={STOP} size={iconSize} />
             <span className="tabular-nums">0:{String(secs).padStart(2, '0')}</span>
           </button>
         ) : state === 'saving' ? (
@@ -194,22 +201,24 @@ const VoiceNoteButton: React.FC<Props> = ({ voice, onSave, onDelete, disabled })
           <>
             <button type="button" onClick={play} title="Play your note"
               className={`${PILL} ${playing ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}>
-              <Icon d={PLAY} />
+              <Icon d={PLAY} size={iconSize} />
               <span className="tabular-nums">{voiceLength(voice.ms)}</span>
             </button>
             <button type="button" onClick={remove} title="Delete the note"
-              className="w-4 h-4 rounded-full text-[10px] font-black leading-none text-slate-400 hover:text-rose-600"
+              className={size === 'md'
+                ? 'w-8 h-8 rounded-full text-base font-black leading-none text-slate-400 hover:text-rose-600'
+                : 'w-4 h-4 rounded-full text-[10px] font-black leading-none text-slate-400 hover:text-rose-600'}
               aria-label="Delete the voice note">×</button>
           </>
         ) : (
           <button type="button" onClick={start} disabled={disabled} title="Record a voice note on this letter"
             className={`${PILL} bg-amber-100 text-amber-800 hover:bg-amber-200`}>
-            <Icon d={MIC} />
+            <Icon d={MIC} size={iconSize} />
             Note
           </button>
         )}
       </span>
-      {err && <span className="text-[8px] font-bold leading-tight text-rose-500 text-center">{err}</span>}
+      {err && <span className={`${size === 'md' ? 'text-[11px]' : 'text-[8px]'} font-bold leading-tight text-rose-500 text-center`}>{err}</span>}
     </span>
   );
 };

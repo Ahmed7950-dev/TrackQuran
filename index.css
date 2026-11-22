@@ -65,3 +65,6 @@ code {
 /* The Free Talk board's text area sits on the dotted board: the reading and
    amber themes paint every textarea, which showed as a band behind the text. */
 html textarea.board-text { background-color: transparent !important; }
+
+/* The Undo bar under the Quran page: its countdown line (StudentProgressPage). */
+@keyframes mistake-undo { from { transform: scaleX(1); } to { transform: scaleX(0); } }

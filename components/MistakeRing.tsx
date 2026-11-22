@@ -289,6 +289,15 @@ const DISPLAY: Record<string, string> = {
   'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
   'Ignore vowel': 'Ign. vowel', 'Weak letter': 'Weak ltr',
 };
+/** The button label the logging card shows for a stored label. Wider than an
+ *  arc, so only the truly long ones are shortened. Stored text never changes. */
+const BUTTON_LABEL: Record<string, string> = {
+  'No Hold': 'No hold', 'Not Silent': 'Not silent', 'Change to Alif': 'To Alif',
+  'Change to Ha': 'To Ha', 'No Stop': 'No stop', 'Letter recognition': 'Letter ?',
+  'Idgham with ghunnah': 'Idgham w/ ghunnah', 'Idgham without ghunnah': 'Idgham w/o ghunnah',
+};
+export const buttonMistakeLabel = (label: string, language: string): string =>
+  language === 'en' ? (BUTTON_LABEL[label] ?? label) : mistakeLabel(label, language);
 /** Labels too long for a single arc get stacked on two arcs inside their layer. */
 const DISPLAY_2LINE: Record<string, [string, string]> = {
   'Idgham with ghunnah': ['Idgham', 'with ghunnah'],
@@ -296,7 +305,7 @@ const DISPLAY_2LINE: Record<string, [string, string]> = {
   'Ignore vowel': ['Ignore', 'vowel'],
   'Weak letter': ['Weak', 'letter'],
 };
-const FLAG_DISPLAY: Record<string, string> = {
+export const FLAG_DISPLAY: Record<string, string> = {
   'Fast reading': 'Fast', 'Choppy reading': 'Choppy',
   'Breaking up words': 'Breaks words', 'Articulation points': 'Articulation',
 };
