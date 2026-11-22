@@ -303,6 +303,58 @@ const TAJWEED_PREF_KEY = 'quranful:showTajweed';
  *  show in the Undo bar. */
 type LogOpts = { type?: MistakeKind; glyph?: string; display?: string };
 
+/** The space a mistake comment may use: the nearest box that clips its
+ *  overflow (the Quran page box does), inside the visible screen. */
+const labelBounds = (el: HTMLElement): { left: number; right: number } => {
+    let left = 0;
+    let right = document.documentElement.clientWidth || window.innerWidth;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox !== 'visible') {
+            const r = p.getBoundingClientRect();
+            left = Math.max(left, r.left);
+            right = Math.min(right, r.right);
+            break;
+        }
+    }
+    return { left, right };
+};
+
+/**
+ * The comment above a marked letter. It is centred on its letter, so on a
+ * letter at the very end of a line half of it used to hang outside the Quran
+ * box, which clips: on the student's iPad the comment sat against the screen
+ * edge with part of it gone. It now slides sideways just enough to stay inside.
+ */
+const MistakeLabel: React.FC<{ text: string; className: string }> = ({ text, className }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const PAD = 6;
+        const fit = () => {
+            el.style.transform = '';
+            const r = el.getBoundingClientRect();
+            if (!r.width) return;
+            const b = labelBounds(el);
+            let dx = 0;
+            if (r.width > b.right - b.left - 2 * PAD) dx = (b.left + b.right) / 2 - (r.left + r.right) / 2;
+            else if (r.left < b.left + PAD) dx = b.left + PAD - r.left;
+            else if (r.right > b.right - PAD) dx = b.right - PAD - r.right;
+            if (Math.abs(dx) > 0.5) el.style.transform = `translateX(${Math.round(dx)}px)`;
+        };
+        fit();
+        // The verse can still move under it: the Quran font arriving, the
+        // screen turning, the window resizing.
+        const raf = requestAnimationFrame(fit);
+        window.addEventListener('resize', fit);
+        let alive = true;
+        document.fonts?.ready.then(() => { if (alive) fit(); }).catch(() => {});
+        return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener('resize', fit); };
+    }, [text, className]);
+    return <div ref={ref} className={className} title={text}>{text}</div>;
+};
+
 const LetterWithError: React.FC<{
     letter: string;
     letterKey: string;
@@ -455,17 +507,15 @@ const LetterWithError: React.FC<{
                         (e.currentTarget as HTMLElement).style.zIndex = '40';
                     }}
                 >
-                    <div className={`shadow-lg transition-all ${
+                    <MistakeLabel text={mistake.errorText} className={`shadow-lg transition-[box-shadow] ${
                         focusMode
                             ? 'px-4 py-2 text-xl sm:text-3xl leading-snug rounded-2xl whitespace-normal break-words max-w-[70vw] sm:max-w-[640px] font-semibold'
-                            : 'px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg whitespace-nowrap max-w-[180px] sm:max-w-[300px] font-medium'
+                            : 'px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg w-max text-center whitespace-normal break-words max-w-[180px] sm:max-w-[300px] font-medium'
                     } ${
                         mistake.errorType === 'tajweed'
                             ? 'bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-200 border-2 border-green-300 dark:border-green-700'
                             : 'bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-200 border-2 border-red-300 dark:border-red-700'
-                    } group-hover:shadow-2xl`} title={mistake.errorText}>
-                        {mistake.errorText}
-                    </div>
+                    } group-hover:shadow-2xl`} />
                 </div>
             )}
             <span
