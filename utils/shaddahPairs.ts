@@ -66,3 +66,39 @@ export function shaddahPairs(count = 20, rng: () => number = Math.random): strin
   }
   return out;
 }
+
+/**
+ * Reading practice on the Qaedah list page, after the three short-vowel
+ * lessons: two random letters, each with its own short vowel — بَتِ, سُمَ, إِلُ.
+ *
+ * The nine vowel combinations are dealt from a shuffled deck, so a run of 20
+ * meets every combination at least twice; the second letters come from a deck
+ * too, so a run of 20 ends on 20 different letters. Hamzah opens a pair only
+ * (seated on alif), the second letter is never the first one.
+ */
+export function vowelPairs(count = 20, rng: () => number = Math.random): string[] {
+  const COMBOS = VOWELS.flatMap(a => VOWELS.map(b => [a, b] as const));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let seconds: string[] = [];
+  let firsts: string[] = [];
+  let combos: (readonly [string, string])[] = [];
+  for (let guard = 0; out.length < count && guard < count * 20; guard++) {
+    if (!seconds.length) seconds = shuffled(LETTERS, rng);
+    if (!firsts.length) firsts = shuffled([...LETTERS, 'ء'], rng);
+    if (!combos.length) combos = shuffled(COMBOS, rng);
+    const second = seconds[seconds.length - 1];
+    let i = firsts.length - 1;
+    while (i >= 0 && firsts[i] === second) i--;
+    if (i < 0) { firsts = []; continue; }
+    const first = firsts.splice(i, 1)[0];
+    const [v1, v2] = combos[combos.length - 1];
+    const pair = opening(first, v1) + second + v2;
+    if (seen.has(pair)) continue;
+    seconds.pop();
+    combos.pop();
+    seen.add(pair);
+    out.push(pair);
+  }
+  return out;
+}

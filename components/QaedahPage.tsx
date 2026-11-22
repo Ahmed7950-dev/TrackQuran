@@ -22,7 +22,7 @@ import {
   logPdfLessonRevision, progressFraction, type PdfLessonProgress,
 } from '../services/pdfLessonProgressService';
 import { getQaedahWordIdsByTopic, getQaedahPractisedByTopic } from '../services/qaedahService';
-import { isShaddahTopic, shaddahPairs } from '../utils/shaddahPairs';
+import { isShaddahTopic, shaddahPairs, vowelPairs } from '../utils/shaddahPairs';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,6 +32,8 @@ const HAFS: React.CSSProperties = { fontFamily: "'Hafs', 'Amiri', serif" };
  *  marks one as generated (never a row in qaedah_words). */
 const PAIRS_PER_RUN = 20;
 const PAIR_ID = 'pair:';
+
+type RunKind = 'words' | 'pairs' | 'vowels';
 
 const PRAISE = [
   { emoji: '🌟', text: 'Amazing!' },   { emoji: '🎉', text: 'Woohoo!' },
@@ -190,8 +192,11 @@ const QaedahPage: React.FC<{
     ? vowelForTopic(selectedTopic.titleEn, selectedTopic.titleAr) : null;
   /** The Shaddah lesson also drills random letter pairs (utils/shaddahPairs). */
   const pairsLesson = !!selectedTopic && isShaddahTopic(selectedTopic.titleEn, selectedTopic.titleAr);
-  /** What the running challenge is made of: the lesson's words, or random pairs. */
-  const [runKind, setRunKind] = useState<'words' | 'pairs'>('words');
+  /** What the running challenge is made of: the lesson's words, random shaddah
+   *  pairs, or (from the list page, no lesson open) random short-vowel pairs. */
+  const [runKind, setRunKind] = useState<RunKind>('words');
+  /** Where Back goes from the challenge: the vowel pairs start on the list. */
+  const backView: View = runKind === 'vowels' ? 'list' : 'words';
   // topicId → lesson PDF (uploaded by an admin), and whether the board is open.
   const [pdfs,        setPdfs]       = useState<QaedahPdfIndex>({});
   /** How far through each lesson's PDF, and which of its words are known —
@@ -360,11 +365,17 @@ const QaedahPage: React.FC<{
         setView('win');
         // Finishing the lesson is the achievement — it lands on the student's
         // progress calendar on the main page.
-        if (studentId && selectedTopic && queue.length > 0) {
+        // The vowel pairs belong to no lesson; their row hangs on the first
+        // short-vowel lesson (topic_id is required) under its own title.
+        const logTopic = runKind === 'vowels'
+          ? (topics.find(t => vowelForTopic(t.titleEn, t.titleAr)) ?? topics[0])
+          : selectedTopic;
+        if (studentId && logTopic && queue.length > 0) {
           void logQaedahCompletion({
             studentId,
-            topicId:      selectedTopic.id,
-            topicTitle:   runKind === 'pairs' ? `${selectedTopic.titleEn} · letter pairs` : selectedTopic.titleEn,
+            topicId:      logTopic.id,
+            topicTitle:   runKind === 'vowels' ? 'Short vowels · letter pairs'
+              : runKind === 'pairs' ? `${logTopic.titleEn} · letter pairs` : logTopic.titleEn,
             wordsCount:   queue.length,
             correctCount: runTally.current.correct,
             wrongCount:   runTally.current.wrong,
@@ -373,7 +384,7 @@ const QaedahPage: React.FC<{
       }
       return next;
     });
-  }, [queue.length, childMode, launchConfetti, studentId, selectedTopic, runKind]);
+  }, [queue.length, childMode, launchConfetti, studentId, selectedTopic, runKind, topics]);
 
   // ── Start challenge ───────────────────────────────────────────────────────
   /** The words a challenge would run on right now: the hand-picked ones if any,
@@ -396,7 +407,14 @@ const QaedahPage: React.FC<{
     })), 'pairs');
   };
 
-  const beginRun = (q: QaedahWord[], kind: 'words' | 'pairs') => {
+  /** List page: two random letters, each with a short vowel. */
+  const startVowelPairs = () => {
+    beginRun(vowelPairs(PAIRS_PER_RUN).map((word, i) => ({
+      id: `${PAIR_ID}v${i}`, topicId: '', word, level: 1 as const, orderIndex: i, createdAt: '',
+    })), 'vowels');
+  };
+
+  const beginRun = (q: QaedahWord[], kind: RunKind) => {
     setRunKind(kind);
     setQueue(q);
     setPos(0);
@@ -510,6 +528,30 @@ const QaedahPage: React.FC<{
           <p className="text-sm mt-1">An admin can add topics from the Admin Panel.</p>
         </div>
       ) : (
+        <>
+        {/* ── Letter pairs with vowels ── After the three short-vowel lessons:
+            two random letters, each with its own vowel, in the usual challenge. */}
+        <button
+          onClick={startVowelPairs}
+          className="w-full mb-4 flex items-center gap-3 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-md transition-all text-left group"
+        >
+          <span className="flex-shrink-0 w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center">
+            <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor">
+              <rect x="3.5" y="7" width="7" height="12" rx="2" />
+              <rect x="13.5" y="7" width="7" height="12" rx="2" />
+              <path strokeLinecap="round" d="M5.5 4h3M15.5 4h3" />
+            </svg>
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Practice</span>
+            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+              Letter pairs with vowels
+            </span>
+          </span>
+          <span lang="ar" dir="rtl" className="flex-shrink-0 text-2xl text-indigo-600 dark:text-indigo-400" style={HAFS}>
+            {'بَتِ'}
+          </span>
+        </button>
         <div className="space-y-2">
           {topics.map((topic, idx) => {
             // Finished = the tutor pressed Mark done on the lesson's last slide,
@@ -585,6 +627,7 @@ const QaedahPage: React.FC<{
             );
           })}
         </div>
+        </>
       )}
     </div>
   );
@@ -865,7 +908,7 @@ const QaedahPage: React.FC<{
     const topBar = (
       <div className="flex items-center gap-3">
         <button
-          onClick={() => setView('words')}
+          onClick={() => setView(backView)}
           className={`px-4 py-1.5 text-sm border transition-colors flex-shrink-0 ${
             childMode
               ? 'rounded-full border-2 border-blue-200 font-bold text-blue-600 hover:border-blue-400 bg-white'
@@ -1035,12 +1078,12 @@ const QaedahPage: React.FC<{
       </h2>
       <p className={`mb-8 max-w-xs ${childMode ? 'text-lg font-bold text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
         {childMode
-          ? <>{`You practised ${queue.length} ${runKind === 'pairs' ? 'pairs' : 'words'}!`}<br />Amazing work! 🎉</>
-          : `You went through all ${queue.length} ${runKind === 'pairs' ? 'pairs' : 'words'}.`}
+          ? <>{`You practised ${queue.length} ${runKind === 'words' ? 'words' : 'pairs'}!`}<br />Amazing work! 🎉</>
+          : `You went through all ${queue.length} ${runKind === 'words' ? 'words' : 'pairs'}.`}
       </p>
       <div className="flex gap-3 flex-wrap justify-center">
         <button
-          onClick={runKind === 'pairs' ? startPairs : handleStart}
+          onClick={runKind === 'vowels' ? startVowelPairs : runKind === 'pairs' ? startPairs : handleStart}
           className={`px-6 py-2.5 font-bold transition-all active:scale-95 ${
             childMode
               ? 'rounded-full bg-orange-400 hover:bg-orange-500 text-white shadow-md'
@@ -1048,13 +1091,13 @@ const QaedahPage: React.FC<{
           }`}
         >{childMode ? '🔁 Play Again' : 'Practice Again'}</button>
         <button
-          onClick={() => setView('words')}
+          onClick={() => setView(backView)}
           className={`px-6 py-2.5 font-bold transition-all active:scale-95 ${
             childMode
               ? 'rounded-full bg-white border-2 border-blue-300 text-blue-600 hover:border-blue-500'
               : 'rounded-xl border border-slate-300 dark:border-gray-600 text-slate-500 dark:text-slate-400 hover:border-slate-500'
           }`}
-        >Back to Lesson</button>
+        >{runKind === 'vowels' ? 'Back to Lessons' : 'Back to Lesson'}</button>
       </div>
     </div>
   );
