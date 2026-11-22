@@ -572,8 +572,12 @@ const App: React.FC = () => {
    *  waits for them: a read issued while a write is uncommitted comes back with
    *  the older row and puts the just-done work back off the screen. */
   const pendingWrites = useRef(0);
+  /** Every write ever started; the roster refresh compares it before and after
+   *  its read to know whether a write slipped in while the read was out. */
+  const writesStarted = useRef(0);
   const trackWrite = <T,>(p: Promise<T>): Promise<T> => {
     pendingWrites.current++;
+    writesStarted.current++;
     return p.finally(() => { pendingWrites.current--; });
   };
   /** The latest roster, for handlers that run after an await. */
@@ -1138,6 +1142,7 @@ const App: React.FC = () => {
     enabled: currentUserRole === 'teacher' && !!currentUserId,
     load: () => getStudents(currentUserId!),
     isWriting: () => pendingWrites.current > 0,
+    writeCount: () => writesStarted.current,
     onRoster: setStudents,
   });
 

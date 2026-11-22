@@ -442,7 +442,9 @@ const LetterWithError: React.FC<{
                 />,
                 document.body
             )}
-            {mistake && mistake.errorText && !isEditing && (
+            {/* A yellow letter is a corrected one: it never carries a comment,
+                even while a stale copy of the mark is still on screen. */}
+            {mistake && mistake.errorText && !isEditing && clickState !== 1 && (
                 <div
                     className={`absolute bottom-full left-1/2 -translate-x-1/2 z-40 pointer-events-auto group ${focusMode ? 'mb-3 sm:mb-6' : 'mb-0.5 sm:mb-3'}`}
                     style={{ zIndex: 40 }}

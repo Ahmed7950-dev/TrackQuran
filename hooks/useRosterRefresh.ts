@@ -14,6 +14,11 @@
 //   * Read while one of our own writes is still in the air. That read can be
 //     served before the write commits, and the answer would put the work that
 //     was just done back off the screen.
+//   * Keep a read that a write overtook. Coming back to the window and
+//     clicking a letter is ONE click: the focus starts a read, the click a
+//     write, and the read could answer with the letter as it was before (a
+//     mark turned yellow got its comment back, Nov 2026). Such an answer is
+//     dropped; the next refresh reads again.
 //   * Blank a roster that has students in it. The loader swallows its own
 //     error and answers with an empty list, so "nothing came back" is not the
 //     same as "there is nothing".
@@ -27,6 +32,8 @@ export interface RosterRefreshOptions<T> {
   load: () => Promise<T[]>;
   /** True while one of our own writes has not come back yet. */
   isWriting: () => boolean;
+  /** How many writes have ever started — changes when one begins. */
+  writeCount: () => number;
   /** Called with a roster worth showing — never with an empty one. */
   onRoster: (rows: T[]) => void;
   /** How often to look while the app is in front. */
@@ -34,11 +41,11 @@ export interface RosterRefreshOptions<T> {
 }
 
 export function useRosterRefresh<T>({
-  enabled, load, isWriting, onRoster, intervalMs = 5 * 60 * 1000,
+  enabled, load, isWriting, writeCount, onRoster, intervalMs = 5 * 60 * 1000,
 }: RosterRefreshOptions<T>): void {
   // Through refs so a new closure on every render doesn't restart the timer.
-  const latest = useRef({ load, isWriting, onRoster });
-  latest.current = { load, isWriting, onRoster };
+  const latest = useRef({ load, isWriting, writeCount, onRoster });
+  latest.current = { load, isWriting, writeCount, onRoster };
 
   useEffect(() => {
     if (!enabled) return;
@@ -48,8 +55,14 @@ export function useRosterRefresh<T>({
       if (stopped) return;
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       if (latest.current.isWriting()) return;
+      const stamp = latest.current.writeCount();
       latest.current.load()
-        .then(rows => { if (!stopped && rows.length) latest.current.onRoster(rows); })
+        .then(rows => {
+          if (stopped || !rows.length) return;
+          // A write began while this read was out: the rows may predate it.
+          if (latest.current.writeCount() !== stamp || latest.current.isWriting()) return;
+          latest.current.onRoster(rows);
+        })
         .catch(() => { /* next time the tab is looked at */ });
     };
 
