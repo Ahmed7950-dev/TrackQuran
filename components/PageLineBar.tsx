@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { getPageOfAyah } from '../services/dataService';
+import { loadMushafLines, mushafLineOf, MushafLineData } from '../services/mushafLines';
 
 /**
  * The thin bar beside the verses on the live logging page.
@@ -13,35 +14,22 @@ import { getPageOfAyah } from '../services/dataService';
  * is the surah line's under the toolbar, so the two read as one.
  *
  * The page flows its text, so a screen line is not a mushaf line. Every word's
- * mushaf line comes from public/mushaf-lines.json (scripts/build-mushaf-lines.py),
- * keyed by the same word index as the letter ids (`letter-s:a:w:l`).
+ * mushaf line comes from services/mushafLines.
+ *
+ * Small text: one screen line would hold two or three mushaf lines and the
+ * arrow could name only the first. So the bar also measures how wide a printed
+ * line is against the space it has and tells the page (`onLinesFit`) when a
+ * typical one fits; the page then starts every printed line on its own line,
+ * like the printed mushaf. A word's width does not change with the breaks, so
+ * the answer holds once they are in.
  * Colours per theme: the .plb-* rules in index.css.
  */
 
-/** [surah - 1][ayah - 1] = [line of the first word, word indexes where the next line starts...] */
-type LineData = number[][][];
-
-let linesLoad: Promise<LineData | null> | null = null;
-const loadLines = (): Promise<LineData | null> => {
-    if (!linesLoad) {
-        const load = fetch('/mushaf-lines.json')
-            .then(r => (r.ok ? r.json() : null))
-            .then(j => (j && Array.isArray(j.lines) ? (j.lines as LineData) : null))
-            .catch(() => null);
-        linesLoad = load;
-        // A failed load may be a passing blip: the next open tries again.
-        load.then(d => { if (!d && linesLoad === load) linesLoad = null; });
-    }
-    return linesLoad;
-};
-
-const lineOfWord = (data: LineData, s: number, a: number, w: number): number | null => {
-    const e = data[s - 1]?.[a - 1];
-    if (!e || !e.length) return null;
-    let line = e[0];
-    for (let i = 1; i < e.length && w >= e[i]; i++) line++;
-    return line;
-};
+/** Printed lines on their own lines once a typical one fits across (with a
+ *  little to spare: the longer ones then wrap). Back to flowing text only once
+ *  clearly too wide, so the page does not flip at the edge. */
+const FIT_ON = 1.1;
+const FIT_OFF = 1.14;
 
 const LINES = 15;
 /** L = one line's dash, G = the gap between lines, P = the gap between pages,
@@ -79,10 +67,14 @@ interface Props {
     toolbarRef: React.RefObject<HTMLElement>;
     /** Changes whenever the verses may have re-flowed (surah, pages, text size, translation). */
     layoutKey: string;
+    /** Whether the page has its printed lines on their own lines now. */
+    linesFit: boolean;
+    /** Called when a typical printed line starts or stops fitting across the page. */
+    onLinesFit: (fit: boolean) => void;
 }
 
-const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey }) => {
-    const [data, setData] = useState<LineData | null>(null);
+const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey, linesFit, onLinesFit }) => {
+    const [data, setData] = useState<MushafLineData | null>(null);
     const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
     const [view, setView] = useState<View>(HIDDEN);
     const model = useRef<Model | null>(null);
@@ -93,28 +85,61 @@ const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey }) => {
 
     useEffect(() => {
         let alive = true;
-        loadLines().then(d => { if (alive) setData(d); });
+        loadMushafLines().then(d => { if (alive) setData(d); });
         return () => { alive = false; };
     }, []);
+
+    /** Tell the page whether a typical printed line fits across it (FIT_ON / FIT_OFF). */
+    const reportFit = (words: { y: number; page: number; line: number; left: number; right: number }[], reach: number, body: HTMLElement) => {
+        const wrap = body.querySelector<HTMLElement>('[id^="verse-container-"]')?.parentElement;
+        if (!wrap) return;
+        const cs = getComputedStyle(wrap);
+        const room = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (!(room > 0)) return;
+        const sameRow = (p: { y: number }, q: { y: number }) => Math.abs(p.y - q.y) < reach * 0.5;
+        // The usual gap between two words on a row (a verse marker makes some wider).
+        const gaps: number[] = [];
+        for (let k = 1; k < words.length; k++) {
+            if (sameRow(words[k], words[k - 1])) gaps.push(Math.max(0, words[k - 1].left - words[k].right));
+        }
+        gaps.sort((p, q) => p - q);
+        const usualGap = gaps.length ? gaps[gaps.length >> 1] : 0;
+        // Each printed line as if laid out on one row: its words and the gaps after them.
+        const widths: number[] = [];
+        for (let k = 0; k < words.length; k++) {
+            const w = words[k];
+            const prev = words[k - 1];
+            const next = words[k + 1];
+            if (!prev || prev.page !== w.page || prev.line !== w.line) widths.push(0);
+            const gap = next && sameRow(next, w) ? Math.max(0, w.left - next.right) : usualGap;
+            widths[widths.length - 1] += (w.right - w.left) + gap;
+        }
+        widths.sort((p, q) => p - q);
+        const ratio = widths[widths.length >> 1] / room;
+        const fit = linesFit ? ratio <= FIT_OFF : ratio <= FIT_ON;
+        if (fit !== linesFit) onLinesFit(fit);
+    };
 
     const measure = (): Model | null => {
         const body = bodyRef.current;
         if (!body || !data) return null;
         const top = body.getBoundingClientRect().top;
-        const words: { y: number; page: number; line: number }[] = [];
+        const words: { y: number; page: number; line: number; left: number; right: number }[] = [];
         let reach = 0;
         // One span per word: its first letter. Turkish keys (T…) carry no number and drop out.
         body.querySelectorAll<HTMLElement>('span[id^="letter-"][id$=":0"]').forEach(el => {
             const [s, a, w] = el.id.slice(7).split(':').map(Number);
             if (!s || !a || !Number.isInteger(w)) return;
-            const line = lineOfWord(data, s, a, w);
+            const line = mushafLineOf(data, s, a, w);
             if (line == null) return;
             const r = el.getBoundingClientRect();
             if (!r.height) return;
             reach = Math.max(reach, r.height);
-            words.push({ y: (r.top + r.bottom) / 2 - top, page: getPageOfAyah(s, a), line });
+            const word = (el.parentElement ?? el).getBoundingClientRect(); // the whole word, its space included
+            words.push({ y: (r.top + r.bottom) / 2 - top, page: getPageOfAyah(s, a), line, left: word.left, right: word.right });
         });
         if (!words.length) return null;
+        reportFit(words, reach, body);
         // A word's place on the tape: its mushaf line plus how far along that line it is.
         const inLine = new Map<string, number>();
         for (const w of words) { const k = `${w.page}:${w.line}`; inLine.set(k, (inLine.get(k) ?? 0) + 1); }

@@ -21,6 +21,7 @@ import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, Recit
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
 import MistakePicker, { MistakeKind } from './MistakePicker';
 import PageLineBar from './PageLineBar';
+import { loadMushafLines, MushafLineData } from '../services/mushafLines';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, findMaddLetters, displayTajweedRule, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
@@ -1641,6 +1642,38 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
     const quranBodyRef = useRef<HTMLDivElement>(null); // For scroll-to-top on page navigation
     const toolbarRef = useRef<HTMLDivElement>(null);   // the page bar's reading line sits under it
+
+    // Printed mushaf lines (the page bar's numbers, and line breaks when the text
+    // is small): which line every word is on, loaded once for the tutor's page.
+    const [mushafLineData, setMushafLineData] = useState<MushafLineData | null>(null);
+    // Set by the page bar: a typical printed line fits across the page, so each
+    // one starts on its own line, as in the mushaf.
+    const [mushafLinesFit, setMushafLinesFit] = useState(false);
+    useEffect(() => {
+        if (readOnly || guest) return;
+        let alive = true;
+        loadMushafLines().then(d => { if (alive) setMushafLineData(d); });
+        return () => { alive = false; };
+    }, [readOnly, guest]);
+    /** Where printed lines begin: `s:a:w` = before that word, `s:a:end` = after the
+     *  ayah (the next one starts a new line on the same page; a page or surah
+     *  start already begins on its own). */
+    const mushafBreaks = useMemo(() => {
+        const out = new Set<string>();
+        if (!mushafLineData) return out;
+        for (let i = 0; i < verses.length; i++) {
+            const [s, a] = verses[i].verse_key.split(':').map(Number);
+            const e = mushafLineData[s - 1]?.[a - 1];
+            if (!e) continue;
+            for (let k = 1; k < e.length; k++) out.add(`${s}:${a}:${e[k]}`);
+            const next = verses[i + 1];
+            if (!next) continue;
+            const [ns, na] = next.verse_key.split(':').map(Number);
+            const ne = mushafLineData[ns - 1]?.[na - 1];
+            if (ne && ns === s && getPageOfAyah(ns, na) === getPageOfAyah(s, a) && ne[0] > e[0] + e.length - 1) out.add(`${s}:${a}:end`);
+        }
+        return out;
+    }, [mushafLineData, verses]);
     /** 0–1: how far into the OPEN SURAH the verse under the toolbar is, for the
      *  orange line along the bottom of the surah bar. Read from the verse the
      *  reader has reached, not the scrollbar, so the page window (which only
@@ -4484,6 +4517,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // Turkish text, whose printed lines are different.
     const showPageBar = !readOnly && !guest && !focusMode && !tadabburMode && !turkishSource
         && !isLoading && !error && verses.length > 0;
+    // Small text: every printed line starts on its own line, so a screen line
+    // never holds two of them and the bar can name each one.
+    const mushafBreaksOn = showPageBar && mushafLinesFit && !!mushafLineData;
 
     const renderSurahContent = () => {
         if (isLoading) return <div className="flex justify-center items-center h-full p-12"><p>{t('liveSession.loadingSurah')}</p></div>;
@@ -4554,7 +4590,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 }
                 const isLastWordInVerse = wordIndex === wordsArray.length - 1;
                 const markPlan = wordMarkPlan(word);
-                return (
+                const wordSpan = (
                     <span key={`word-${surahNum}:${ayahNum}:${wordIndex}`} className="relative inline" style={{ display: 'inline', fontFamily: markPlan.mode === 'wholeWord' ? markPlan.font : 'inherit' }}>
                         {letters.map(({ letter, index: letterIndex }) => {
                             const baseKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
@@ -4602,6 +4638,10 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                         {' '}
                     </span>
                 );
+                // This word begins a printed line: start it on its own line.
+                return mushafBreaksOn && mushafBreaks.has(`${surahNum}:${ayahNum}:${wordIndex}`)
+                    ? <React.Fragment key={`word-${surahNum}:${ayahNum}:${wordIndex}`}><br />{wordSpan}</React.Fragment>
+                    : wordSpan;
             });
             const isSelectedStart = selectionStart?.surah === surahNum && selectionStart?.ayah === ayahNum;
             const verseMarker = (<VerseMarker key={`marker-${verse.verse_key}`} number={ayahNum} surah={surahNum} isSelectedStart={isSelectedStart}/>);
@@ -4780,6 +4820,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <div id={verseContainerId} key={verseContainerId} className={`${verseContainerClass}${hwHighlightClass}`}>
                         {verseTextNode}
                         {verseMarker}
+                        {/* The next ayah begins a printed line: end this one's line here. */}
+                        {mushafBreaksOn && !showNoteArea && mushafBreaks.has(`${surahNum}:${ayahNum}:end`) && <br />}
                         {noteSection}
                     </div>
                 );
@@ -5698,6 +5740,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 </div>
                             </div>
                         )}
+                        {/* Room to scroll the last lines up to the page bar's arrow in the
+                            middle of the screen (a short surah in small text fits on one screen). */}
+                        {showPageBar && <div aria-hidden="true" className="h-[40vh]" />}
                         </>
                         )}
                     </div>
@@ -5722,7 +5767,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                 <PageLineBar
                     bodyRef={quranBodyRef}
                     toolbarRef={toolbarRef}
-                    layoutKey={`${selectedSurahId}|${currentPageRange.start}-${currentPageRange.end}|${fontSize}|${showTranslation ? 1 : 0}|${verses.length}`}
+                    layoutKey={`${selectedSurahId}|${currentPageRange.start}-${currentPageRange.end}|${fontSize}|${showTranslation ? 1 : 0}|${verses.length}|${mushafBreaksOn ? 1 : 0}`}
+                    linesFit={mushafLinesFit}
+                    onLinesFit={setMushafLinesFit}
                 />
             )}
             {showScrollTop && (
