@@ -20,6 +20,7 @@ import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, a
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
 import MistakePicker, { MistakeKind } from './MistakePicker';
+import PageLineBar from './PageLineBar';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
 import { analyzeVerseTajweed, findMaddLetters, displayTajweedRule, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
@@ -1639,6 +1640,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const scrollIntervalRef = useRef<number | null>(null);
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
     const quranBodyRef = useRef<HTMLDivElement>(null); // For scroll-to-top on page navigation
+    const toolbarRef = useRef<HTMLDivElement>(null);   // the page bar's reading line sits under it
     /** 0–1: how far into the OPEN SURAH the verse under the toolbar is, for the
      *  orange line along the bottom of the surah bar. Read from the verse the
      *  reader has reached, not the scrollbar, so the page window (which only
@@ -4477,6 +4479,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         );
     };
 
+    // The page bar beside the verses: the tutor's live logging page only, on
+    // the flowing text. Its line numbers are the Madani mushaf's, so not on the
+    // Turkish text, whose printed lines are different.
+    const showPageBar = !readOnly && !guest && !focusMode && !tadabburMode && !turkishSource
+        && !isLoading && !error && verses.length > 0;
+
     const renderSurahContent = () => {
         if (isLoading) return <div className="flex justify-center items-center h-full p-12"><p>{t('liveSession.loadingSurah')}</p></div>;
         if (error) return <div className="text-center text-red-500 p-12">{error}</div>;
@@ -4778,7 +4786,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
              }
         });
         const sizeClass = fontSize <= 1 ? 'text-base' : `text-${fontSize}xl`;
-        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center ${sizeClass} select-none py-6 px-2 sm:py-10 sm:px-4` + (showTranslation ? '' : ' leading-[2.6]');
+        // With the page bar, a margin on the right for it (both sides on wider screens, so the text stays centred).
+        const padClass = showPageBar ? 'py-6 pl-2 pr-[34px] sm:py-10 sm:px-14' : 'py-6 px-2 sm:py-10 sm:px-4';
+        const wrapperClassName = `font-quranic text-slate-900 dark:text-slate-100 text-center ${sizeClass} select-none ${padClass}` + (showTranslation ? '' : ' leading-[2.6]');
         return (<div className={wrapperClassName}>{surahContent}</div>);
     };
 
@@ -5060,7 +5070,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
             )}
 
             <div className={guest ? '' : 'space-y-6'}>
-                <div className={`relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30 rounded-t-none ${guest ? 'rounded-b-none border-x-0' : 'rounded-b-2xl'}`} style={{ top: `${toolbarStickyTop}px` }}>
+                <div ref={toolbarRef} className={`relative px-2.5 py-2.5 sm:px-4 sm:py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-gray-700 sticky z-30 rounded-t-none ${guest ? 'rounded-b-none border-x-0' : 'rounded-b-2xl'}`} style={{ top: `${toolbarStickyTop}px` }}>
                     {/* How far into the surah the reader has come — full at its end. */}
                     <div dir="ltr" aria-hidden="true"
                         className={`absolute inset-x-0 bottom-0 h-[3px] overflow-hidden bg-slate-200/60 dark:bg-gray-700/60 ${guest ? '' : 'rounded-b-2xl'}`}>
@@ -5707,6 +5717,13 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
                     Scrolling on its own — tap to stop
                 </button>
+            )}
+            {showPageBar && (
+                <PageLineBar
+                    bodyRef={quranBodyRef}
+                    toolbarRef={toolbarRef}
+                    layoutKey={`${selectedSurahId}|${currentPageRange.start}-${currentPageRange.end}|${fontSize}|${showTranslation ? 1 : 0}|${verses.length}`}
+                />
             )}
             {showScrollTop && (
                 <button
