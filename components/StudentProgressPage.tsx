@@ -292,7 +292,11 @@ const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !
 // below color letter units per rule, with dark-mode variants.
 const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
     .map(r => `.tj-${r}{color:${TAJWEED_RULES[r].color}} .dark .tj-${r}{color:${TAJWEED_RULES[r].colorDark}}`)
-    .join('\n');
+    .join('\n')
+    // The madd letters are drawn a little heavier as well as in their colour:
+    // an alif is one thin stroke, and colour alone barely shows on it. Two
+    // sideways shadows in the letter's own colour; they scale with the text.
+    + '\n.tj-madd_letter{text-shadow:0.025em 0 0 currentColor,-0.025em 0 0 currentColor}';
 
 // Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';

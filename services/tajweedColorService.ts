@@ -68,7 +68,7 @@ export const TAJWEED_RULES: Record<TajweedRule, TajweedRuleMeta> = {
   ham_wasl:            { label: 'Hamzat Wasl (silent)',   labelAr: 'همزة وصل',         color: '#AAAAAA', colorDark: '#8A8A8A' },
   laam_shamsiyah:      { label: 'Silent Lam (sun letters)', labelAr: 'لام شمسية',      color: '#AAAAAA', colorDark: '#8A8A8A' },
   slnt:                { label: 'Silent letter',          labelAr: 'حرف لا يُنطق',     color: '#AAAAAA', colorDark: '#8A8A8A' },
-  madd_letter:         { label: 'Madd letters',           labelAr: 'حروف المد',        color: '#A16207', colorDark: '#FACC15' },
+  madd_letter:         { label: 'Madd letters',           labelAr: 'حروف المد',        color: '#E6007E', colorDark: '#FF4FA8' },
 };
 
 // Short, teacher-facing explanation of each rule (English + Arabic) for the
