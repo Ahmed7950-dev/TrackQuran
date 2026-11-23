@@ -38,7 +38,10 @@ export type TajweedRule =
   | 'madda_obligatory'
   | 'ham_wasl'
   | 'laam_shamsiyah'
-  | 'slnt';
+  | 'slnt'
+  /** Display-only: never returned by analyzeVerseTajweed. The letters of madd
+   *  themselves (findMaddLetters), shown in a colour of their own. */
+  | 'madd_letter';
 
 export interface TajweedRuleMeta {
   label: string;      // legend label (English)
@@ -65,6 +68,7 @@ export const TAJWEED_RULES: Record<TajweedRule, TajweedRuleMeta> = {
   ham_wasl:            { label: 'Hamzat Wasl (silent)',   labelAr: 'همزة وصل',         color: '#AAAAAA', colorDark: '#8A8A8A' },
   laam_shamsiyah:      { label: 'Silent Lam (sun letters)', labelAr: 'لام شمسية',      color: '#AAAAAA', colorDark: '#8A8A8A' },
   slnt:                { label: 'Silent letter',          labelAr: 'حرف لا يُنطق',     color: '#AAAAAA', colorDark: '#8A8A8A' },
+  madd_letter:         { label: 'Madd letters',           labelAr: 'حروف المد',        color: '#A16207', colorDark: '#FACC15' },
 };
 
 // Short, teacher-facing explanation of each rule (English + Arabic) for the
@@ -87,12 +91,13 @@ export const TAJWEED_DESCRIPTIONS: Record<TajweedRule, { en: string; ar: string 
   ham_wasl:            { en: 'Connecting hamza — silent when continuing from before.',            ar: 'همزة وصل تسقط عند الوصل.' },
   laam_shamsiyah:      { en: 'Lām not pronounced before a sun letter.',                           ar: 'لام شمسية لا تُنطق.' },
   slnt:                { en: 'A written letter that is not pronounced.',                           ar: 'حرف يُكتب ولا يُنطق.' },
+  madd_letter:         { en: 'Alif, waw and ya with no vowel, and the small alif, waw and ya.',     ar: 'الألف والواو والياء الساكنة، والألف والواو والياء الصغيرة.' },
 };
 
 // Legend display order: pronunciation rules first, silent/gray last.
 export const TAJWEED_LEGEND_ORDER: TajweedRule[] = [
   'ghunnah', 'ikhafa', 'ikhafa_shafawi', 'idgham_ghunnah', 'idgham_wo_ghunnah',
-  'idgham_shafawi', 'iqlab', 'qalaqah', 'madda_normal', 'madda_permissible',
+  'idgham_shafawi', 'iqlab', 'qalaqah', 'madd_letter', 'madda_normal', 'madda_permissible',
   'madda_obligatory', 'madda_necessary', 'idgham_mutajanisayn', 'idgham_mutaqaribayn',
   'ham_wasl', 'laam_shamsiyah', 'slnt',
 ];
@@ -333,4 +338,131 @@ export function analyzeVerseTajweed(verse: string, turkish = false): Map<string,
   const res = new Map<string, TajweedRule>();
   flat.forEach((f, idx) => { if (out[idx]) res.set(`${f.wi}:${f.ui}`, out[idx]!); });
   return res;
+}
+
+
+// ── Letters of madd ──────────────────────────────────────────────────────────
+// A separate layer from the rules above: every letter that is read long.
+//   - ا / ى after a fatha, و after a damma, ي / ى after a kasra, written bare
+//     (the Madani text puts a sukun only on the leen letters, وْ يْ, which
+//     are not madd letters);
+//   - the small alif (U+0670), small waw (U+06E5) and small ya (U+06E6/7).
+//     These are marks, so the letter unit carrying them is what lights up;
+//     the Madani text seats most small alifs on a tatweel of their own (ـٰ);
+//   - Turkish text: its long-vowel strokes (U+06EA long i, U+06EB long u)
+//     and the vertical fatha (U+0670) play the part of the small letters.
+// Left out, because they are not read long:
+//   - a madd letter ending a word when the next word starts with hamzat wasl
+//     (فِى ٱلْأَرْضِ, قَالُوا۟ ٱدْخُلُوا۟): two sakins meet and it drops;
+//   - a silah on the verse's last letter (dropped when stopping there);
+//   - a small ya / waw that carries its own vowel or shadda (ءَاتَىٰنِۦَ: a
+//     consonant), and a small alif seating a hamza (فَٱدَّٰرَْٰٔتُمْ);
+//   - the silent seat alif of a fathatan, except on the verse's last letter,
+//     where stopping turns the fathatan into a long ā (madd al-ʿiwad).
+const FATHA = 'َ', DAMMA = 'ُ', KASRA = 'ِ';
+const FATHATAN = 'ً', DAMMATAN = 'ٌ', KASRATAN = 'ٍ';
+const TR_LONG_I = '۪', TR_LONG_U = '۫';
+
+export function findMaddLetters(verse: string, turkish = false): Set<string> {
+  const flat: Unit[] = [];
+  splitTajweedWords(verse).forEach((w, wi) => segmentWord(w).forEach((u, ui) => flat.push({ wi, ui, u, base: u[0] })));
+  const L = flat.length;
+  const isLetterUnit = (i: number) => i >= 0 && i < L && isArabicLetterUnit(flat[i].base);
+  const marks = (i: number) => flat[i].u.slice(1).replace(/[ۖ-ۜ]/g, '');
+  const isSilent = (i: number) => /[۟۠]/.test(flat[i].u);
+  /** Nothing on it but (perhaps) a maddah: the shape of a written madd letter. */
+  const bare = (i: number) => marks(i).replace(/ٓ/g, '') === '';
+  /** The letter before, in the same word. */
+  const prev = (i: number) => (i > 0 && flat[i - 1].wi === flat[i].wi && isLetterUnit(i - 1) ? i - 1 : -1);
+
+  let lastPron = L - 1;
+  while (lastPron > 0 && (!isLetterUnit(lastPron) || isSilent(lastPron))) lastPron--;
+  /** The pronoun's long vowel (silah) is not read when stopping on it. */
+  const silahAtStop = (i: number) => i === lastPron && flat[i].base === 'ه';
+
+  const madd: boolean[] = new Array(L).fill(false);
+  for (let i = 0; i < L; i++) {
+    if (!isLetterUnit(i) || isSilent(i)) continue;
+    const m = marks(i); const b = flat[i].base;
+
+    // Small alif — unless it only seats a hamza.
+    if (m.includes(DAGGER)) { if (!m.includes(HAMZA_ABOVE)) madd[i] = true; continue; }
+    // Small waw / ya — a consonant when a vowel or shadda follows it.
+    const small = [SMALL_WAW, SMALL_YEH, SMALL_HIGH_YEH].map(c => m.indexOf(c)).filter(k => k >= 0);
+    if (small.length) {
+      const after = m.slice(Math.min(...small) + 1);
+      if (!/[َُِّ]/.test(after) && !silahAtStop(i)) madd[i] = true;
+      continue;
+    }
+    if (turkish && m.includes(TR_LONG_U)) { if (!silahAtStop(i)) madd[i] = true; continue; }
+    if (turkish && m.includes(TR_LONG_I)) {
+      // The long-i stroke before a written ي: the ي is the madd letter. With
+      // no ي after it, the stroke stands for one (the silah بِه۪).
+      const n = i + 1;
+      const yaFollows = n < L && flat[n].wi === flat[i].wi && ['ي', 'ى'].includes(flat[n].base) && bare(n);
+      if (!yaFollows && !silahAtStop(i)) madd[i] = true;
+      continue;
+    }
+
+    if (!['ا', 'ى', 'و', 'ي'].includes(b) || !bare(i)) continue;
+    const p = prev(i);
+    if (p === -1) continue;
+    const pm = marks(p);
+    const fatha = pm.includes(FATHA) && !pm.includes(FATHATAN);
+    const damma = pm.includes(DAMMA) && !pm.includes(DAMMATAN);
+    const kasra = pm.includes(KASRA) && !pm.includes(KASRATAN);
+    const trA = turkish && pm.includes(DAGGER);
+    // Turkish writes hamzat wasl after a prefix as a plain alif: وَالْ, فَاسْتَمِعْ,
+    // وَالشَّمْسِ, وَالَّذ۪ينَ. A sukun, a bare (sun-letter) lam, or a shadda that
+    // no maddah announces comes next — never the case after a madd alif.
+    if (turkish && b === 'ا' && i + 1 < L && flat[i + 1].wi === flat[i].wi) {
+      const nm = marks(i + 1);
+      if (/[ْۡ]/.test(nm) || (flat[i + 1].base === 'ل' && nm === '') || (nm.includes(SHADDA) && !pm.includes(MADDAH))) continue;
+    }
+    if ((b === 'ا' || b === 'ى') && (fatha || trA)) madd[i] = true;
+    else if (b === 'ي' && trA) madd[i] = true;          // Turkish: اَتٰيكَ, the ā written with ي
+    else if (b === 'و' && (damma || (turkish && pm.includes(TR_LONG_U)))) madd[i] = true;
+    else if ((b === 'ي' || b === 'ى') && (kasra || (turkish && pm.includes(TR_LONG_I)))) madd[i] = true;
+    else if (i === lastPron && (b === 'ا' || b === 'ى') && pm.includes(FATHATAN)) madd[i] = true;
+  }
+
+  // Two sakins: the madd letter ending a word drops before hamzat wasl. The
+  // Turkish text writes that hamza as a plain alif with no vowel.
+  const startsWithWasl = (wi: number) => {
+    const k = flat.findIndex(f => f.wi === wi);
+    if (k === -1) return false;
+    return flat[k].base === 'ٱ' || (turkish && flat[k].base === 'ا' && marks(k) === '');
+  };
+  for (let i = 0; i < L; i++) {
+    if (!madd[i]) continue;
+    // Last pronounced letter of its word (a silent alif may trail it: قَالُوا۟).
+    let k = i + 1;
+    while (k < L && flat[k].wi === flat[i].wi && (!isLetterUnit(k) || isSilent(k))) k++;
+    const wordEnds = k >= L || flat[k].wi !== flat[i].wi;
+    if (wordEnds && flat[i].wi + 1 <= flat[L - 1].wi && startsWithWasl(flat[i].wi + 1)) madd[i] = false;
+  }
+
+  const res = new Set<string>();
+  flat.forEach((f, idx) => { if (madd[idx]) res.add(`${f.wi}:${f.ui}`); });
+  return res;
+}
+
+
+/**
+ * What the reader colours a letter with, given the rules the viewer chose to
+ * see. The letters of madd beat the 2-count madd (it is the same letter seen
+ * as a madd) and the silent mark (صَلَوٰة: the small alif on a silent waw is
+ * what is read), but not the rules that say more: the 4-6 count madds, and
+ * the nūn/mīm rules whose clusters run through a letter (نَفْسٍ وَٰحِدَةٍ).
+ */
+export function displayTajweedRule(
+  rule: TajweedRule | undefined,
+  isMaddLetter: boolean,
+  on: (r: TajweedRule) => boolean,
+): TajweedRule | undefined {
+  const weak = rule === 'madda_normal' || rule === 'slnt';
+  if (rule && !weak && on(rule)) return rule;
+  if (isMaddLetter && on('madd_letter')) return 'madd_letter';
+  if (rule && on(rule)) return rule;
+  return undefined;
 }

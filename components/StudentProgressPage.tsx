@@ -21,7 +21,7 @@ import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, Recit
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
 import MistakePicker, { MistakeKind } from './MistakePicker';
 import { RECITERS, ReciterKey, reciterOf, fullSurahUrl, timedSurahUrl, timedTimings, everyayahUrl, AyahTiming } from '../services/recitersService';
-import { analyzeVerseTajweed, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
+import { analyzeVerseTajweed, findMaddLetters, displayTajweedRule, TajweedRule, TAJWEED_RULES, TAJWEED_LEGEND_ORDER, TAJWEED_DESCRIPTIONS } from '../services/tajweedColorService';
 import ConfirmationModal from './ConfirmationModal';
 import DeadlinePicker from './DeadlinePicker';
 import { dueLabel } from '../utils/quranHomework';
@@ -296,6 +296,15 @@ const TAJWEED_CSS = (Object.keys(TAJWEED_RULES) as TajweedRule[])
 
 // Tajweed colouring preference. Absent (first visit) = OFF; '1' once enabled.
 const TAJWEED_PREF_KEY = 'quranful:showTajweed';
+// The colours the viewer switched off in the key ("i"). The HIDDEN ones are
+// stored, so a colour added later starts out shown.
+const TAJWEED_HIDDEN_KEY = 'quranful:tajweedHidden';
+const loadHiddenTajweed = (): Set<TajweedRule> => {
+    try {
+        const raw = JSON.parse(localStorage.getItem(TAJWEED_HIDDEN_KEY) ?? '[]');
+        return new Set((Array.isArray(raw) ? raw : []).filter((r: unknown): r is TajweedRule => typeof r === 'string' && r in TAJWEED_RULES));
+    } catch { return new Set(); }
+};
 
 // Component for rendering a letter with error marking
 /** What the logging card tells the page about a log, beyond the text itself:
@@ -1494,11 +1503,39 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
         try { localStorage.setItem(TAJWEED_PREF_KEY, showTajweed ? '1' : '0'); } catch { /* private mode / quota */ }
     }, [showTajweed]);
 
+    const [hiddenTajweed, setHiddenTajweed] = useState<Set<TajweedRule>>(loadHiddenTajweed);
+    useEffect(() => {
+        try { localStorage.setItem(TAJWEED_HIDDEN_KEY, JSON.stringify([...hiddenTajweed])); } catch { /* private mode / quota */ }
+    }, [hiddenTajweed]);
+    /** Switch one colour on or off. Turning one ON also turns the colours on:
+     *  choosing what to see is asking to see it. */
+    const toggleTajweedRule = useCallback((r: TajweedRule) => {
+        const turningOn = hiddenTajweed.has(r);
+        setHiddenTajweed(prev => {
+            const next = new Set(prev);
+            if (next.has(r)) next.delete(r); else next.add(r);
+            return next;
+        });
+        if (turningOn) setShowTajweed(true);
+    }, [hiddenTajweed]);
+
     const verseTajweedMaps = useMemo(() => {
         const m = new Map<string, Map<string, TajweedRule>>();
-        if (showTajweed) verses.forEach(v => m.set(v.verse_key, analyzeVerseTajweed(v.text_uthmani, turkishSource)));
+        if (!showTajweed) return m;
+        const on = (r: TajweedRule) => !hiddenTajweed.has(r);
+        const wantMadd = on('madd_letter');
+        verses.forEach(v => {
+            const rules = analyzeVerseTajweed(v.text_uthmani, turkishSource);
+            const madd = wantMadd ? findMaddLetters(v.text_uthmani, turkishSource) : new Set<string>();
+            const shown = new Map<string, TajweedRule>();
+            new Set([...rules.keys(), ...madd]).forEach(k => {
+                const r = displayTajweedRule(rules.get(k), madd.has(k), on);
+                if (r) shown.set(k, r);
+            });
+            m.set(v.verse_key, shown);
+        });
         return m;
-    }, [verses, showTajweed, turkishSource]);
+    }, [verses, showTajweed, turkishSource, hiddenTajweed]);
     const [showTajweedMenu, setShowTajweedMenu] = useState(false);
     // ── Focus / word-by-word reading mode ───────────────────────────────────
     const [focusMode, setFocusMode] = useState(false);
@@ -5699,33 +5736,60 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                     />
                 );
             })()}
-            {showTajweedMenu && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowTajweedMenu(false)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-gray-700">
-                            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                <span>🎨</span>{t('liveSession.tajweedInfoTitle')}
+            {showTajweedMenu && (() => {
+                const shownCount = TAJWEED_LEGEND_ORDER.filter(r => !hiddenTajweed.has(r)).length;
+                return (
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowTajweedMenu(false)}>
+                    <div role="dialog" aria-modal="true" aria-label={t('liveSession.tajweedInfoTitle')}
+                        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 ps-5 pe-3 py-3 border-b border-slate-200 dark:border-gray-700">
+                            <h3 className="flex-1 min-w-0 text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                <span>🎨</span><span className="truncate">{t('liveSession.tajweedInfoTitle')}</span>
+                                <span className="text-xs font-bold tabular-nums text-slate-400 dark:text-slate-500">{shownCount}/{TAJWEED_LEGEND_ORDER.length}</span>
                             </h3>
-                            <button onClick={() => setShowTajweedMenu(false)} aria-label="Close" className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 text-xl leading-none">×</button>
+                            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-slate-100 dark:bg-gray-700">
+                                <button type="button" onClick={() => { setHiddenTajweed(new Set()); setShowTajweed(true); }}
+                                    className={`h-7 px-2.5 rounded-md text-xs font-bold transition-colors ${shownCount === TAJWEED_LEGEND_ORDER.length ? 'bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                                    {t('liveSession.tajweedAll')}
+                                </button>
+                                <button type="button" onClick={() => setHiddenTajweed(new Set(TAJWEED_LEGEND_ORDER))}
+                                    className={`h-7 px-2.5 rounded-md text-xs font-bold transition-colors ${shownCount === 0 ? 'bg-white dark:bg-gray-800 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                                    {t('liveSession.tajweedNone')}
+                                </button>
+                            </div>
+                            <button onClick={() => setShowTajweedMenu(false)} aria-label="Close" className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-700 text-xl leading-none">×</button>
                         </div>
-                        <div className="overflow-y-auto px-4 py-3 flex flex-col gap-2.5">
-                            {TAJWEED_LEGEND_ORDER.map(ruleId => (
-                                <div key={ruleId} className="flex items-start gap-3">
-                                    <span className="w-3.5 h-3.5 mt-1 rounded-full flex-shrink-0 ring-1 ring-black/10 dark:ring-white/10" style={{ background: TAJWEED_RULES[ruleId].color }} />
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-baseline justify-between gap-2">
-                                            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{TAJWEED_RULES[ruleId].label}</span>
-                                            <span dir="rtl" className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex-shrink-0">{TAJWEED_RULES[ruleId].labelAr}</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">{TAJWEED_DESCRIPTIONS[ruleId].en}</p>
-                                        <p dir="rtl" className="text-xs text-slate-500 dark:text-slate-400 leading-snug">{TAJWEED_DESCRIPTIONS[ruleId].ar}</p>
-                                    </div>
-                                </div>
-                            ))}
+                        <div className="overflow-y-auto p-2 flex flex-col">
+                            {TAJWEED_LEGEND_ORDER.map(ruleId => {
+                                const on = !hiddenTajweed.has(ruleId);
+                                return (
+                                    <button key={ruleId} type="button" role="switch" aria-checked={on}
+                                        onClick={() => toggleTajweedRule(ruleId)}
+                                        className="w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-start hover:bg-slate-50 dark:hover:bg-gray-700/60 transition-colors">
+                                        {/* The rule's own colour, light or dark theme alike (tj- class). */}
+                                        <span className={`tj-${ruleId} w-3.5 h-3.5 mt-1 rounded-full flex-shrink-0`}
+                                            style={on ? { background: 'currentColor' } : { boxShadow: 'inset 0 0 0 2px currentColor' }} />
+                                        <span className={`min-w-0 flex-1 transition-opacity ${on ? '' : 'opacity-45'}`}>
+                                            <span className="flex items-baseline justify-between gap-2">
+                                                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{TAJWEED_RULES[ruleId].label}</span>
+                                                <span dir="rtl" className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex-shrink-0">{TAJWEED_RULES[ruleId].labelAr}</span>
+                                            </span>
+                                            <span className="block text-xs text-slate-500 dark:text-slate-400 leading-snug">{TAJWEED_DESCRIPTIONS[ruleId].en}</span>
+                                            <span dir="rtl" className="block text-xs text-slate-500 dark:text-slate-400 leading-snug">{TAJWEED_DESCRIPTIONS[ruleId].ar}</span>
+                                        </span>
+                                        <span aria-hidden="true"
+                                            className={`tj-${ruleId} mt-0.5 w-9 h-5 p-0.5 rounded-full flex-shrink-0 flex items-center transition-colors ${on ? 'justify-end' : 'justify-start bg-slate-200 dark:bg-gray-600'}`}
+                                            style={on ? { background: 'currentColor' } : undefined}>
+                                            <span className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
             {/* ── Go to a verse — double-clicking a surah in the nav bar ────── */}
             {verseJumpSurah !== null && (() => {
                 const surah = QURAN_METADATA.find(x => x.number === verseJumpSurah);
