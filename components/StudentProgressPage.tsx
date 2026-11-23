@@ -334,12 +334,18 @@ const labelBounds = (el: HTMLElement): { left: number; right: number } => {
  * letter at the very end of a line half of it used to hang outside the Quran
  * box, which clips: on the student's iPad the comment sat against the screen
  * edge with part of it gone. It now slides sideways just enough to stay inside.
+ *
+ * Not in focus mode (`fit` false): there the words ride a strip that slides
+ * past, so a comment measured while its word was off-screen got pushed
+ * thousands of pixels away and never showed. There it stays on its letter.
  */
-const MistakeLabel: React.FC<{ text: string; className: string }> = ({ text, className }) => {
+const MistakeLabel: React.FC<{ text: string; className: string; fit?: boolean }> = ({ text, className, fit: fitOn = true }) => {
     const ref = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         const el = ref.current;
         if (!el) return;
+        el.style.transform = '';
+        if (!fitOn) return;
         const PAD = 6;
         const fit = () => {
             el.style.transform = '';
@@ -360,7 +366,7 @@ const MistakeLabel: React.FC<{ text: string; className: string }> = ({ text, cla
         let alive = true;
         document.fonts?.ready.then(() => { if (alive) fit(); }).catch(() => {});
         return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener('resize', fit); };
-    }, [text, className]);
+    }, [text, className, fitOn]);
     return <div ref={ref} className={className} title={text}>{text}</div>;
 };
 
@@ -516,7 +522,7 @@ const LetterWithError: React.FC<{
                         (e.currentTarget as HTMLElement).style.zIndex = '40';
                     }}
                 >
-                    <MistakeLabel text={mistake.errorText} className={`shadow-lg transition-[box-shadow] ${
+                    <MistakeLabel text={mistake.errorText} fit={!focusMode} className={`shadow-lg transition-[box-shadow] ${
                         focusMode
                             ? 'px-4 py-2 text-xl sm:text-3xl leading-snug rounded-2xl whitespace-normal break-words max-w-[70vw] sm:max-w-[640px] font-semibold'
                             : 'px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg w-max text-center whitespace-normal break-words max-w-[180px] sm:max-w-[300px] font-medium'
