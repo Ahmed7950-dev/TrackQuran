@@ -22,7 +22,7 @@ import {
   splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT,
   wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
 } from '../utils/quranicMarks';
-import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { supabase } from '../lib/supabase';
 import { setBusy } from '../services/versionWatch';
 import type { Mistake } from '../types';
@@ -867,8 +867,16 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
       );
     }
 
-    // Letter by letter, exactly as the Mistakes page draws it, so the highlight
-    // sits on the letter the tutor marked and the word still joins up.
+    // Letter by letter, as the tutor's Quran page draws it, so the highlight
+    // sits on the letter the tutor marked and the word still joins up. The
+    // invisible seams (letterSeams) give every letter a width of its own:
+    // without them the font fuses letters like the ى of فِى into the letter
+    // before it, and the ى's colour had nowhere to show (only its comment did).
+    // `align-top` on each letter's wrapper, as on the tutor's page, makes
+    // Chrome shape every letter on its own too (Amiri otherwise gives the
+    // tatweel under a hamza, ـَٔ, no width). The coloured span has no
+    // `position`: iOS can skip painting the background of an inline element
+    // that has one (see LetterWithError).
     const plan = wordMarkPlan(word);
     return listenable(
       <span className="relative inline"
@@ -879,11 +887,13 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           // A stopping sign sits beside the letter, never inside its span —
           // iOS clips it to a sliver otherwise (see splitTrailingWaqf).
           const { glyph, waqf } = splitTrailingWaqf(letter);
+          const { lead, trail } = letterSeams(letters, index);
+          const text = almSeedForUnit(glyph) + lead + glyph + trail;
           return (
-            <span key={index} className="relative inline" style={{ display: 'inline', margin: 0, padding: 0 }}>
+            <span key={index} className="relative inline align-top" style={{ display: 'inline', margin: 0, padding: 0 }}>
               {m && bubble(m)}
-              <span className="relative inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
-                {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, lh) : almSeedForUnit(glyph) + glyph}
+              <span className="inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
+                {hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, lh) : text}
               </span>
               {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
             </span>

@@ -9,7 +9,7 @@ import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
-import { parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { saveOrShareFile } from '../services/fileSaver';
 
 
@@ -696,7 +696,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         letter: string;
         letterKey: string;
         mistake: Mistake | undefined;
-    }> = ({ letter, letterKey, mistake }) => {
+        /** Invisible joiner / non-joiner at the letter's edges (letterSeams). */
+        seams: { lead: string; trail: string };
+    }> = ({ letter, letterKey, mistake, seams }) => {
         const { glyph, waqf } = splitTrailingWaqf(letter);
         const getLetterColor = () => {
             if (mistake && mistake.errorText) {
@@ -738,22 +740,27 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     </div>
                 )}
                 
-                {/* Letter with background highlight - exactly like StudentProgressPage */}
+                {/* Letter with background highlight, like StudentProgressPage. The
+                    seams give it a width of its own (the font would otherwise fuse
+                    e.g. the ى of فِى into the letter before it, leaving its colour
+                    nowhere to show), and no position/z-index: iOS can skip
+                    painting the background of an inline element that has them. */}
                 <span
-                    className={`inline rounded transition-colors relative z-10 ${getLetterColor()}`}
+                    className={`inline rounded transition-colors ${getLetterColor()}`}
                     style={{ 
                         display: 'inline', 
                         fontFamily: 'inherit', 
                         letterSpacing: '0', 
-                        position: 'relative', 
-                        zIndex: 10,
                         // Ensure no gaps
                         margin: '0',
                         padding: '0'
                     }}
                 >
                     {/* almSeedForUnit: keeps iOS CoreText shaping tatweel-hamza units as Arabic */}
-                    {hasLowMeem(glyph) ? renderLowMeemUnit(glyph, glyph, 10 / 7) : almSeedForUnit(glyph) + glyph}
+                    {(() => {
+                        const text = almSeedForUnit(glyph) + seams.lead + glyph + seams.trail;
+                        return hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, 10 / 7) : text;
+                    })()}
                 </span>
                 {/* A stopping sign only draws whole as its own run — splitTrailingWaqf. */}
                 {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
@@ -816,6 +823,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 letter={letter}
                                 letterKey={letterKey}
                                 mistake={mistake}
+                                seams={letterSeams(letters, letterIndex)}
                             />
                         );
                     })}

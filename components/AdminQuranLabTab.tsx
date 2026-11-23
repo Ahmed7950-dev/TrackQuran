@@ -27,6 +27,7 @@ import {
   recitationVerseUrl, uploadRecitationVerse,
 } from '../services/quranLabService';
 import { masterTake } from '../utils/recitationMastering';
+import { letterSeams } from '../utils/mistakeLetters';
 
 // ── Local copies of the reader's letter segmentation (same as SharedReportPage) ──
 const isArabicLetter = (char: string | undefined): boolean => {
@@ -54,10 +55,6 @@ const parseWordIntoLetters = (word: string): Array<{ letter: string; index: numb
   }
   return letters;
 };
-
-const ZWJ = '‍';
-const NON_FORWARD_JOINING = new Set<string>(['ا', 'أ', 'إ', 'آ', 'ٱ', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ء', 'ة', 'ى']);
-const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !NON_FORWARD_JOINING.has(ch);
 
 const toEastern = (n: number): string => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[+d]);
 
@@ -473,9 +470,9 @@ const AdminQuranLabTab: React.FC = () => {
       <span className="relative inline" style={{ display: 'inline' }}>
         {letters.map(({ letter, index: li }) => {
           const letterKey = `${verseKey}:${wordIdx}:${li}`;
-          const joinLead = li > 0 && connectsForward(letters[li - 1].letter[0]);
-          const joinTrail = li < letters.length - 1 && connectsForward(letter[0]);
-          const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+          // The same seams as the reader (letterSeams), so marks sit where they will there.
+          const { lead, trail } = letterSeams(letters, li);
+          const text = almSeedForUnit(letter) + lead + letter + trail;
           // Live preview: the picked mark follows `work` before it is saved.
           let adj = savedAdjFor(letterKey);
           if (sel?.letterKey === letterKey && pickedMark) adj = { ...(adj ?? {}), [pickedMark]: work };
@@ -503,9 +500,8 @@ const AdminQuranLabTab: React.FC = () => {
       <span style={{ display: 'inline' }}>
         {letters.map(({ letter }, li) => {
           const overlays = unitOverlayPlan(letter, 2.6, undefined);
-          const joinLead = li > 0 && connectsForward(letters[li - 1].letter[0]);
-          const joinTrail = li < letters.length - 1 && connectsForward(letter[0]);
-          const text = almSeedForUnit(letter) + (joinLead ? ZWJ : '') + letter + (joinTrail ? ZWJ : '');
+          const { lead, trail } = letterSeams(letters, li);
+          const text = almSeedForUnit(letter) + lead + letter + trail;
           return <React.Fragment key={li}>{overlays ? renderUnitOverlays(text, overlays) : text}</React.Fragment>;
         })}
       </span>

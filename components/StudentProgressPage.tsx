@@ -15,7 +15,7 @@ import ExportReportModal from './ExportReportModal';
 import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
-import { splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { letterSeams, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
@@ -266,27 +266,11 @@ const parseWordIntoLetters = (word: string): Array<{ letter: string; index: numb
     return letters;
 };
 
-// ── Cursive joining for per-letter spans ──────────────────────────────────────
-// Each letter is rendered in its own inline element so it can be tapped/marked.
-// iOS Safari shapes every inline element as an ISOLATED text run, so Arabic
-// letters fail to join and the word looks broken. Injecting a Zero-Width Joiner
-// (U+200D) at a letter's connecting edges forces each isolated span to render in
-// its correct contextual form (initial / medial / final), so they line up and
-// appear connected. Harmless on browsers that already join across spans.
-const ZWJ = '‍';
-// Base letters that do NOT connect to the FOLLOWING letter (right-joining only
-// or non-joining): alif forms, dal/thal, ra/zay, waw forms, hamza, teh marbuta,
-// alef maksura.
-const NON_FORWARD_JOINING = new Set<string>([
-  'ا', 'أ', 'إ', 'آ', 'ٱ', // ا أ إ آ ٱ
-  'د', 'ذ',                               // د ذ
-  'ر', 'ز',                               // ر ز
-  'و', 'ؤ',                               // و ؤ
-  'ء',                                         // ء
-  'ة',                                         // ة
-  'ى',                                         // ى
-]);
-const connectsForward = (ch: string): boolean => !!ch && isArabicLetter(ch) && !NON_FORWARD_JOINING.has(ch);
+// ── Seams for per-letter spans ────────────────────────────────────────────────
+// Each letter is its own inline element so it can be tapped and marked. The
+// invisible joiner / non-joiner at every seam (letterSeams, utils/mistakeLetters)
+// keeps the word joined on iOS and gives every letter a width of its own, so
+// its mistake colour always shows.
 
 // Tajweed rule detection now lives in services/tajweedColorService.ts (verse-level
 // engine validated against Quran.com's tajweed annotations). The generated classes
@@ -387,8 +371,8 @@ const LetterWithError: React.FC<{
     onLongPress?: (key: string) => void;
     isFocused?: boolean;
     isCursorActive?: boolean;
-    joinLead?: boolean;
-    joinTrail?: boolean;
+    /** The invisible joiner / non-joiner before and after the letter (letterSeams). */
+    seams?: { lead: string; trail: string };
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     vowelAdj?: Record<string, VowelAdjustment>; // admin vowel-position corrections for this unit
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
@@ -418,8 +402,7 @@ const LetterWithError: React.FC<{
     onLongPress,
     isFocused,
     isCursorActive,
-    joinLead,
-    joinTrail,
+    seams,
     markLineHeight = 2.6,
     vowelAdj,
     focusMode,
@@ -570,7 +553,7 @@ const LetterWithError: React.FC<{
                     // almSeedForUnit: tatweel-seated hamza units (ـَٔ) carry no
                     // Script=Arabic char, so iOS CoreText skips their GPOS and
                     // drops the vowel to the baseline — seed the run as Arabic.
-                    const text = almSeedForUnit(glyph) + (joinLead ? ZWJ : '') + glyph + (joinTrail ? ZWJ : '');
+                    const text = almSeedForUnit(glyph) + (seams?.lead ?? '') + glyph + (seams?.trail ?? '');
                     const overlays = unitOverlayPlan(glyph, markLineHeight, vowelAdj);
                     return overlays ? renderUnitOverlays(text, overlays) : text;
                 })()}
@@ -4286,14 +4269,12 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                 >
                                     {letters.map(({ letter, index: letterIndex }) => {
                                         const baseKey = `${surahNum}:${ayahNum}:${wordIndex}:${letterIndex}`;
-                                        const isLast = letterIndex === letters.length - 1;
                                         const r = tjMap?.get(`${wordIndex}:${letterIndex}`);
                                         return (
                                             <LetterWithError
                                                 key={baseKey}
                                                 letter={letter}
-                                                joinLead={letterIndex > 0 && connectsForward(letters[letterIndex - 1].letter[0])}
-                                                joinTrail={!isLast && connectsForward(letter[0])}
+                                                seams={letterSeams(letters, letterIndex)}
                                                 letterKey={`tadabbur-${baseKey}`}
                                                 mistake={undefined}
                                                 isEditing={false}
@@ -4563,16 +4544,11 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                             const mistake = studentMistakes[letterKey];
                             const isEditing = editingLetterKey === letterKey;
                             const clickState = letterClickStates.current[letterKey] || (mistake ? 2 : 0);
-                            const isLastLetterOfWord = letterIndex === letters.length - 1;
-                            // Cursive-join hints so each isolated letter span shapes correctly on iOS.
-                            const joinLead  = letterIndex > 0 && connectsForward(letters[letterIndex - 1].letter[0]);
-                            const joinTrail = !isLastLetterOfWord && connectsForward(letter[0]);
                             return (
                                 <LetterWithError
                                     key={letterKey}
                                     letter={letter}
-                                    joinLead={joinLead}
-                                    joinTrail={joinTrail}
+                                    seams={letterSeams(letters, letterIndex)}
                                     letterKey={letterKey}
                                     mistake={mistake}
                                     isEditing={isEditing}
@@ -5559,8 +5535,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                         <LetterWithError
                                                                             key={lk}
                                                                             letter={letter}
-                                                                            joinLead={li > 0 && connectsForward(letters[li - 1].letter[0])}
-                                                                            joinTrail={li !== letters.length - 1 && connectsForward(letter[0])}
+                                                                            seams={letterSeams(letters, li)}
                                                                             letterKey={lk}
                                                                             mistake={mk}
                                                                             isEditing={editingLetterKey === lk}
