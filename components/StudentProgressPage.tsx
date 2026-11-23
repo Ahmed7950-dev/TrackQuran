@@ -4423,7 +4423,8 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     // The page bar beside the verses: the tutor's live logging page only, on
     // the flowing text. Its line numbers are the Madani mushaf's, so not on the
     // Turkish text, whose printed lines are different.
-    const showPageBar = !readOnly && !guest && !focusMode && !tadabburMode && !turkishSource
+    // The tutor's live page and the student's portal (readOnly); not the public page (guest).
+    const showPageBar = !guest && !focusMode && !tadabburMode && !turkishSource
         && !isLoading && !error && verses.length > 0;
 
     const renderSurahContent = () => {
