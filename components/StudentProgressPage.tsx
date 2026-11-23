@@ -16,6 +16,7 @@ import { useI18n } from '../context/I18nProvider';
 import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorizedPagesSet } from '../services/dataService';
 import { pageVerseList } from '../services/quranPageData';
 import { letterSeams, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { useSpreadLabels } from '../utils/spreadLabels';
 import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
@@ -297,63 +298,19 @@ const loadHiddenTajweed = (): Set<TajweedRule> => {
  *  show in the Undo bar. */
 type LogOpts = { type?: MistakeKind; glyph?: string; display?: string };
 
-/** The space a mistake comment may use: the nearest box that clips its
- *  overflow (the Quran page box does), inside the visible screen. */
-const labelBounds = (el: HTMLElement): { left: number; right: number } => {
-    let left = 0;
-    let right = document.documentElement.clientWidth || window.innerWidth;
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-        const ox = getComputedStyle(p).overflowX;
-        if (ox !== 'visible') {
-            const r = p.getBoundingClientRect();
-            left = Math.max(left, r.left);
-            right = Math.min(right, r.right);
-            break;
-        }
-    }
-    return { left, right };
-};
-
 /**
- * The comment above a marked letter. It is centred on its letter, so on a
- * letter at the very end of a line half of it used to hang outside the Quran
- * box, which clips: on the student's iPad the comment sat against the screen
- * edge with part of it gone. It now slides sideways just enough to stay inside.
+ * The comment above a marked letter, centred on its letter. useSpreadLabels on
+ * the Quran box slides it sideways when it would cover a neighbouring letter's
+ * comment or hang outside the box (the student's iPad cut it off at line ends).
  *
- * Not in focus mode (`fit` false): there the words ride a strip that slides
+ * Not in focus mode (`spread` false): there the words ride a strip that slides
  * past, so a comment measured while its word was off-screen got pushed
  * thousands of pixels away and never showed. There it stays on its letter.
  */
-const MistakeLabel: React.FC<{ text: string; className: string; fit?: boolean }> = ({ text, className, fit: fitOn = true }) => {
-    const ref = useRef<HTMLDivElement>(null);
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        el.style.transform = '';
-        if (!fitOn) return;
-        const PAD = 6;
-        const fit = () => {
-            el.style.transform = '';
-            const r = el.getBoundingClientRect();
-            if (!r.width) return;
-            const b = labelBounds(el);
-            let dx = 0;
-            if (r.width > b.right - b.left - 2 * PAD) dx = (b.left + b.right) / 2 - (r.left + r.right) / 2;
-            else if (r.left < b.left + PAD) dx = b.left + PAD - r.left;
-            else if (r.right > b.right - PAD) dx = b.right - PAD - r.right;
-            if (Math.abs(dx) > 0.5) el.style.transform = `translateX(${Math.round(dx)}px)`;
-        };
-        fit();
-        // The verse can still move under it: the Quran font arriving, the
-        // screen turning, the window resizing.
-        const raf = requestAnimationFrame(fit);
-        window.addEventListener('resize', fit);
-        let alive = true;
-        document.fonts?.ready.then(() => { if (alive) fit(); }).catch(() => {});
-        return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener('resize', fit); };
-    }, [text, className, fitOn]);
-    return <div ref={ref} className={className} title={text}>{text}</div>;
-};
+const MistakeLabel: React.FC<{ text: string; className: string; spread?: boolean }> = ({ text, className, spread = true }) => (
+    <div className={className} title={text} data-mistake-label={spread ? '' : undefined}
+        style={{ transform: 'translateX(var(--spread-x, 0px)) scale(var(--spread-s, 1))', transformOrigin: 'center bottom' }}>{text}</div>
+);
 
 const LetterWithError: React.FC<{
     letter: string;
@@ -506,7 +463,7 @@ const LetterWithError: React.FC<{
                         (e.currentTarget as HTMLElement).style.zIndex = '40';
                     }}
                 >
-                    <MistakeLabel text={mistake.errorText} fit={!focusMode} className={`shadow-lg transition-[box-shadow] ${
+                    <MistakeLabel text={mistake.errorText} spread={!focusMode} className={`shadow-lg transition-[box-shadow] ${
                         focusMode
                             ? 'px-4 py-2 text-xl sm:text-3xl leading-snug rounded-2xl whitespace-normal break-words max-w-[70vw] sm:max-w-[640px] font-semibold'
                             : 'px-1.5 py-0.5 text-[10px] leading-tight rounded-md sm:px-3 sm:py-1 sm:text-sm sm:rounded-lg w-max text-center whitespace-normal break-words max-w-[180px] sm:max-w-[300px] font-medium'
@@ -1623,6 +1580,9 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
     const scrollIntervalRef = useRef<number | null>(null);
     const letterClickStates = useRef<Record<string, number>>({}); // Track click states: 0 = none, 1 = yellow (pending), 2 = marked
     const quranBodyRef = useRef<HTMLDivElement>(null); // For scroll-to-top on page navigation
+    // Comments of neighbouring marked letters slide apart instead of covering
+    // each other, and stay inside the Quran box (utils/spreadLabels).
+    useSpreadLabels(quranBodyRef, !focusMode);
     const toolbarRef = useRef<HTMLDivElement>(null);   // the page bar's reading line sits under it
     /** 0–1: how far into the OPEN SURAH the verse under the toolbar is, for the
      *  orange line along the bottom of the surah bar. Read from the verse the

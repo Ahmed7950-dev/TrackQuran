@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
 import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
 import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { useSpreadLabels } from '../utils/spreadLabels';
 import { saveOrShareFile } from '../services/fileSaver';
 
 
@@ -256,6 +257,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     }, [student.mistakes, dateFilter, specificDate]);
 
     const [isImageExportMode, setIsImageExportMode] = useState(false);
+    // Comments on neighbouring marked letters slide apart instead of covering each other.
+    const contentRef = useRef<HTMLDivElement>(null);
+    useSpreadLabels(contentRef);
 
     // Helper function to get image export library
     const getImageExportLibrary = () => {
@@ -724,10 +728,13 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                 {mistake && mistake.errorText && (
                     <div 
                         className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-40 pointer-events-none"
+                        data-mistake-label=""
                         style={{ 
                             zIndex: 40, 
                             whiteSpace: 'nowrap',
-                            transform: 'translateX(-50%)'
+                            // useSpreadLabels slides it sideways off a neighbour's comment.
+                            transform: 'translateX(calc(-50% + var(--spread-x, 0px))) scale(var(--spread-s, 1))',
+                            transformOrigin: 'center bottom'
                         }}
                     >
                                     <div className={`px-2 py-1 text-xs rounded shadow whitespace-nowrap max-w-[250px] font-medium ${
@@ -881,7 +888,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
     }
 
     return (
-        <div id="mistakes-review-content" className="space-y-6">
+        <div id="mistakes-review-content" ref={contentRef} className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                 <div className="flex items-center gap-3">
                     {onBack && (

@@ -23,6 +23,7 @@ import {
   wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
 } from '../utils/quranicMarks';
 import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
+import { useSpreadLabels } from '../utils/spreadLabels';
 import { supabase } from '../lib/supabase';
 import { setBusy } from '../services/versionWatch';
 import type { Mistake } from '../types';
@@ -289,6 +290,9 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     // the card is the better answer.
     setFit(Math.max(0.45, (h - over - 6) / h));
   }, [fit, texts, idx, vw, vh, liveMistakes, rec]);
+  // Comments on neighbouring letters slide apart instead of covering each
+  // other, inside the gold-bordered card the verse sits in.
+  useSpreadLabels(verseRef, true, () => verseRef.current?.parentElement ?? null);
 
   /** Quran.com's own word list per surah, for the word-by-word recitation. Only
    *  fetched for a homework that carries mistakes — a fresh one has none. */
@@ -808,10 +812,14 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
     </svg>
   );
 
+  // Centred on its letter; useSpreadLabels slides it sideways (--spread-x), and
+  // on a crowded line shrinks it (--spread-s), so it covers no neighbouring
+  // letter's comment and stays inside the card.
   const bubble = (m: Mistake) => (m.errorText || m.voice) ? (
-    <span aria-hidden="true" className="absolute left-1/2 pointer-events-none"
+    <span aria-hidden="true" className="absolute left-1/2 pointer-events-none" data-mistake-label=""
       style={{
-        bottom: '100%', transform: 'translateX(-50%)', marginBottom: 4, zIndex: 20,
+        bottom: '100%', transform: 'translateX(calc(-50% + var(--spread-x, 0px))) scale(var(--spread-s, 1))',
+        transformOrigin: 'center bottom', marginBottom: 4, zIndex: 20,
         fontFamily: BODY, fontSize: 'clamp(11px, 1.6vw, 15px)', fontWeight: 600, lineHeight: 1.25,
         whiteSpace: 'nowrap', padding: '2px 9px', borderRadius: 8, boxShadow: '0 4px 10px rgba(0,0,0,.12)',
         ...(m.errorType === 'tajweed'
