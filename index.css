@@ -71,13 +71,11 @@ html textarea.board-text { background-color: transparent !important; }
 
 /* ── Page bar beside the verses (components/PageLineBar.tsx) ──
    Orange = the surah line under the toolbar. read = lines read on this page,
-   unread = the rest of it, prev/next = the pages either side, tag = the arrow. */
+   unread = the rest of it, prev/next = the pages either side. */
 .plb-read { background-color: #f97316; }
 .plb-unread { background-color: #e2e8f0; }
 .plb-prev { background-color: #fcd4b0; }
 .plb-next { background-color: #edf1f6; }
-.plb-tag { fill: #c2410c; }
-.plb-num { color: #ffffff; }
 [data-theme="reading"] .plb-unread { background-color: #e2d9c8; }
 [data-theme="reading"] .plb-prev { background-color: #f4cda3; }
 [data-theme="reading"] .plb-next { background-color: #ebe4d6; }
@@ -85,11 +83,7 @@ html textarea.board-text { background-color: transparent !important; }
 .dark .plb-unread { background-color: #3b4757; }
 .dark .plb-prev { background-color: rgba(251, 146, 60, 0.34); }
 .dark .plb-next { background-color: #2c3644; }
-.dark .plb-tag { fill: #fb923c; }
-.dark .plb-num { color: #1f2937; }
 html.dark[data-theme="amber"] .plb-read { background-color: #e8a33d; }
 html.dark[data-theme="amber"] .plb-unread { background-color: #2b2f34; }
 html.dark[data-theme="amber"] .plb-prev { background-color: rgba(232, 163, 61, 0.32); }
 html.dark[data-theme="amber"] .plb-next { background-color: #212428; }
-html.dark[data-theme="amber"] .plb-tag { fill: #e8a33d; }
-html.dark[data-theme="amber"] .plb-num { color: #0d0e10; }

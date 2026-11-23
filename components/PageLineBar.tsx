@@ -5,12 +5,12 @@ import { getPageOfAyah } from '../services/dataService';
 /**
  * The thin bar beside the verses on the live logging page.
  *
- * The arrow stays in the middle of the visible Quran area (between the toolbar
- * and the bottom of the screen) and points at the line being read. Its number
- * is that line on the printed Madani mushaf page, 1 to 15. The bar is the
- * page's 15 lines as dashes that slide past the arrow as the tutor scrolls:
- * orange once read, the pages before and after faint beyond a gap. The orange
- * is the surah line's under the toolbar, so the two read as one.
+ * The bar is the printed Madani mushaf page's 15 lines as dashes. They slide
+ * as the tutor scrolls so that the line being read sits at the bar's middle,
+ * which is the middle of the visible Quran area (between the toolbar and the
+ * bottom of the screen). Lines up to it are orange, the rest grey, and the
+ * pages before and after show faint beyond a gap. The orange is the surah
+ * line's under the toolbar, so the two read as one.
  *
  * The page flows its text, so a screen line is not a mushaf line. Every word's
  * mushaf line comes from public/mushaf-lines.json (scripts/build-mushaf-lines.py),
@@ -45,28 +45,18 @@ const lineOfWord = (data: LineData, s: number, a: number, w: number): number | n
 
 const LINES = 15;
 /** L = one line's dash, G = the gap between lines, P = the gap between pages,
- *  tw/th/tip/r = the arrow tag, inset = bar centre from the Quran box's edge. */
+ *  inset = bar centre from the Quran box's edge. */
 const GEO = {
-    wide:  { W: 40, L: 12, G: 3, P: 14, tw: 26, th: 21, tip: 6, r: 6, fs: 12, inset: 24, maxH: 520 },
-    phone: { W: 30, L: 10, G: 3, P: 12, tw: 20, th: 17, tip: 5, r: 5, fs: 10.5, inset: 15, maxH: 480 },
+    wide:  { L: 12, G: 3, P: 14, inset: 24, maxH: 520 },
+    phone: { L: 10, G: 3, P: 12, inset: 15, maxH: 480 },
 };
-type Geo = typeof GEO.wide;
 const TRACK = 3;           // the same 3px as the surah line under the toolbar
 const TOP_GAP = 20;        // air under the toolbar
 const BOTTOM_RESERVE = 88; // the round back-to-start button (bottom-6, 48px) and air
 const FADE = 'linear-gradient(to bottom, transparent 0%, #000 13%, #000 87%, transparent 100%)';
-const EASTERN = '٠١٢٣٤٥٦٧٨٩';
-const toEastern = (n: number) => String(n).replace(/\d/g, d => EASTERN[Number(d)]);
-
-/** A small rounded tag whose left side comes to a point, at the text. */
-const tagPath = ({ tip: t, tw: w, th: h, r }: Geo) => {
-    const m = h / 2;
-    return `M ${t + r} 0 H ${t + w - r} Q ${t + w} 0 ${t + w} ${r} V ${h - r} Q ${t + w} ${h} ${t + w - r} ${h} `
-        + `H ${t + r} Q ${t} ${h} ${t} ${h - r} L 0.8 ${m + 0.9} Q 0 ${m} 0.8 ${m - 0.9} L ${t} ${r} Q ${t} 0 ${t + r} 0 Z`;
-};
 
 /** A screen line: its centre (from the Quran box's top) and where its first
- *  word sits on the tape, in px. The first word is where the arrow points. */
+ *  word sits on the tape, in px. The bar's middle follows the first word. */
 interface ScreenLine { y: number; px: number }
 interface Model { lines: ScreenLine[]; base: number; reach: number }
 interface View { show: boolean; left: number; top: number; h: number; base: number; page: number; line: number }
@@ -148,11 +138,11 @@ const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey }) => {
         const ls = m.lines;
         const first = ls[0];
         const last = ls[ls.length - 1];
-        // Off the verses (the surah's title above, the page buttons below): nothing to point at.
+        // Off the verses (the surah's title above, the page buttons below): nothing to show.
         if (h < 120 || y < first.y - m.reach || y > last.y + m.reach) { hide(); return; }
-        // The screen line the arrow points at: the one whose middle is nearest.
-        // Its number and the tape follow that line, so they always agree with
-        // what the arrow touches; the tape glides between lines (CSS transition).
+        // The screen line at the bar's middle: the one whose centre is nearest
+        // the reading line. The tape and the orange follow that line, and the
+        // tape glides between lines (CSS transition).
         let lo = 0;
         let hi = ls.length - 1;
         while (lo < hi) {
@@ -165,7 +155,7 @@ const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey }) => {
         const line = Math.min(LINES, Math.max(1, Math.floor((px - k * stride) / step) + 1));
         const next: View = {
             show: true,
-            left: Math.round(box.right - g.inset - g.W / 2),
+            left: Math.round(box.right - g.inset - TRACK / 2),
             top: Math.round(readY - h / 2),
             h,
             base: m.base,
@@ -238,34 +228,14 @@ const PageLineBar: React.FC<Props> = ({ bodyRef, toolbarRef, layoutKey }) => {
         <div
             aria-hidden="true"
             className="fixed z-20 pointer-events-none select-none transition-opacity duration-200"
-            style={{ left: view.left, top: view.top, width: g.W, height: view.h, opacity: view.show ? 1 : 0, visibility: view.h ? 'visible' : 'hidden' }}
+            style={{ left: view.left, top: view.top, width: TRACK, height: view.h, opacity: view.show ? 1 : 0, visibility: view.h ? 'visible' : 'hidden' }}
         >
-            <div className="absolute top-0 overflow-hidden" style={{ left: g.W / 2 - TRACK / 2, width: TRACK, height: view.h, WebkitMaskImage: FADE, maskImage: FADE }}>
+            <div className="absolute inset-0 overflow-hidden" style={{ WebkitMaskImage: FADE, maskImage: FADE }}>
                 <div ref={tapeRef} className="absolute inset-x-0 top-0 will-change-transform transition-transform duration-200 ease-out">
                     {dashes.map(d => (
                         <div key={d.key} className={`absolute inset-x-0 rounded-full ${d.cls}`} style={{ top: d.top, height: g.L }} />
                     ))}
                 </div>
-            </div>
-            <div
-                className="absolute"
-                style={{ left: g.W / 2 - g.tw / 2 - g.tip, top: view.h / 2 - g.th / 2, width: g.tip + g.tw, height: g.th }}
-            >
-                <svg
-                    width={g.tip + g.tw}
-                    height={g.th}
-                    viewBox={`0 0 ${g.tip + g.tw} ${g.th}`}
-                    className="block overflow-visible"
-                    style={{ filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.22))' }}
-                >
-                    <path className="plb-tag" d={tagPath(g)} />
-                </svg>
-                <span
-                    className="plb-num absolute top-0 flex items-center justify-center font-bold leading-none tabular-nums"
-                    style={{ left: g.tip, width: g.tw, height: g.th, fontSize: g.fs }}
-                >
-                    {view.line ? toEastern(view.line) : ''}
-                </span>
             </div>
         </div>,
         document.body,
