@@ -1,4 +1,5 @@
 import React from 'react';
+import { joinsAcross } from './arabicJoining';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Quranic mark handling.
@@ -321,7 +322,6 @@ const isArabicLetterCh = (ch: string): boolean => {
   const c = ch.charCodeAt(0);
   return (c >= 0x0621 && c <= 0x064A) || (c >= 0x0671 && c <= 0x06D3) || c === 0x06D5 || (c >= 0x06EE && c <= 0x06EF) || (c >= 0x06FA && c <= 0x06FC);
 };
-const NON_FWD_JOIN = new Set(['ا', 'أ', 'إ', 'آ', 'ٱ', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ء', 'ة', 'ى']);
 const toUnits = (word: string): string[] => {
   const out: string[] = [];
   for (const ch of word) {
@@ -390,8 +390,9 @@ export const renderWordWithMarks = (word: string, _keyPrefix = '', lineHeight = 
   let buf = '';
   units.forEach((u, i) => {
     if (!hasLowMeem(u)) { buf += u; return; }
-    const lead = i > 0 && isArabicLetterCh(units[i - 1][0]) && !NON_FWD_JOIN.has(units[i - 1][0]);
-    const trail = i < units.length - 1 && isArabicLetterCh(u[0]) && !NON_FWD_JOIN.has(u[0]);
+    // Joined exactly where the plain word joins (utils/arabicJoining).
+    const lead = i > 0 && joinsAcross(units[i - 1], u);
+    const trail = i < units.length - 1 && joinsAcross(u, units[i + 1]);
     if (buf) { nodes.push(buf + (lead ? ZWJ : '')); buf = ''; }
     nodes.push(
       <React.Fragment key={`lm${i}`}>

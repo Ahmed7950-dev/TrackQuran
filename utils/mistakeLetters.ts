@@ -10,6 +10,7 @@
 
 import type React from 'react';
 import { tanweenOnSeatAlif } from './quranicMarks';
+import { joinsAcross, ZWJ, ZWNJ } from './arabicJoining';
 
 export const isArabicLetter = (char: string | undefined): boolean => {
   if (!char) return false;
@@ -52,7 +53,11 @@ export const parseWordIntoLetters = (word: string): Array<{ letter: string; inde
 // mistake can colour one letter. Two invisible characters go at every seam:
 //  - ZERO WIDTH JOINER where the two letters join, so each keeps its joined
 //    shape even where a browser shapes every span on its own (older iOS);
-//  - ZERO WIDTH NON-JOINER where they don't (after ا د ذ ر ز و ة ى, before ء).
+//  - ZERO WIDTH NON-JOINER where they don't (after ا د ذ ر ز و ة, before ء).
+// Where a word joins is decided by joinsAcross (utils/arabicJoining), from the
+// Unicode joining rules the browser itself uses. A hand list here once said ى
+// never joins the next letter, and 338 Quran words with ى inside them came
+// apart (أَرَىٰكَ, هَدَىٰكُمْ).
 // Both also stop the font fusing the two letters into one shape: the Quran
 // fonts draw فى, كى, لا, the word Allah, وإ and many more as one glyph, and
 // the browser then gives the second letter NO width, so its colour has
@@ -66,19 +71,13 @@ export const parseWordIntoLetters = (word: string): Array<{ letter: string; inde
 // in all seven bundled fonts (Chrome; Safari measured with Hafs).
 // Before ء the old rule put a joiner too, drawing the letter before it in a
 // joined shape (دِفۡءٌ came out with a joined ف): ء never joins.
-export const ZWJ = '‍';
-export const ZWNJ = '‌';
-const NON_FORWARD_JOINING = new Set<string>([
-  'ا', 'أ', 'إ', 'آ', 'ٱ', 'د', 'ذ', 'ر', 'ز', 'و', 'ؤ', 'ء', 'ة', 'ى',
-]);
-const joinsNext = (ch: string | undefined): boolean => isArabicLetter(ch) && !NON_FORWARD_JOINING.has(ch!);
-const joinsPrevious = (ch: string | undefined): boolean => isArabicLetter(ch) && ch !== 'ء';
+export { ZWJ, ZWNJ };
 
 /** The invisible characters to put before (`lead`) and after (`trail`) letter
  *  `i` of a word split by parseWordIntoLetters. A tatweel seed (almSeedForUnit)
  *  still goes first, before `lead`. */
 export const letterSeams = (letters: ReadonlyArray<{ letter: string }>, i: number): { lead: string; trail: string } => {
-  const seam = (a: string, b: string) => (joinsNext(a[0]) && joinsPrevious(b[0]) ? ZWJ : ZWNJ);
+  const seam = (a: string, b: string) => (joinsAcross(a, b) ? ZWJ : ZWNJ);
   return {
     lead: i > 0 ? seam(letters[i - 1].letter, letters[i].letter) : '',
     trail: i < letters.length - 1 ? seam(letters[i].letter, letters[i + 1].letter) : '',
