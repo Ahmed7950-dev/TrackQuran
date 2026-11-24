@@ -69,6 +69,10 @@ html textarea.board-text { background-color: transparent !important; }
 /* The Undo bar under the Quran page: its countdown line (StudentProgressPage). */
 @keyframes mistake-undo { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
+/* Free Talk verbs table: a pronoun that has no imperative (components/FreeTalkVerbTable.tsx).
+   A see-through stripe, so it reads the same in every theme. */
+.ftv-none { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(148, 163, 184, 0.24) 6px 7px); }
+
 /* ── Page bar beside the verses (components/PageLineBar.tsx) ──
    Orange = the surah line under the toolbar. read = lines read on this page,
    unread = the rest of it, prev/next = the pages either side. */

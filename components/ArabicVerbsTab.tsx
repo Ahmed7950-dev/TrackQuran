@@ -14,6 +14,10 @@
 //     green and dims the rest. Open a card and it plays its own conjugations
 //     in place: ←/→ through the pronouns, ↑/↓ through the tenses, only what
 //     was written; on a phone the same by swiping the card.
+//   · A switch above the verbs shows them as ONE table instead (every verb,
+//     tense and pronoun at once: FreeTalkVerbTable; remembered per device),
+//     and Practice drills random written forms as flashcards or as a choice
+//     between forms of the same verb (FreeTalkPractice; nothing is saved).
 //   · Students see the page from level 2 on and can add, edit and delete
 //     their own verbs too (through their link token). The tutor can always
 //     open it and picks the script once per student. The variety
@@ -26,6 +30,8 @@ import { ArabicLesson, ArabicStudent, VocabWord as LessonWord } from '../types';
 import { getVocabWordsForLessons, ensureShareToken, getLessonProgressForStudent } from '../services/arabicService';
 import FreeTalkQuestions from './FreeTalkQuestions';
 import FreeTalkBoard from './FreeTalkBoard';
+import FreeTalkVerbTable from './FreeTalkVerbTable';
+import FreeTalkPractice, { canPractise } from './FreeTalkPractice';
 import { QRCodeSVG } from 'qrcode.react';
 import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
@@ -35,44 +41,15 @@ import {
 import {
   PronounGroup, hasDual, matchesWords, normForSearch, pronounLabel, pronounsFor, tableOrder,
 } from '../utils/arabicVerbPronouns';
+import { AR_FONT, TENSE_NAME, cellText, filledKeys, headword, showMeaning, verbPart } from '../utils/freeTalkVerbs';
 
-const TENSE_NAME: Record<TenseKey, string> = { past: 'Past', present: 'Present', imperative: 'Imperative' };
 const TENSE_SHORT: Record<TenseKey, string> = { past: 'Past', present: 'Pres', imperative: 'Imp' };
 const VARIETY_NAME: Record<VerbVariety, string> = { levantine: 'Palestinian', msa: 'MSA' };
-const AR_FONT = "'Amiri', 'Amiri Regular', serif";
-
-const cellText = (t: VerbTable | undefined, key: string, script: VerbScript) =>
-  ((script === 'arabic' ? t?.cells[key]?.ar : t?.cells[key]?.tr) ?? '').trim();
-
-/** The pronouns of one tense that actually have a form in this script. */
-function filledKeys(v: ArabicVerb, tense: TenseKey, script: VerbScript): string[] {
-  const t = v.conjugations[tense];
-  if (!t) return [];
-  return tableOrder(v.variety, tense, t.dual, t.plural).map(p => p.key).filter(k => cellText(t, k, script));
-}
-
-/** The form that names the card: "he" in the past, as a dictionary does. */
-function headword(v: ArabicVerb, script: VerbScript): string {
-  const he = cellText(v.conjugations.past, 's3m', script);
-  if (he) return he;
-  for (const tense of TENSES) {
-    const k = filledKeys(v, tense, script)[0];
-    if (k) return cellText(v.conjugations[tense], k, script);
-  }
-  return '';
-}
+const VIEW_KEY = 'freeTalk:view';
 
 const learnsBothOf = (s: ArabicStudent) => s.arabicDialects.includes('msa') && s.arabicDialects.includes('levantine');
 
 /** The variety from the student's details: Palestinian when they learn Levantine, else MSA. */
-/** The meaning is stored as "to write"; the editor shows "To" fixed and keeps
- *  only the verb, and the cards show "To Write". */
-const verbPart = (meaning: string) => meaning.replace(/^\s*to\s+/i, '').trim();
-const showMeaning = (meaning: string) => {
-  const v = verbPart(meaning);
-  return v ? `To ${v.charAt(0).toUpperCase()}${v.slice(1)}` : '';
-};
-
 function defaultVariety(s: ArabicStudent): VerbVariety {
   return s.arabicDialects.includes('levantine') || !s.arabicDialects.includes('msa') ? 'levantine' : 'msa';
 }
@@ -759,6 +736,15 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   const [open, setOpen] = useState<{ id: string; pos: Pos } | null>(null);
   const [editing, setEditing] = useState<ArabicVerb | 'new' | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  // Cards or one table: remembered on this device.
+  const [view, setView] = useState<'cards' | 'table'>(() => {
+    try { return localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'cards'; } catch { return 'cards'; }
+  });
+  const chooseView = (v: 'cards' | 'table') => {
+    setView(v); setOpen(null);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ }
+  };
+  const [practising, setPractising] = useState(false);
 
   // ── Words to find: the lesson words and the word lists, kept apart ──
   const [lessonWords, setLessonWords] = useState<LessonWord[]>([]);
@@ -1029,6 +1015,35 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
       <FreeTalkBoard studentId={student.id} studentName={student.name}
         side={studentMode ? 'student' : 'tutor'} studentToken={studentMode ? student.shareToken : undefined} />
 
+      {/* Cards or table, and the practice: the same on both sides. */}
+      {verbs && verbs.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div role="group" aria-label="Show verbs as" className="flex gap-0.5 p-[3px] bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-600 rounded-[13px]">
+            {(['cards', 'table'] as const).map(v => (
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => chooseView(v)}
+                className={`h-9 px-3 sm:px-3.5 rounded-[10px] text-[13px] font-bold flex items-center gap-1.5 transition-colors ${view === v
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>
+                {v === 'cards' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><rect x="3.5" y="3.5" width="7" height="7" rx="2" /><rect x="13.5" y="3.5" width="7" height="7" rx="2" /><rect x="3.5" y="13.5" width="7" height="7" rx="2" /><rect x="13.5" y="13.5" width="7" height="7" rx="2" /></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><rect x="3.5" y="4" width="17" height="16" rx="2.5" /><path strokeLinecap="round" d="M3.5 9.5h17M3.5 14.8h17M9 9.5V20" /></svg>
+                )}
+                {v === 'cards' ? 'Cards' : 'Table'}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setPractising(true)} disabled={!canPractise(verbs, script)}
+            className="h-11 sm:h-[42px] ps-3.5 pe-4 rounded-[13px] bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-sm font-extrabold flex items-center gap-2 shadow-[0_6px_16px_-6px_rgba(217,119,6,0.6)]">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-[18px] h-[18px]"><rect x="7" y="3.5" width="13" height="16" rx="2.5" strokeLinejoin="round" /><path strokeLinejoin="round" d="M4 7.5v10A2.5 2.5 0 0 0 6.5 20H15" /><path d="m12 9 3.5 2.5L12 14z" fill="currentColor" /></svg>
+            Practice
+          </button>
+        </div>
+      )}
+      {practising && verbs && (
+        <FreeTalkPractice verbs={verbs} script={script} onClose={() => setPractising(false)} />
+      )}
+
       {verbs === null ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" /></div>
       ) : verbs.length === 0 ? (
@@ -1036,6 +1051,9 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           <p className="text-base font-bold text-slate-700 dark:text-slate-200">No {VARIETY_NAME[variety]} verbs yet</p>
           {!studentMode && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Verbs you add here are for {student.name} only.</p>}
         </div>
+      ) : view === 'table' ? (
+        <FreeTalkVerbTable verbs={verbs} variety={variety} script={script} matches={matches}
+          onEdit={canEdit ? v => setEditing(v) : undefined} />
       ) : (
         <div ref={wallRef} className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3 sm:gap-3.5">
           {verbs.map(v => (
@@ -1052,7 +1070,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
         </div>
       )}
 
-      {verbs && verbs.length > 0 && (
+      {verbs && verbs.length > 0 && view === 'cards' && (
         <div className="hidden sm:flex items-center justify-center gap-5 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5"><kbd className="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 font-bold">← →</kbd>pronouns</span>
           <span className="flex items-center gap-1.5"><kbd className="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 font-bold">↑ ↓</kbd>past, present, imperative</span>
